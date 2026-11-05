@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/approval_models.dart';
+import '../../domain/model_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../protocol/approval_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
+import '../../protocol/model_protocol.dart';
 import '../../protocol/protocol_models.dart';
 import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
@@ -34,6 +36,7 @@ class ProcessTransport implements CodexTransport {
       writer: process.write,
     );
     _threadProtocol = ThreadProtocolAdapter(request: _peer.request);
+    _modelProtocol = ModelProtocolAdapter(request: _peer.request);
     _turnProtocol = TurnProtocolAdapter(
       request: _peer.request,
       notifications: _peer.notifications,
@@ -58,6 +61,7 @@ class ProcessTransport implements CodexTransport {
       StreamController<ProcessExit>.broadcast();
   late final JsonRpcPeer _peer;
   late final ThreadProtocolAdapter _threadProtocol;
+  late final ModelProtocolAdapter _modelProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ApprovalProtocolAdapter _approvalProtocol;
   late final StreamSubscription<String> _stderrSubscription;
@@ -119,6 +123,10 @@ class ProcessTransport implements CodexTransport {
       _threadProtocol.listThreads(query);
 
   @override
+  Future<ModelPage> listModels(ModelListQuery query) =>
+      _modelProtocol.listModels(query);
+
+  @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>
       _threadProtocol.startThread(options);
 
@@ -135,10 +143,8 @@ class ProcessTransport implements CodexTransport {
       _threadProtocol.deleteThread(threadId);
 
   @override
-  Future<TurnHandle> startTurn({
-    required String threadId,
-    required String text,
-  }) => _turnProtocol.startTurn(threadId: threadId, text: text);
+  Future<TurnHandle> startTurn(TurnStartOptions options) =>
+      _turnProtocol.startTurn(options);
 
   @override
   Future<void> interruptTurn({

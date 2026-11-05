@@ -1,17 +1,10 @@
+import 'execution_settings.dart';
+
 enum ThreadRuntimeStatus { notLoaded, idle, active, systemError, unknown }
 
 enum ThreadSortKey { createdAt, updatedAt, recencyAt }
 
 enum SortDirection { ascending, descending }
-
-/// Optional per-thread approval policy overrides supported by app-server v2.
-///
-/// Production callers normally leave this unset so Codex uses the user's
-/// configured policy. Explicit values are useful for settings UI and bounded
-/// protocol smoke tests.
-enum ThreadApprovalPolicy { untrusted, onRequest, never }
-
-enum ThreadSandboxMode { readOnly, workspaceWrite, dangerFullAccess }
 
 class ThreadSummary {
   const ThreadSummary({
@@ -78,12 +71,14 @@ class ThreadStartOptions {
   const ThreadStartOptions({
     required this.cwd,
     this.ephemeral = false,
+    this.model,
     this.approvalPolicy,
     this.sandbox,
   });
 
   final String cwd;
   final bool ephemeral;
-  final ThreadApprovalPolicy? approvalPolicy;
-  final ThreadSandboxMode? sandbox;
+  final String? model;
+  final ApprovalPolicyOverride? approvalPolicy;
+  final SandboxModeOverride? sandbox;
 }

@@ -45,13 +45,16 @@ initialization handshake, displays typed runtime state, and owns the child
 process lifecycle. Linux, Windows, macOS, and Android project shells are in the
 repository; Android remote control is a later phase.
 
-Phase 2 is in progress. The current desktop slice lists bounded pages of thread
+Phase 2 is locally implemented. The current desktop slice lists bounded pages of thread
 metadata, starts threads, reads stored thread metadata without turns, and
 resumes threads without hydrating their history. It can also start and stop
 turns, coalesce assistant streaming into a bounded recent timeline, summarize
 tool activity, and surface explicit approve-once/reject prompts. The UI retains
-at most 100 thread rows and 200 recent conversation entries; stored turn-history
-pagination and diff viewing are not implemented yet.
+at most 100 thread rows and 200 recent conversation entries. Model and reasoning
+choices come from live app-server discovery; approval and sandbox overrides are
+explicit, and dangerous choices require confirmation. Turn diffs are projected
+into bounded file summaries with a virtualized selected-file view. Stored
+turn-history pagination is the next performance slice.
 
 ## Run locally
 
@@ -72,6 +75,8 @@ dart run tool/runtime_smoke.dart
 dart run tool/thread_smoke.dart
 dart run tool/turn_smoke.dart
 dart run tool/approval_smoke.dart
+dart run tool/model_smoke.dart
+flutter test tool/coding_task_smoke.dart --reporter expanded
 ```
 
 ## Verify

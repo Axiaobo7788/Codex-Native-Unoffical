@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
+import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
@@ -31,8 +32,8 @@ Future<void> main() async {
     final thread = await transport.startThread(
       ThreadStartOptions(
         cwd: Directory.current.path,
-        approvalPolicy: ThreadApprovalPolicy.untrusted,
-        sandbox: ThreadSandboxMode.readOnly,
+        approvalPolicy: ApprovalPolicyOverride.untrusted,
+        sandbox: SandboxModeOverride.readOnly,
       ),
     );
     smokeThreadId = thread.id;
@@ -68,15 +69,18 @@ Future<void> main() async {
         case AssistantTextDeltaEvent():
         case AssistantMessageEvent():
         case ActivityEvent():
+        case TurnDiffUpdatedEvent():
       }
     }, onError: turnCompleted.completeError);
 
     final turn = await transport.startTurn(
-      threadId: smokeThreadId,
-      text:
-          'Run exactly this shell command once: '
-          'python -c "print(\'APPROVAL_SMOKE_OK\')". '
-          'Do not use any other tool.',
+      TurnStartOptions(
+        threadId: smokeThreadId,
+        text:
+            'Run exactly this shell command once: '
+            'python -c "print(\'APPROVAL_SMOKE_OK\')". '
+            'Do not use any other tool.',
+      ),
     );
     activeTurnId = turn.id;
 

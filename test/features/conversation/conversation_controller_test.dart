@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:codex_native_unofficial/src/domain/model_gateway.dart';
+import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/features/conversation/conversation_controller.dart';
+import 'package:codex_native_unofficial/src/features/settings/execution_settings_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -12,8 +15,11 @@ void main() {
 
   setUp(() {
     gateway = _FakeTurnGateway();
+    final settings = ExecutionSettingsController(gateway: _FakeModelGateway());
+    addTearDown(settings.dispose);
     controller = ConversationController(
       gateway: gateway,
+      settings: settings,
       maxEntries: 8,
       maxEntryCharacters: 1024,
       coalesceInterval: Duration.zero,
@@ -148,11 +154,8 @@ class _FakeTurnGateway implements TurnGateway {
   Stream<TurnEvent> get turnEvents => events.stream;
 
   @override
-  Future<TurnHandle> startTurn({
-    required String threadId,
-    required String text,
-  }) async {
-    started.add((threadId, text));
+  Future<TurnHandle> startTurn(TurnStartOptions options) async {
+    started.add((options.threadId, options.text));
     return const TurnHandle(id: 'turn-1', status: TurnRuntimeStatus.inProgress);
   }
 
@@ -165,6 +168,12 @@ class _FakeTurnGateway implements TurnGateway {
   }
 
   Future<void> dispose() => events.close();
+}
+
+class _FakeModelGateway implements ModelGateway {
+  @override
+  Future<ModelPage> listModels(ModelListQuery query) async =>
+      const ModelPage(models: [], nextCursor: null);
 }
 
 ThreadSummary _thread({String id = 'thread-1'}) => ThreadSummary(

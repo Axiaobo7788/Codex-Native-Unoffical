@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/approval_gateway.dart';
 import '../domain/approval_models.dart';
+import '../domain/model_gateway.dart';
+import '../domain/model_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
@@ -17,7 +19,7 @@ import '../transport/process/process_transport.dart';
 typedef TransportStarter = Future<ProcessTransport> Function(String executable);
 
 class RuntimeController extends ChangeNotifier
-    implements ThreadGateway, TurnGateway, ApprovalGateway {
+    implements ThreadGateway, TurnGateway, ApprovalGateway, ModelGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     TransportStarter? transportStarter,
@@ -56,6 +58,10 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().listThreads(query);
 
   @override
+  Future<ModelPage> listModels(ModelListQuery query) =>
+      _connectedTransport().listModels(query);
+
+  @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>
       _connectedTransport().startThread(options);
 
@@ -68,10 +74,12 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().resumeThread(threadId);
 
   @override
-  Future<TurnHandle> startTurn({
-    required String threadId,
-    required String text,
-  }) => _connectedTransport().startTurn(threadId: threadId, text: text);
+  Future<void> deleteThread(String threadId) =>
+      _connectedTransport().deleteThread(threadId);
+
+  @override
+  Future<TurnHandle> startTurn(TurnStartOptions options) =>
+      _connectedTransport().startTurn(options);
 
   @override
   Future<void> interruptTurn({

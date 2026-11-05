@@ -1,4 +1,5 @@
 import '../domain/approval_models.dart';
+import '../domain/model_models.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
 import '../protocol/protocol_models.dart';
@@ -11,15 +12,13 @@ abstract interface class CodexTransport {
   Stream<ApprovalEvent> get approvalEvents;
 
   Future<InitializeResult> initialize(InitializeRequest request);
+  Future<ModelPage> listModels(ModelListQuery query);
   Future<ThreadPage> listThreads(ThreadListQuery query);
   Future<ThreadSummary> startThread(ThreadStartOptions options);
   Future<ThreadSummary> readThread(String threadId);
   Future<ThreadSummary> resumeThread(String threadId);
   Future<void> deleteThread(String threadId);
-  Future<TurnHandle> startTurn({
-    required String threadId,
-    required String text,
-  });
+  Future<TurnHandle> startTurn(TurnStartOptions options);
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,

@@ -1,3 +1,4 @@
+import '../domain/execution_settings.dart';
 import '../domain/thread_models.dart';
 import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
@@ -40,6 +41,7 @@ final class ThreadProtocolAdapter {
     final response = await request('thread/start', {
       'cwd': options.cwd,
       'ephemeral': options.ephemeral,
+      if (options.model != null) 'model': options.model,
       if (options.approvalPolicy case final approvalPolicy?)
         'approvalPolicy': _approvalPolicy(approvalPolicy),
       if (options.sandbox case final sandbox?) 'sandbox': _sandbox(sandbox),
@@ -158,16 +160,16 @@ final class ThreadProtocolAdapter {
     SortDirection.descending => 'desc',
   };
 
-  static String _approvalPolicy(ThreadApprovalPolicy policy) =>
+  static String _approvalPolicy(ApprovalPolicyOverride policy) =>
       switch (policy) {
-        ThreadApprovalPolicy.untrusted => 'untrusted',
-        ThreadApprovalPolicy.onRequest => 'on-request',
-        ThreadApprovalPolicy.never => 'never',
+        ApprovalPolicyOverride.untrusted => 'untrusted',
+        ApprovalPolicyOverride.onRequest => 'on-request',
+        ApprovalPolicyOverride.never => 'never',
       };
 
-  static String _sandbox(ThreadSandboxMode sandbox) => switch (sandbox) {
-    ThreadSandboxMode.readOnly => 'read-only',
-    ThreadSandboxMode.workspaceWrite => 'workspace-write',
-    ThreadSandboxMode.dangerFullAccess => 'danger-full-access',
+  static String _sandbox(SandboxModeOverride sandbox) => switch (sandbox) {
+    SandboxModeOverride.readOnly => 'read-only',
+    SandboxModeOverride.workspaceWrite => 'workspace-write',
+    SandboxModeOverride.dangerFullAccess => 'danger-full-access',
   };
 }

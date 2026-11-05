@@ -1,29 +1,35 @@
+import '../domain/execution_settings.dart';
 import '../domain/turn_models.dart';
 import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
+import 'unified_diff_parser.dart';
 
 final class TurnProtocolAdapter {
   TurnProtocolAdapter({
     required this.request,
     required Stream<CodexNotification> notifications,
+    UnifiedDiffParser diffParser = const UnifiedDiffParser(),
   }) : events = notifications
-           .map(_parseNotification)
+           .map((notification) => _parseNotification(notification, diffParser))
            .where((event) => event != null)
            .cast<TurnEvent>();
 
   final ProtocolRequest request;
   final Stream<TurnEvent> events;
 
-  Future<TurnHandle> startTurn({
-    required String threadId,
-    required String text,
-  }) async {
+  Future<TurnHandle> startTurn(TurnStartOptions options) async {
     final response = await request('turn/start', {
-      'threadId': threadId,
+      'threadId': options.threadId,
       'input': [
-        {'type': 'text', 'text': text, 'text_elements': <Object?>[]},
+        {'type': 'text', 'text': options.text, 'text_elements': <Object?>[]},
       ],
+      if (options.model != null) 'model': options.model,
+      if (options.reasoningEffort != null) 'effort': options.reasoningEffort,
+      if (options.approvalPolicy case final approvalPolicy?)
+        'approvalPolicy': _approvalPolicy(approvalPolicy),
+      if (options.sandbox case final sandbox?)
+        'sandboxPolicy': _sandboxPolicy(sandbox),
     });
     final turn = _requiredObject(response, 'turn', 'turn/start response');
     return _parseTurnHandle(turn);
@@ -36,7 +42,10 @@ final class TurnProtocolAdapter {
     await request('turn/interrupt', {'threadId': threadId, 'turnId': turnId});
   }
 
-  static TurnEvent? _parseNotification(CodexNotification notification) {
+  static TurnEvent? _parseNotification(
+    CodexNotification notification,
+    UnifiedDiffParser diffParser,
+  ) {
     final params = notification.params;
     return switch (notification.method) {
       'turn/started' => _parseTurnStarted(params),
@@ -49,6 +58,13 @@ final class TurnProtocolAdapter {
       ),
       'item/started' => _parseItem(params, completed: false),
       'item/completed' => _parseItem(params, completed: true),
+      'turn/diff/updated' => TurnDiffUpdatedEvent(
+        snapshot: diffParser.parse(
+          threadId: _requiredString(params, 'threadId'),
+          turnId: _requiredString(params, 'turnId'),
+          diff: _requiredString(params, 'diff'),
+        ),
+      ),
       'error' => _parseError(params),
       _ => null,
     };
@@ -195,6 +211,22 @@ final class TurnProtocolAdapter {
 
   static String _truncate(String value, int limit) =>
       value.length <= limit ? value : '${value.substring(0, limit)}…';
+
+  static String _approvalPolicy(ApprovalPolicyOverride policy) =>
+      switch (policy) {
+        ApprovalPolicyOverride.untrusted => 'untrusted',
+        ApprovalPolicyOverride.onRequest => 'on-request',
+        ApprovalPolicyOverride.never => 'never',
+      };
+
+  static JsonObject _sandboxPolicy(SandboxModeOverride sandbox) =>
+      switch (sandbox) {
+        SandboxModeOverride.readOnly => const {'type': 'readOnly'},
+        SandboxModeOverride.workspaceWrite => const {'type': 'workspaceWrite'},
+        SandboxModeOverride.dangerFullAccess => const {
+          'type': 'dangerFullAccess',
+        },
+      };
 
   static String _humanize(String value) {
     final spaced = value.replaceAllMapped(

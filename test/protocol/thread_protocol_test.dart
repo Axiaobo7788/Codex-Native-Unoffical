@@ -1,3 +1,4 @@
+import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
@@ -88,8 +89,9 @@ void main() {
     await adapter.startThread(
       const ThreadStartOptions(
         cwd: '/workspace/project',
-        approvalPolicy: ThreadApprovalPolicy.untrusted,
-        sandbox: ThreadSandboxMode.readOnly,
+        model: 'model-wire-name',
+        approvalPolicy: ApprovalPolicyOverride.untrusted,
+        sandbox: SandboxModeOverride.readOnly,
       ),
     );
 
@@ -98,6 +100,7 @@ void main() {
       _Request('thread/start', {
         'cwd': '/workspace/project',
         'ephemeral': false,
+        'model': 'model-wire-name',
         'approvalPolicy': 'untrusted',
         'sandbox': 'read-only',
       }),

@@ -5,4 +5,5 @@ abstract interface class ThreadGateway {
   Future<ThreadSummary> startThread(ThreadStartOptions options);
   Future<ThreadSummary> readThread(String threadId);
   Future<ThreadSummary> resumeThread(String threadId);
+  Future<void> deleteThread(String threadId);
 }

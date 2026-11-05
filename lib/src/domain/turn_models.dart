@@ -1,4 +1,25 @@
+import 'execution_settings.dart';
+import 'diff_models.dart';
+
 enum TurnRuntimeStatus { inProgress, completed, interrupted, failed, unknown }
+
+class TurnStartOptions {
+  const TurnStartOptions({
+    required this.threadId,
+    required this.text,
+    this.model,
+    this.reasoningEffort,
+    this.approvalPolicy,
+    this.sandbox,
+  });
+
+  final String threadId;
+  final String text;
+  final String? model;
+  final String? reasoningEffort;
+  final ApprovalPolicyOverride? approvalPolicy;
+  final SandboxModeOverride? sandbox;
+}
 
 class TurnHandle {
   const TurnHandle({required this.id, required this.status});
@@ -82,4 +103,11 @@ class TurnErrorEvent extends TurnEvent {
 
   final String message;
   final bool willRetry;
+}
+
+class TurnDiffUpdatedEvent extends TurnEvent {
+  TurnDiffUpdatedEvent({required this.snapshot})
+    : super(threadId: snapshot.threadId, turnId: snapshot.turnId);
+
+  final DiffSnapshot snapshot;
 }

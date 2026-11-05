@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_gateway.dart';
 import '../../domain/turn_models.dart';
+import '../settings/execution_settings_controller.dart';
 
 enum ConversationEntryKind { user, assistant, activity, error }
 
@@ -37,6 +38,7 @@ class ConversationEntry {
 class ConversationController extends ChangeNotifier {
   ConversationController({
     required this.gateway,
+    required this.settings,
     this.maxEntries = 200,
     this.maxEntryCharacters = 64 * 1024,
     this.maxPendingDeltaItems = 16,
@@ -53,6 +55,7 @@ class ConversationController extends ChangeNotifier {
   static const _omittedPrefix = '[Earlier text omitted]\n';
 
   final TurnGateway gateway;
+  final ExecutionSettingsController settings;
   final int maxEntries;
   final int maxEntryCharacters;
   final int maxPendingDeltaItems;
@@ -110,8 +113,7 @@ class ConversationController extends ChangeNotifier {
 
     try {
       final turn = await gateway.startTurn(
-        threadId: currentThread.id,
-        text: trimmed,
+        settings.turnOptions(threadId: currentThread.id, text: trimmed),
       );
       if (_disposed || _thread?.id != currentThread.id) {
         return true;
@@ -187,6 +189,8 @@ class ConversationController extends ChangeNotifier {
           event.willRetry ? '${event.message} (retrying)' : event.message,
         );
         _notify();
+      case TurnDiffUpdatedEvent():
+      // Diff state has its own bounded projection and view controller.
     }
   }
 

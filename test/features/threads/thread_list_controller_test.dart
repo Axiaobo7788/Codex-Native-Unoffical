@@ -64,6 +64,9 @@ class _FakeThreadGateway implements ThreadGateway {
   final List<String> resumeIds = [];
 
   @override
+  Future<void> deleteThread(String threadId) async {}
+
+  @override
   Future<ThreadPage> listThreads(ThreadListQuery query) async {
     queries.add(query);
     return pages.removeAt(0);

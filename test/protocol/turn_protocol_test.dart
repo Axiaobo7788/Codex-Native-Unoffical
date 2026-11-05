@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
@@ -33,8 +34,7 @@ void main() {
     };
 
     final turn = await adapter.startTurn(
-      threadId: 'thread-1',
-      text: 'Do the task',
+      const TurnStartOptions(threadId: 'thread-1', text: 'Do the task'),
     );
 
     expect(turn.id, 'turn-1');
@@ -60,6 +60,28 @@ void main() {
       'threadId': 'thread-1',
       'turnId': 'turn-1',
     });
+  });
+
+  test('serializes only explicit execution overrides', () async {
+    responses['turn/start'] = {
+      'turn': {'id': 'turn-2', 'status': 'inProgress'},
+    };
+
+    await adapter.startTurn(
+      const TurnStartOptions(
+        threadId: 'thread-1',
+        text: 'Do the task',
+        model: 'model-wire-name',
+        reasoningEffort: 'high',
+        approvalPolicy: ApprovalPolicyOverride.onRequest,
+        sandbox: SandboxModeOverride.workspaceWrite,
+      ),
+    );
+
+    expect(requests.single.params['model'], 'model-wire-name');
+    expect(requests.single.params['effort'], 'high');
+    expect(requests.single.params['approvalPolicy'], 'on-request');
+    expect(requests.single.params['sandboxPolicy'], {'type': 'workspaceWrite'});
   });
 
   test('maps lifecycle and assistant delta notifications', () async {
@@ -165,6 +187,34 @@ void main() {
     expect(event.summary, 'Command: flutter test');
     expect(event.summary, isNot(contains('MULTI_MEGABYTE')));
     expect(event.status, 'completed');
+  });
+
+  test('projects turn diff updates into bounded typed files', () async {
+    final eventFuture = adapter.events
+        .where((event) => event is TurnDiffUpdatedEvent)
+        .cast<TurnDiffUpdatedEvent>()
+        .first;
+    notifications.add(
+      const CodexNotification(
+        method: 'turn/diff/updated',
+        params: {
+          'threadId': 'thread-1',
+          'turnId': 'turn-1',
+          'diff':
+              'diff --git a/lib/a.dart b/lib/a.dart\n'
+              '--- a/lib/a.dart\n'
+              '+++ b/lib/a.dart\n'
+              '@@ -1 +1 @@\n'
+              '-old\n'
+              '+new\n',
+        },
+      ),
+    );
+
+    final event = await eventFuture;
+    expect(event.snapshot.files.single.path, 'lib/a.dart');
+    expect(event.snapshot.additions, 1);
+    expect(event.snapshot.deletions, 1);
   });
 }
 

@@ -64,6 +64,8 @@ Future<void> main() async {
             }
           case ActivityEvent():
           // The smoke prompt forbids tools; any approval request is handled below.
+          case TurnDiffUpdatedEvent():
+          // The smoke prompt forbids file changes.
         }
       },
       onError: (Object error, StackTrace stackTrace) {
@@ -85,8 +87,10 @@ Future<void> main() async {
 
     pendingCompletion = Completer<TurnCompletedEvent>();
     final turn = await transport.startTurn(
-      threadId: smokeThreadId,
-      text: 'Reply with exactly TURN_SMOKE_OK and do not call any tools.',
+      TurnStartOptions(
+        threadId: smokeThreadId,
+        text: 'Reply with exactly TURN_SMOKE_OK and do not call any tools.',
+      ),
     );
     activeTurnId ??= turn.id;
 
@@ -103,8 +107,10 @@ Future<void> main() async {
     pendingCompletion = Completer<TurnCompletedEvent>();
     pendingStarted = Completer<String>();
     final interruptTarget = await transport.startTurn(
-      threadId: smokeThreadId,
-      text: 'Begin writing a very long plain-text essay. Do not call tools.',
+      TurnStartOptions(
+        threadId: smokeThreadId,
+        text: 'Begin writing a very long plain-text essay. Do not call tools.',
+      ),
     );
     activeTurnId = interruptTarget.id;
     final startedTurnId = await pendingStarted.future.timeout(

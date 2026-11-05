@@ -8,7 +8,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 1 — Flutter + Codex app-server vertical slice: IMPLEMENTED, VERIFIED, COMMITTED (`5089320`)**
 
-**Phase 2 — Local usable Codex client: IN PROGRESS — thread, turn, streaming, interruption, and approval-rejection slices locally verified**
+**Phase 2 — Local usable Codex client: IMPLEMENTED AND LOCALLY MACHINE-VERIFIED — Human approval interaction and hosted CI remain separate gates**
 
 ## Current repository state
 
@@ -27,10 +27,24 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
 - The conversation projection retains at most 200 recent entries and 64 KiB per entry, coalesces streaming updates on a 50 ms cadence, and never retains command output payloads.
 - Command/file-change approvals support explicit approve-once and reject responses. Unknown and unsupported server requests fail closed and cannot expose an approve action. The real reject path is verified; approve-once is currently unit-tested but not Human-validated.
-- The desktop UI now provides a virtualized recent-activity timeline, composer, race-safe stop action, and pending-approval banner. Stored turn pagination, model controls, diffs, and Android remote control are not implemented yet.
+- `model/list` drives typed visible-model and reasoning-effort controls. Model, effort, approval, and sandbox overrides are omitted by default; `never` approval and `danger-full-access` require an explicit UI confirmation.
+- Turn diff notifications are converted immediately into a bounded typed projection: at most 2 MiB processed input, 100 files, 512 KiB retained total, 128 KiB and 4,000 lines per file, and 2,000 characters per retained line. Only the selected file's rows are built by the diff view.
+- The desktop UI now provides a virtualized recent-activity timeline, composer, race-safe stop action, pending-approval banner, execution settings, changed-file summary, and selected-file diff.
+- A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
+- Stored turn/item history pagination and inactive-page eviction are not implemented yet. Android remote control remains Phase 4 work.
 - Lightweight GitHub Actions CI is configured for format, analyze, tests, and a Linux debug build. Hosted CI has not run for the local Phase 1 commit yet.
 
 ## Completed
+
+### 2026-11-05 — Phase 2 execution controls, bounded diff, and coding-task gate
+
+- Added typed `model/list` discovery and a settings controller for server-advertised models/reasoning efforts plus explicit approval/sandbox overrides.
+- Preserved stock Codex defaults by omitting all overrides until the user selects one. Added confirmation dialogs before disabling approval prompts or granting danger-full-access sandbox mode.
+- Added typed turn override serialization using the server's `model`, `effort`, `approvalPolicy`, and `sandboxPolicy` fields.
+- Added a bounded unified-diff parser, active-thread diff controller, changed-file counts, selected-file picker, truncation state, and virtualized line rendering.
+- Added `tool/model_smoke.dart` and an opt-in Flutter harness at `tool/coding_task_smoke.dart`.
+- The real coding smoke used `workspace-write` and `never` only inside a newly created `/tmp` workspace, changed `notes.txt` from `alpha` to `alpha` + `beta`, observed one file/one addition/no approval requests, and deleted the exact smoke thread and workspace.
+- The first coding-smoke harness attempt used `testWidgets`; its fake clock prevented timeout/shutdown timers from advancing and required runner interruption after read-only inspection showed no remaining app-server or temp workspace. The harness now uses ordinary Flutter `test`, and the same task passed with real timers.
 
 ### 2026-11-05 — Phase 2 turn and approval vertical slice
 
@@ -76,13 +90,15 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 37 tests.
+- `flutter test --reporter expanded`: PASS, 46 tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
 - `dart run tool/turn_smoke.dart`: PASS against the installed stock Codex; a fixed-response turn completed with the expected marker, a second turn reached `turn/started`, interruption completed with status `interrupted`, and the smoke-owned thread was deleted.
 - `dart run tool/approval_smoke.dart`: PASS against the installed stock Codex; an untrusted command produced a typed approval, the client rejected it, the turn completed, and the smoke-owned thread was deleted without executing the command.
-- Real Linux GUI launch after the conversation slice: PASS; the connected runtime, thread list, and empty conversation state rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
+- `dart run tool/model_smoke.dart`: PASS; the installed app-server advertised 8 visible models, identified `gpt-6.1-sol` as default, and advertised `low` as its default reasoning effort.
+- `flutter test tool/coding_task_smoke.dart --reporter expanded`: PASS in 46 seconds; production controllers completed the exact temporary-file task, projected one changed file/one addition, observed zero approvals, and cleaned both thread and workspace.
+- Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
 - Windows/macOS/Android builds and physical-device validation: NOT RUN in this Linux environment.
@@ -92,6 +108,7 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - Direct `flutter analyze` from this repository's Unicode filesystem path currently crashes Flutter 3.47.1's LSP byte-stream parser with a truncated initialization JSON message. The same source passes `dart analyze --fatal-infos` at the real path and `flutter analyze` through an ASCII symlink. This is preserved as a toolchain/path issue, not recorded as a clean direct-path run.
 - A successful `turn/start` response does not prove the server has installed the turn as interruptible. Real validation observed `turn/interrupt` fail with `-32600` when sent before `turn/started`; the UI now waits for the notification before exposing Stop.
 - Approval approve-once serialization and controller behavior are covered by tests, but no real command or file mutation was approved during automated validation. The real smoke deliberately validated rejection only; Human approval UX remains a separate gate.
+- The dangerous execution-setting confirmation dialogs and populated diff view have not received Human visual/interaction acceptance. Their protocol/controller/parser behavior is machine-tested, and the main GUI surface was directly inspected, but those are distinct claims.
 - The real GUI launch logged host GTK/Wayland warnings for ATK socket embedding and a missing cursor-theme asset. They did not prevent the window, handshake, or child cleanup, but should be rechecked during later Linux UI work.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
 - After loading thread state, the tested stock app-server did not exit within the 3-second stdin-EOF window or the following 3-second SIGTERM window. The SIGKILL fallback completed at about 6.1 seconds and no child survived GUI exit. Shutdown is bounded and correct, but the latency/source should be investigated before release polish.
@@ -100,15 +117,15 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Continue Phase 2 with model/sandbox controls and a basic lazy diff surface:
+Begin Phase 3 with the upstream paginated history APIs now advertised by this app-server:
 
-1. query supported models/configuration from app-server rather than hardcoding model names;
-2. keep model, reasoning effort, sandbox, and approval choices typed and pass them only through supported thread/turn request fields;
-3. project file-change events into changed-file metadata without retaining entire patches in the timeline;
-4. load one selected file diff on demand with strict size bounds;
-5. complete one small real coding-task smoke through the client path, including a Human-approved mutation if approval is required.
+1. add typed, bounded `thread/turns/list` pages using summary item views;
+2. add typed `thread/items/list` pages for one selected turn, retaining opaque cursors rather than full history;
+3. merge live active-turn projection with paged stored history without duplicate items;
+4. evict old pages and inactive-thread state under explicit caps;
+5. add synthetic 1,000-turn / multi-megabyte-output stress evidence before broadening UI polish.
 
-Do not begin Android remote transport or ecosystem management until the full local coding-task gate is satisfied.
+Do not begin Android remote transport or ecosystem management until bounded stored-history behavior is implemented and measured.
 
 ## Milestone outline
 
@@ -122,11 +139,11 @@ Do not begin Android remote transport or ecosystem management until the full loc
 
 ### Phase 2 — Local Codex workflow
 
-- thread list/start/read/resume metadata;
-- turn start, streaming events, completion/failure/cancellation;
-- bounded conversation projection;
-- approvals and basic diff/task state;
-- one real small coding task completed through this client.
+- thread list/start/read/resume metadata: complete and locally verified;
+- turn start, streaming events, completion/failure/cancellation: complete and locally verified;
+- bounded live conversation projection: complete and locally verified;
+- approvals, execution controls, and basic bounded diff/task state: complete and locally verified, with Human approve-once interaction pending;
+- one real small coding task completed through production client controllers: complete and locally verified.
 
 ### Phase 3 — Bounded-memory UX
 

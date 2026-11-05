@@ -3,10 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../domain/diff_models.dart';
+import '../domain/execution_settings.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
 import '../features/approvals/approval_controller.dart';
 import '../features/conversation/conversation_controller.dart';
+import '../features/diff/diff_controller.dart';
+import '../features/settings/execution_settings_controller.dart';
 import '../features/threads/thread_list_controller.dart';
 import 'runtime_controller.dart';
 import 'theme_tokens.dart';
@@ -28,7 +32,9 @@ class CodexNativeApp extends StatefulWidget {
 class _CodexNativeAppState extends State<CodexNativeApp> {
   late final RuntimeController _controller;
   late final ThreadListController _threadController;
+  late final ExecutionSettingsController _settingsController;
   late final ConversationController _conversationController;
+  late final DiffController _diffController;
   late final ApprovalController _approvalController;
   late final bool _ownsController;
   AppLifecycleListener? _lifecycleListener;
@@ -40,7 +46,12 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _ownsController = widget.runtimeController == null;
     _controller = widget.runtimeController ?? RuntimeController();
     _threadController = ThreadListController(gateway: _controller);
-    _conversationController = ConversationController(gateway: _controller);
+    _settingsController = ExecutionSettingsController(gateway: _controller);
+    _conversationController = ConversationController(
+      gateway: _controller,
+      settings: _settingsController,
+    );
+    _diffController = DiffController(gateway: _controller);
     _approvalController = ApprovalController(gateway: _controller);
     _controller.addListener(_handleRuntimeState);
     _threadController.addListener(_handleThreadSelection);
@@ -58,6 +69,8 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _threadController.removeListener(_handleThreadSelection);
     _approvalController.dispose();
     _conversationController.dispose();
+    _diffController.dispose();
+    _settingsController.dispose();
     _threadController.dispose();
     if (_ownsController) {
       _controller.dispose();
@@ -76,6 +89,8 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
         threadController: _threadController,
         conversationController: _conversationController,
         approvalController: _approvalController,
+        settingsController: _settingsController,
+        diffController: _diffController,
         defaultWorkingDirectory: Directory.current.path,
       ),
     );
@@ -88,10 +103,12 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     }
     _requestedInitialThreads = true;
     unawaited(_threadController.refresh());
+    unawaited(_settingsController.refreshModels());
   }
 
   void _handleThreadSelection() {
     _conversationController.bindThread(_threadController.selectedThread);
+    _diffController.bindThread(_threadController.selectedThread);
   }
 }
 
@@ -102,6 +119,8 @@ class RuntimeStatusScreen extends StatelessWidget {
     required this.threadController,
     required this.conversationController,
     required this.approvalController,
+    required this.settingsController,
+    required this.diffController,
     required this.defaultWorkingDirectory,
   });
 
@@ -109,6 +128,8 @@ class RuntimeStatusScreen extends StatelessWidget {
   final ThreadListController threadController;
   final ConversationController conversationController;
   final ApprovalController approvalController;
+  final ExecutionSettingsController settingsController;
+  final DiffController diffController;
   final String defaultWorkingDirectory;
 
   @override
@@ -137,6 +158,7 @@ class RuntimeStatusScreen extends StatelessWidget {
                               width: 360,
                               child: _ThreadPanel(
                                 controller: threadController,
+                                settingsController: settingsController,
                                 defaultWorkingDirectory:
                                     defaultWorkingDirectory,
                               ),
@@ -146,6 +168,8 @@ class RuntimeStatusScreen extends StatelessWidget {
                               child: _ConversationPanel(
                                 controller: conversationController,
                                 approvalController: approvalController,
+                                settingsController: settingsController,
+                                diffController: diffController,
                               ),
                             ),
                           ],
@@ -167,10 +191,14 @@ class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
     required this.controller,
     required this.approvalController,
+    required this.settingsController,
+    required this.diffController,
   });
 
   final ConversationController controller;
   final ApprovalController approvalController;
+  final ExecutionSettingsController settingsController;
+  final DiffController diffController;
 
   @override
   State<_ConversationPanel> createState() => _ConversationPanelState();
@@ -179,6 +207,7 @@ class _ConversationPanel extends StatefulWidget {
 class _ConversationPanelState extends State<_ConversationPanel> {
   late final TextEditingController _composerController;
   late final ScrollController _scrollController;
+  var _showChanges = false;
 
   @override
   void initState() {
@@ -205,7 +234,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
       ),
       child: AnimatedBuilder(
-        animation: widget.controller,
+        animation: Listenable.merge([widget.controller, widget.diffController]),
         builder: (context, _) {
           final controller = widget.controller;
           final thread = controller.thread;
@@ -229,6 +258,24 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
+                    _ExecutionSettingsButton(
+                      controller: widget.settingsController,
+                    ),
+                    if (widget.diffController.snapshot?.files.isNotEmpty ??
+                        false)
+                      TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _showChanges = !_showChanges),
+                        icon: Icon(
+                          _showChanges ? Icons.chat_outlined : Icons.difference,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _showChanges
+                              ? 'Conversation'
+                              : 'Changes ${widget.diffController.snapshot!.files.length}',
+                        ),
+                      ),
                     if (controller.canInterrupt)
                       TextButton.icon(
                         onPressed: controller.interrupt,
@@ -240,7 +287,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               ),
               const Divider(height: 1),
               _ApprovalBanner(controller: widget.approvalController),
-              Expanded(child: _timeline(controller)),
+              Expanded(
+                child: _showChanges && widget.diffController.snapshot != null
+                    ? _DiffView(controller: widget.diffController)
+                    : _timeline(controller),
+              ),
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.all(ThemeTokens.space3),
@@ -336,6 +387,393 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         curve: Curves.easeOut,
       );
     });
+  }
+}
+
+class _ExecutionSettingsButton extends StatelessWidget {
+  const _ExecutionSettingsButton({required this.controller});
+
+  final ExecutionSettingsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final selected = controller.selectedModelId == null
+            ? 'Defaults'
+            : controller.effectiveModel?.displayName ?? 'Model';
+        return TextButton.icon(
+          onPressed: controller.loading
+              ? null
+              : () => showDialog<void>(
+                  context: context,
+                  builder: (_) =>
+                      _ExecutionSettingsDialog(controller: controller),
+                ),
+          icon: controller.loading
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.tune, size: 18),
+          label: Text(selected),
+        );
+      },
+    );
+  }
+}
+
+class _ExecutionSettingsDialog extends StatelessWidget {
+  const _ExecutionSettingsDialog({required this.controller});
+
+  static const _inherit = '';
+
+  final ExecutionSettingsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => AlertDialog(
+        title: const Text('Execution settings'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Overrides apply only when explicitly selected. Defaults '
+                  'continue to come from Codex configuration.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: ThemeTokens.space4),
+                _dropdown(
+                  label: 'Model',
+                  value: controller.selectedModelId ?? _inherit,
+                  items: [
+                    const DropdownMenuItem(
+                      value: _inherit,
+                      child: Text('Codex default'),
+                    ),
+                    for (final model in controller.models)
+                      DropdownMenuItem(
+                        value: model.id,
+                        child: Text(model.displayName),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      controller.selectModel(value == _inherit ? null : value),
+                ),
+                const SizedBox(height: ThemeTokens.space3),
+                _dropdown(
+                  label: 'Reasoning effort',
+                  value: controller.selectedReasoningEffort ?? _inherit,
+                  items: [
+                    const DropdownMenuItem(
+                      value: _inherit,
+                      child: Text('Model default'),
+                    ),
+                    for (final effort in controller.availableReasoningEfforts)
+                      DropdownMenuItem(
+                        value: effort.value,
+                        child: Text(effort.value),
+                      ),
+                  ],
+                  onChanged: (value) => controller.selectReasoningEffort(
+                    value == _inherit ? null : value,
+                  ),
+                ),
+                const SizedBox(height: ThemeTokens.space3),
+                _dropdown(
+                  label: 'Approval mode',
+                  value: _approvalValue(controller.approvalPolicy),
+                  items: const [
+                    DropdownMenuItem(
+                      value: _inherit,
+                      child: Text('Codex default'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'untrusted',
+                      child: Text('Ask for untrusted commands'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'on-request',
+                      child: Text('Ask when Codex requests'),
+                    ),
+                    DropdownMenuItem(value: 'never', child: Text('Never ask')),
+                  ],
+                  onChanged: (value) => _setApproval(context, value),
+                ),
+                const SizedBox(height: ThemeTokens.space3),
+                _dropdown(
+                  label: 'Sandbox',
+                  value: _sandboxValue(controller.sandbox),
+                  items: const [
+                    DropdownMenuItem(
+                      value: _inherit,
+                      child: Text('Codex default'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'read-only',
+                      child: Text('Read only'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'workspace-write',
+                      child: Text('Workspace write'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'danger-full-access',
+                      child: Text('Danger: full access'),
+                    ),
+                  ],
+                  onChanged: (value) => _setSandbox(context, value),
+                ),
+                if (controller.errorMessage case final error?) ...[
+                  const SizedBox(height: ThemeTokens.space3),
+                  SelectableText(
+                    error,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: ThemeTokens.error),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: controller.refreshModels,
+            child: const Text('Refresh models'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _dropdown({
+    required String label,
+    required String value,
+    required List<DropdownMenuItem<String>> items,
+    required ValueChanged<String> onChanged,
+  }) => InputDecorator(
+    decoration: InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        isDense: true,
+        isExpanded: true,
+        items: items,
+        onChanged: (next) {
+          if (next != null) {
+            onChanged(next);
+          }
+        },
+      ),
+    ),
+  );
+
+  Future<void> _setApproval(BuildContext context, String value) async {
+    final policy = switch (value) {
+      'untrusted' => ApprovalPolicyOverride.untrusted,
+      'on-request' => ApprovalPolicyOverride.onRequest,
+      'never' => ApprovalPolicyOverride.never,
+      _ => null,
+    };
+    if (policy == ApprovalPolicyOverride.never &&
+        !await _confirm(
+          context,
+          title: 'Disable approval prompts?',
+          message:
+              'Codex may execute commands without asking. The configured '
+              'sandbox still applies, but this removes an important review gate.',
+          confirmLabel: 'Never ask',
+        )) {
+      return;
+    }
+    controller.selectApprovalPolicy(policy);
+  }
+
+  Future<void> _setSandbox(BuildContext context, String value) async {
+    final sandbox = switch (value) {
+      'read-only' => SandboxModeOverride.readOnly,
+      'workspace-write' => SandboxModeOverride.workspaceWrite,
+      'danger-full-access' => SandboxModeOverride.dangerFullAccess,
+      _ => null,
+    };
+    if (sandbox == SandboxModeOverride.dangerFullAccess &&
+        !await _confirm(
+          context,
+          title: 'Allow full filesystem access?',
+          message:
+              'Commands will not be restricted by the Codex sandbox. Use this '
+              'only for a workspace you trust.',
+          confirmLabel: 'Allow full access',
+        )) {
+      return;
+    }
+    controller.selectSandbox(sandbox);
+  }
+
+  static Future<bool> _confirm(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  static String _approvalValue(ApprovalPolicyOverride? policy) =>
+      switch (policy) {
+        ApprovalPolicyOverride.untrusted => 'untrusted',
+        ApprovalPolicyOverride.onRequest => 'on-request',
+        ApprovalPolicyOverride.never => 'never',
+        null => _inherit,
+      };
+
+  static String _sandboxValue(SandboxModeOverride? sandbox) =>
+      switch (sandbox) {
+        SandboxModeOverride.readOnly => 'read-only',
+        SandboxModeOverride.workspaceWrite => 'workspace-write',
+        SandboxModeOverride.dangerFullAccess => 'danger-full-access',
+        null => _inherit,
+      };
+}
+
+class _DiffView extends StatelessWidget {
+  const _DiffView({required this.controller});
+
+  final DiffController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = controller.snapshot;
+    final selected = controller.selectedFile;
+    if (snapshot == null || snapshot.files.isEmpty || selected == null) {
+      return Center(
+        child: Text(
+          'No file changes for this turn.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(ThemeTokens.space3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selected.path,
+                  isExpanded: true,
+                  items: [
+                    for (final file in snapshot.files)
+                      DropdownMenuItem(
+                        value: file.path,
+                        child: Text(
+                          '${file.path}  +${file.additions} -${file.deletions}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (path) {
+                    if (path != null) {
+                      controller.selectFile(path);
+                    }
+                  },
+                ),
+              ),
+              Text(
+                '${snapshot.files.length} file(s)  '
+                '+${snapshot.additions}  -${snapshot.deletions}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (snapshot.truncated || selected.truncated) ...[
+                const SizedBox(height: ThemeTokens.space2),
+                Text(
+                  'Large diff truncated to the bounded presentation limit.',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: ThemeTokens.pending),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(child: _DiffLines(file: selected)),
+      ],
+    );
+  }
+}
+
+class _DiffLines extends StatelessWidget {
+  const _DiffLines({required this.file});
+
+  final DiffFile file;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectionArea(
+      child: ListView.builder(
+        itemExtent: 21,
+        itemCount: file.lines.length,
+        itemBuilder: (context, index) {
+          final line = file.lines[index];
+          final background = line.startsWith('+') && !line.startsWith('+++')
+              ? ThemeTokens.connected.withValues(alpha: 0.1)
+              : line.startsWith('-') && !line.startsWith('---')
+              ? ThemeTokens.error.withValues(alpha: 0.1)
+              : Colors.transparent;
+          return ColoredBox(
+            color: background,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ThemeTokens.space3,
+              ),
+              child: Text(
+                line,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.clip,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(fontFamily: 'monospace', height: 1.5),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -506,10 +944,12 @@ class _ConversationEntryView extends StatelessWidget {
 class _ThreadPanel extends StatefulWidget {
   const _ThreadPanel({
     required this.controller,
+    required this.settingsController,
     required this.defaultWorkingDirectory,
   });
 
   final ThreadListController controller;
+  final ExecutionSettingsController settingsController;
   final String defaultWorkingDirectory;
 
   @override
@@ -665,7 +1105,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       );
       return;
     }
-    await widget.controller.startThread(ThreadStartOptions(cwd: cwd));
+    await widget.controller.startThread(
+      widget.settingsController.threadOptions(cwd),
+    );
   }
 }
 
