@@ -97,8 +97,11 @@ WSS `/v1/ws` endpoint: the same-origin HTTPS exchange has strict input/response
 schemas, 8 KiB body limits, connection/request deadlines, no redirect or
 certificate bypass, and verified secure-storage readback before Remote starts.
 Unreadable or revoked profiles require an affirmative local clear. A trusted
-desktop setup/invitation surface, pairing-bound self-signed certificate trust,
-full conversation features, and real-device validation remain.
+desktop setup surface now reports the listener/TLS/bind/advertised endpoint,
+creates a transient five-minute ticket only on request, and confirms device
+revocation without exposing stored bearers. Pairing-bound self-signed
+certificate trust, full conversation features, and real-device validation
+remain.
 
 ## Run locally
 
@@ -138,6 +141,14 @@ owner-only. Replace certificate/key files completely, then invoke trusted local
 `host/remote/tls/reload` to rotate new handshakes. A failed reload keeps the last
 valid certificate.
 
+To make the desktop setup surface produce a shareable invitation, also set
+`--remote-advertise-endpoint wss://host.example/v1/ws` (or
+`CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`). This is the exact client-facing
+address and is intentionally separate from the bind address for wildcard,
+reverse-proxy, NAT, and split-DNS deployments. It must not contain credentials,
+query parameters, or fragments. The UI reports a missing value and will not
+guess one or enable networking.
+
 `tool/remote_smoke.dart` remains plaintext-loopback by default. To exercise WSS,
 set `CODEX_NATIVE_REMOTE_SMOKE_TLS_CERT` and
 `CODEX_NATIVE_REMOTE_SMOKE_TLS_KEY`; its Dart clients build an explicit trust
@@ -147,9 +158,10 @@ The current Android onboarding form accepts only an exact
 `wss://host.example/v1/ws` endpoint whose certificate chains to the Dart
 runtime's default trusted roots, plus the Host's 24-character one-use ticket.
 It never accepts or displays a bearer token. The desktop product does not yet
-provide the trusted setup screen that creates a ticket and presents a verified
-client-reachable endpoint, so this is an integrated Android security path rather
-than a complete end-user setup workflow.
+verify real-network reachability, but its trusted setup screen now creates the
+ticket on demand and presents only the explicit advertised endpoint. The
+operator remains responsible for DNS/firewall/proxy and a certificate trusted
+by the Android runtime.
 
 ## Verify
 

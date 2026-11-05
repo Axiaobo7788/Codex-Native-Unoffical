@@ -112,6 +112,18 @@ sequence. Same-session retained suffixes replay; an evicted cursor, receiver
 lag, or live sequence gap requires authoritative resync. Token deltas, diffs,
 server requests, approvals, and all writes remain deliberately unrouted.
 
+The Host separately accepts an optional exact client-facing WSS `/v1/ws`
+endpoint through `--remote-advertise-endpoint` or
+`CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`. It is never inferred from the bind
+socket: wildcard addresses are not client destinations, and a reverse proxy may
+make the public endpoint intentionally different. Trusted local status reports
+both values. The desktop setup dialog uses a local-only typed administration
+gateway outside `CodexTransport`, creates a five-minute ticket only after an
+affirmative action, retains it only for the dialog lifetime, and requires the
+ticket response endpoint to match current status. It can list and explicitly
+revoke at most 32 public device records. It cannot enable or reconfigure the
+listener, and Android Remote has no access to these administration methods.
+
 The Dart `RemoteTransport` now implements that read-only envelope without
 changing feature schemas. It requires WSS by default (with an explicit literal-
 loopback-only development exception), validates the negotiated subprotocol,
@@ -177,8 +189,6 @@ The remaining network and Android layers must still provide:
 
 - pairing-bound self-signed certificate identity or real-device evidence for
   the current default-root trust path;
-- a trusted desktop setup/invitation surface that creates tickets and presents a
-  client-reachable endpoint without deriving it from a wildcard bind;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
 - versioned pairing-bound local-certificate onboarding; the current form covers

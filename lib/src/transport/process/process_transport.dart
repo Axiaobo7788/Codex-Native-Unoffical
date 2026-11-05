@@ -6,6 +6,7 @@ import '../../domain/approval_models.dart';
 import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
+import '../../domain/remote_admin_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../protocol/approval_protocol.dart';
@@ -15,6 +16,7 @@ import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/model_protocol.dart';
 import '../../protocol/output_protocol.dart';
 import '../../protocol/protocol_models.dart';
+import '../../protocol/remote_admin_protocol.dart';
 import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
 import '../codex_transport.dart';
@@ -43,6 +45,7 @@ class ProcessTransport implements CodexTransport {
     _historyProtocol = HistoryProtocolAdapter(request: _peer.request);
     _modelProtocol = ModelProtocolAdapter(request: _peer.request);
     _outputProtocol = OutputProtocolAdapter(request: _peer.request);
+    _remoteAdminProtocol = RemoteAdminProtocolAdapter(request: _peer.request);
     _turnProtocol = TurnProtocolAdapter(
       request: _peer.request,
       notifications: _peer.notifications,
@@ -70,6 +73,7 @@ class ProcessTransport implements CodexTransport {
   late final HistoryProtocolAdapter _historyProtocol;
   late final ModelProtocolAdapter _modelProtocol;
   late final OutputProtocolAdapter _outputProtocol;
+  late final RemoteAdminProtocolAdapter _remoteAdminProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ApprovalProtocolAdapter _approvalProtocol;
   late final StreamSubscription<String> _stderrSubscription;
@@ -216,6 +220,18 @@ class ProcessTransport implements CodexTransport {
     required Object requestId,
     required ApprovalDecision decision,
   }) => _approvalProtocol.decide(requestId: requestId, decision: decision);
+
+  Future<RemoteHostStatus> readRemoteAdminStatus() =>
+      _remoteAdminProtocol.status();
+
+  Future<RemotePairingTicket> createRemotePairingTicket() =>
+      _remoteAdminProtocol.createPairingTicket();
+
+  Future<List<RemotePairedDevice>> listRemotePairedDevices() =>
+      _remoteAdminProtocol.listDevices();
+
+  Future<bool> revokeRemotePairedDevice(String deviceId) =>
+      _remoteAdminProtocol.revokeDevice(deviceId);
 
   void _captureStderr(String chunk) {
     _stderrTail += chunk;

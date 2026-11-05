@@ -370,3 +370,63 @@ not restored with it.
   value.
 - Cursor durability and reconnect ownership remain outside the credential
   record so a received-but-not-applied event can never advance durable state.
+
+---
+
+## ADR-013 — Require an explicit advertised endpoint for desktop pairing
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+Treat the Remote listener bind address and the client-facing pairing endpoint as
+two different operator-owned values. `codex-native-host` accepts an optional
+`CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`/`--remote-advertise-endpoint` only when
+a listener is enabled. It must be an exact absolute `wss://.../v1/ws` URI with
+no user info, query, fragment, zero port, or unspecified `0.0.0.0`/`[::]` host.
+The Host reports that value through trusted-local status and returns the same
+value with a newly created pairing ticket. It never derives an invitation from
+the bound socket address.
+
+The Flutter desktop exposes Remote administration through a dedicated local
+gateway over `ProcessTransport`, not through `CodexTransport` and not through
+the Android `RemoteTransport`. Opening the setup surface reads listener/TLS/
+scope/endpoint and bounded public device metadata, but creates no ticket. A
+ticket is created only after an explicit action, retained only by that dialog,
+and accepted only when its endpoint exactly matches the current status and its
+expiry is still in the future. Listener configuration remains restart-owned;
+the UI neither enables networking nor edits Host configuration.
+
+Revocation remains explicit and requires confirmation plus authoritative list
+readback. The registry limits active credentials to 32. Revoked or expired
+records stay visible immediately, then are pruned atomically with the next
+successful pairing publication so revocation can release capacity without
+making the durable store unbounded.
+
+### Why
+
+- A wildcard bind describes where a server accepts traffic, not a hostname or
+  address another device can reach. Guessing one can produce an unusable or
+  security-incorrect invitation.
+- Bind and public endpoint legitimately differ behind a TLS reverse proxy, NAT,
+  split DNS, or an installed service. Requiring equality would reject supported
+  deployments while derivation would hide operator intent.
+- Pairing tickets are bearer-like, short-lived secrets. Automatic generation on
+  screen open, persistence in application state, or diagnostic logging would
+  increase exposure without improving setup.
+- Local administration can revoke network clients and mint credentials, so it
+  must not be added to the transport abstraction used by those same clients.
+
+### Consequence
+
+- A listener without an advertised endpoint remains usable for operator-level
+  testing but the desktop cannot create a shareable invitation from it.
+- Operators must configure a fixed reachable WSS endpoint and restart the Host;
+  reachability, DNS, firewall, proxy, and certificate correctness still require
+  real-network validation.
+- The initial desktop surface presents endpoint and manual ticket text only. A
+  future QR invitation and pairing-bound local CA identity require a versioned
+  artifact and credential-record migration; they must not silently extend this
+  schema.

@@ -8,6 +8,8 @@ import '../domain/execution_settings.dart';
 import '../domain/history_models.dart';
 import '../domain/output_gateway.dart';
 import '../domain/output_models.dart';
+import '../domain/remote_admin_gateway.dart';
+import '../domain/remote_admin_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
 import '../features/approvals/approval_controller.dart';
@@ -17,6 +19,7 @@ import '../features/conversation/history_controller.dart';
 import '../features/conversation/output_viewer_controller.dart';
 import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
+import '../features/settings/remote_admin_controller.dart';
 import '../features/threads/thread_list_controller.dart';
 import '../transport/remote/remote_onboarding.dart';
 import 'runtime_controller.dart';
@@ -162,7 +165,7 @@ class RuntimeStatusScreen extends StatelessWidget {
                 builder: (context, _) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _RuntimePanel(snapshot: controller.snapshot),
+                    _RuntimePanel(controller: controller),
                     if (controller.snapshot.state ==
                         RuntimeConnectionState.connected) ...[
                       const SizedBox(height: ThemeTokens.space4),
@@ -1966,13 +1969,394 @@ class _ThreadRow extends StatelessWidget {
   }
 }
 
-class _RuntimePanel extends StatelessWidget {
-  const _RuntimePanel({required this.snapshot});
+class _RemoteSetupDialog extends StatefulWidget {
+  const _RemoteSetupDialog({required this.gateway});
 
-  final RuntimeSnapshot snapshot;
+  final RemoteAdminGateway gateway;
+
+  @override
+  State<_RemoteSetupDialog> createState() => _RemoteSetupDialogState();
+}
+
+class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
+  late final RemoteAdminController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = RemoteAdminController(gateway: widget.gateway);
+    unawaited(_controller.refresh());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  ThemeTokens.space6,
+                  ThemeTokens.space4,
+                  ThemeTokens.space3,
+                  ThemeTokens.space3,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.devices_other),
+                    const SizedBox(width: ThemeTokens.space2),
+                    Expanded(
+                      child: Text(
+                        'Remote setup',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(ThemeTokens.space6),
+                  child: _RemoteSetupContent(controller: _controller),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RemoteSetupContent extends StatelessWidget {
+  const _RemoteSetupContent({required this.controller});
+
+  final RemoteAdminController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = controller.status;
+    final ticket = controller.ticket;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final activeDevices = controller.devices.where(
+      (device) => !device.isRevoked && !device.isExpiredAt(nowMs),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Host listener', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: ThemeTokens.space2),
+        if (status == null)
+          Text(
+            controller.phase == RemoteAdminPhase.loading
+                ? 'Reading trusted local Host state…'
+                : 'Host listener state is unavailable.',
+            key: const ValueKey('remote-setup-status'),
+          )
+        else
+          _RemoteListenerDetails(status: status),
+        if (controller.errorMessage case final error?) ...[
+          const SizedBox(height: ThemeTokens.space3),
+          Text(
+            error,
+            key: const ValueKey('remote-setup-error'),
+            style: const TextStyle(color: ThemeTokens.error),
+          ),
+        ],
+        const SizedBox(height: ThemeTokens.space4),
+        Wrap(
+          spacing: ThemeTokens.space2,
+          runSpacing: ThemeTokens.space2,
+          children: [
+            FilledButton.icon(
+              key: const ValueKey('remote-create-ticket-button'),
+              onPressed: controller.canCreatePairingTicket
+                  ? () => unawaited(controller.createPairingTicket())
+                  : null,
+              icon: controller.phase == RemoteAdminPhase.creatingTicket
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.add_link),
+              label: const Text('Create one-use ticket'),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('remote-setup-refresh-button'),
+              onPressed: controller.isBusy
+                  ? null
+                  : () => unawaited(controller.refresh()),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh'),
+            ),
+          ],
+        ),
+        if (ticket != null) ...[
+          const SizedBox(height: ThemeTokens.space4),
+          _RemoteTicketCard(ticket: ticket),
+        ],
+        const SizedBox(height: ThemeTokens.space6),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Paired devices',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Text(
+              '${activeDevices.length} active · '
+              '${controller.devices.length} stored',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        const SizedBox(height: ThemeTokens.space2),
+        if (controller.devices.isEmpty)
+          Text(
+            controller.phase == RemoteAdminPhase.loading
+                ? 'Loading paired-device metadata…'
+                : 'No paired devices.',
+            key: const ValueKey('remote-device-empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          for (final device in controller.devices)
+            _RemoteDeviceTile(controller: controller, device: device),
+      ],
+    );
+  }
+}
+
+class _RemoteListenerDetails extends StatelessWidget {
+  const _RemoteListenerDetails({required this.status});
+
+  final RemoteHostStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!status.enabled) {
+      return Container(
+        key: const ValueKey('remote-listener-disabled'),
+        padding: const EdgeInsets.all(ThemeTokens.space3),
+        color: ThemeTokens.pending.withValues(alpha: 0.08),
+        child: const Text(
+          'Remote listening is disabled. This screen will not enable it. '
+          'Configure CODEX_NATIVE_REMOTE_LISTEN and restart the Host.',
+        ),
+      );
+    }
+    final endpoint = status.advertisedEndpoint;
+    return Container(
+      key: const ValueKey('remote-listener-enabled'),
+      padding: const EdgeInsets.all(ThemeTokens.space3),
+      decoration: BoxDecoration(
+        border: Border.all(color: ThemeTokens.border),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Detail(label: 'Bind', value: status.bindAddress ?? 'Unavailable'),
+          const SizedBox(height: ThemeTokens.space2),
+          _Detail(
+            label: 'Scope',
+            value: switch (status.scope) {
+              RemoteListenerScope.loopback => 'Loopback',
+              RemoteListenerScope.network => 'Network',
+              null => 'Unavailable',
+            },
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          _Detail(
+            label: 'Local TLS',
+            value: status.tls == true ? 'Enabled' : 'Not enabled',
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          if (endpoint == null)
+            const Text(
+              'No client endpoint is advertised. Set '
+              'CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT to the exact reachable '
+              'wss://…/v1/ws address and restart the Host. A wildcard bind is '
+              'never converted into an invitation address.',
+              key: ValueKey('remote-advertised-endpoint-missing'),
+              style: TextStyle(color: ThemeTokens.pending),
+            )
+          else ...[
+            Text(
+              'Advertised client endpoint',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: ThemeTokens.space1),
+            SelectableText(
+              endpoint,
+              key: const ValueKey('remote-advertised-endpoint'),
+            ),
+            if (status.tls == false) ...[
+              const SizedBox(height: ThemeTokens.space2),
+              Text(
+                status.scope == RemoteListenerScope.loopback
+                    ? 'The local listener is plaintext loopback; the advertised '
+                          'WSS endpoint must terminate TLS in a trusted proxy.'
+                    : 'The Host configuration is inconsistent: network scope '
+                          'must not be plaintext.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RemoteTicketCard extends StatelessWidget {
+  const _RemoteTicketCard({required this.ticket});
+
+  final RemotePairingTicket ticket;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('remote-ticket-card'),
+      padding: const EdgeInsets.all(ThemeTokens.space4),
+      decoration: BoxDecoration(
+        color: ThemeTokens.connected.withValues(alpha: 0.08),
+        border: Border.all(color: ThemeTokens.connected),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'One-use pairing ticket',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          SelectableText(
+            ticket.code,
+            key: const ValueKey('remote-ticket-code'),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontFamily: 'monospace', letterSpacing: 1.5),
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          SelectableText(ticket.endpoint ?? 'Endpoint unavailable'),
+          const SizedBox(height: ThemeTokens.space2),
+          Text(
+            'Expires ${_formatUtc(ticket.expiresAtMs)}. It is replaced by any '
+            'new ticket and is not persisted by this UI.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RemoteDeviceTile extends StatelessWidget {
+  const _RemoteDeviceTile({required this.controller, required this.device});
+
+  final RemoteAdminController controller;
+  final RemotePairedDevice device;
+
+  @override
+  Widget build(BuildContext context) {
+    final expired = device.isExpiredAt(DateTime.now().millisecondsSinceEpoch);
+    final active = !device.isRevoked && !expired;
+    final status = device.isRevoked
+        ? 'Revoked ${_formatUtc(device.revokedAtMs!)}'
+        : expired
+        ? 'Expired ${_formatUtc(device.expiresAtMs)}'
+        : 'Expires ${_formatUtc(device.expiresAtMs)}';
+    return Card(
+      key: ObjectKey(device),
+      margin: const EdgeInsets.only(top: ThemeTokens.space2),
+      child: ListTile(
+        title: Text(device.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          '${_scopeLabels(device.scopes)}\n$status',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        isThreeLine: true,
+        trailing: OutlinedButton(
+          onPressed: active && controller.canRevokeDevices
+              ? () => unawaited(_confirmRevoke(context))
+              : null,
+          child: const Text('Revoke'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRevoke(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Revoke paired device?'),
+        content: Text(
+          'Revoke “${device.name}”? Its current bearer will stop connecting. '
+          'This cannot be undone; pairing it again requires a fresh ticket.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('remote-confirm-revoke-button'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Revoke device'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await controller.revokeDevice(device);
+    }
+  }
+}
+
+String _formatUtc(int milliseconds) => DateTime.fromMillisecondsSinceEpoch(
+  milliseconds,
+  isUtc: true,
+).toIso8601String();
+
+String _scopeLabels(Set<RemoteDeviceScope> scopes) => scopes
+    .map(
+      (scope) => switch (scope) {
+        RemoteDeviceScope.read => 'Read',
+        RemoteDeviceScope.write => 'Write',
+        RemoteDeviceScope.approvalsRespond => 'Approvals',
+        RemoteDeviceScope.deviceRotate => 'Rotate credential',
+      },
+    )
+    .join(' · ');
+
+class _RuntimePanel extends StatelessWidget {
+  const _RuntimePanel({required this.controller});
+
+  final RuntimeController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = controller.snapshot;
     final statusColor = switch (snapshot.state) {
       RuntimeConnectionState.connected ||
       RuntimeConnectionState.remoteReadOnly => ThemeTokens.connected,
@@ -2007,7 +2391,28 @@ class _RuntimePanel extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: ThemeTokens.space6),
-            Text('Runtime', style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Runtime',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (snapshot.state == RuntimeConnectionState.connected &&
+                    !controller.usesRemote)
+                  OutlinedButton.icon(
+                    key: const ValueKey('remote-setup-button'),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (context) =>
+                          _RemoteSetupDialog(gateway: controller),
+                    ),
+                    icon: const Icon(Icons.devices_other, size: 18),
+                    label: const Text('Remote setup'),
+                  ),
+              ],
+            ),
             const SizedBox(height: ThemeTokens.space3),
             Row(
               children: [

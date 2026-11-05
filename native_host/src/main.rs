@@ -35,6 +35,7 @@ fn run() -> io::Result<()> {
         return Ok(());
     };
     let cache_dir = config.cache_dir.clone();
+    let remote_advertise_endpoint = config.remote_advertise_endpoint.clone();
     let remote_admin = Arc::new(Mutex::new(RemoteAdmin::new(
         config.remote_device_file.clone(),
     )));
@@ -50,7 +51,12 @@ fn run() -> io::Result<()> {
             remote_admin
                 .lock()
                 .map_err(|_| io::Error::other("Remote administration lock poisoned"))?
-                .set_listener(server.address(), server.is_tls(), server.tls_reloader());
+                .set_listener(
+                    server.address(),
+                    server.is_tls(),
+                    server.tls_reloader(),
+                    remote_advertise_endpoint,
+                );
             Some(server)
         }
         None => None,

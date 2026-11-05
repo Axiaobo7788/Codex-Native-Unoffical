@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
+import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/transport/process/child_process.dart';
 import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,6 +94,36 @@ void main() {
     expect(child.closeInputCount, 1);
     expect(child.killSignals, isEmpty);
   });
+
+  test(
+    'routes trusted local Remote administration through the Host peer',
+    () async {
+      final statusFuture = transport.readRemoteAdminStatus();
+      await pumpEventQueue();
+      final request = jsonDecode(child.writes.single) as Map<String, Object?>;
+      expect(request['method'], 'host/status');
+      child.addStdout({
+        'id': request['id'],
+        'result': {
+          'version': '0.1.0',
+          'maxOutputBytes': 1024,
+          'maxSessionBytes': 2048,
+          'maxReadBytes': 256,
+          'remote': {
+            'enabled': true,
+            'address': '127.0.0.1:4317',
+            'tls': false,
+            'scope': 'loopback',
+            'advertisedEndpoint': 'wss://host.example/v1/ws',
+          },
+        },
+      });
+
+      final status = await statusFuture;
+      expect(status.scope, RemoteListenerScope.loopback);
+      expect(status.canCreatePairingTicket, isTrue);
+    },
+  );
 
   test(
     'starts the native Host with the separately located Codex path',

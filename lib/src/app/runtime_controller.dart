@@ -11,6 +11,8 @@ import '../domain/model_gateway.dart';
 import '../domain/model_models.dart';
 import '../domain/output_gateway.dart';
 import '../domain/output_models.dart';
+import '../domain/remote_admin_gateway.dart';
+import '../domain/remote_admin_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
@@ -39,7 +41,8 @@ class RuntimeController extends ChangeNotifier
         ApprovalGateway,
         ModelGateway,
         OutputGateway,
-        HistoryGateway {
+        HistoryGateway,
+        RemoteAdminGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     this.hostLocator = const HostExecutableLocator(),
@@ -161,6 +164,22 @@ class RuntimeController extends ChangeNotifier
     }
     return onboarding.clearProfile();
   }
+
+  @override
+  Future<RemoteHostStatus> readRemoteAdminStatus() =>
+      _connectedTransport().readRemoteAdminStatus();
+
+  @override
+  Future<RemotePairingTicket> createRemotePairingTicket() =>
+      _connectedTransport().createRemotePairingTicket();
+
+  @override
+  Future<List<RemotePairedDevice>> listRemotePairedDevices() =>
+      _connectedTransport().listRemotePairedDevices();
+
+  @override
+  Future<bool> revokeRemotePairedDevice(String deviceId) =>
+      _connectedTransport().revokeRemotePairedDevice(deviceId);
 
   @override
   Future<ThreadPage> listThreads(ThreadListQuery query) =>

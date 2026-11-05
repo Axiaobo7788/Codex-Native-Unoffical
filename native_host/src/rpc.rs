@@ -29,10 +29,11 @@ pub(crate) struct RemoteAdmin {
     tls_reloader: Option<RemoteTlsReloader>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct RemoteListenerStatus {
     address: SocketAddr,
     tls: bool,
+    advertised_endpoint: Option<String>,
 }
 
 impl RemoteAdmin {
@@ -101,8 +102,13 @@ impl RemoteAdmin {
         address: SocketAddr,
         tls: bool,
         tls_reloader: Option<RemoteTlsReloader>,
+        advertised_endpoint: Option<String>,
     ) {
-        self.listener = Some(RemoteListenerStatus { address, tls });
+        self.listener = Some(RemoteListenerStatus {
+            address,
+            tls,
+            advertised_endpoint,
+        });
         self.tls_reloader = tls_reloader;
     }
 
@@ -114,12 +120,13 @@ impl RemoteAdmin {
     }
 
     fn listener_status(&self) -> Value {
-        match self.listener {
+        match self.listener.as_ref() {
             Some(listener) => serde_json::json!({
                 "enabled": true,
                 "address": listener.address.to_string(),
                 "tls": listener.tls,
                 "scope": if listener.address.ip().is_loopback() { "loopback" } else { "network" },
+                "advertisedEndpoint": listener.advertised_endpoint.as_deref(),
             }),
             None => serde_json::json!({"enabled": false}),
         }
@@ -191,6 +198,7 @@ pub(crate) fn route_client_message(
             Ok(serde_json::json!({
                 "code": ticket.code,
                 "expiresAt": ticket.expires_at_ms,
+                "endpoint": admin.listener.as_ref().and_then(|listener| listener.advertised_endpoint.as_deref()),
             }))
         }
         "host/remote/devices/list" => {
@@ -455,6 +463,7 @@ mod tests {
         let code = created["result"]["code"].as_str().unwrap().to_owned();
         assert_eq!(code.len(), 24);
         assert_eq!(created["result"]["expiresAt"], 301_000);
+        assert_eq!(created["result"]["endpoint"], Value::Null);
 
         let issued = remote_admin
             .lock()
@@ -490,6 +499,39 @@ mod tests {
         .unwrap();
         let revoked = response(route_client_message(revoke, &store, &remote_admin));
         assert_eq!(revoked["result"]["revoked"], true);
+    }
+
+    #[test]
+    fn local_status_and_pairing_report_only_the_explicit_advertised_endpoint() {
+        let (_temp, store, _, remote_admin) = fixture();
+        remote_admin.lock().unwrap().set_listener(
+            "0.0.0.0:4317".parse().unwrap(),
+            true,
+            None,
+            Some("wss://host.example:4317/v1/ws".into()),
+        );
+
+        let status = response(route_client_message(
+            br#"{"id":1,"method":"host/status"}"#.to_vec(),
+            &store,
+            &remote_admin,
+        ));
+        assert_eq!(status["result"]["remote"]["address"], "0.0.0.0:4317");
+        assert_eq!(status["result"]["remote"]["scope"], "network");
+        assert_eq!(
+            status["result"]["remote"]["advertisedEndpoint"],
+            "wss://host.example:4317/v1/ws"
+        );
+
+        let created = response(route_client_message(
+            br#"{"id":2,"method":"host/remote/pairing/create","params":{}}"#.to_vec(),
+            &store,
+            &remote_admin,
+        ));
+        assert_eq!(
+            created["result"]["endpoint"],
+            "wss://host.example:4317/v1/ws"
+        );
     }
 
     #[test]

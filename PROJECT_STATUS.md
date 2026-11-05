@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, secure default-root pairing/recovery onboarding, and a bounded read-only metadata UI are implemented; a trusted desktop setup surface, pairing-bound local-certificate trust, writes/approvals, and full conversation integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, secure default-root pairing/recovery onboarding, a bounded read-only metadata UI, and a trusted desktop setup/device-management surface are implemented; pairing-bound local-certificate trust, writes/approvals, and full conversation integration do not exist yet**
 
 ## Current repository state
 
@@ -85,13 +85,17 @@ This file is the repository's durable project memory. Update it whenever a task 
   pairing, and hash-only scoped device credentials. The WS/WSS listener uses
   these primitives. Android now has a strict platform-backed WSS/default-root
   device-record owner plus a bounded WSS pairing/recovery UI. The Android flow
-  still requires an exact operator-provided endpoint and a ticket created through
-  the local Host RPC because the desktop setup surface does not exist yet.
+  still requires an exact operator-configured endpoint. The desktop setup
+  surface now reads that explicit advertised endpoint and creates a one-use
+  ticket on demand without exposing the issued bearer.
 - The desktop Host exposes trusted local `host/remote/pairing/create`,
   `host/remote/devices/list`, and `host/remote/devices/revoke` administration.
   Its credential registry is loaded lazily from a configurable user config file,
   so Remote-store corruption cannot block ordinary local Host status or Codex
-  startup.
+  startup. The desktop Flutter surface accesses these methods only through a
+  local administration gateway outside `CodexTransport`, reports listener/TLS/
+  bind/advertised endpoint state, creates no ticket on open, and confirms every
+  device revocation before authoritative readback.
 - The Host can explicitly enable a plaintext listener only on a literal loopback
   address. A non-loopback listener requires an operator-provided PEM certificate
   chain/private key and uses rustls HTTPS/WSS; invalid or incomplete material
@@ -108,13 +112,55 @@ This file is the repository's durable project memory. Update it whenever a task 
   Android can now exchange a one-use ticket over default-root HTTPS, verify and
   save the issued bearer atomically, connect only after readback, and explicitly
   clear an unreadable/revoked profile. There is still no Remote write/approval
-  path, full conversation surface, desktop pairing/setup UX, or pairing-bound
-  local-certificate trust.
+  path, full conversation surface, or pairing-bound local-certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 trusted desktop Remote setup and device management
+
+- Added an optional `CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`/
+  `--remote-advertise-endpoint` Host setting. It requires an enabled listener
+  and an exact WSS `/v1/ws` URI, rejecting user info, query, fragment, zero port,
+  and unspecified `0.0.0.0`/`[::]` destinations. The value is separate from the
+  actual bind address so reverse proxies and wildcard binds remain truthful; the
+  Host never guesses a client address.
+- Extended trusted-local status and pairing-ticket responses with that exact
+  endpoint. A release Host plus stock app-server reported a real ephemeral
+  loopback bind and the independently configured endpoint, then exited zero on
+  EOF. This is configuration propagation evidence, not DNS/firewall/certificate
+  or Android reachability proof.
+- Added strict typed desktop administration models/protocol and a separate
+  `RemoteAdminGateway`. Only a connected `ProcessTransport` implements it;
+  `CodexTransport` and Android `RemoteTransport` do not. Exact response shapes,
+  WSS endpoint grammar, ticket/ID alphabets, Unicode device-name bounds, four
+  known scopes, timestamps, unique IDs, and the 32-row device cap fail closed.
+  Object strings and product errors redact endpoint, ticket, and device IDs and
+  reject any unexpected bearer field.
+- Added the desktop setup dialog. Opening it reads Host/device state but never
+  creates a ticket or enables networking. An affirmative action creates one
+  transient five-minute ticket only when an advertised endpoint is present;
+  its endpoint must match current status and its expiry must be future. Closing
+  the dialog drops it. Missing configuration explains the exact environment
+  setting instead of deriving a value from the wildcard bind.
+- Added bounded device metadata and affirmative revocation. The UI never shows
+  a bearer or device ID and always reads the authoritative list after the Host
+  action. Adjacent review found the existing total-record limit meant revoked
+  devices did not actually release a slot. The registry now limits active
+  credentials and atomically prunes revoked/expired records only with the next
+  successful pairing, preserving immediate revocation readback without
+  unbounded storage.
+- Added six protocol, six controller, three widget, one ProcessTransport, and
+  three Rust regression cases. The initial no-port WSS process test exposed that
+  Dart does not provide a default `Uri.port` for `wss`; validation now reads the
+  port only when explicitly present. All 151 Flutter tests and 78 Rust tests,
+  fatal-info analysis, formatting, strict Clippy, Rust release, Linux debug, and
+  Android debug builds pass. The Android build again used only the reversible
+  ASCII Flutter-SDK property workaround and produced the unchanged
+  191,469,644-byte APK. No emulator/physical Android device or Human visual
+  acceptance was available.
 
 ### 2026-11-05 — Phase 4 bounded Android pairing and recovery onboarding
 
@@ -749,8 +795,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test`: PASS, 99 tests, including 18 bounded Dart Remote transport
-  tests and 9 credential/recovery tests.
+- `flutter test`: PASS, 151 tests, including the Remote transport, credential,
+  lifecycle, pairing/onboarding, trusted desktop administration, and widget
+  interaction gates.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -761,8 +808,8 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 25 Remote-library tests, 47 Host-binary tests,
-  and 3 executable failure-path tests (75 total), including real TCP/WSS,
+- `cargo test --workspace`: PASS, 26 Remote-library tests, 49 Host-binary tests,
+  and 3 executable failure-path tests (78 total), including real TCP/WSS,
   exact event replay/gap recovery, abrupt reconnect, slow-reader disconnection,
   live revocation, certificate trust/rotation/rollback, protocol-close shutdown,
   deterministic storage failure, and cache/TLS startup gates.
@@ -805,10 +852,11 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   before compilation because `android/settings.gradle.kts` observed the SDK as
   `/home/axiaobo/ææ¡£/flutter`. With only the ignored
   `android/local.properties` temporarily pointed at an exact ASCII symlink,
-  `./gradlew assembleDebug` passed 87 actionable tasks and produced a 145 MiB
-  debug APK with arm64-v8a, armeabi-v7a, and x86_64 native outputs. The file and
-  symlink were restored/removed afterward. This proves the Android product and
-  plugin build under the path workaround, not a clean ordinary-path build.
+  `./gradlew assembleDebug` passed 185 actionable tasks and produced the
+  unchanged 191,469,644-byte debug APK with arm64-v8a, armeabi-v7a, and x86_64
+  native outputs. The file and symlink were restored/removed afterward. This
+  proves the Android product and plugin build under the path workaround, not a
+  clean ordinary-path build.
 - Packaged Linux GUI runtime launch: PASS; direct process inspection showed
   Flutter -> adjacent bundled Host -> separately located stock Codex. SIGINT
   removed all three processes. Existing ATK/cursor-theme warnings remained.
@@ -930,22 +978,17 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 Make the secure pairing path operable end to end without asking users to invoke
 raw Host RPCs or weakening certificate identity:
 
-1. add a trusted desktop Remote setup surface that reports disabled/listener/TLS
-   state, creates exactly one short-lived ticket on an affirmative action, shows
-   the client-reachable WSS `/v1/ws` endpoint without guessing it from a wildcard
-   bind, and supports explicit device list/revocation. Do not auto-enable a
-   listener or expose a ticket in logs;
-2. design a versioned pairing invitation for QR/manual transfer with exact
+1. design a versioned pairing invitation for QR/manual transfer with exact
    endpoint and ticket fields plus pairing-bound local certificate/CA identity.
    Add a new credential-record version and scoped TLS context only after the
    bootstrap proves Host identity; never use `badCertificateCallback`, TOFU after
    sending the ticket, or silent trust migration;
-3. exercise the current default-root path against an available emulator/device
+2. exercise the current default-root path against an available emulator/device
    and real Host: cold start, foreground/background, process death, network
    loss/recovery, Host restart, credential rejection/revocation,
    invalid/untrusted certificate, unreadable Keystore state, pairing save
    failure, and backup/restore behavior before claiming Android readiness;
-4. only after pairing/setup is usable and device-verified, extend the Remote
+3. only after pairing/setup is usable and device-verified, extend the Remote
    product beyond bounded read-only metadata. Keep pagination, output, writes,
    approvals, idempotency, and attachment bounds explicit rather than reusing the
    desktop surface optimistically.

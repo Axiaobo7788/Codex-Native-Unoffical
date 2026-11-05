@@ -186,11 +186,15 @@ impl DeviceRegistry {
         // A correct ticket is consumed even if durable publication fails. Retrying a
         // partially failed security operation requires a newly displayed local ticket.
         self.pairing = None;
-        if self.devices.len() >= self.max_devices {
+        let mut staged = self.devices.clone();
+        if staged.len() >= self.max_devices {
+            staged.retain(|_, record| record.is_active(now_ms));
+        }
+        if staged.len() >= self.max_devices {
             return Err(AuthError::DeviceLimit);
         }
-        let token = unique_token(&self.devices)?;
-        let id = unique_device_id(&self.devices)?;
+        let token = unique_token(&staged)?;
+        let id = unique_device_id(&staged)?;
         let expires_at_ms =
             now_ms
                 .checked_add(self.credential_ttl_ms)
@@ -211,7 +215,6 @@ impl DeviceRegistry {
             device: device.clone(),
             token_digest: token_digest(&token),
         };
-        let mut staged = self.devices.clone();
         staged.insert(id, record);
         save_store(&self.file_path, &staged)?;
         self.devices = staged;
@@ -731,6 +734,23 @@ mod tests {
             limited.pair(&ticket.code, "second", scopes(), 202),
             Err(AuthError::PairingUnavailable)
         ));
+    }
+
+    #[test]
+    fn revoked_and_expired_records_release_a_bounded_pairing_slot() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("revoked/devices.json");
+        let mut limited = DeviceRegistry::open(path, CREDENTIAL_TTL_MS, 1).unwrap();
+        let revoked = pair(&mut limited, 100);
+        assert!(limited.revoke(&revoked.device.id, 200).unwrap());
+        let replacement = pair(&mut limited, 201);
+        assert_eq!(limited.list(), vec![replacement.device]);
+
+        let path = temp.path().join("expired/devices.json");
+        let mut limited = DeviceRegistry::open(path, CREDENTIAL_TTL_MS, 1).unwrap();
+        let expired = pair(&mut limited, 300);
+        let replacement = pair(&mut limited, expired.device.expires_at_ms);
+        assert_eq!(limited.list(), vec![replacement.device]);
     }
 
     #[test]

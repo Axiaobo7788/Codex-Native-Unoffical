@@ -1027,10 +1027,10 @@ _Reviewed: 2026-11-05_
   captive-portal, Doze, or network-switching behavior. The pairing and WebSocket
   implementations must also be tested with the same real certificate chain; a
   pairing-only success is not connection readiness.
-- The Host local RPC can create a ticket, but the desktop product cannot yet
-  present a verified client-reachable endpoint or manage devices. The Android
-  form is therefore a real bounded path for operator-configured Hosts, not a
-  complete end-user setup experience.
+- At this slice boundary the Host local RPC could create a ticket, but the
+  desktop product could not present an explicitly configured client endpoint or
+  manage devices. The following trusted desktop setup slice closes that manual
+  RPC gap without changing the Android trust model.
 
 #### Validation and preserved negative evidence
 
@@ -1055,3 +1055,80 @@ _Reviewed: 2026-11-05_
   Keystore call, default-root HTTPS exchange, IME flow, Activity lifecycle,
   backup/restore, process kill, or Human interaction was executed. Those remain
   release gates rather than inferred passes.
+
+### Trusted desktop Remote setup and explicit endpoint advertisement
+
+_Reviewed: 2026-11-05_
+
+#### Sources and constraints re-applied
+
+- `codex-remote` at
+  [`fcdf784`](https://github.com/Venompool888/codex-remote/commit/fcdf784e6365735ad9efde5cb43c5126042f4556),
+  specifically its explicit `publicUrl`, `PairingLink.kt`, generation-scoped
+  setup controller, secure token store, and Host pair route. The useful product
+  evidence is that a public client endpoint is explicit and invalid public
+  configuration is visible; one-use material is transient and created through
+  an operator action. Its HTTP onboarding, protocol fallback, unbounded response
+  strings, and unverified asynchronous preference writes remain deliberate
+  non-adoptions.
+- `codex-remote-android` at
+  [`372581a`](https://github.com/liuhao-labs/codex-remote-android/commit/372581ad5cc66677d5322a9a447a03277d36ce15),
+  whose SSH setup blocks on explicit Host fingerprint confirmation before
+  credentials. This supports keeping identity and invitation presentation on a
+  trusted local surface, but does not justify adopting SSH or TOFU after a
+  pairing ticket is sent.
+- This repository's implemented Host behavior remains authoritative: listener
+  bind scope/TLS are runtime facts, pairing tickets last five minutes with only
+  one active ticket, public device records are capped at 32, and local
+  `host/remote/*` calls are separated from the authenticated network allowlist.
+
+#### Adopted here
+
+- Add a separate optional advertised endpoint rather than reconstructing one
+  from the listener. Accept only exact WSS `/v1/ws`, reject user info, query,
+  fragment, port zero, and unspecified IP hosts, and require a listener to be
+  enabled. Preserve reverse-proxy deployments by not requiring the endpoint to
+  equal the bind address or local TLS flag.
+- Return the endpoint in both `host/status` and ticket creation. The desktop
+  adapter requires exact bounded Host-owned schemas, rejects unexpected bearer
+  data, caps the device list at 32, and redacts endpoint/ticket/device IDs from
+  object strings and product errors.
+- Keep administration outside `CodexTransport`; only the connected desktop
+  `ProcessTransport` exposes it. Opening the dialog performs status/device reads
+  but creates no ticket. An explicit button creates one ticket, verifies that
+  its endpoint still matches status and that it is unexpired, and drops the
+  ticket when the dialog closes. The UI never enables or rewrites listener
+  configuration.
+- Require confirmation before revocation and read the device list back from the
+  Host. Count only active credentials toward the 32-device pairing limit; prune
+  revoked/expired records atomically only when publishing a replacement so the
+  store remains bounded and a just-revoked row can still be read back.
+
+#### Deliberate non-adoptions and validation boundary
+
+- Do not auto-discover LAN addresses, turn `0.0.0.0` into a hostname, create a
+  ticket when the dialog opens, copy a ticket to the clipboard automatically,
+  log it, persist it, enable a listener, edit configuration, or expose local
+  administration to a Remote device.
+- This surface does not prove that the configured endpoint is reachable, that
+  its certificate chains on Android, or that a reverse proxy forwards the exact
+  routes and headers. Those are installed-network/device gates. QR transfer and
+  self-signed/local-CA bootstrap still require a versioned pairing artifact that
+  binds endpoint, ticket, and Host identity before credentials are sent.
+- Six protocol, six controller, three widget, one process-correlation, and three
+  new Rust regressions cover malformed endpoints/shapes, no automatic ticket,
+  dialog-lifetime state, endpoint/expiry consistency, affirmative revocation,
+  authoritative readback, stale disposal, actual Host status projection, and
+  capacity release by revoked/expired credentials. All 151 Flutter and 78 Rust
+  tests pass, together with fatal-info analysis, strict Clippy, Rust release,
+  Linux debug, and Android debug builds.
+- The first ProcessTransport test exposed that Dart's `Uri.port` cannot supply a
+  default for the `wss` scheme when no explicit port exists; endpoint validation
+  now reads the port only when `hasPort` is true. Adjacent review then exposed
+  that revoked records still counted toward the old total-record limit, making
+  the documented recovery action ineffective. Pairing now prunes inactive
+  records at the atomic replacement boundary while preserving the active cap.
+- A release Host with stock app-server reported a real ephemeral loopback bind,
+  `tls=false`, and the independently configured WSS endpoint, then exited zero
+  on EOF. This verifies propagation, not endpoint network reachability. Linux is
+  still the only available device and no Human visual acceptance was performed.

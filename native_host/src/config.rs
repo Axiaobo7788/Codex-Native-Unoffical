@@ -1,7 +1,8 @@
 use crate::remote_tls::RemoteTlsFiles;
+use axum::http::Uri;
 use std::env;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -19,6 +20,7 @@ pub(crate) struct Config {
     pub(crate) remote_device_file: Option<PathBuf>,
     pub(crate) remote_listen: Option<SocketAddr>,
     pub(crate) remote_tls: Option<RemoteTlsFiles>,
+    pub(crate) remote_advertise_endpoint: Option<String>,
     pub(crate) max_output_bytes: u64,
     pub(crate) max_session_bytes: u64,
     pub(crate) max_forward_message_bytes: u64,
@@ -42,6 +44,8 @@ impl Config {
         let mut remote_listen = optional_socket_addr("CODEX_NATIVE_REMOTE_LISTEN")?;
         let mut remote_tls_cert = optional_path("CODEX_NATIVE_REMOTE_TLS_CERT")?;
         let mut remote_tls_key = optional_path("CODEX_NATIVE_REMOTE_TLS_KEY")?;
+        let mut remote_advertise_endpoint =
+            optional_string("CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT")?;
 
         let mut arguments = env::args_os().skip(1);
         while let Some(argument) = arguments.next() {
@@ -61,9 +65,15 @@ impl Config {
                 "--remote-tls-key" => {
                     remote_tls_key = Some(required_path(&mut arguments, "--remote-tls-key")?)
                 }
+                "--remote-advertise-endpoint" => {
+                    remote_advertise_endpoint = Some(required_string(
+                        &mut arguments,
+                        "--remote-advertise-endpoint",
+                    )?)
+                }
                 "-h" | "--help" => {
                     println!(
-                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen IP:PORT [--remote-tls-cert CERT.pem --remote-tls-key KEY.pem]]",
+                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen IP:PORT [--remote-tls-cert CERT.pem --remote-tls-key KEY.pem] [--remote-advertise-endpoint wss://host.example/v1/ws]]",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -82,6 +92,8 @@ impl Config {
         }
 
         let remote_tls = validate_remote_transport(remote_listen, remote_tls_cert, remote_tls_key)?;
+        let remote_advertise_endpoint =
+            validate_remote_advertise_endpoint(remote_listen, remote_advertise_endpoint)?;
 
         Ok(Some(Self {
             codex_executable,
@@ -89,6 +101,7 @@ impl Config {
             remote_device_file,
             remote_listen,
             remote_tls,
+            remote_advertise_endpoint,
             max_output_bytes: positive_u64(
                 "CODEX_NATIVE_MAX_OUTPUT_BYTES",
                 DEFAULT_MAX_OUTPUT_BYTES,
@@ -139,6 +152,24 @@ fn required_socket_addr(
     parse_socket_addr(&value.to_string_lossy(), flag)
 }
 
+fn required_string(
+    arguments: &mut impl Iterator<Item = std::ffi::OsString>,
+    flag: &str,
+) -> io::Result<String> {
+    let value = arguments.next().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{flag} requires a value"),
+        )
+    })?;
+    value.into_string().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{flag} must be valid UTF-8"),
+        )
+    })
+}
+
 fn optional_socket_addr(name: &str) -> io::Result<Option<SocketAddr>> {
     match env::var(name) {
         Ok(value) => parse_socket_addr(&value, name).map(Some),
@@ -170,6 +201,21 @@ fn optional_path(name: &str) -> io::Result<Option<PathBuf>> {
     }
 }
 
+fn optional_string(name: &str) -> io::Result<Option<String>> {
+    match env::var(name) {
+        Ok(value) if value.is_empty() => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{name} must not be empty"),
+        )),
+        Ok(value) => Ok(Some(value)),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(env::VarError::NotUnicode(_)) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{name} must be valid UTF-8"),
+        )),
+    }
+}
+
 fn validate_remote_transport(
     address: Option<SocketAddr>,
     cert: Option<PathBuf>,
@@ -196,6 +242,52 @@ fn validate_remote_transport(
         )),
         (_, tls) => Ok(tls),
     }
+}
+
+fn validate_remote_advertise_endpoint(
+    listener: Option<SocketAddr>,
+    endpoint: Option<String>,
+) -> io::Result<Option<String>> {
+    let Some(endpoint) = endpoint else {
+        return Ok(None);
+    };
+    if listener.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Remote advertised endpoint requires a Remote listener",
+        ));
+    }
+    if endpoint.len() > 2_048 {
+        return Err(invalid_remote_advertise_endpoint());
+    }
+    let uri = endpoint
+        .parse::<Uri>()
+        .map_err(|_| invalid_remote_advertise_endpoint())?;
+    let authority = uri
+        .authority()
+        .ok_or_else(invalid_remote_advertise_endpoint)?;
+    if uri.scheme_str() != Some("wss")
+        || uri.path() != "/v1/ws"
+        || uri.query().is_some()
+        || authority.as_str().contains('@')
+        || authority.host().is_empty()
+        || authority.port_u16() == Some(0)
+        || authority
+            .host()
+            .trim_matches(['[', ']'])
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_unspecified())
+    {
+        return Err(invalid_remote_advertise_endpoint());
+    }
+    Ok(Some(uri.to_string()))
+}
+
+fn invalid_remote_advertise_endpoint() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "Remote advertised endpoint must be an exact WSS /v1/ws URI",
+    )
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -294,6 +386,44 @@ mod tests {
             validate_remote_transport(network, None, None),
         ] {
             assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        }
+    }
+
+    #[test]
+    fn remote_advertised_endpoint_is_explicit_wss_only() {
+        let listener = Some("0.0.0.0:4317".parse().unwrap());
+        assert_eq!(
+            validate_remote_advertise_endpoint(
+                listener,
+                Some("wss://host.example:4317/v1/ws".into()),
+            )
+            .unwrap()
+            .as_deref(),
+            Some("wss://host.example:4317/v1/ws")
+        );
+        assert!(
+            validate_remote_advertise_endpoint(listener, None)
+                .unwrap()
+                .is_none()
+        );
+
+        for (configured_listener, endpoint) in [
+            (None, "wss://host.example/v1/ws"),
+            (listener, "ws://host.example/v1/ws"),
+            (listener, "https://host.example/v1/ws"),
+            (listener, "wss://host.example/v1/pair"),
+            (listener, "wss://host.example/v1/ws?ticket=secret"),
+            (listener, "wss://user@host.example/v1/ws"),
+            (listener, "wss://host.example:0/v1/ws"),
+            (listener, "wss://0.0.0.0/v1/ws"),
+            (listener, "wss://[::]/v1/ws"),
+        ] {
+            assert_eq!(
+                validate_remote_advertise_endpoint(configured_listener, Some(endpoint.into()),)
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidInput
+            );
         }
     }
 }

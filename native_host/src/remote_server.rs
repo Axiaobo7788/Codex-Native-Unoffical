@@ -1508,6 +1508,7 @@ mod tests {
             server.address(),
             server.is_tls(),
             server.tls_reloader(),
+            Some("wss://remote.example/v1/ws".into()),
         );
         assert!(server.is_tls());
         assert!(!server.address().ip().is_loopback());
@@ -1534,6 +1535,10 @@ mod tests {
         let status: Value = serde_json::from_slice(&status).unwrap();
         assert_eq!(status["result"]["remote"]["tls"], true);
         assert_eq!(status["result"]["remote"]["scope"], "network");
+        assert_eq!(
+            status["result"]["remote"]["advertisedEndpoint"],
+            "wss://remote.example/v1/ws"
+        );
 
         let health = tls_http_request(
             address,
