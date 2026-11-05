@@ -265,3 +265,149 @@ _Reviewed: 2026-11-05_
 - Widget tests must cover formatting, raw HTML as inert text, blocked images and
   URI schemes, external `http`/`https` activation, streaming fallback, source
   caps, and the existing 1,000-item lazy-build boundary.
+
+## Android Remote transport, pairing, and resume
+
+_Reviewed: 2026-11-05_
+
+### Sources reviewed
+
+- OpenAI Codex main at
+  [`e7f32cf`](https://github.com/openai/codex/commit/e7f32cf1928a35a9232a633a51c2a03b5a7e2c72),
+  especially the CLI listener selection, app-server transport authentication,
+  app-server README, and WebSocket test client. License: Apache-2.0.
+- OpenAI Codex Remote failure reports
+  [#39954](https://github.com/openai/codex/issues/39954),
+  [#37967](https://github.com/openai/codex/issues/37967),
+  [#55005](https://github.com/openai/codex/issues/55005),
+  [#41573](https://github.com/openai/codex/issues/41573), and
+  [#36189](https://github.com/openai/codex/issues/36189). These are incident
+  evidence, not one proven shared root cause.
+- `codex-remote` at
+  [`fcdf784`](https://github.com/Venompool888/codex-remote/commit/fcdf784e6365735ad9efde5cb43c5126042f4556),
+  including protocol v2, Host auth/server code, Android reconnect code, and the
+  lifecycle reconciliation audit. License: PolyForm Noncommercial 1.0.0;
+  implementation code is research-only for this Apache-2.0 project.
+- `codex-remote-android` at
+  [`372581a`](https://github.com/liuhao-labs/codex-remote-android/commit/372581ad5cc66677d5322a9a447a03277d36ce15),
+  including its SSH transport, host-key confirmation, encrypted credentials,
+  bounded initial history, and upward pagination. License: Apache-2.0.
+- `mobile-codex` at
+  [`107e7d7`](https://github.com/nokryong/mobile-codex/commit/107e7d73a4cb3285408b90242b37d5d7de49fbf5),
+  including phone/tablet navigation, draft ownership, stale-turn guards, and
+  bounded diff/preview presentation. License: GPL-3.0; implementation code is
+  research-only for this Apache-2.0 project.
+
+### Upstream and failure evidence
+
+- Current stock `codex app-server` can listen on stdio, Unix sockets, or a TCP
+  WebSocket address. Its WebSocket transport supports a capability token file,
+  a precomputed SHA-256 token hash, or signed bearer credentials. Upstream also
+  states that remote-control peers still need a device authenticator.
+- Direct Android-to-app-server WebSocket access would bypass this project's
+  already-required Host output transformation, spool budgets, lifecycle
+  supervision, and future attachment boundary. Availability upstream therefore
+  changes implementation options, not ADR-008's ownership.
+- An authenticated socket is not equivalent to a usable hydrated client. Real
+  reports show connections that initialize/list successfully while large-thread
+  hydration loops or times out; some mobile-to-Host writes can persist while
+  read-side hydration is still broken.
+- Full-history replies can be orders of magnitude larger than summary pages.
+  Large payload handling must not block ping/pong or fill an unbounded outbound
+  queue, and reconnect must never silently duplicate a write whose outcome is
+  unknown.
+- A second app-server process is not a safe way to obtain remote writer access:
+  the local real-runtime gates already show active-writer ownership, and remote
+  reports distinguish live writer state from persisted paged history.
+- Reference lifecycle audits found stale completion, late delta, navigation,
+  and reconnect results overwriting newer state. Terminal evidence must be
+  monotonic and results must be scoped to a connection/session/navigation
+  generation; assistant text alone never proves completion.
+
+### Decision for this project
+
+The Rust Host owns an explicitly enabled Remote listener and wraps sanitized
+app-server JSON-RPC in a small authenticated, resumable envelope. Ordinary Codex
+method names and typed adapter semantics remain protocol-native; only `host/*`
+operations belong to this project. The envelope must not become a parallel agent
+or feature RPC schema.
+
+The initial protocol has these invariants:
+
+1. The listener is disabled by default and binds loopback unless the user
+   explicitly configures remote exposure. Non-loopback exposure requires TLS;
+   plaintext WebSocket is limited to loopback/test use.
+2. Pairing is initiated from a local trusted Host surface with one short-lived,
+   single-use ticket. Success returns one cryptographically random 256-bit
+   device token exactly once. The Host persists only its SHA-256 digest plus a
+   bounded device name, scopes, creation/expiry/last-seen/revocation metadata,
+   using owner-only atomic storage and constant-time digest comparison.
+3. A three-message `server_hello` / `client_hello` / `hello_ack` negotiation
+   selects a common version and capabilities before any RPC is accepted. The
+   Host advertises a process-scoped session ID and current event sequence.
+4. Every replayable event has a strictly increasing sequence. The client ACKs
+   its highest contiguous sequence. Replay is allowed only for the same Host
+   session and a retained continuous suffix; a process change or missing gap
+   returns `resyncRequired` and forces bounded authoritative reload.
+5. The journal is bounded by both item count and serialized bytes. Each inbound
+   message, outbound message, and per-connection queued byte total also has a
+   hard cap. Control/heartbeat progress must not wait behind large application
+   payloads.
+6. Multiple clients cannot share raw app-server request IDs. The Host gives each
+   connection a namespace/remaps correlation IDs, then returns the client's
+   original ID only to that connection.
+7. Remote write methods require an idempotency key. The Host may replay a cached
+   outcome only inside the same authoritative Host session; after Host restart,
+   an unconfirmed operation is reported as unknown and is never silently
+   retried.
+8. Pending approval/input requests are durable protocol state independent of the
+   volatile event suffix. They have Host-generated opaque IDs, scopes and
+   deadlines, are replayed only to eligible devices, and fail closed when stale,
+   superseded, or already answered.
+9. Initial and recovery reads reuse existing bounded thread/turn/item pagination.
+   The client never auto-drains every thread or complete history merely because
+   a socket connected.
+10. Large attachments and command output do not travel as base64 WebSocket
+    frames. They use separately authenticated, device-bound, chunked transfers
+    with exact total size, range, per-chunk and whole-object integrity, quotas,
+    expiry, and opaque references.
+
+Android will store the issued device secret with platform-backed secure storage
+when the device slice is implemented. The first Host slice should establish the
+pure protocol/auth/replay state machine and its adversarial tests before adding a
+network library, so listener behavior cannot define ambiguous semantics by
+accident.
+
+### Deliberate non-adoptions
+
+- Do not connect Android directly to stock app-server or expose its raw listener
+  on a LAN.
+- Do not make SSH/general remote-shell credentials the default Remote transport;
+  it remains a possible explicit future adapter, not a pairing substitute.
+- Do not copy PolyForm Noncommercial or GPL implementation code.
+- Do not reproduce a feature-by-feature Remote RPC allowlist that drifts from
+  app-server, and do not read rollout files to synthesize protocol state.
+- Do not use a count-only replay journal, a 64 MiB socket backlog, automatic
+  full-history hydration, or base64 attachment bodies as this project's bounds.
+- Do not resend writes or approval answers across a changed Host session merely
+  because the mobile process still has a queued request.
+
+### Validation required here
+
+- Protocol tests must cover incompatible versions, pre-handshake RPC rejection,
+  exact gap boundaries, duplicate/out-of-order ACKs, session changes, item and
+  byte eviction, one oversize event, integer overflow, ID namespace collisions,
+  stale generations, and idempotency-key parameter mismatch.
+- Auth tests must cover ticket expiry/single use, token entropy/format, constant-
+  time digest matching, rotation/revocation/expiry, corrupt storage, atomic
+  owner-only persistence, rate budgets, and live revocation.
+- Network tests must cover loopback-only defaults, refusal of plaintext
+  non-loopback exposure, handshake deadlines, message/backlog caps, slow readers,
+  ping/pong under application load, abrupt disconnect, TLS configuration, and no
+  surviving Host/Codex process.
+- End-to-end recovery must prove no missing or duplicate events within a retained
+  same-session suffix, explicit bounded resync beyond it, no duplicate writes,
+  fail-closed approvals, bounded hydration, and output/attachment range transfer.
+- Real Android physical-device gates must include background/foreground, Wi-Fi
+  changes, Doze, process death, credential revocation, Host restart, large
+  threads, active turns, approval races, and phone/tablet presentation.

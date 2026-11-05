@@ -210,3 +210,55 @@ while broad sandbox exceptions would not recreate normal developer-shell access.
   notarize the completed app, and validate on a real macOS machine.
 - Removing App Sandbox does not weaken the client's own approval, sandbox-policy,
   opaque-path, or bounded-transport rules. Those remain application requirements.
+
+---
+
+## ADR-010 — Use a Host-owned authenticated resumable Remote envelope
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+Android Remote connects to an explicitly enabled listener owned by
+`codex-native-host`, not directly to stock app-server. The Host carries sanitized
+app-server JSON-RPC inside a minimal versioned envelope with device
+authentication, capabilities, a process-scoped session ID, sequenced events,
+ACK/resume, bounded replay, and explicit resynchronization.
+
+Pairing uses a short-lived single-use local ticket and returns one random 256-bit
+device bearer token. Only its SHA-256 digest and bounded device metadata are
+persisted. Non-loopback exposure requires TLS. Ordinary Codex methods remain
+Codex methods; project-owned extensions stay under `host/*`.
+
+Replay storage is bounded by both event count and serialized bytes, while
+message and per-connection queue limits protect live delivery. Writes require
+same-session idempotency keys and are never silently replayed after a Host
+restart. Large blobs use separately authenticated chunked transfer rather than
+WebSocket base64 payloads.
+
+### Why
+
+- The Host already owns output removal, opaque range reads, child lifecycle, and
+  bounded transport; direct app-server access would bypass those invariants.
+- A network connection can survive while state hydration, writer ownership, or
+  large-payload delivery is broken. Session/sequence/resync semantics make those
+  states explicit instead of treating `connected` as authoritative readiness.
+- Reusing protocol-native app-server methods avoids a second feature schema that
+  would drift from Codex, while the narrow envelope supplies the security and
+  recovery properties app-server delegates to its remote peer.
+
+### Consequence
+
+- Remote networking is opt-in and loopback-only by default. Configuration must
+  reject plaintext non-loopback listeners.
+- Protocol, auth, journal, correlation, and idempotency semantics are tested as a
+  pure Host state machine before a WebSocket implementation is selected.
+- Android keeps only a bounded projection and uses existing paginated adapters
+  after resync; it must not hydrate complete thread history automatically.
+- Pending approvals/elicitation remain distinct fail-closed Host state rather
+  than relying only on the volatile event journal.
+- Device secret storage, TLS, installed-network behavior, and reconnect recovery
+  require real platform/device validation and cannot be claimed from Linux unit
+  tests alone.

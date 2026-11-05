@@ -10,7 +10,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 2 — Local usable Codex client: IMPLEMENTED AND LOCALLY MACHINE-VERIFIED — Human approval interaction and hosted CI remain separate gates**
 
-**Phase 3 — Bounded-memory long-session UX: IN PROGRESS — paginated history, bounded native command-output viewing, and safe lazy assistant Markdown are integrated and Linux-measured; cross-platform and Human gates remain**
+**Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
+
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research and ADR are complete; pure Host protocol core is next**
 
 ## Current repository state
 
@@ -68,12 +70,41 @@ This file is the repository's durable project memory. Update it whenever a task 
   The outer virtualized timeline controls widget construction and no global AST
   cache retains inactive messages.
 - Cross-platform RSS/runtime evidence and Human interaction acceptance are not
-  complete yet. Android remote control remains Phase 4 work.
+  complete yet. Those remaining Phase 3 gates require unavailable Human,
+  Windows, macOS, or installed-volume evidence in this Linux session, so Phase 4
+  machine-actionable work has started without misreporting those gates complete.
+- Android Remote has a researched Host-owned envelope design: explicit opt-in
+  listener, local single-use pairing, hashed scoped device credentials,
+  TLS-required non-loopback exposure, version/capability negotiation,
+  session/sequence/ACK resume, count-and-byte-bounded replay, same-session write
+  idempotency, and separate chunked large-object transfer. No Remote network
+  listener or Android credential flow is implemented yet.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 Remote transport research and protocol decision
+
+- Reviewed current official app-server stdio/Unix/WebSocket listener and
+  authentication support, five upstream Remote failure reports, and three
+  reference clients at pinned commits with Apache-2.0, PolyForm Noncommercial,
+  and GPL licensing boundaries recorded.
+- Confirmed that upstream WebSocket availability does not replace this project's
+  Host: direct access would bypass the already-integrated bounded output spool,
+  lifecycle, and future attachment boundary. ADR-010 keeps ordinary Codex RPC
+  semantics while adding only a minimal Host-owned authenticated/resumable
+  envelope.
+- Defined local single-use pairing, hash-only device credential persistence,
+  TLS-required non-loopback exposure, three-message negotiation, process session
+  identity, sequence/ACK/resync rules, dual count/byte journal limits,
+  correlation namespaces, same-session write idempotency, fail-closed pending
+  interactions, bounded recovery reads, and chunked large-object transfer.
+- Preserved negative evidence that socket authentication/readiness is separate
+  from bounded hydration and live writer state, that large payloads can block
+  recovery/control traffic, and that stale lifecycle results can overwrite newer
+  navigation/turn state unless generation-scoped and monotonic.
 
 ### 2026-11-05 — Phase 3 Host storage-failure and shutdown gates
 
@@ -403,21 +434,22 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Continue Phase 3 with the remaining presentation and platform gates:
+Implement and adversarially test the pure Rust Host Remote protocol core before
+choosing a WebSocket dependency:
 
-1. obtain Human visual/interaction acceptance for populated range-backed logs,
-   truncated output, large diffs, dangerous settings, and Markdown selection/link
-   behavior; their production-App machine gates now pass;
-2. run Windows and macOS native builds plus packaged process/output/lifecycle RSS
-   gates; on macOS also validate nested signing, notarization, ordinary workspace
-   access, and no surviving child;
-3. exercise real installed-volume exhaustion and lifecycle soak on supported
-   platforms; deterministic Linux storage faults and current shutdown smokes now
-   pass, while the historical six-second fallback remains a non-reproduced watch
-   item.
+1. typed version/capability/session handshake with no pre-ack RPC path;
+2. strictly sequenced replay journal bounded simultaneously by event count and
+   serialized bytes, plus exact same-session gap/resync decisions and contiguous
+   ACK validation;
+3. request-correlation namespaces and same-session write-idempotency state that
+   cannot silently cross a Host restart;
+4. cryptographic single-use pairing and hash-only device registry with
+   expiry/revocation/persistence failure gates.
 
-Do not begin Android remote transport or ecosystem management until the remaining
-Phase 3 RC gates are exhausted or require unavailable platform/Human evidence.
+After the semantics pass independently, research/select the smallest maintained
+Rust WebSocket/TLS stack and connect an opt-in loopback listener without changing
+the existing desktop stdio path. Preserve the unavailable Phase 3 Human,
+Windows/macOS, and installed-volume gates as RC requirements.
 
 ## Milestone outline
 
