@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, and operator-certificate non-loopback TLS are implemented; writes/approvals and the Android trust/credential/client flow do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, and the bounded Dart Remote transport core are implemented; writes/approvals and the Android trust/credential/reconnect/UI flow do not exist yet**
 
 ## Current repository state
 
@@ -25,7 +25,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   - perform `initialize` followed by `initialized`;
   - surface typed runtime status to Flutter widgets;
   - capture a bounded stderr tail, report malformed protocol data and process exits, and close the child without leaving an orphan.
-- `CodexTransport` isolates feature/domain code from the process implementation so a later `RemoteTransport` can preserve the same boundary.
+- `CodexTransport` isolates feature/domain code from transport details. The
+  production desktop uses `ProcessTransport`; a read-only `RemoteTransport`
+  now reuses the typed model/thread/turn adapters but is deliberately not wired
+  into Android runtime state before credential, trust, resync, and reconnect
+  ownership exist.
 - Typed thread operations now cover bounded `thread/list`, `thread/start`, metadata-only `thread/read`, history-excluding `thread/resume`, and exact-ID delete for smoke-test cleanup.
 - The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, and exposes select/resume actions. It does not retain turns or raw protocol JSON.
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
@@ -94,13 +98,64 @@ This file is the repository's durable project memory. Update it whenever a task 
   `host/remote/status`, `model/list`, bounded `thread/list`, and metadata-only
   `thread/read` through the same sanitized stock app-server process. Six bounded
   lifecycle/state notification methods feed sequenced live delivery and same-
-  session replay. It still has no writes, approvals, Android client, or pairing-
-  bound Android certificate trust.
+  session replay. Dart now has a bounded read-only client protocol core, but
+  there is still no Remote write/approval path, Android credential/reconnect
+  coordinator or UI, or pairing-bound Android certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 bounded Dart Remote transport core
+
+- Added production Android `INTERNET` permission and a typed
+  `RemoteTransport` over `dart:io` WebSocket. WSS is the default; plaintext is
+  accepted only through an explicit opt-in with a literal loopback IP. Endpoint
+  validation rejects user-info/query credential placement without echoing the
+  URI, and bearer validation accepts only the Host's exact 43-character
+  base64url credential shape.
+- Implemented strict `codex-native-v1` subprotocol and three-message
+  negotiation, required capability/version checks, same-session resume, exact
+  sequenced event acceptance, ACK, a 64-request correlation cap, 1 MiB encoded
+  message cap, request deadlines, and coordinated fail-closed shutdown. A late
+  socket arriving after a connection deadline is explicitly closed rather than
+  leaked.
+- The real `dart:io` socket disables WebSocket compression, configures Dart
+  3.13's 1 MiB inbound frame limit, and serializes outbound messages through
+  `addStream` so OS write backpressure can pause the source. Its application
+  write queue is independently capped at 64 messages and 2 MiB. Real loopback
+  socket tests prove ordered writes and that an oversize frame is protocol-
+  closed before a message reaches the transport.
+- A new connection now requires bounded authoritative resync even when the Host
+  has no replay suffix. Events are held behind that snapshot, not exposed to
+  feature state, and a generation token prevents an older in-flight resync from
+  clearing a newer invalidation. The client buffer mirrors the Host's 512-event
+  and 8 MiB journal limits; exhaustion clears the incomplete suffix and forces
+  a new generation.
+- Reused the existing typed model/thread/turn adapters for the currently
+  allowed `host/remote/status`, `model/list`, `thread/list`, and metadata-only
+  `thread/read` surface. History/output reads, writes, turns, interruption, and
+  approvals are rejected locally without putting an RPC on the socket. A
+  synthetic initialize result is returned only after Remote status/session/mode
+  validation; this transport foundation is not yet an Android ready state.
+- The first fail-closed sequence-gap test stalled during close. The cause was
+  closing the socket before cancelling the active `StreamIterator`; reversing
+  that order removed the lifecycle wait and is retained as negative evidence.
+  Eighteen focused tests now cover endpoint/credential boundaries, late-connect
+  cleanup, subprotocol negotiation, resync gating/generation invalidation,
+  exact replay/ACK, out-of-order RPC correlation, local write rejection,
+  malformed/binary/gap input, abnormal peer close, explicit resync, timeout,
+  concurrent close, and real-socket frame/write behavior. Dart's oversize-frame
+  path closes the message stream with code 1002 instead of forwarding its
+  internal exception; the transport now converts every abnormal peer close into
+  a visible protocol error.
+- Full `dart analyze` and all 90 Flutter tests pass. The production Android
+  manifest contains `INTERNET`; `assembleDebug` again passed 87 Gradle tasks and
+  produced the 145 MiB three-ABI debug APK after temporarily Unicode-escaping
+  the ignored Flutter SDK property. Ordinary `flutter build apk` still fails
+  before compilation on this Unicode path, and no emulator, physical Android,
+  real LAN, background lifecycle, platform-CA, or UI claim is made.
 
 ### 2026-11-05 — Phase 4 fail-closed non-loopback WSS
 
@@ -511,7 +566,8 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 72 tests.
+- `flutter test --reporter expanded`: PASS, 90 tests, including 18 bounded
+  Dart Remote transport tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -606,6 +662,13 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   The passing build also reported Gradle-10/AGP-9 migration warnings, an ignored
   legacy manifest `package` attribute in `url_launcher_android`, and an Android
   SDK XML version skew; none was promoted to a clean warning-free gate.
+- Dart 3.13 exposes an inbound WebSocket frame cap, not an aggregate fragmented-
+  message cap. The client sets it to 1 MiB, disables compression, and also
+  rejects any delivered combined message above 1 MiB; the authenticated Host
+  independently caps each message and emits it as one frame. This is bounded
+  for the trusted Host implemented here, not proof that a compromised
+  authenticated Host cannot fragment a larger message and cause a transient
+  client allocation before the combined check. There is no accept-all TLS path.
 - Safe assistant Markdown intentionally differs by lifecycle and size:
   in-progress messages are plain text, and completed messages above 16 KiB show
   only a labeled bounded tail rather than rich formatting. Actual external
@@ -674,23 +737,26 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Build the bounded Android `RemoteTransport` and credential/trust bootstrap against
-the now-working WSS envelope:
+Build the Android credential/trust and recovery owner around the now-tested
+read-only `RemoteTransport`:
 
-1. add the production Android `INTERNET` permission and a typed transport that
-   uses `wss://` by default, the same protocol models, bounded queues, three-
-   message negotiation, ACK/resume, heartbeat, and explicit resync;
-2. add platform-backed storage for the issued device credential with Android
+1. add platform-backed storage for the issued device credential with Android
    backup exclusions and explicit unreadable/lost-key recovery. Do not persist a
    bearer in preferences, logs, crash text, or navigation state;
-3. support ordinary system-CA certificates first. Design the local self-signed
+2. support ordinary system-CA certificates first. Design the local self-signed
    pairing artifact so certificate/CA identity is authenticated and stored with
    the device record; never use `badCertificateCallback` as onboarding;
-4. exercise reconnect, Host restart/session change, revocation, malformed and
-   oversized input, bounded hydration, and process/background lifecycle in Dart
-   tests, then run the available emulator/device and Android build gates. Keep
-   server requests/approvals and writes rejected until pending interaction state
-   and idempotency are wired end to end.
+3. add a lifecycle/reconnect coordinator with bounded backoff, persisted
+   session/sequence only after applied events, initial and gap-triggered bounded
+   authoritative reads, stale-attempt rejection, and explicit revoked/lost-key
+   states. Dart automatically handles WebSocket ping/pong control frames; the
+   coordinator must still own application readiness and request-timeout recovery;
+4. integrate Android runtime state only after those boundaries are real, then
+   exercise Host restart/session change, revocation, malformed/oversized input,
+   bounded hydration, and process/background lifecycle in Dart tests and the
+   available emulator/device/build gates. Keep server requests/approvals and
+   writes rejected until pending interaction state and idempotency are wired end
+   to end.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

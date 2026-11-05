@@ -47,7 +47,8 @@ Pre-alpha. Phase 1 is implemented: the Flutter desktop app locates a stock
 `codex` executable, starts the bundled Rust Host, completes the stock app-server
 initialization handshake, displays typed runtime state, and owns the process
 lifecycle. Linux, Windows, macOS, and Android project shells are in the
-repository; Android remote control is a later phase.
+repository; the bounded Android Remote transport foundation is in progress and
+is not yet connected to product runtime state.
 
 Phase 2 is locally implemented. The current desktop slice lists bounded pages
 of thread metadata, starts threads, reads stored thread metadata without turns,
@@ -79,9 +80,12 @@ strict read-only subset—`model/list`, bounded `thread/list`, and metadata-only
 `thread/read`—through the same stock app-server and output sanitizer. A small
 allowlist of sanitized lifecycle notifications now uses a 512-event/8 MiB
 sequence journal with ACK, same-session replay, and explicit gap resync. Token
-deltas, diffs, server requests, writes/approvals, pairing-bound Android
-certificate trust, Android secure storage, and the Android UI are not
-implemented yet.
+deltas, diffs, server requests, and writes/approvals remain unrouted. A bounded
+Dart `RemoteTransport` now enforces WSS-by-default negotiation, request/event
+limits, ACK/resume, initial authoritative resync, and stale-resync rejection
+while reusing the typed protocol adapters. It is not wired into the Android UI
+until pairing-bound certificate trust, platform-backed secure storage,
+reconnect/background recovery, and authoritative state hydration are complete.
 
 ## Run locally
 

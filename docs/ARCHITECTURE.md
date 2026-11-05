@@ -112,12 +112,35 @@ sequence. Same-session retained suffixes replay; an evicted cursor, receiver
 lag, or live sequence gap requires authoritative resync. Token deltas, diffs,
 server requests, approvals, and all writes remain deliberately unrouted.
 
+The Dart `RemoteTransport` now implements that read-only envelope without
+changing feature schemas. It requires WSS by default (with an explicit literal-
+loopback-only development exception), validates the negotiated subprotocol,
+versions and capabilities, correlates at most 64 RPCs, accepts only the exact
+next event sequence, ACKs accepted events, and reuses the typed model/thread/turn
+adapters. A fresh or invalid resume always enters authoritative-resync state.
+Incremental events are held behind the snapshot, and resync generations prevent
+stale asynchronous reads from claiming a newer invalidation. The held suffix is
+bounded to 512 events and 8 MiB. History/output, writes, approvals, and server
+requests fail locally because the Host has not made those semantics remotely
+safe.
+
+This is a transport core, not Android application readiness. The Android runtime
+controller still needs a platform-backed credential/trust owner, persisted
+applied cursor, reconnect/backoff and process-lifecycle policy, and bounded
+authoritative hydration before it can select `RemoteTransport`. Dart 3.13's
+socket is configured with a 1 MiB inbound frame cap and no compression, while
+the transport separately caps a delivered combined message. The authenticated
+Host also caps and emits one-frame messages. Dart exposes no aggregate
+fragmented-message setting, so this is not a malicious-authenticated-Host memory
+boundary.
+
 The remaining network and Android layers must still provide:
 
 - pairing-bound self-signed certificate identity or ordinary platform-CA trust;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
-- platform-backed Android credential storage and lifecycle recovery.
+- platform-backed Android credential storage, reconnect, and lifecycle recovery;
+- Android runtime/UI integration and bounded authoritative resync projection.
 
 ## Fidelity mode
 

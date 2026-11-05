@@ -644,4 +644,93 @@ _Reviewed: 2026-11-05_
 
 Deliberately deferred: write methods, pending approval state, output-range
 transfer, diff chunking, pairing-bound Android certificate onboarding, Android
-secure storage, and the Android Remote client remain unavailable.
+secure storage, reconnect/lifecycle ownership, and Android application
+integration remain unavailable.
+
+### Bounded Dart Remote client transport
+
+_Reviewed: 2026-11-05_
+
+#### Sources and constraints applied
+
+- Dart's official `WebSocket.connect`, `HttpClient`, and `SecurityContext` APIs
+  reviewed in the WSS section above remain the implementation boundary. The
+  WebSocket client negotiates `codex-native-v1`, carries the bearer only in the
+  Authorization header, uses platform trust roots by default, and permits a
+  narrowly configured `HttpClient` for a future pairing-bound local trust
+  anchor. No `badCertificateCallback` exists in the product path.
+- Dart automatically handles WebSocket ping/pong control frames. Application
+  code still needs request deadlines, socket-close recovery, resume, and
+  authoritative readiness; inventing an additional JSON heartbeat would create
+  a second liveness protocol without improving the Host's existing heartbeat.
+- Dart 3.13 adds `maxPayloadLength` to the WebSocket client. SDK source confirms
+  that it rejects each uncompressed frame before exposing a message and caps a
+  decompressed frame, but fragmented uncompressed frames accumulate into the
+  message builder without an aggregate check. Configure the frame limit to
+  1 MiB, disable compression, retain a second combined-message check, and treat
+  TLS-authenticated Host behavior as part of the trust boundary. This does not
+  prove bounded allocation against a compromised Host that deliberately
+  fragments a larger message and is recorded as a release risk, not hidden.
+- SDK source also confirms that ordinary `WebSocket.add()` enters a synchronous
+  stream-controller path. Use serialized `addStream` writes instead: its source
+  subscription is paused when the underlying socket consumer applies
+  backpressure. Keep a separate count-and-byte cap because backpressure does not
+  itself bound calls already queued by application code.
+
+#### Adopted here
+
+- Require WSS and an exact `/v1/ws` endpoint. Permit plaintext only with an
+  explicit flag and a literal loopback IP; reject hostname loopback, query,
+  fragment, and user-info forms. Validate the 43-character base64url bearer and
+  keep credential/URI details out of validation errors.
+- Reuse the Host's three-message negotiation and require protocol version 1 plus
+  `ack`, `eventReplay`, and `readOnlyCodex`. A missing subprotocol, inconsistent
+  session/sequence, binary/unknown/malformed message, event gap, or malformed RPC
+  result policy-closes the connection.
+- Treat a connection without an exact same-session retained cursor as requiring
+  authoritative resync, even though the Host correctly reports that there is no
+  replay request. Hold subsequent events behind the snapshot and require the
+  caller to complete the same resync generation. Buffer exhaustion or a Host
+  marker increments the generation so a stale read cannot clear newer evidence.
+- Mirror the Host bounds: 64 pending RPCs, 1 MiB messages, 512 held events and
+  8 MiB held-event bytes. The real socket additionally caps its serialized
+  outbound queue at 64 messages/2 MiB and uses the SDK frame cap. One ambiguous
+  RPC timeout closes the connection rather than allowing a late response to be
+  mistaken for a safe retry. A connection Future that completes after its
+  deadline is explicitly closed.
+- Reuse typed model/thread/turn adapters, but expose only status, model list,
+  bounded thread list, and metadata-only thread read. All writes, approvals,
+  history, and output calls reject locally until the Host has end-to-end state
+  and idempotency semantics for them.
+
+#### Validation and preserved negative evidence
+
+- Sixteen fake-socket and two real-loopback-socket tests cover security
+  configuration, handshake, first resync, retained replay, ACK/cursor
+  advancement, out-of-order correlation, unsupported writes,
+  malformed/binary/gap input, abnormal peer close, explicit resync, event-buffer
+  exhaustion, timeout, concurrent close, ordered real-socket writes, and the
+  SDK frame cap. The first sequence-gap test hung:
+  the reader tried to close its socket before cancelling the active iterator.
+  Cancelling input first fixed the concrete lifecycle cycle; the initial hang is
+  retained rather than erased by later green tests. The first real oversize-
+  frame assertion expected a stream error; Dart instead intentionally sends a
+  protocol close and ends the message stream without forwarding that internal
+  error. The test now asserts close code 1002, and `RemoteTransport` surfaces an
+  abnormal stream end through its public protocol-error channel.
+- Full Dart analysis and all 90 Flutter tests pass. The Android manifest merge
+  contains `INTERNET`, and the three-ABI debug APK builds through the documented
+  Unicode-path local-property workaround. No real Android network, background,
+  process-death, platform-CA, or presentation behavior was exercised.
+
+#### Deliberately deferred
+
+- Do not wire the transport into `RuntimeController` while endpoint/trust and
+  device credential ownership are transient strings and resync has no bounded
+  application projection owner.
+- Do not persist a bearer or cursor in ordinary preferences, route state, logs,
+  or crash text. Add platform-backed storage with backup exclusions and explicit
+  key-loss recovery first.
+- Do not automatically retry writes or approval answers. The current client is
+  read-only; reconnect/idempotency and durable pending interaction state remain
+  separate future slices.
