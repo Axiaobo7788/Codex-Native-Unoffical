@@ -2128,3 +2128,58 @@ _Reviewed: 2026-11-06_
   bundle. This closes the hosted compilation/behavior requirement only for the
   implemented leaf-object gate, not the remaining installed-service, installer,
   directory-custody, extended-ACL, or Human gates.
+
+## macOS external TLS-key extended ACL gate
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Apple's archived [`acl_get_fd_np(3)`](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/acl_get_fd.3.html)
+  documents descriptor-based retrieval of a requested ACL type and requires the
+  returned allocation to be released with `acl_free`. Apple's ACL guidance says
+  filesystem clients must check for and respect ACL presence rather than assume
+  mode bits are the complete access policy.
+- Apple's open-source Libc at
+  `71bbe350ab79eef58113991d817ccc6165061a64` (APSL-2.0) implements
+  `acl_get_fd_np` with `ACL_TYPE_EXTENDED` through `fstatx_np` and records
+  `ENOENT` when the `FILESEC_ACL` property is absent. This establishes an exact
+  same-handle absence result rather than requiring a path-based `ls`/`chmod`
+  subprocess. No source code is copied.
+- GNU gnulib at `f6cbe6673d0cbc8e13ca27773aeb53e891d33bac`
+  (GPL-3.0-or-later) treats `ACL_TYPE_EXTENDED` as the real macOS ACL type,
+  retrieves it from a supplied descriptor when available, classifies the
+  returned object, and releases it. The Host adopts the descriptor lifetime and
+  release pattern, not gnulib code or its cross-platform policy.
+- rsync at `a6b31adfa495513abf7ae002b81fabe29bc50986`
+  (GPL-3.0-or-later) likewise maps its macOS access-ACL abstraction to
+  `ACL_TYPE_EXTENDED` and iterates named entries. The Host deliberately does not
+  copy that parser because an external TLS key needs no extended ACL at all.
+
+### Adopted boundary
+
+- Retain ADR-022's no-follow open, same-handle ownership check, and no
+  group/other mode bits. On macOS query that descriptor for
+  `ACL_TYPE_EXTENDED` before reading a key byte. Accept only `ENOENT`; reject
+  every returned ACL object and every other error. Always free a returned ACL.
+- Rejecting the whole ACL object avoids a fragile second authorization engine
+  for UUID-qualified principals, ordered allow/deny entries, inheritance, and
+  future ACE forms. The Host remains read-only and gives the operator a coarse
+  remediation condition without printing ACL identities or key content.
+- The hosted macOS job now runs `cargo test --workspace` before the Flutter
+  build. Its native fixture starts with mode `0600`, adds `everyone allow read`,
+  and requires the same production read path to fail. Linux cannot execute or
+  validate this Apple-libc boundary, so local format/Clippy/tests are necessary
+  but not sufficient evidence.
+
+### Deliberate non-adoptions and remaining gates
+
+- Do not invoke `chmod -N`, reinterpret a deny-only ACL as harmless, or repair
+  operator state. An explicit empty/deny ACL is also rejected so future edits
+  cannot silently broaden a configuration the Host had accepted.
+- Do not claim parent-directory custody, installed service-account readability,
+  installer ACL behavior, administrator isolation, signing/notarization, or
+  Human installed-machine acceptance from this leaf-object gate.
+- A first code-bearing macOS 15 arm64 CI run is still required to compile the
+  FFI, prove APFS's absent-ACL result, create the extended-ACL fixture, and run
+  the packaged Host/license smoke.

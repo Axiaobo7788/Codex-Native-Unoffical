@@ -148,10 +148,11 @@ address. A network listener additionally requires both `--remote-tls-cert` and
 `CODEX_NATIVE_REMOTE_TLS_KEY` variables). The Host opens both files without
 following a leaf symlink/reparse point and reads at most a 1 MiB certificate
 chain and 256 KiB private key. On Unix the key must be owned by the Host process
-user with no group/other mode bits. On Windows it must already have a protected
-DACL, be owned by the process user, LocalSystem, or Administrators, and grant no
-other principal access. The Host validates but never rewrites this operator-owned
-file. Replace certificate/key files completely, then invoke trusted local
+user with no group/other mode bits; macOS additionally requires that no extended
+ACL be present. On Windows it must already have a protected DACL, be owned by
+the process user, LocalSystem, or Administrators, and grant no other principal
+access. The Host validates but never rewrites this operator-owned file. Replace
+certificate/key files completely, then invoke trusted local
 `host/remote/tls/reload` to rotate new handshakes. A failed reload keeps the last
 valid certificate.
 

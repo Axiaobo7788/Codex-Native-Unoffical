@@ -95,8 +95,7 @@ jobs:
           rustup toolchain install 1.89.0 --profile minimal
           rustup default 1.89.0
       - run: flutter pub get
-      - name: Run native Host tests on Windows
-        if: runner.os == 'Windows'
+      - name: Run native Host tests
         run: cargo test --workspace
       - run: flutter build ${{ matrix.platform }} --debug
 

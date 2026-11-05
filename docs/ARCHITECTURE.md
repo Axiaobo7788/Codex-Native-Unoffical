@@ -124,11 +124,13 @@ Unix retains explicit `0700`/`0600` modes. Operator-provided TLS private-key ACL
 handling remains read-only because that file is not Host-owned state. Its leaf
 is opened without following a symlink/reparse point and read through the same
 checked handle with a 256 KiB limit. Unix requires the effective process user as
-owner and no group/other mode bits. Windows requires a protected DACL, an owner
-of the current process user, LocalSystem, or Administrators, and only standard
-allow ACEs for those same principals. Standard deny ACEs are harmless; a
-null/invalid DACL or any other ACE type fails closed. The public certificate
-chain is likewise a regular no-follow file and is capped at 1 MiB.
+owner and no group/other mode bits. macOS additionally requires the same handle
+to report no `ACL_TYPE_EXTENDED` object; absence must be explicit and any query
+error fails closed. Windows requires a protected DACL, an owner of the current
+process user, LocalSystem, or Administrators, and only standard allow ACEs for
+those same principals. Standard deny ACEs are harmless; a null/invalid DACL or
+any other ACE type fails closed. The public certificate chain is likewise a
+regular no-follow file and is capped at 1 MiB.
 Installed-service key provisioning and platform installer ACLs are still
 separate release gates.
 

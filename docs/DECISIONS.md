@@ -954,3 +954,49 @@ configuration.
 - Installed-service identity/provisioning, installer ACLs, parent-directory
   custody, macOS extended ACLs, signing, and Human installed-machine review
   remain separate release gates.
+
+---
+
+## ADR-023 — Reject every macOS extended ACL on an external TLS private key
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+After ADR-022's same-handle owner and mode checks, query the already-open macOS
+private-key descriptor with `acl_get_fd_np(..., ACL_TYPE_EXTENDED)`. Accept only
+the documented absent-property result, `ENOENT`. Reject every returned extended
+ACL object, including a deny-only or explicitly empty object, and fail closed on
+every other query error. Release a returned ACL with `acl_free`. Do not parse,
+repair, or remove the operator's ACL.
+
+Run the native Host Rust suite on the hosted macOS job so a real Apple libc and
+APFS fixture exercise both a plain owner-only key and a `0600` key that also has
+an `everyone allow read` ACL.
+
+### Why
+
+- macOS extended ACLs can name users or groups independently from the three
+  POSIX mode classes, so `0600` alone does not establish the intended principal
+  boundary.
+- The Apple API retrieves the ACL from the descriptor that will later be read,
+  preserving ADR-022's no-second-path-lookup property.
+- Interpreting UUID-qualified allow/deny order, inheritance flags, and future
+  ACE forms would add a second platform policy engine. This operator input has
+  no compatibility need for an ACL, so requiring explicit absence is the
+  smaller fail-closed contract.
+
+### Consequence
+
+- A macOS operator must remove any extended ACL before Host startup or TLS
+  reload; the Host reports the condition but does not invoke `chmod` or mutate
+  the external key.
+- A filesystem or runtime that cannot prove ACL absence is rejected even if its
+  POSIX mode appears owner-only. Root and other platform administrators remain
+  outside this local-user boundary.
+- Parent-directory custody, installed service identities, installer behavior,
+  signing/notarization, and Human installed-machine review remain separate
+  release gates. This decision supersedes only ADR-022's macOS extended-ACL
+  deferral.

@@ -157,6 +157,9 @@ fn validate_private_key_file(file: &File) -> io::Result<()> {
                 "Remote TLS private key must not be accessible by group or other users",
             ));
         }
+
+        #[cfg(target_os = "macos")]
+        validate_no_macos_extended_acl(file)?;
     }
 
     #[cfg(windows)]
@@ -168,6 +171,58 @@ fn validate_private_key_file(file: &File) -> io::Result<()> {
     })?;
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn validate_no_macos_extended_acl(file: &File) -> io::Result<()> {
+    use std::ffi::c_void;
+    use std::os::fd::AsRawFd;
+
+    type Acl = *mut c_void;
+    const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
+
+    unsafe extern "C" {
+        fn acl_get_fd_np(fd: libc::c_int, acl_type: libc::c_int) -> Acl;
+        fn acl_free(object: *mut c_void) -> libc::c_int;
+    }
+
+    struct OwnedAcl(Acl);
+
+    impl Drop for OwnedAcl {
+        fn drop(&mut self) {
+            // SAFETY: acl_get_fd_np returned this non-null ACL allocation and
+            // this guard is its only owner. acl_free accepts that allocation.
+            unsafe {
+                acl_free(self.0);
+            }
+        }
+    }
+
+    // SAFETY: __error returns this thread's errno slot on macOS. Clearing it
+    // makes a surprising null-without-errno result fail closed instead of
+    // inheriting an unrelated earlier error.
+    unsafe {
+        *libc::__error() = 0;
+    }
+    // SAFETY: the File keeps this valid descriptor open for the duration of
+    // the call and ACL_TYPE_EXTENDED is the public macOS ACL type.
+    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), ACL_TYPE_EXTENDED) };
+    if acl.is_null() {
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ENOENT) {
+            return Ok(());
+        }
+        return Err(io::Error::new(
+            error.kind(),
+            format!("failed to inspect Remote TLS private key extended ACL: {error}"),
+        ));
+    }
+
+    let _acl = OwnedAcl(acl);
+    Err(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "Remote TLS private key must not have a macOS extended ACL",
+    ))
 }
 
 fn read_bounded(mut file: File, max_bytes: u64, what: &str) -> io::Result<Vec<u8>> {
@@ -252,6 +307,44 @@ mod tests {
         let error = read_private_key(&link).unwrap_err();
 
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn private_key_with_extended_acl_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::process::Command;
+
+        let temp = tempfile::tempdir().unwrap();
+        let key = temp.path().join("key.pem");
+        fs::write(&key, b"private").unwrap();
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+
+        let output = Command::new("/bin/chmod")
+            .arg("+a")
+            .arg("everyone allow read")
+            .arg(&key)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "failed to prepare macOS ACL fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fs::metadata(&key).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "the ACL fixture must remain owner-only by POSIX mode"
+        );
+
+        let error = read_private_key(&key).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(
+            error
+                .to_string()
+                .contains("must not have a macOS extended ACL")
+        );
     }
 
     fn make_private_for_test(path: &Path) {

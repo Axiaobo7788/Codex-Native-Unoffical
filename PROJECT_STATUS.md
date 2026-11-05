@@ -109,7 +109,8 @@ This file is the repository's durable project memory. Update it whenever a task 
 - The Host can explicitly enable a plaintext listener only on a literal loopback
   address. A non-loopback listener requires an operator-provided PEM certificate
   chain/private key and uses rustls HTTPS/WSS; invalid or incomplete material
-  fails before bind and before stock Codex starts. Unix keys must be owner-only.
+  fails before bind and before stock Codex starts. Unix keys must be owner-only;
+  macOS keys must also have no extended ACL.
   Trusted local `host/remote/tls/reload` atomically changes new-handshake identity
   without dropping established sockets and retains the last valid configuration
   on failure. The bounded endpoints implement pairing, version negotiation,
@@ -203,6 +204,14 @@ This file is the repository's durable project memory. Update it whenever a task 
   verified its Host/license bundle. This establishes the ADR-022 behavior on
   the hosted Windows image; it does not establish installed-service custody,
   installer behavior, macOS extended ACL handling, or Human acceptance.
+- The macOS follow-up uses Apple libc's descriptor-based
+  `acl_get_fd_np(..., ACL_TYPE_EXTENDED)` after the existing owner/mode check.
+  Only explicit `ENOENT` absence passes; any ACL object or other query failure
+  is rejected without mutating the operator file. A native test adds an
+  `everyone allow read` ACL to an otherwise-`0600` fixture, and the macOS CI job
+  now runs the Rust suite before its Flutter build. Local Linux format, Clippy,
+  and all 87 applicable Rust test instances pass; real Apple compilation and
+  ACL behavior remain pending the first code-bearing hosted run.
 - Windows ACL evidence follow-up CI `42117298358` at `5ce6b6b`, Windows job
   `127560231894`, passed the prior 85 native test instances with no `warning:`
   line, then passed the Windows Flutter build and Host/license smoke. Its
