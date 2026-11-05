@@ -1,4 +1,5 @@
 use crate::remote_bridge::is_reserved_host_id;
+use crate::remote_tls::RemoteTlsReloader;
 use crate::spool::{OutputChunk, OutputStat, SpoolStore};
 use base64::Engine;
 use codex_native_host::remote::{AuthError, Device, DeviceRegistry, PairingTicket};
@@ -24,7 +25,14 @@ pub(crate) struct RemoteAdmin {
     file_path: Option<PathBuf>,
     registry: Option<DeviceRegistry>,
     now_ms: fn() -> io::Result<u64>,
-    listener_address: Option<SocketAddr>,
+    listener: Option<RemoteListenerStatus>,
+    tls_reloader: Option<RemoteTlsReloader>,
+}
+
+#[derive(Clone, Copy)]
+struct RemoteListenerStatus {
+    address: SocketAddr,
+    tls: bool,
 }
 
 impl RemoteAdmin {
@@ -33,7 +41,8 @@ impl RemoteAdmin {
             file_path,
             registry: None,
             now_ms: system_now_ms,
-            listener_address: None,
+            listener: None,
+            tls_reloader: None,
         }
     }
 
@@ -43,7 +52,8 @@ impl RemoteAdmin {
             file_path: Some(file_path),
             registry: None,
             now_ms,
-            listener_address: None,
+            listener: None,
+            tls_reloader: None,
         }
     }
 
@@ -86,17 +96,30 @@ impl RemoteAdmin {
         Ok(self.registry()?.is_active(device_id, now_ms))
     }
 
-    pub(crate) fn set_listener_address(&mut self, address: SocketAddr) {
-        self.listener_address = Some(address);
+    pub(crate) fn set_listener(
+        &mut self,
+        address: SocketAddr,
+        tls: bool,
+        tls_reloader: Option<RemoteTlsReloader>,
+    ) {
+        self.listener = Some(RemoteListenerStatus { address, tls });
+        self.tls_reloader = tls_reloader;
+    }
+
+    fn reload_tls(&self) -> io::Result<()> {
+        self.tls_reloader
+            .as_ref()
+            .ok_or_else(|| invalid_params("Remote TLS is not enabled"))?
+            .reload()
     }
 
     fn listener_status(&self) -> Value {
-        match self.listener_address {
-            Some(address) => serde_json::json!({
+        match self.listener {
+            Some(listener) => serde_json::json!({
                 "enabled": true,
-                "address": address.to_string(),
-                "tls": false,
-                "scope": "loopback",
+                "address": listener.address.to_string(),
+                "tls": listener.tls,
+                "scope": if listener.address.ip().is_loopback() { "loopback" } else { "network" },
             }),
             None => serde_json::json!({"enabled": false}),
         }
@@ -188,6 +211,14 @@ pub(crate) fn route_client_message(
                 .revoke(device_id, now_ms)
                 .map_err(remote_auth_error)?;
             Ok(serde_json::json!({"revoked": revoked}))
+        }
+        "host/remote/tls/reload" => {
+            require_no_params(params)?;
+            remote_admin
+                .lock()
+                .map_err(|_| io::Error::other("Remote administration lock poisoned"))?
+                .reload_tls()?;
+            Ok(serde_json::json!({"reloaded": true}))
         }
         _ => Err(io::Error::new(
             io::ErrorKind::Unsupported,

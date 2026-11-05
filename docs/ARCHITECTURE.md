@@ -89,12 +89,16 @@ state after issuance.
 The implemented pure Host protocol foundation provides version negotiation,
 process-scoped session identity, sequenced replay with count and byte budgets,
 ACK validation, correlation namespaces, same-session write idempotency, and
-hash-only device credentials. An opt-in loopback-only HTTP/WebSocket listener is
-also implemented behind `--remote-listen`/`CODEX_NATIVE_REMOTE_LISTEN`. It pairs
-one-use local tickets, requires a scoped bearer token and protocol subprotocol,
-enforces explicit body/frame/message/write-buffer/connection limits, negotiates
-before RPC, sends heartbeat pings, checks live revocation, and broadcasts a
-bounded protocol close before Host shutdown. It currently exposes only the
+hash-only device credentials. An opt-in HTTP/WebSocket listener is implemented
+behind `--remote-listen`/`CODEX_NATIVE_REMOTE_LISTEN`. Plaintext is restricted
+to a literal loopback address. Non-loopback requires an explicitly configured
+PEM certificate chain/private key and serves HTTPS/WSS through rustls; TLS
+material is validated before bind and stock-Codex startup and can be atomically
+reloaded only through the trusted local Host RPC. It pairs one-use local
+tickets, requires a scoped bearer token and protocol subprotocol, enforces
+explicit body/frame/message/write-buffer/connection limits, negotiates before
+RPC, sends heartbeat pings, checks live revocation, and broadcasts a bounded
+protocol close before Host shutdown. It currently exposes only the
 read-only `host/remote/status`, `model/list`, bounded `thread/list`, and
 metadata-only `thread/read` methods. Codex responses reuse the same Host output
 sanitizer, are correlated through a per-process reserved namespace, and are
@@ -110,7 +114,7 @@ server requests, approvals, and all writes remain deliberately unrouted.
 
 The remaining network and Android layers must still provide:
 
-- TLS-required non-loopback transport and certificate policy;
+- pairing-bound self-signed certificate identity or ordinary platform-CA trust;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
 - platform-backed Android credential storage and lifecycle recovery.

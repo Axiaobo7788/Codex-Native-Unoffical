@@ -3,6 +3,7 @@ mod events;
 mod json_string;
 mod remote_bridge;
 mod remote_server;
+mod remote_tls;
 mod rpc;
 mod spool;
 mod transform;
@@ -40,12 +41,16 @@ fn run() -> io::Result<()> {
     let (events_tx, events_rx) = mpsc::sync_channel(HOST_EVENT_CAPACITY);
     let remote_server = match config.remote_listen {
         Some(address) => {
-            let server =
-                RemoteServer::start(address, Arc::clone(&remote_admin), events_tx.clone())?;
+            let server = RemoteServer::start(
+                address,
+                config.remote_tls.clone(),
+                Arc::clone(&remote_admin),
+                events_tx.clone(),
+            )?;
             remote_admin
                 .lock()
                 .map_err(|_| io::Error::other("Remote administration lock poisoned"))?
-                .set_listener_address(server.address());
+                .set_listener(server.address(), server.is_tls(), server.tls_reloader());
             Some(server)
         }
         None => None,

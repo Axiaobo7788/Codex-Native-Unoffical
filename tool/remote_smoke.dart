@@ -23,9 +23,25 @@ Future<void> main() async {
   final temporary = await Directory.systemTemp.createTemp(
     'codex-native-remote-smoke-',
   );
+  final tlsCert = Platform.environment['CODEX_NATIVE_REMOTE_SMOKE_TLS_CERT'];
+  final tlsKey = Platform.environment['CODEX_NATIVE_REMOTE_SMOKE_TLS_KEY'];
+  if ((tlsCert == null) != (tlsKey == null)) {
+    stderr.writeln('REMOTE_SMOKE=INVALID_TLS_CONFIGURATION');
+    stderr.writeln('Set both Remote smoke TLS certificate and key paths.');
+    exitCode = 2;
+    await temporary.delete(recursive: true);
+    return;
+  }
+  final useTls = tlsCert != null;
+  final listenAddress =
+      Platform.environment['CODEX_NATIVE_REMOTE_SMOKE_LISTEN'] ??
+      (useTls ? '0.0.0.0:0' : '127.0.0.1:0');
+  final expectedScope = _listenerScope(listenAddress);
   Process? process;
   _LocalPeer? local;
   WebSocket? socket;
+  HttpClient? pairClient;
+  HttpClient? webSocketClient;
   StreamSubscription<dynamic>? socketSubscription;
   final socketMessages = _MessageQueue();
   final stderrTail = _BoundedText(16 * 1024);
@@ -33,7 +49,7 @@ Future<void> main() async {
   var succeeded = false;
   try {
     final deviceFile = File('${temporary.path}/devices.json');
-    process = await Process.start(host, [
+    final arguments = [
       '--codex',
       codex,
       '--cache-dir',
@@ -41,8 +57,15 @@ Future<void> main() async {
       '--remote-device-file',
       deviceFile.path,
       '--remote-listen',
-      '127.0.0.1:0',
-    ]);
+      listenAddress,
+      if (useTls) ...[
+        '--remote-tls-cert',
+        tlsCert,
+        '--remote-tls-key',
+        tlsKey!,
+      ],
+    ];
+    process = await Process.start(host, arguments);
     process.stderr.transform(utf8.decoder).listen(stderrTail.add);
     local = _LocalPeer(process);
 
@@ -50,15 +73,20 @@ Future<void> main() async {
     final remote = _result(status)['remote'];
     if (remote is! Map<String, dynamic> ||
         remote['enabled'] != true ||
-        remote['scope'] != 'loopback' ||
-        remote['tls'] != false) {
-      throw StateError('Host did not report a loopback Remote listener.');
+        remote['scope'] != expectedScope ||
+        remote['tls'] != useTls) {
+      throw StateError('Host did not report the requested Remote listener.');
     }
     final address = remote['address'];
     if (address is! String) {
       throw StateError('Host did not report its Remote address.');
     }
-    final endpoint = _parseAddress(address);
+    final endpoint = _parseAddress(address, allowUnspecified: useTls);
+    if (useTls) {
+      final certificate = await File(tlsCert).readAsBytes();
+      pairClient = _trustedClient(certificate);
+      webSocketClient = _trustedClient(certificate);
+    }
 
     final ticket = _result(
       await local.request(2, 'host/remote/pairing/create', const {}),
@@ -79,7 +107,7 @@ Future<void> main() async {
     }
     await local.notify('initialized', const {});
 
-    final paired = await _pair(endpoint, code);
+    final paired = await _pair(endpoint, code, client: pairClient, tls: useTls);
     final token = paired['token'];
     final device = paired['device'];
     if (token is! String ||
@@ -97,9 +125,10 @@ Future<void> main() async {
     }
 
     socket = await WebSocket.connect(
-      'ws://${endpoint.address.address}:${endpoint.port}/v1/ws',
+      '${useTls ? 'wss' : 'ws'}://${endpoint.address.address}:${endpoint.port}/v1/ws',
       headers: {HttpHeaders.authorizationHeader: 'Bearer $token'},
       protocols: const ['codex-native-v1'],
+      customClient: webSocketClient,
     ).timeout(_timeout);
     if (socket.protocol != 'codex-native-v1') {
       throw StateError('Remote WebSocket subprotocol was not negotiated.');
@@ -221,6 +250,8 @@ Future<void> main() async {
     stdout.writeln('THREAD_READ_METADATA_ONLY=true');
     stdout.writeln('INTERNAL_ID_LEAK=false');
     stdout.writeln('LIVE_REVOCATION=true');
+    stdout.writeln('TLS=$useTls');
+    stdout.writeln('LISTENER_SCOPE=${remote['scope']}');
   } catch (error, stackTrace) {
     stderr.writeln('REMOTE_SMOKE=FAIL');
     stderr.writeln(error);
@@ -231,6 +262,8 @@ Future<void> main() async {
     if (socket != null && socket.readyState != WebSocket.closed) {
       await socket.close();
     }
+    pairClient?.close(force: true);
+    webSocketClient?.close(force: true);
     if (process != null) {
       await process.stdin.close();
       try {
@@ -263,13 +296,23 @@ Future<void> main() async {
   }
 }
 
-Future<Map<String, dynamic>> _pair(_Endpoint endpoint, String code) async {
-  final client = HttpClient();
+Future<Map<String, dynamic>> _pair(
+  _Endpoint endpoint,
+  String code, {
+  HttpClient? client,
+  required bool tls,
+}) async {
+  final ownsClient = client == null;
+  client ??= HttpClient();
   try {
-    final request = await client.post(
-      endpoint.address.address,
-      endpoint.port,
-      '/v1/pair',
+    final request = await client.openUrl(
+      'POST',
+      Uri(
+        scheme: tls ? 'https' : 'http',
+        host: endpoint.address.address,
+        port: endpoint.port,
+        path: '/v1/pair',
+      ),
     );
     request.headers.contentType = ContentType.json;
     request.write(
@@ -286,8 +329,16 @@ Future<Map<String, dynamic>> _pair(_Endpoint endpoint, String code) async {
     }
     return decoded;
   } finally {
-    client.close(force: true);
+    if (ownsClient) {
+      client.close(force: true);
+    }
   }
+}
+
+HttpClient _trustedClient(List<int> certificate) {
+  final context = SecurityContext(withTrustedRoots: false)
+    ..setTrustedCertificatesBytes(certificate);
+  return HttpClient(context: context);
 }
 
 Future<Map<String, dynamic>> _remoteRequest(
@@ -331,18 +382,38 @@ Map<String, dynamic> _remoteResult(Map<String, dynamic> response) {
   return result;
 }
 
-_Endpoint _parseAddress(String value) {
+_Endpoint _parseAddress(String value, {required bool allowUnspecified}) {
   final separator = value.lastIndexOf(':');
   if (separator <= 0) {
     throw FormatException('Invalid listener address: $value');
   }
   final host = value.substring(0, separator).replaceAll(RegExp(r'^\[|\]$'), '');
   final port = int.parse(value.substring(separator + 1));
-  final address = InternetAddress.tryParse(host);
+  var address = InternetAddress.tryParse(host);
+  if (allowUnspecified && (host == '0.0.0.0' || host == '::')) {
+    address = address?.type == InternetAddressType.IPv6
+        ? InternetAddress.loopbackIPv6
+        : InternetAddress.loopbackIPv4;
+  }
   if (address == null || !address.isLoopback || port < 1 || port > 65535) {
-    throw FormatException('Listener is not a valid loopback endpoint: $value');
+    throw FormatException(
+      'Listener is not a connectable test endpoint: $value',
+    );
   }
   return _Endpoint(address, port);
+}
+
+String _listenerScope(String value) {
+  final separator = value.lastIndexOf(':');
+  if (separator <= 0) {
+    throw FormatException('Invalid listener address: $value');
+  }
+  final host = value.substring(0, separator).replaceAll(RegExp(r'^\[|\]$'), '');
+  final address = InternetAddress.tryParse(host);
+  if (address == null) {
+    throw FormatException('Listener must use a literal IP address: $value');
+  }
+  return address.isLoopback ? 'loopback' : 'network';
 }
 
 final class _Endpoint {

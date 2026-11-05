@@ -1,3 +1,4 @@
+use crate::remote_tls::RemoteTlsFiles;
 use std::env;
 use std::io;
 use std::net::SocketAddr;
@@ -17,6 +18,7 @@ pub(crate) struct Config {
     pub(crate) cache_dir: PathBuf,
     pub(crate) remote_device_file: Option<PathBuf>,
     pub(crate) remote_listen: Option<SocketAddr>,
+    pub(crate) remote_tls: Option<RemoteTlsFiles>,
     pub(crate) max_output_bytes: u64,
     pub(crate) max_session_bytes: u64,
     pub(crate) max_forward_message_bytes: u64,
@@ -38,6 +40,8 @@ impl Config {
             .map(Some)
             .unwrap_or_else(default_remote_device_file);
         let mut remote_listen = optional_socket_addr("CODEX_NATIVE_REMOTE_LISTEN")?;
+        let mut remote_tls_cert = optional_path("CODEX_NATIVE_REMOTE_TLS_CERT")?;
+        let mut remote_tls_key = optional_path("CODEX_NATIVE_REMOTE_TLS_KEY")?;
 
         let mut arguments = env::args_os().skip(1);
         while let Some(argument) = arguments.next() {
@@ -51,9 +55,15 @@ impl Config {
                 "--remote-listen" => {
                     remote_listen = Some(required_socket_addr(&mut arguments, "--remote-listen")?)
                 }
+                "--remote-tls-cert" => {
+                    remote_tls_cert = Some(required_path(&mut arguments, "--remote-tls-cert")?)
+                }
+                "--remote-tls-key" => {
+                    remote_tls_key = Some(required_path(&mut arguments, "--remote-tls-key")?)
+                }
                 "-h" | "--help" => {
                     println!(
-                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen 127.0.0.1:PORT]",
+                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen IP:PORT [--remote-tls-cert CERT.pem --remote-tls-key KEY.pem]]",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -71,11 +81,14 @@ impl Config {
             }
         }
 
+        let remote_tls = validate_remote_transport(remote_listen, remote_tls_cert, remote_tls_key)?;
+
         Ok(Some(Self {
             codex_executable,
             cache_dir,
             remote_device_file,
             remote_listen,
+            remote_tls,
             max_output_bytes: positive_u64(
                 "CODEX_NATIVE_MAX_OUTPUT_BYTES",
                 DEFAULT_MAX_OUTPUT_BYTES,
@@ -123,34 +136,66 @@ fn required_socket_addr(
             format!("{flag} requires a socket address"),
         )
     })?;
-    parse_loopback_socket_addr(&value.to_string_lossy(), flag)
+    parse_socket_addr(&value.to_string_lossy(), flag)
 }
 
 fn optional_socket_addr(name: &str) -> io::Result<Option<SocketAddr>> {
     match env::var(name) {
-        Ok(value) => parse_loopback_socket_addr(&value, name).map(Some),
+        Ok(value) => parse_socket_addr(&value, name).map(Some),
         Err(env::VarError::NotPresent) => Ok(None),
         Err(env::VarError::NotUnicode(_)) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{name} must be a UTF-8 loopback socket address"),
+            format!("{name} must be a UTF-8 IP socket address"),
         )),
     }
 }
 
-fn parse_loopback_socket_addr(value: &str, source: &str) -> io::Result<SocketAddr> {
-    let address = value.parse::<SocketAddr>().map_err(|_| {
+fn parse_socket_addr(value: &str, source: &str) -> io::Result<SocketAddr> {
+    value.parse::<SocketAddr>().map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{source} must be a loopback IP socket address"),
+            format!("{source} must be a literal IP socket address"),
         )
-    })?;
-    if !address.ip().is_loopback() {
-        return Err(io::Error::new(
+    })
+}
+
+fn optional_path(name: &str) -> io::Result<Option<PathBuf>> {
+    match env::var_os(name) {
+        Some(value) if value.is_empty() => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{source} cannot expose plaintext Remote beyond loopback"),
-        ));
+            format!("{name} must not be empty"),
+        )),
+        Some(value) => Ok(Some(PathBuf::from(value))),
+        None => Ok(None),
     }
-    Ok(address)
+}
+
+fn validate_remote_transport(
+    address: Option<SocketAddr>,
+    cert: Option<PathBuf>,
+    key: Option<PathBuf>,
+) -> io::Result<Option<RemoteTlsFiles>> {
+    let tls = match (cert, key) {
+        (Some(cert), Some(key)) => Some(RemoteTlsFiles { cert, key }),
+        (None, None) => None,
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Remote TLS certificate and private key must be configured together",
+            ));
+        }
+    };
+    match (address, tls) {
+        (None, Some(_)) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Remote TLS files require a Remote listener",
+        )),
+        (Some(address), None) if !address.ip().is_loopback() => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "plaintext Remote listener is restricted to loopback",
+        )),
+        (_, tls) => Ok(tls),
+    }
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -198,22 +243,57 @@ mod tests {
     use super::*;
 
     #[test]
-    fn plaintext_remote_address_is_loopback_only() {
+    fn remote_address_requires_a_literal_ip() {
         assert_eq!(
-            parse_loopback_socket_addr("127.0.0.1:0", "test").unwrap(),
+            parse_socket_addr("127.0.0.1:0", "test").unwrap(),
             "127.0.0.1:0".parse().unwrap()
         );
         assert_eq!(
-            parse_loopback_socket_addr("[::1]:4317", "test").unwrap(),
+            parse_socket_addr("[::1]:4317", "test").unwrap(),
             "[::1]:4317".parse().unwrap()
         );
-        for invalid in ["0.0.0.0:4317", "192.168.1.10:4317", "localhost:4317"] {
+        assert_eq!(
+            parse_socket_addr("0.0.0.0:4317", "test").unwrap(),
+            "0.0.0.0:4317".parse().unwrap()
+        );
+        for invalid in ["localhost:4317", "missing-port"] {
             assert_eq!(
-                parse_loopback_socket_addr(invalid, "test")
-                    .unwrap_err()
-                    .kind(),
+                parse_socket_addr(invalid, "test").unwrap_err().kind(),
                 io::ErrorKind::InvalidInput
             );
+        }
+    }
+
+    #[test]
+    fn remote_transport_configuration_fails_closed() {
+        let loopback = Some("127.0.0.1:0".parse().unwrap());
+        let network = Some("0.0.0.0:4317".parse().unwrap());
+        let cert = || Some(PathBuf::from("cert.pem"));
+        let key = || Some(PathBuf::from("key.pem"));
+
+        assert!(
+            validate_remote_transport(None, None, None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            validate_remote_transport(loopback, None, None)
+                .unwrap()
+                .is_none()
+        );
+        let tls = validate_remote_transport(network, cert(), key())
+            .unwrap()
+            .unwrap();
+        assert_eq!(tls.cert, PathBuf::from("cert.pem"));
+        assert_eq!(tls.key, PathBuf::from("key.pem"));
+
+        for result in [
+            validate_remote_transport(None, cert(), key()),
+            validate_remote_transport(loopback, cert(), None),
+            validate_remote_transport(loopback, None, key()),
+            validate_remote_transport(network, None, None),
+        ] {
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput);
         }
     }
 }

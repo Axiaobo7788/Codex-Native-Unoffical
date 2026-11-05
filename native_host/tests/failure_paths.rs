@@ -25,6 +25,41 @@ fn invalid_cache_root_fails_before_the_codex_child_is_started() {
     assert!(!stderr.contains("failed to start `codex-child-must-not-start`"));
 }
 
+#[test]
+fn invalid_tls_material_fails_before_the_codex_child_is_started() {
+    let temp = TempDir::new().unwrap();
+    let cert = temp.path().join("invalid-cert.pem");
+    let key = temp.path().join("invalid-key.pem");
+    let private_marker = "PRIVATE-MARKER-MUST-NOT-LEAK";
+    fs::write(&cert, b"not a certificate").unwrap();
+    fs::write(&key, private_marker).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_codex-native-host"))
+        .args([
+            "--codex",
+            "codex-child-must-not-start",
+            "--remote-listen",
+            "127.0.0.1:0",
+            "--remote-tls-cert",
+            cert.to_str().unwrap(),
+            "--remote-tls-key",
+            key.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("failed to load Remote TLS certificate/key"));
+    assert!(!stderr.contains(private_marker));
+    assert!(!stderr.contains("failed to start `codex-child-must-not-start`"));
+}
+
 #[cfg(unix)]
 #[test]
 fn unwritable_cache_parent_is_reported_before_child_start() {

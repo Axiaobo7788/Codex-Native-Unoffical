@@ -444,6 +444,102 @@ _Reviewed: 2026-11-05_
   rustls with an explicit certificate/key policy; it must not silently downgrade
   to `ws://` when TLS configuration fails.
 
+### WSS certificate loading, rotation, and Android trust boundary
+
+_Reviewed: 2026-11-05_
+
+#### Primary sources
+
+- [`axum-server` 0.8 rustls configuration](https://docs.rs/axum-server/0.8.0/axum_server/tls_rustls/struct.RustlsConfig.html),
+  [`from_tcp_rustls`](https://docs.rs/axum-server/0.8.0/axum_server/fn.from_tcp_rustls.html),
+  and its [graceful-shutdown handle](https://docs.rs/axum-server/0.8.0/axum_server/struct.Handle.html).
+- [Android Network Security Configuration](https://developer.android.com/privacy-and-security/security-config)
+  and [Android's TLS guidance](https://developer.android.com/privacy-and-security/security-ssl).
+- Dart [`WebSocket.connect`](https://api.dart.dev/dart-io/WebSocket/connect.html),
+  [`HttpClient`](https://api.dart.dev/dart-io/HttpClient-class.html), and
+  [`SecurityContext`](https://api.dart.dev/dart-io/SecurityContext-class.html).
+- [`flutter_secure_storage`](https://pub.dev/packages/flutter_secure_storage)
+  and its [release history](https://pub.dev/packages/flutter_secure_storage/changelog)
+  for the later Android device-secret slice.
+
+#### Maintained reference implementations
+
+- [`codex-remote`](https://github.com/Venompool888/codex-remote) keeps its core
+  service on loopback and recommends HTTPS/WSS termination by a reverse proxy;
+  explicit HTTP is limited to trusted private/ADB scenarios. This supports a
+  documented reverse-proxy deployment option, but does not substitute for a
+  safe built-in listener when this Host is configured directly.
+- [LocalSend's protocol](https://github.com/localsend/protocol/blob/main/README.md)
+  uses a certificate fingerprint as device identity, while current LocalSend
+  hardening also binds the claimed fingerprint to the TLS certificate. This is
+  useful evidence for a pairing-bound local identity, but its mutual-TLS model
+  is more machinery than the current scoped-bearer envelope requires.
+- [`codex-remote-android` at `372581a`](https://github.com/liuhao-labs/codex-remote-android/commit/372581ad5cc66677d5322a9a447a03277d36ce15)
+  confirms the value of explicit user-confirmed host identity and fail-closed
+  changed-identity handling even though it uses SSH rather than WSS.
+
+#### Findings
+
+- `axum-server` 0.8.0 supports Rust 1.82, the project's axum/Tokio stack, PEM
+  certificate-chain loading, shared `ArcSwap`-backed atomic reload, and bounded
+  graceful shutdown. Its default rustls backend is AWS-LC. This project pins the
+  dependency surface through `Cargo.lock` and keeps the existing HTTP body,
+  WebSocket frame/message/write-buffer, connection, queue, journal, and write
+  timeout bounds above the TLS acceptor.
+- Android can use platform trust anchors for ordinary CA certificates and a
+  narrowly supplied trust anchor for a local identity. Android's own guidance
+  cautions that routine public-key pinning can strand clients during rotation;
+  a future local self-signed flow should therefore bind an expected certificate
+  or local CA identity during pairing and define re-pair/rotation behavior rather
+  than install an unconditional `badCertificateCallback`.
+- Dart supports injecting an `HttpClient` into `WebSocket.connect`, and that
+  client can use a `SecurityContext` populated with the exact trusted
+  certificate bytes. The release WSS smoke exercises that path without a trust
+  bypass callback.
+- Current `flutter_secure_storage` uses Android Keystore-backed key wrapping and
+  encrypted storage, but its Android backup exclusions and minimum SDK/version
+  constraints must be evaluated when the Android client slice lands. It is not
+  added merely to make Host TLS reachable.
+
+#### Adopted here
+
+- Add `--remote-tls-cert`/`CODEX_NATIVE_REMOTE_TLS_CERT` and
+  `--remote-tls-key`/`CODEX_NATIVE_REMOTE_TLS_KEY`. Both are required together;
+  neither is meaningful without a listener. A non-loopback listener without
+  both fails configuration, and `RemoteServer` independently enforces the same
+  plaintext boundary before binding.
+- Load and parse the certificate/key before binding. On Unix, reject a private
+  key readable by group or other users. Never echo PEM contents in status or
+  errors. Keep optional plaintext loopback operation for local development and
+  the established smoke path.
+- Expose rotation only through trusted local `host/remote/tls/reload`. A valid
+  replacement is swapped for new TLS handshakes without dropping established
+  WebSockets. Invalid replacement material returns a generic Host error and
+  keeps the last valid rustls configuration.
+- Prefer a normal CA certificate or reverse proxy for managed/public deployment.
+  Defer local self-signed Android onboarding until the pairing artifact can bind
+  certificate identity and platform-backed device-secret storage together. Do
+  not add mTLS or arbitrary-certificate acceptance in this slice.
+
+#### Validation and preserved negative evidence
+
+- A first focused WSS test passed TLS but closed immediately before
+  `server_hello`. Investigation found that `axum-server`'s `http1_only()` serve
+  branch did not use Hyper's upgrade-serving path. Removing that override while
+  retaining the router's HTTP/WebSocket limits restored WebSocket upgrade. The
+  observed EOF is preserved here rather than erased by the later pass.
+- Real TLS tests cover HTTPS health/pairing, hash-only bearer persistence,
+  authenticated WSS negotiation, default-root rejection of the self-signed
+  certificate, operator-supplied trust, non-loopback wildcard binding, local
+  status projection, successful rotation, rejection by the old trust root,
+  survival of an established connection, failed-reload rollback, and active
+  WSS shutdown with an `Away` close frame.
+- A release Host plus stock app-server completed the read-only Remote smoke over
+  WSS using an explicitly populated Dart `SecurityContext`. It bound a network-
+  scope wildcard and connected back through loopback on the same Linux host.
+  This is not a physical Android, real LAN/firewall, system-CA, or installed
+  service validation.
+
 ### Initial read-only Codex routing surface
 
 _Reviewed: 2026-11-05_
@@ -547,5 +643,5 @@ _Reviewed: 2026-11-05_
   stock turn notification was observed end to end.
 
 Deliberately deferred: write methods, pending approval state, output-range
-transfer, diff chunking, non-loopback TLS, Android secure storage, and the
-Android Remote client remain unavailable.
+transfer, diff chunking, pairing-bound Android certificate onboarding, Android
+secure storage, and the Android Remote client remain unavailable.

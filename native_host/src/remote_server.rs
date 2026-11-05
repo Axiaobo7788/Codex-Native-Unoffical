@@ -1,5 +1,6 @@
 use crate::events::{AppServerRemoteNotification, HostEvent, RemoteRpcCall};
 use crate::remote_bridge::{remote_error, validate_read_only_request};
+use crate::remote_tls::{RemoteTlsFiles, RemoteTlsReloader};
 use crate::rpc::RemoteAdmin;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::extract::{DefaultBodyLimit, State};
@@ -50,6 +51,8 @@ const PAIR_ATTEMPTS_PER_MINUTE: usize = 10;
 
 pub(crate) struct RemoteServer {
     address: SocketAddr,
+    tls: bool,
+    tls_reloader: Option<RemoteTlsReloader>,
     session_id: Arc<str>,
     publisher: RemoteEventPublisher,
     shutdown: Option<watch::Sender<bool>>,
@@ -59,15 +62,19 @@ pub(crate) struct RemoteServer {
 impl RemoteServer {
     pub(crate) fn start(
         address: SocketAddr,
+        tls_files: Option<RemoteTlsFiles>,
         admin: Arc<Mutex<RemoteAdmin>>,
         events: SyncSender<HostEvent>,
     ) -> io::Result<Self> {
-        if !address.ip().is_loopback() {
+        if tls_files.is_none() && !address.ip().is_loopback() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "plaintext Remote listener is restricted to loopback",
             ));
         }
+        let tls_reloader = tls_files.map(RemoteTlsReloader::load).transpose()?;
+        let tls_config = tls_reloader.as_ref().map(RemoteTlsReloader::config);
+        let tls = tls_reloader.is_some();
         let listener = std::net::TcpListener::bind(address)?;
         listener.set_nonblocking(true)?;
         let address = listener.local_addr()?;
@@ -97,10 +104,16 @@ impl RemoteServer {
             shutdown: shutdown_rx.clone(),
         };
         let thread = thread::Builder::new()
-            .name("host-remote-loopback".into())
-            .spawn(move || run_server(listener, state, shutdown_rx))?;
+            .name(if tls {
+                "host-remote-wss".into()
+            } else {
+                "host-remote-loopback".into()
+            })
+            .spawn(move || run_server(listener, tls_config, state, shutdown_rx))?;
         Ok(Self {
             address,
+            tls,
+            tls_reloader,
             session_id,
             publisher,
             shutdown: Some(shutdown_tx),
@@ -110,6 +123,14 @@ impl RemoteServer {
 
     pub(crate) fn address(&self) -> SocketAddr {
         self.address
+    }
+
+    pub(crate) fn is_tls(&self) -> bool {
+        self.tls
+    }
+
+    pub(crate) fn tls_reloader(&self) -> Option<RemoteTlsReloader> {
+        self.tls_reloader.clone()
     }
 
     pub(crate) fn session_id(&self) -> &str {
@@ -255,6 +276,7 @@ impl AttemptBudget {
 
 fn run_server(
     listener: std::net::TcpListener,
+    tls_config: Option<axum_server::tls_rustls::RustlsConfig>,
     state: ServerState,
     mut shutdown: watch::Receiver<bool>,
 ) -> io::Result<()> {
@@ -263,7 +285,6 @@ fn run_server(
         .enable_all()
         .build()?;
     runtime.block_on(async move {
-        let listener = tokio::net::TcpListener::from_std(listener)?;
         let connections = Arc::clone(&state.connections);
         let app = Router::new()
             .route("/healthz", get(health))
@@ -272,11 +293,28 @@ fn run_server(
             .layer(DefaultBodyLimit::max(HTTP_BODY_BYTES))
             .layer(middleware::map_response(security_headers))
             .with_state(state);
-        let server_result = axum::serve(listener, app)
-            .with_graceful_shutdown(async move {
-                wait_for_shutdown(&mut shutdown).await;
-            })
-            .await;
+        let server_result = match tls_config {
+            Some(tls_config) => {
+                let handle = axum_server::Handle::new();
+                let shutdown_handle = handle.clone();
+                tokio::spawn(async move {
+                    wait_for_shutdown(&mut shutdown).await;
+                    shutdown_handle.graceful_shutdown(Some(SHUTDOWN_DRAIN_TIMEOUT));
+                });
+                axum_server::from_tcp_rustls(listener, tls_config)?
+                    .handle(handle)
+                    .serve(app.into_make_service())
+                    .await
+            }
+            None => {
+                let listener = tokio::net::TcpListener::from_std(listener)?;
+                axum::serve(listener, app)
+                    .with_graceful_shutdown(async move {
+                        wait_for_shutdown(&mut shutdown).await;
+                    })
+                    .await
+            }
+        };
         let all_connections_closed = tokio::time::timeout(
             SHUTDOWN_DRAIN_TIMEOUT,
             connections.acquire_many_owned(MAX_CONNECTIONS as u32),
@@ -752,7 +790,7 @@ async fn handle_client_message(
                     result: serde_json::json!({
                         "sessionId": state.session_id.as_ref(),
                         "device": device,
-                        "mode": "loopbackReadOnlyCodex",
+                        "mode": "readOnlyCodex",
                     }),
                 });
             }
@@ -879,6 +917,11 @@ fn json_error(status: StatusCode, message: &'static str) -> Response {
 mod tests {
     use super::*;
     use crate::events::HOST_EVENT_CAPACITY;
+    use crate::rpc::{ClientMessage as LocalClientMessage, route_client_message};
+    use crate::spool::SpoolStore;
+    use rcgen::{CertifiedKey, generate_simple_self_signed};
+    use rustls::pki_types::{CertificateDer, ServerName};
+    use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
     use serde_json::{Value, json};
     use std::fs;
     use std::io::{Read, Write};
@@ -886,7 +929,7 @@ mod tests {
     use std::sync::mpsc as std_mpsc;
     use tempfile::TempDir;
     use tungstenite::client::IntoClientRequest;
-    use tungstenite::{Message as ClientWsMessage, client};
+    use tungstenite::{Connector, Message as ClientWsMessage, client, client_tls_with_config};
 
     #[test]
     fn attempt_budget_is_bounded_and_recovers_after_the_window() {
@@ -902,10 +945,56 @@ mod tests {
     fn rejects_non_loopback_plaintext_listener_before_binding() {
         let admin = Arc::new(Mutex::new(RemoteAdmin::new(None)));
         let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
-        let error = RemoteServer::start("0.0.0.0:0".parse().unwrap(), admin, events)
+        let error = RemoteServer::start("0.0.0.0:0".parse().unwrap(), None, admin, events)
             .err()
             .unwrap();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn invalid_tls_material_fails_before_binding_without_leaking_key_bytes() {
+        let temp = TempDir::new().unwrap();
+        let cert_path = temp.path().join("invalid-cert.pem");
+        let key_path = temp.path().join("invalid-key.pem");
+        let private_marker = "PRIVATE-MARKER-MUST-NOT-LEAK";
+        fs::write(&cert_path, b"not a certificate").unwrap();
+        fs::write(&key_path, private_marker).unwrap();
+        make_private(&key_path);
+        let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = occupied.local_addr().unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(None)));
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+
+        let error = RemoteServer::start(
+            address,
+            Some(RemoteTlsFiles {
+                cert: cert_path,
+                key: key_path,
+            }),
+            admin,
+            events,
+        )
+        .err()
+        .unwrap();
+
+        assert_ne!(error.kind(), io::ErrorKind::AddrInUse);
+        assert!(!error.to_string().contains(private_marker));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn group_or_world_readable_tls_private_key_is_rejected() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let (files, _cert) = write_test_tls_identity(temp.path());
+        fs::set_permissions(&files.key, fs::Permissions::from_mode(0o644)).unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(None)));
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let error = RemoteServer::start("127.0.0.1:0".parse().unwrap(), Some(files), admin, events)
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     }
 
     #[test]
@@ -992,7 +1081,8 @@ mod tests {
                 .unwrap()
         };
         let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
-        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let server =
+            RemoteServer::start("127.0.0.1:0".parse().unwrap(), None, admin, events).unwrap();
         let publisher = server.publisher();
 
         let mut first = connect_and_negotiate(server.address(), &issued.token, None);
@@ -1124,7 +1214,8 @@ mod tests {
                 .unwrap()
         };
         let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
-        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let server =
+            RemoteServer::start("127.0.0.1:0".parse().unwrap(), None, admin, events).unwrap();
         let publisher = server.publisher();
         let (mut socket, _) = connect_and_negotiate(server.address(), &issued.token, None);
 
@@ -1179,9 +1270,13 @@ mod tests {
         let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(device_file.clone()))));
         let ticket = admin.lock().unwrap().create_pairing_ticket().unwrap();
         let (events, event_receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
-        let server =
-            RemoteServer::start("127.0.0.1:0".parse().unwrap(), Arc::clone(&admin), events)
-                .unwrap();
+        let server = RemoteServer::start(
+            "127.0.0.1:0".parse().unwrap(),
+            None,
+            Arc::clone(&admin),
+            events,
+        )
+        .unwrap();
         let address = server.address();
 
         let health = http_get(address, "/healthz");
@@ -1254,7 +1349,7 @@ mod tests {
         assert_eq!(status["type"], "rpc_result");
         assert_eq!(status["id"], "status-1");
         assert_eq!(status["result"]["device"]["id"], device_id);
-        assert_eq!(status["result"]["mode"], "loopbackReadOnlyCodex");
+        assert_eq!(status["result"]["mode"], "readOnlyCodex");
 
         socket
             .send(ClientWsMessage::Text(
@@ -1363,7 +1458,8 @@ mod tests {
                 .unwrap()
         };
         let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
-        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let server =
+            RemoteServer::start("127.0.0.1:0".parse().unwrap(), None, admin, events).unwrap();
         let request = websocket_request(server.address(), Some(&issued.token));
         let stream = TcpStream::connect(server.address()).unwrap();
         stream
@@ -1394,6 +1490,192 @@ mod tests {
     }
 
     #[test]
+    fn wss_pairing_authentication_and_atomic_certificate_rotation_work() {
+        let temp = TempDir::new().unwrap();
+        let device_file = temp.path().join("devices.json");
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(device_file.clone()))));
+        let ticket = admin.lock().unwrap().create_pairing_ticket().unwrap();
+        let (tls_files, first_cert) = write_test_tls_identity(temp.path());
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let server = RemoteServer::start(
+            "0.0.0.0:0".parse().unwrap(),
+            Some(tls_files.clone()),
+            Arc::clone(&admin),
+            events,
+        )
+        .unwrap();
+        admin.lock().unwrap().set_listener(
+            server.address(),
+            server.is_tls(),
+            server.tls_reloader(),
+        );
+        assert!(server.is_tls());
+        assert!(!server.address().ip().is_loopback());
+        let address = SocketAddr::from(([127, 0, 0, 1], server.address().port()));
+        let first_client = tls_client_config(first_cert);
+        let store = SpoolStore::open(
+            temp.path().join("spool"),
+            1024,
+            2048,
+            4096,
+            64,
+            Duration::from_secs(60),
+        )
+        .unwrap();
+
+        let status = route_client_message(
+            br#"{"id":1,"method":"host/status"}"#.to_vec(),
+            &store,
+            &admin,
+        );
+        let LocalClientMessage::Respond(Some(status)) = status else {
+            panic!("expected local Host status response");
+        };
+        let status: Value = serde_json::from_slice(&status).unwrap();
+        assert_eq!(status["result"]["remote"]["tls"], true);
+        assert_eq!(status["result"]["remote"]["scope"], "network");
+
+        let health = tls_http_request(
+            address,
+            Arc::clone(&first_client),
+            "GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+        );
+        assert!(health.starts_with("HTTP/1.1 200 OK\r\n"), "{health}");
+
+        let body = json!({"code": ticket.code, "deviceName": "TLS phone"}).to_string();
+        let paired = tls_http_request(
+            address,
+            Arc::clone(&first_client),
+            &format!(
+                "POST /v1/pair HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            ),
+        );
+        assert!(paired.starts_with("HTTP/1.1 200 OK\r\n"), "{paired}");
+        let paired_json: Value = serde_json::from_str(http_body(&paired)).unwrap();
+        let token = paired_json["token"].as_str().unwrap();
+        assert!(!fs::read_to_string(&device_file).unwrap().contains(token));
+
+        let untrusted = client_tls_with_config(
+            secure_websocket_request(address, Some(token)),
+            TcpStream::connect(address).unwrap(),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                untrusted,
+                tungstenite::HandshakeError::Failure(tungstenite::Error::Io(ref error))
+                    if error.kind() == io::ErrorKind::InvalidData
+            ),
+            "unexpected untrusted-certificate failure: {untrusted:?}"
+        );
+
+        let existing_stream = TcpStream::connect(address).unwrap();
+        existing_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let (mut existing, _) = client_tls_with_config(
+            secure_websocket_request(address, Some(token)),
+            existing_stream,
+            None,
+            Some(Connector::Rustls(Arc::clone(&first_client))),
+        )
+        .unwrap();
+        negotiate(&mut existing);
+
+        let (_same_files, second_cert) = write_test_tls_identity(temp.path());
+        let reload = route_client_message(
+            br#"{"id":2,"method":"host/remote/tls/reload","params":{}}"#.to_vec(),
+            &store,
+            &admin,
+        );
+        let LocalClientMessage::Respond(Some(reload)) = reload else {
+            panic!("expected local TLS reload response");
+        };
+        let reload: Value = serde_json::from_slice(&reload).unwrap();
+        assert_eq!(reload["result"]["reloaded"], true);
+        let second_client = tls_client_config(second_cert);
+
+        existing
+            .send(ClientWsMessage::Text(
+                json!({
+                    "type": "rpc",
+                    "id": "after-rotation",
+                    "method": "host/remote/status",
+                    "params": {},
+                })
+                .to_string()
+                .into(),
+            ))
+            .unwrap();
+        assert_eq!(read_json(&mut existing)["id"], "after-rotation");
+
+        let old_trust = client_tls_with_config(
+            secure_websocket_request(address, Some(token)),
+            TcpStream::connect(address).unwrap(),
+            None,
+            Some(Connector::Rustls(first_client)),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                old_trust,
+                tungstenite::HandshakeError::Failure(tungstenite::Error::Io(ref error))
+                    if error.kind() == io::ErrorKind::InvalidData
+            ),
+            "unexpected old-certificate failure after rotation: {old_trust:?}"
+        );
+
+        let (mut rotated, _) = client_tls_with_config(
+            secure_websocket_request(address, Some(token)),
+            TcpStream::connect(address).unwrap(),
+            None,
+            Some(Connector::Rustls(Arc::clone(&second_client))),
+        )
+        .unwrap();
+        negotiate(&mut rotated);
+
+        let invalid_marker = "INVALID-CERTIFICATE-MUST-NOT-LEAK";
+        fs::write(&tls_files.cert, invalid_marker).unwrap();
+        let failed_reload = route_client_message(
+            br#"{"id":3,"method":"host/remote/tls/reload","params":{}}"#.to_vec(),
+            &store,
+            &admin,
+        );
+        let LocalClientMessage::Respond(Some(failed_reload)) = failed_reload else {
+            panic!("expected local failed TLS reload response");
+        };
+        let failed_reload: Value = serde_json::from_slice(&failed_reload).unwrap();
+        assert_eq!(failed_reload["error"]["code"], -32602);
+        assert!(!failed_reload.to_string().contains(invalid_marker));
+
+        let after_failed_reload_stream = TcpStream::connect(address).unwrap();
+        after_failed_reload_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let (mut after_failed_reload, _) = client_tls_with_config(
+            secure_websocket_request(address, Some(token)),
+            after_failed_reload_stream,
+            None,
+            Some(Connector::Rustls(second_client)),
+        )
+        .unwrap();
+        negotiate(&mut after_failed_reload);
+        drop(existing);
+        drop(rotated);
+        let started = Instant::now();
+        server.stop().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(matches!(
+            after_failed_reload.read().unwrap(),
+            ClientWsMessage::Close(Some(frame))
+                if frame.code == tungstenite::protocol::frame::coding::CloseCode::Away
+        ));
+    }
+
+    #[test]
     fn upstream_timeout_closes_the_connection_and_emits_disconnect_cleanup() {
         let temp = TempDir::new().unwrap();
         let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(
@@ -1415,7 +1697,8 @@ mod tests {
                 .unwrap()
         };
         let (events, receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
-        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let server =
+            RemoteServer::start("127.0.0.1:0".parse().unwrap(), None, admin, events).unwrap();
         let request = websocket_request(server.address(), Some(&issued.token));
         let stream = TcpStream::connect(server.address()).unwrap();
         stream
@@ -1514,6 +1797,94 @@ mod tests {
         request
     }
 
+    fn secure_websocket_request(
+        address: SocketAddr,
+        token: Option<&str>,
+    ) -> tungstenite::http::Request<()> {
+        let mut request = format!("wss://127.0.0.1:{}/v1/ws", address.port())
+            .into_client_request()
+            .unwrap();
+        request.headers_mut().insert(
+            tungstenite::http::header::SEC_WEBSOCKET_PROTOCOL,
+            tungstenite::http::HeaderValue::from_static(WS_PROTOCOL),
+        );
+        if let Some(token) = token {
+            request.headers_mut().insert(
+                tungstenite::http::header::AUTHORIZATION,
+                tungstenite::http::HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
+            );
+        }
+        request
+    }
+
+    fn write_test_tls_identity(directory: &std::path::Path) -> (RemoteTlsFiles, Vec<u8>) {
+        let CertifiedKey { cert, signing_key } =
+            generate_simple_self_signed(vec!["localhost".to_owned(), "127.0.0.1".to_owned()])
+                .unwrap();
+        let files = RemoteTlsFiles {
+            cert: directory.join("server-cert.pem"),
+            key: directory.join("server-key.pem"),
+        };
+        fs::write(&files.cert, cert.pem()).unwrap();
+        fs::write(&files.key, signing_key.serialize_pem()).unwrap();
+        make_private(&files.key);
+        (files, cert.der().to_vec())
+    }
+
+    fn make_private(path: &std::path::Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+
+    fn tls_client_config(cert: Vec<u8>) -> Arc<ClientConfig> {
+        let mut roots = RootCertStore::empty();
+        roots.add(CertificateDer::from(cert)).unwrap();
+        Arc::new(
+            ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::aws_lc_rs::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
+        )
+    }
+
+    fn tls_http_request(address: SocketAddr, config: Arc<ClientConfig>, request: &str) -> String {
+        let server_name = ServerName::try_from("127.0.0.1").unwrap().to_owned();
+        let connection = ClientConnection::new(config, server_name).unwrap();
+        let stream = TcpStream::connect(address).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut stream = StreamOwned::new(connection, stream);
+        stream.write_all(request.as_bytes()).unwrap();
+        stream.flush().unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        response
+    }
+
+    fn negotiate<S: Read + Write>(socket: &mut tungstenite::WebSocket<S>) {
+        let server_hello = read_json(socket);
+        socket
+            .send(ClientWsMessage::Text(
+                json!({
+                    "type": "client_hello",
+                    "supportedProtocolVersions": [1],
+                })
+                .to_string()
+                .into(),
+            ))
+            .unwrap();
+        let acknowledgement = read_json(socket);
+        assert_eq!(acknowledgement["type"], "hello_ack");
+        assert_eq!(acknowledgement["sessionId"], server_hello["sessionId"]);
+    }
+
     fn connect_and_negotiate(
         address: SocketAddr,
         token: &str,
@@ -1556,7 +1927,7 @@ mod tests {
         }
     }
 
-    fn read_json(socket: &mut tungstenite::WebSocket<TcpStream>) -> Value {
+    fn read_json<S: Read + Write>(socket: &mut tungstenite::WebSocket<S>) -> Value {
         loop {
             match socket.read().unwrap() {
                 ClientWsMessage::Text(text) => return serde_json::from_str(&text).unwrap(),

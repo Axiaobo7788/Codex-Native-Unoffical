@@ -69,15 +69,19 @@ bounded Markdown allowlist: raw HTML is inert, images never load, only explicit
 parsing falls back to a bounded tail above 16 KiB. Cross-platform and Human UI
 validation remain.
 
-Phase 4 has started behind an explicit loopback-only Host option. Local trusted
-administration can issue one-use pairing tickets and revoke hash-only device
-credentials. The authenticated `codex-native-v1` WebSocket currently exposes a
+Phase 4 has an explicit Host Remote option. Plaintext is loopback-only;
+non-loopback exposure requires an operator-provided certificate/key and uses
+rustls HTTPS/WSS with fail-closed startup and trusted-local atomic reload. Local
+trusted administration can issue one-use pairing tickets, rotate TLS material,
+and revoke hash-only device credentials. The authenticated `codex-native-v1`
+WebSocket currently exposes a
 strict read-only subset—`model/list`, bounded `thread/list`, and metadata-only
 `thread/read`—through the same stock app-server and output sanitizer. A small
 allowlist of sanitized lifecycle notifications now uses a 512-event/8 MiB
 sequence journal with ACK, same-session replay, and explicit gap resync. Token
-deltas, diffs, server requests, writes/approvals, TLS/non-loopback exposure,
-Android secure storage, and the Android UI are not implemented yet.
+deltas, diffs, server requests, writes/approvals, pairing-bound Android
+certificate trust, Android secure storage, and the Android UI are not
+implemented yet.
 
 ## Run locally
 
@@ -107,6 +111,20 @@ dart run tool/host_lifecycle_soak.dart
 cargo build --release --workspace
 dart run tool/remote_smoke.dart
 ```
+
+Remote is disabled unless the Host receives `--remote-listen` (or
+`CODEX_NATIVE_REMOTE_LISTEN`). Plaintext accepts only a literal loopback
+address. A network listener additionally requires both `--remote-tls-cert` and
+`--remote-tls-key` (or the matching `CODEX_NATIVE_REMOTE_TLS_CERT` and
+`CODEX_NATIVE_REMOTE_TLS_KEY` variables); on Unix the private key must be
+owner-only. Replace certificate/key files completely, then invoke trusted local
+`host/remote/tls/reload` to rotate new handshakes. A failed reload keeps the last
+valid certificate.
+
+`tool/remote_smoke.dart` remains plaintext-loopback by default. To exercise WSS,
+set `CODEX_NATIVE_REMOTE_SMOKE_TLS_CERT` and
+`CODEX_NATIVE_REMOTE_SMOKE_TLS_KEY`; its Dart clients build an explicit trust
+context from that certificate and never use an accept-all callback.
 
 ## Verify
 

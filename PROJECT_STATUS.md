@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated loopback transport, bounded read-only Codex RPC, and sanitized event replay are implemented; writes/approvals, TLS/non-loopback, and Android credential flow do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, and operator-certificate non-loopback TLS are implemented; writes/approvals and the Android trust/credential/client flow do not exist yet**
 
 ## Current repository state
 
@@ -76,7 +76,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Android Remote now has a pure Rust Host core for typed negotiation,
   session/sequence/ACK resume, count-and-byte-bounded replay, multi-connection
   request correlation, bounded same-session write idempotency, single-use
-  pairing, and hash-only scoped device credentials. The loopback WebSocket uses
+  pairing, and hash-only scoped device credentials. The WS/WSS listener uses
   these primitives; no Android credential flow exists yet.
 - The desktop Host exposes trusted local `host/remote/pairing/create`,
   `host/remote/devices/list`, and `host/remote/devices/revoke` administration.
@@ -84,18 +84,59 @@ This file is the repository's durable project memory. Update it whenever a task 
   so Remote-store corruption cannot block ordinary local Host status or Codex
   startup.
 - The Host can explicitly enable a plaintext listener only on a literal loopback
-  address. Its bounded HTTP pairing and authenticated WebSocket endpoints
-  implement version negotiation, heartbeat, live revocation, and coordinated
-  shutdown. The socket exposes `host/remote/status`, `model/list`, bounded
-  `thread/list`, and metadata-only `thread/read` through the same sanitized stock
-  app-server process. Six bounded lifecycle/state notification methods now feed
-  sequenced live delivery and same-session replay. It still has no writes,
-  approvals, Android client, or non-loopback transport.
+  address. A non-loopback listener requires an operator-provided PEM certificate
+  chain/private key and uses rustls HTTPS/WSS; invalid or incomplete material
+  fails before bind and before stock Codex starts. Unix keys must be owner-only.
+  Trusted local `host/remote/tls/reload` atomically changes new-handshake identity
+  without dropping established sockets and retains the last valid configuration
+  on failure. The bounded endpoints implement pairing, version negotiation,
+  heartbeat, live revocation, and coordinated shutdown. The socket exposes
+  `host/remote/status`, `model/list`, bounded `thread/list`, and metadata-only
+  `thread/read` through the same sanitized stock app-server process. Six bounded
+  lifecycle/state notification methods feed sequenced live delivery and same-
+  session replay. It still has no writes, approvals, Android client, or pairing-
+  bound Android certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 fail-closed non-loopback WSS
+
+- Reviewed `axum-server`/rustls certificate loading and atomic reload, Android
+  network-security and pinning guidance, Dart `HttpClient`/`SecurityContext`
+  injection, current secure-storage constraints, and maintained Remote clients.
+  ADR-011 requires explicit certificate identity for non-loopback Remote and
+  forbids arbitrary-certificate callbacks or plaintext downgrade.
+- Added paired certificate/key environment and CLI configuration. Both must be
+  present with an enabled listener; plaintext remains literal-loopback-only in
+  both the parser and the server. TLS parses before bind and before Codex spawn,
+  Unix private keys with group/other permissions fail, and errors/status never
+  include PEM contents.
+- Added rustls HTTPS/WSS through `axum-server` while retaining every existing
+  HTTP body, WebSocket frame/message/write-buffer, connection, application queue,
+  replay, heartbeat, and timeout bound. Local status now reports actual TLS and
+  loopback/network scope instead of hard-coded values.
+- Added trusted-local `host/remote/tls/reload`. A valid certificate/key pair is
+  atomically adopted for new handshakes, existing WSS connections survive, old
+  trust no longer connects, and an invalid reload returns a generic error while
+  retaining the last valid configuration.
+- The initial TLS WebSocket test observed an EOF because `axum-server`'s
+  `http1_only()` path did not serve HTTP upgrades. Removing that override fixed
+  the concrete lifecycle mismatch; the failure remains recorded in research.
+- Rust tests now pass 25 Remote-library tests, 47 Host-binary tests, and three
+  executable failure-path tests (75 total). A release Host plus stock app-server
+  passed the complete read-only Remote smoke over WSS in 10.828 seconds with a
+  Dart `SecurityContext`, network-scope wildcard bind, hash-only pairing, eight
+  models, metadata-only thread read, live revocation, no internal-ID leak, and
+  zero Host exit. The client connected through loopback on the same Linux host,
+  so this is not real LAN, firewall, system-CA, service-install, or Android proof.
+- Dependency review caught Cargo initially selecting `rcgen` 0.14.10 and `time`
+  0.3.55, both of which require Rust 1.88 despite the Host's declared Rust 1.87
+  floor. The committed lock now uses `rcgen` 0.14.5 (declared MSRV 1.71) and
+  `time` 0.3.45 (declared MSRV 1.83). This environment has Rust 1.99, so an
+  actual Rust 1.87 build remains a separate CI/toolchain gate.
 
 ### 2026-11-05 — Phase 4 bounded Codex event replay
 
@@ -481,11 +522,11 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 25 Remote-library tests, 43 Host-binary tests,
-  and 2 executable failure-path tests (70 total), including real loopback TCP,
+- `cargo test --workspace`: PASS, 25 Remote-library tests, 47 Host-binary tests,
+  and 3 executable failure-path tests (75 total), including real TCP/WSS,
   exact event replay/gap recovery, abrupt reconnect, slow-reader disconnection,
-  live revocation, protocol-close shutdown, deterministic storage-failure, and
-  cache-startup gates.
+  live revocation, certificate trust/rotation/rollback, protocol-close shutdown,
+  deterministic storage failure, and cache/TLS startup gates.
 - `cargo build --release --workspace`: PASS.
 - Release `codex-native-host` real-runtime smoke: PASS; one process carried a
   Host status request plus stock app-server initialize/initialized and reported
@@ -498,11 +539,17 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   EOF without leaving a device credential file. The first harness attempt was
   invalid because its absent `jq` consumer caused stdout `Broken pipe`; it was
   not counted as a product pass or failure.
-- `dart run tool/remote_smoke.dart`: PASS in 10.673 seconds against release Host
+- `dart run tool/remote_smoke.dart`: PASS in 10.777 seconds against release Host
   and stock app-server. It paired without plaintext token persistence, negotiated
   `codex-native-v1`, read 8 models, listed and metadata-read a real thread,
   observed no internal ID on local stdout, live-revoked the device, removed its
   temporary state, and observed Host exit code zero.
+- TLS-configured `dart run tool/remote_smoke.dart`: PASS in 10.828 seconds
+  against release Host and the same stock app-server. The Host bound
+  `0.0.0.0:0`, reported `scope=network`/`tls=true`, and Dart trusted the generated
+  self-signed certificate only through an explicit `SecurityContext`; pairing,
+  WSS negotiation, eight-model and metadata-thread reads, internal-ID isolation,
+  live revocation, temporary-state cleanup, and zero Host exit all passed.
 - `dart run tool/host_memory_benchmark.dart`: PASS three times for 3/30/300 MiB.
   Fixture deltas were 6,303,744/62,926,848/629,157,888,
   6,303,744/62,926,848/629,157,888, and
@@ -614,6 +661,12 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   not yet define a headless Host lifecycle. Sanitized synthetic/TCP gates prove
   event publication and replay, but the current real stock-app-server smoke does
   not start a turn and therefore does not prove a live stock turn notification.
+- Operator-provided WSS is implemented and same-host release-tested, but the test
+  connected through loopback to a wildcard listener. Real LAN routing, host
+  firewall discovery, CA chain/renewal under installed service accounts, Windows
+  private-key ACLs, Android platform trust, background reconnect, and pairing-
+  bound self-signed identity remain unverified. No Android code accepts arbitrary
+  bad certificates.
 - Long-running sessions must not cause Flutter to hydrate unbounded history.
   Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
   evidence now exist, but real app-server RSS and cross-platform installed-build
@@ -621,21 +674,23 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Research and implement the secure non-loopback transport boundary before an
-Android device can use the now-working read/replay surface:
+Build the bounded Android `RemoteTransport` and credential/trust bootstrap against
+the now-working WSS envelope:
 
-1. compare current rustls/axum-server certificate loading and Android trust/pin
-   behavior with maintained Remote clients, and record the bootstrap/rotation
-   decision in `docs/RESEARCH.md` and an ADR if it is durable;
-2. add an explicit WSS configuration whose certificate/key validation fails
-   before bind and which can never downgrade a requested non-loopback listener
-   to plaintext;
-3. preserve the same body/frame/message/connection/queue/replay bounds under TLS
-   and add real handshake, bad-certificate, reload/rotation, shutdown, and secret
-   leakage gates;
-4. then build the bounded Android `RemoteTransport` and platform-backed device
-   secret flow against this envelope. Keep server requests/approvals and writes
-   rejected until pending interaction state and idempotency are wired end to end.
+1. add the production Android `INTERNET` permission and a typed transport that
+   uses `wss://` by default, the same protocol models, bounded queues, three-
+   message negotiation, ACK/resume, heartbeat, and explicit resync;
+2. add platform-backed storage for the issued device credential with Android
+   backup exclusions and explicit unreadable/lost-key recovery. Do not persist a
+   bearer in preferences, logs, crash text, or navigation state;
+3. support ordinary system-CA certificates first. Design the local self-signed
+   pairing artifact so certificate/CA identity is authenticated and stored with
+   the device record; never use `badCertificateCallback` as onboarding;
+4. exercise reconnect, Host restart/session change, revocation, malformed and
+   oversized input, bounded hydration, and process/background lifecycle in Dart
+   tests, then run the available emulator/device and Android build gates. Keep
+   server requests/approvals and writes rejected until pending interaction state
+   and idempotency are wired end to end.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

@@ -262,3 +262,53 @@ WebSocket base64 payloads.
 - Device secret storage, TLS, installed-network behavior, and reconnect recovery
   require real platform/device validation and cannot be claimed from Linux unit
   tests alone.
+
+---
+
+## ADR-011 — Require explicit certificate identity for non-loopback Remote
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+`codex-native-host` permits plaintext Remote only on a literal loopback address.
+Every non-loopback listener requires an explicitly configured PEM certificate
+chain and matching private key and serves HTTPS/WSS through rustls. Missing,
+partial, unreadable, overexposed, or invalid TLS configuration fails before the
+listener binds and before stock Codex starts; there is no plaintext fallback.
+
+Certificate rotation is an explicit trusted-local operation under
+`host/remote/tls/reload`. A complete valid replacement is swapped atomically for
+new handshakes. A failed reload keeps the last valid configuration, exposes no
+certificate/key contents, and does not terminate established connections.
+
+Public or managed deployments should use a normal CA-valid certificate, either
+directly or through a correctly configured TLS reverse proxy. A future local
+self-signed pairing flow must deliver and persist the expected certificate/CA
+identity through the trusted pairing surface. Android must never implement
+trust by accepting an arbitrary bad certificate.
+
+### Why
+
+- A bearer token sent over non-loopback plaintext is reusable by an observer and
+  does not authenticate the Host to the phone.
+- Silent downgrade after a certificate error would turn a configuration or
+  rotation mistake into credential exposure.
+- Android's platform trust store is appropriate for ordinary CA certificates;
+  a local self-signed identity needs an explicit pairing-bound trust bootstrap,
+  not a global bypass callback.
+- Atomic reload permits planned certificate rotation without invalidating active
+  work, while retaining the previous valid configuration avoids an outage from
+  a partial or malformed file replacement.
+
+### Consequence
+
+- Linux/macOS private-key files must not grant group/other access. Windows key
+  ACL behavior and installed-service operation require a separate platform gate.
+- The current bearer token remains the device authorization credential; mTLS is
+  not required for this slice and may be reconsidered only with measured need.
+- The current Host can serve operator-provided TLS, but self-signed Android
+  onboarding is not complete until pairing securely binds certificate identity
+  and platform-backed secret storage is implemented and device-tested.
