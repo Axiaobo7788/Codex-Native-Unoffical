@@ -28,6 +28,10 @@ import '../transport/remote/remote_onboarding.dart';
 import 'runtime_controller.dart';
 import 'theme_tokens.dart';
 
+const _desktopSplitMinimumWidth = 760.0;
+const _compactThreadPanelHeight = 320.0;
+const _compactConversationMinimumHeight = 420.0;
+
 class CodexNativeApp extends StatefulWidget {
   const CodexNativeApp({
     super.key,
@@ -180,30 +184,45 @@ class RuntimeStatusScreen extends StatelessWidget {
                         RuntimeConnectionState.connected) ...[
                       const SizedBox(height: ThemeTokens.space4),
                       Expanded(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(
-                              width: 360,
-                              child: _ThreadPanel(
-                                controller: threadController,
-                                settingsController: settingsController,
-                                defaultWorkingDirectory:
-                                    defaultWorkingDirectory,
-                              ),
-                            ),
-                            const SizedBox(width: ThemeTokens.space4),
-                            Expanded(
-                              child: _ConversationPanel(
-                                controller: conversationController,
-                                historyController: historyController,
-                                approvalController: approvalController,
-                                settingsController: settingsController,
-                                diffController: diffController,
-                                outputGateway: controller,
-                              ),
-                            ),
-                          ],
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final threads = _ThreadPanel(
+                              controller: threadController,
+                              settingsController: settingsController,
+                              defaultWorkingDirectory: defaultWorkingDirectory,
+                            );
+                            final conversation = _ConversationPanel(
+                              controller: conversationController,
+                              historyController: historyController,
+                              approvalController: approvalController,
+                              settingsController: settingsController,
+                              diffController: diffController,
+                              outputGateway: controller,
+                            );
+                            if (constraints.maxWidth <
+                                _desktopSplitMinimumWidth) {
+                              final conversationHeight =
+                                  constraints.maxHeight <
+                                      _compactConversationMinimumHeight
+                                  ? _compactConversationMinimumHeight
+                                  : constraints.maxHeight;
+                              return _CompactWorkspace(
+                                key: const ValueKey('compact-workspace'),
+                                threads: threads,
+                                conversation: conversation,
+                                conversationHeight: conversationHeight,
+                              );
+                            }
+                            return Row(
+                              key: const ValueKey('desktop-split-workspace'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(width: 360, child: threads),
+                                const SizedBox(width: ThemeTokens.space4),
+                                Expanded(child: conversation),
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ] else if (controller.snapshot.state ==
@@ -236,6 +255,54 @@ class RuntimeStatusScreen extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactWorkspace extends StatefulWidget {
+  const _CompactWorkspace({
+    super.key,
+    required this.threads,
+    required this.conversation,
+    required this.conversationHeight,
+  });
+
+  final Widget threads;
+  final Widget conversation;
+  final double conversationHeight;
+
+  @override
+  State<_CompactWorkspace> createState() => _CompactWorkspaceState();
+}
+
+class _CompactWorkspaceState extends State<_CompactWorkspace> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: _compactThreadPanelHeight, child: widget.threads),
+            const SizedBox(height: ThemeTokens.space4),
+            SizedBox(
+              height: widget.conversationHeight,
+              child: widget.conversation,
+            ),
+          ],
         ),
       ),
     );
@@ -1820,13 +1887,15 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: ThemeTokens.space2,
+                  runSpacing: ThemeTokens.space1,
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Threads',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+                    Text(
+                      'Threads',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                     IconButton(
                       tooltip: 'Refresh threads',
@@ -2158,13 +2227,15 @@ class _RemoteSetupContent extends StatelessWidget {
           ),
         ],
         const SizedBox(height: ThemeTokens.space6),
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: ThemeTokens.space2,
+          runSpacing: ThemeTokens.space1,
           children: [
-            Expanded(
-              child: Text(
-                'Paired devices',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+            Text(
+              'Paired devices',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             Text(
               '${activeDevices.length} active · '
@@ -2610,14 +2681,13 @@ class _RuntimePanel extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: ThemeTokens.space6),
-            Row(
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: ThemeTokens.space2,
+              runSpacing: ThemeTokens.space2,
               children: [
-                Expanded(
-                  child: Text(
-                    'Runtime',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
+                Text('Runtime', style: Theme.of(context).textTheme.titleMedium),
                 if (snapshot.state == RuntimeConnectionState.connected &&
                     !controller.usesRemote)
                   OutlinedButton.icon(

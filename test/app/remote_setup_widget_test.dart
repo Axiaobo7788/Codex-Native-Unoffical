@@ -11,6 +11,31 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('compact desktop shell and setup stay overflow-free', (
+    tester,
+  ) async {
+    await _pumpApp(tester, physicalSize: const Size(320, 720));
+
+    expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
+    final scrollbar = find.descendant(
+      of: find.byKey(const ValueKey('compact-workspace')),
+      matching: find.byType(Scrollbar),
+    );
+    expect(scrollbar, findsOneWidget);
+    expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+    await tester.ensureVisible(find.text('Conversation'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('remote-setup-button')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remote setup'), findsNWidgets(2));
+    expect(find.textContaining('1 active'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('trusted setup creates tickets only after affirmative action', (
     tester,
   ) async {
@@ -26,6 +51,10 @@ void main() {
     );
     final runtime = await _pumpApp(tester);
 
+    expect(
+      find.byKey(const ValueKey('desktop-split-workspace')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
     await tester.pumpAndSettle();
 

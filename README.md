@@ -58,7 +58,9 @@ tool activity, and surface explicit approve-once/reject prompts. The UI retains
 at most 100 thread rows and 200 recent conversation entries. Model and reasoning
 choices come from live app-server discovery; approval and sandbox overrides are
 explicit, and dangerous choices require confirmation. Turn diffs are projected
-into bounded file summaries with a virtualized selected-file view.
+into bounded file summaries with a virtualized selected-file view. The desktop
+keeps its 360-pixel thread split on wide windows and uses a visibly scrollable
+stack of bounded thread/conversation panels below 760 logical pixels.
 
 Phase 3 is locally machine-verified on Linux. Stored history uses bounded `thread/turns/list` summary
 pages and loads full items for only one selected turn. The Host incrementally

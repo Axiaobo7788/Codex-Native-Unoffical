@@ -39,7 +39,11 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Command/file-change approvals support explicit approve-once and reject responses. Unknown and unsupported server requests fail closed and cannot expose an approve action. The real reject path is verified; approve-once is currently unit-tested but not Human-validated.
 - `model/list` drives typed visible-model and reasoning-effort controls. Model, effort, approval, and sandbox overrides are omitted by default; `never` approval and `danger-full-access` require an explicit UI confirmation.
 - Turn diff notifications are converted immediately into a bounded typed projection: at most 2 MiB processed input, 100 files, 512 KiB retained total, 128 KiB and 4,000 lines per file, and 2,000 characters per retained line. Only the selected file's rows are built by the diff view.
-- The desktop UI now provides a virtualized recent-activity timeline, composer, race-safe stop action, pending-approval banner, execution settings, changed-file summary, and selected-file diff.
+- The desktop UI now provides a virtualized recent-activity timeline, composer,
+  race-safe stop action, pending-approval banner, execution settings, changed-
+  file summary, and selected-file diff. At compact widths the thread and
+  conversation panels keep bounded usable heights inside an explicitly
+  scrollable workspace; wide layouts preserve the 360-pixel thread split.
 - A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
 - Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns and can return directly to the newest page.
 - The typed history layer loads ascending `thread/items/list` pages for exactly
@@ -132,7 +136,7 @@ This file is the repository's durable project memory. Update it whenever a task 
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
   credentials are not persisted, and permissions remain read-only. Run
-  `42076435647` at `36b7102` passed all three jobs: exact-Rust/Dart/Flutter
+  `42084742395` at `1299fb8` passed all three jobs: exact-Rust/Dart/Flutter
   verification, Linux and Android debug builds, and native Windows x64/macOS
   arm64 bundle/Host/license gates.
 - Android release variants no longer inherit the public debug certificate or
@@ -142,6 +146,30 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Compact desktop shell overflow recovery
+
+- Preserved the original 320x1000 probe failures before changing layout: the
+  runtime action row overflowed right by 11 pixels and the fixed desktop split
+  overflowed right by 104 pixels. The first stacked revision exposed a 23-pixel
+  thread-header right overflow and 64-pixel thread-panel bottom overflow; the
+  adjacent 320x720 probe then exposed 93-pixel thread and 83-pixel conversation
+  bottom overflows. Later passes do not erase those observed failures.
+- Runtime, thread, and paired-device summary action rows now wrap at their
+  natural widths. At 760 logical pixels and above the existing 360-pixel thread
+  pane plus conversation split remains unchanged. Below that boundary the two
+  bounded panels use a vertically scrollable workspace with an always-visible
+  draggable scrollbar, a 320-pixel thread panel, and a conversation panel at
+  least 420 pixels high rather than compressing either panel below its controls.
+- One widget regression exercises the whole connected shell and Remote setup
+  dialog at 320x720, asserts the compact/scrollable branch and no rendering
+  exception, and the existing 1500x1000 path asserts the wide split remains.
+  The full suite passes 168/168, fatal-info Dart analysis passes, independent
+  ASCII-path Flutter analysis passes, and the Linux debug build succeeds.
+- This is deterministic layout evidence, not Human visual or input acceptance.
+  Real window resizing, nested-scroll feel, keyboard navigation, text scaling,
+  and platform rendering remain Human/cross-platform review gates. Hosted CI for
+  this code-bearing responsive change is pending its deliberate push.
 
 ### 2026-11-06 — Bounded Android Remote pairing QR intake
 
@@ -187,8 +215,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Physical permission prompts, Settings recovery, camera focus/rotation,
   camera-less/front-only devices, dense Version 40 recognition, system-root and
   pairing-bound end-to-end scans, process death, and Human acceptance remain
-  unrun device gates. Hosted CI for this code-bearing change is pending its
-  deliberate push.
+  unrun device gates. Hosted run `42084742395` at implementation commit
+  `1299fb8` passed Ubuntu verification plus Android debug, Windows x64, and
+  macOS arm64 build/package gates.
 
 ### 2026-11-06 — Bounded desktop Remote pairing QR presentation
 
@@ -219,11 +248,13 @@ This file is the repository's durable project memory. Update it whenever a task 
 - A separate 320-logical-pixel whole-shell probe could not isolate QR behavior:
   it exposed existing desktop split-pane, runtime-header, and setup-summary row
   overflows before ticket creation. The valid 620-pixel constrained-symbol test
-  passes without an exception. Compact desktop-window responsiveness remains
-  machine-actionable work; it is not reported as fixed by this slice.
+  passed without an exception. This negative evidence remained attributable to
+  this QR slice; the later compact-shell recovery recorded above fixes and
+  independently verifies those overflows.
 - Added the direct dependency provenance to `THIRD_PARTY_NOTICES.md`. Android
-  camera selection/permission/lifecycle and bounded decoder intake remain the
-  next QR slice and require their own dependency/license review.
+  camera selection/permission/lifecycle and bounded decoder intake were kept
+  outside this slice and later completed with their own dependency/license
+  review.
 - Final local gates pass: zero-change Dart formatting, fatal-info Dart analysis,
   Flutter analysis through the established ASCII project alias, all 161 Flutter
   tests, Linux debug bundle, native-license drift/packaging, Android release-
@@ -1345,15 +1376,11 @@ its now-versioned trust boundary:
    unreadable Keystore state, pairing-save failure, backup/restore behavior,
    camera permission denial/settings recovery, rotation, dense QR intake, and
    exact desktop-to-phone interoperability;
-2. while a device remains unavailable, fix the already reproduced compact
-   desktop-window overflows in the runtime header, split workspace, and Remote
-   setup summary without weakening the full desktop layout or calling a narrow
-   widget test Human visual acceptance;
-3. only after pairing/setup is device-verified, extend the Remote product beyond
+2. only after pairing/setup is device-verified, extend the Remote product beyond
    bounded read-only metadata. Keep pagination, output, writes, approvals,
    idempotency, and attachment bounds explicit rather than reusing the desktop
    surface optimistically;
-4. while a physical Android device is unavailable, continue independent
+3. while a physical Android device is unavailable, continue independent
    machine-actionable RC work such as unsigned release-artifact assembly,
    integrity/provenance manifests, installed-layout checks, and release
    documentation without claiming unavailable hosted or native-platform passes.
@@ -1369,8 +1396,9 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: current implementation run `42076435647` passed exact-Rust,
-  Dart/Flutter, Linux, Android debug, Windows x64, and macOS arm64 gates.
+- Hosted CI: latest completed code-bearing run `42084742395` at `1299fb8`
+  passed exact-Rust, Dart/Flutter, Linux, Android debug, Windows x64, and macOS
+  arm64 gates.
 
 ### Phase 2 — Local Codex workflow
 
