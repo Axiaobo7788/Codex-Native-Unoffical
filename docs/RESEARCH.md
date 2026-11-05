@@ -1748,3 +1748,17 @@ _Reviewed: 2026-11-06_
   commit passed Ubuntu verification and Linux/Android debug builds plus native
   Windows x64 and macOS arm64 bundle gates. A corrected review-artifact rerun is
   still required.
+- Corrective run `42093902515` at `43a256f` completed the full Linux x64 and
+  macOS arm64 review-artifact jobs, including the previously failing macOS
+  assembly, independent verification, and upload. Windows completed its release
+  build but still failed the clean-source identity gate. The added bounded
+  porcelain diagnostic made the evidence actionable: Windows had rewritten all
+  seven tracked Flutter desktop plugin registrants (`.cc`, `.h`, `.cmake`, and
+  `.swift`) across the Linux, macOS, and Windows shells. These are one generated
+  family refreshed together by Flutter with host-native line endings, so their
+  exact repository patterns are now pinned to LF. This is narrower than a
+  whole-repository EOL policy and retains byte/content drift detection. The run
+  remains failed; a fresh Windows runner must demonstrate that normalization
+  removes only EOL drift and leaves the post-build tree clean. Companion normal
+  CI run `42093880114` passed Ubuntu verification/Linux and Android debug builds
+  plus native Windows x64 and macOS arm64 debug bundle gates.

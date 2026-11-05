@@ -216,6 +216,18 @@ This file is the repository's durable project memory. Update it whenever a task 
   corrective hosted run can identify the exact Windows drift without weakening
   the clean-source provenance gate. A fourth focused test covers both accepted
   non-executable framework files and rejected non-executable app launchers.
+- Corrective run `42093902515` at `43a256f` proved the macOS permission fix:
+  Linux x64 and macOS arm64 both completed release build, assembly, self-verify,
+  independent verify, and upload. Windows again failed closed at assembly, and
+  the new bounded diagnostic identified exactly all seven tracked Flutter
+  desktop plugin registrants across Linux, macOS, and Windows. Flutter refreshes
+  them together with host-native line endings during a Windows build. Their
+  exact generated-source patterns are now pinned to LF in `.gitattributes`
+  rather than weakening source identity or globally rewriting unrelated files.
+  Run `42093902515` remains failed and does not count as a three-platform pass;
+  a fourth hosted run must prove the targeted EOL contract. Its companion normal
+  CI run `42093880114` passed all three jobs, including the full Ubuntu source,
+  Rust, Flutter, Linux, and Android gates plus native Windows/macOS debug bundles.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
