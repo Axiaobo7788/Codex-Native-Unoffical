@@ -20,6 +20,11 @@ import '../protocol/protocol_models.dart';
 import '../transport/process/codex_executable_locator.dart';
 import '../transport/process/host_executable_locator.dart';
 import '../transport/process/process_transport.dart';
+import '../transport/remote/remote_credentials.dart';
+import '../transport/remote/remote_cursor_store.dart';
+import '../transport/remote/remote_lifecycle_coordinator.dart';
+import '../transport/remote/remote_projection.dart';
+import '../transport/remote/remote_secure_storage.dart';
 
 typedef TransportStarter = Future<ProcessTransport> Function(
   String hostExecutable,
@@ -38,22 +43,39 @@ class RuntimeController extends ChangeNotifier
     this.locator = const CodexExecutableLocator(),
     this.hostLocator = const HostExecutableLocator(),
     TransportStarter? transportStarter,
-  }) : _transportStarter =
-           transportStarter ??
-           ((hostExecutable, codexExecutable) => ProcessTransport.startHost(
-             hostExecutablePath: hostExecutable,
-             codexExecutablePath: codexExecutable,
-           ));
+    bool? useRemote,
+    RemoteLifecycleOwner? remoteLifecycle,
+  }) {
+    _transportStarter =
+        transportStarter ??
+        ((hostExecutable, codexExecutable) => ProcessTransport.startHost(
+          hostExecutablePath: hostExecutable,
+          codexExecutablePath: codexExecutable,
+        ));
+    _usesRemote = useRemote ?? (remoteLifecycle != null || Platform.isAndroid);
+    if (!_usesRemote && remoteLifecycle != null) {
+      throw ArgumentError(
+        'A Remote lifecycle owner requires Remote runtime mode.',
+        'remoteLifecycle',
+      );
+    }
+    _remoteLifecycle =
+        remoteLifecycle ??
+        (_usesRemote ? _createDefaultRemoteLifecycle() : null);
+  }
 
   final CodexExecutableLocator locator;
   final HostExecutableLocator hostLocator;
-  final TransportStarter _transportStarter;
+  late final TransportStarter _transportStarter;
+  late final bool _usesRemote;
+  late final RemoteLifecycleOwner? _remoteLifecycle;
   RuntimeSnapshot _snapshot = const RuntimeSnapshot.idle();
   ProcessTransport? _transport;
   StreamSubscription<ProcessExit>? _exitSubscription;
   StreamSubscription<ProtocolViolation>? _protocolErrorSubscription;
   StreamSubscription<TurnEvent>? _turnEventSubscription;
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
+  StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   final StreamController<TurnEvent> _turnEvents =
       StreamController<TurnEvent>.broadcast();
   final StreamController<ApprovalEvent> _approvalEvents =
@@ -63,6 +85,13 @@ class RuntimeController extends ChangeNotifier
   var _stopping = false;
 
   RuntimeSnapshot get snapshot => _snapshot;
+  bool get usesRemote => _usesRemote;
+  List<CodexModel> get remoteModels =>
+      _remoteLifecycle?.projection?.models ?? const [];
+  List<ThreadSummary> get remoteThreads =>
+      _remoteLifecycle?.projection?.threads ?? const [];
+  bool get remoteHasMoreThreads =>
+      _remoteLifecycle?.projection?.nextThreadCursor != null;
 
   @override
   Stream<TurnEvent> get turnEvents => _turnEvents.stream;
@@ -70,7 +99,18 @@ class RuntimeController extends ChangeNotifier
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvalEvents.stream;
 
-  Future<void> start() => _startOperation ??= _start();
+  Future<void> start() =>
+      _usesRemote ? _startRemote() : (_startOperation ??= _startDesktop());
+
+  Future<void> handleAppHidden() async {
+    if (!_usesRemote || _stopping || _disposed) {
+      return;
+    }
+    await _remoteLifecycle!.suspend();
+    _handleRemoteState(_remoteLifecycle.state);
+  }
+
+  Future<void> handleAppShown() => start();
 
   @override
   Future<ThreadPage> listThreads(ThreadListQuery query) =>
@@ -159,6 +199,11 @@ class RuntimeController extends ChangeNotifier
   );
 
   ProcessTransport _connectedTransport() {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'This operation is unavailable on the read-only Remote product surface.',
+      );
+    }
     final transport = _transport;
     if (transport == null ||
         _snapshot.state != RuntimeConnectionState.connected ||
@@ -168,18 +213,7 @@ class RuntimeController extends ChangeNotifier
     return transport;
   }
 
-  Future<void> _start() async {
-    if (Platform.isAndroid) {
-      _setSnapshot(
-        const RuntimeSnapshot(
-          state: RuntimeConnectionState.unsupported,
-          message: 'Android will connect through RemoteTransport in Phase 4.',
-        ),
-      );
-
-      return;
-    }
-
+  Future<void> _startDesktop() async {
     _setSnapshot(const RuntimeSnapshot(state: RuntimeConnectionState.locating));
     final executable = await locator.locate();
     if (executable == null) {
@@ -260,6 +294,86 @@ class RuntimeController extends ChangeNotifier
     }
   }
 
+  Future<void> _startRemote() async {
+    if (_stopping || _disposed) {
+      return;
+    }
+    final lifecycle = _remoteLifecycle!;
+    _remoteStateSubscription ??= lifecycle.states.listen(
+      _handleRemoteState,
+      onError: (Object _, StackTrace _) {
+        _setSnapshot(
+          const RuntimeSnapshot(
+            state: RuntimeConnectionState.error,
+            message: 'Remote lifecycle failed.',
+          ),
+        );
+      },
+    );
+    _handleRemoteState(lifecycle.state);
+    await lifecycle.start();
+    _handleRemoteState(lifecycle.state);
+  }
+
+  void _handleRemoteState(RemoteLifecycleState state) {
+    if (!_usesRemote || _stopping || _disposed) {
+      return;
+    }
+    final snapshot = switch (state.phase) {
+      RemoteLifecyclePhase.idle ||
+      RemoteLifecyclePhase.loadingCredentials => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteConnecting,
+        message: 'Loading the paired Remote device profile.',
+      ),
+      RemoteLifecyclePhase.unpaired => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteUnpaired,
+        message:
+            'This device is not paired with a Codex Native Host. Pairing UI '
+            'is not available in this build yet.',
+      ),
+      RemoteLifecyclePhase.credentialRecoveryRequired => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteCredentialRecoveryRequired,
+        message:
+            'The saved Remote profile is unreadable or invalid. It was not '
+            'deleted; explicit clear and re-pair recovery is required.',
+      ),
+      RemoteLifecyclePhase.connecting => RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteConnecting,
+        message: 'Connecting to the paired Host (attempt ${state.attempt}).',
+      ),
+      RemoteLifecyclePhase.hydrating => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteHydrating,
+        message: 'Loading a bounded authoritative model and thread snapshot.',
+      ),
+      RemoteLifecyclePhase.ready => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteReadOnly,
+        message:
+            'Read-only Remote metadata is ready. Turns, history, output, '
+            'approvals, and writes are unavailable in this build.',
+      ),
+      RemoteLifecyclePhase.waitingToRetry => RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteWaitingToRetry,
+        message:
+            'The Remote connection failed. Retrying in '
+            '${state.retryDelay?.inSeconds ?? 0} seconds.',
+      ),
+      RemoteLifecyclePhase.revoked => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteRevoked,
+        message:
+            'This device credential was rejected or revoked. Re-pairing is '
+            'required; automatic reconnect has stopped.',
+      ),
+      RemoteLifecyclePhase.suspended => const RuntimeSnapshot(
+        state: RuntimeConnectionState.remoteSuspended,
+        message: 'Remote is suspended while the application is hidden.',
+      ),
+      RemoteLifecyclePhase.stopped => const RuntimeSnapshot(
+        state: RuntimeConnectionState.stopped,
+      ),
+    };
+    _setSnapshot(snapshot);
+  }
+
   void _handleExit(ProcessExit exit) {
     if (_stopping || _disposed) {
       return;
@@ -316,6 +430,8 @@ class RuntimeController extends ChangeNotifier
     await _protocolErrorSubscription?.cancel();
     await _turnEventSubscription?.cancel();
     await _approvalEventSubscription?.cancel();
+    await _remoteLifecycle?.stop();
+    await _remoteStateSubscription?.cancel();
     await _transport?.close();
     await _turnEvents.close();
     await _approvalEvents.close();
@@ -329,6 +445,15 @@ class RuntimeController extends ChangeNotifier
         ),
       );
     }
+  }
+
+  static RemoteLifecycleOwner _createDefaultRemoteLifecycle() {
+    final storage = FlutterRemoteSecureValueStore();
+    return RemoteLifecycleCoordinator(
+      credentialStore: RemoteCredentialStore(storage),
+      cursorStore: RemoteAppliedCursorStore(storage),
+      projection: BoundedRemoteProjection(),
+    );
   }
 
   void _setSnapshot(RuntimeSnapshot value) {

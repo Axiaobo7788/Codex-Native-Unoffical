@@ -124,15 +124,15 @@ bounded to 512 events and 8 MiB. History/output, writes, approvals, and server
 requests fail locally because the Host has not made those semantics remotely
 safe.
 
-This is a transport core, not Android application readiness. The Android client
-now has a platform-backed owner for one versioned WSS/system-CA device record.
+The Android client now has a platform-backed owner for one versioned
+WSS/system-CA device record.
 It stores endpoint, bearer, bounded device metadata, and trust kind as one
 secure value, serializes and verifies mutations, distinguishes absent from
 unreadable/corrupt state, and never silently deletes an unreadable record.
 Android cloud backup and device transfer exclude all SharedPreferences because
 the corresponding Keystore wrapping key is device-bound.
 
-An unwired `RemoteLifecycleCoordinator` now owns connection readiness above the
+`RemoteLifecycleCoordinator` owns connection readiness above the
 socket. Its separate secure cursor is device/session bound and is accepted only
 with an exactly matching retained projection. Fresh or invalid state loads at
 most 100 models and 100 thread rows, replaces the bounded authoritative
@@ -141,8 +141,12 @@ mutate that projection before their cursor is persisted. Connection and resync
 generations reject stale work; projection writes are serialized across sessions;
 generic failures use capped exponential backoff; credential rejection and live
 revocation are terminal; suspend retains only a provably applied projection and
-stop invalidates it. This owner is not yet constructed by Android runtime state
-or driven by application foreground/background transitions.
+stop invalidates it. Android `RuntimeController` constructs this stack by
+default. `AppLifecycleListener.onHide` suspends it and `onShow` restarts it;
+detach performs full shutdown. Product state distinguishes every lifecycle gate
+and exposes only the ready projection through a bounded read-only metadata view.
+Existing desktop controllers and process transport are unchanged, while every
+unsupported Remote gateway rejects locally.
 
 Dart 3.13's socket is configured with a 1 MiB inbound frame cap and no
 compression, while
@@ -156,8 +160,9 @@ The remaining network and Android layers must still provide:
 - pairing-bound self-signed certificate identity or ordinary platform-CA trust;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
-- Android app/process lifecycle wiring around the tested reconnect owner;
-- Android runtime/UI integration of the bounded authoritative projection.
+- pairing/onboarding plus explicit credential recovery UI;
+- paged/selectable Remote metadata and later conversation features only after
+  their Host semantics are bounded end to end.
 
 ## Fidelity mode
 

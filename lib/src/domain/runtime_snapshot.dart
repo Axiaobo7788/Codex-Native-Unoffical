@@ -8,6 +8,14 @@ enum RuntimeConnectionState {
   error,
   processExited,
   unsupported,
+  remoteUnpaired,
+  remoteCredentialRecoveryRequired,
+  remoteConnecting,
+  remoteHydrating,
+  remoteWaitingToRetry,
+  remoteReadOnly,
+  remoteRevoked,
+  remoteSuspended,
   stopped,
 }
 
@@ -38,6 +46,15 @@ class RuntimeSnapshot {
     RuntimeConnectionState.error => 'Error',
     RuntimeConnectionState.processExited => 'Process exited',
     RuntimeConnectionState.unsupported => 'Unavailable on this platform',
+    RuntimeConnectionState.remoteUnpaired => 'Remote not paired',
+    RuntimeConnectionState.remoteCredentialRecoveryRequired =>
+      'Remote pairing needs recovery',
+    RuntimeConnectionState.remoteConnecting => 'Connecting to Remote Host',
+    RuntimeConnectionState.remoteHydrating => 'Loading Remote state',
+    RuntimeConnectionState.remoteWaitingToRetry => 'Remote reconnect pending',
+    RuntimeConnectionState.remoteReadOnly => 'Remote connected (read-only)',
+    RuntimeConnectionState.remoteRevoked => 'Remote device revoked',
+    RuntimeConnectionState.remoteSuspended => 'Remote suspended',
     RuntimeConnectionState.stopped => 'Stopped',
   };
 }

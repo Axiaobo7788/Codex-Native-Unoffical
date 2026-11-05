@@ -43,7 +43,17 @@ final class RemoteLifecycleState {
 
 typedef RemoteDelay = Future<void> Function(Duration duration);
 
-final class RemoteLifecycleCoordinator {
+abstract interface class RemoteLifecycleOwner {
+  RemoteLifecycleState get state;
+  Stream<RemoteLifecycleState> get states;
+  RemoteProjectionSnapshot? get projection;
+
+  Future<void> start();
+  Future<void> suspend();
+  Future<void> stop();
+}
+
+final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
   factory RemoteLifecycleCoordinator({
     required RemoteCredentialStore credentialStore,
     required RemoteAppliedCursorStore cursorStore,
@@ -99,10 +109,14 @@ final class RemoteLifecycleCoordinator {
   var _connectionGeneration = 0;
   var _active = false;
 
+  @override
   RemoteLifecycleState get state => _state;
+  @override
   Stream<RemoteLifecycleState> get states => _states.stream;
+  @override
   RemoteProjectionSnapshot? get projection => _projection.snapshot;
 
+  @override
   Future<void> start() {
     if (_active) {
       return Future<void>.value();
@@ -120,11 +134,13 @@ final class RemoteLifecycleCoordinator {
     return Future<void>.value();
   }
 
+  @override
   Future<void> suspend() => _deactivate(
     phase: RemoteLifecyclePhase.suspended,
     invalidateProjection: false,
   );
 
+  @override
   Future<void> stop() => _deactivate(
     phase: RemoteLifecyclePhase.stopped,
     invalidateProjection: true,
@@ -525,6 +541,7 @@ final class RemoteLifecycleCoordinator {
     await _cursorStore.save(deviceId: record.deviceId, cursor: cursor);
     if (_isCurrentConnection(generation, connectionGeneration, session)) {
       _appliedCursor = cursor;
+      _setState(_state);
     }
   }
 

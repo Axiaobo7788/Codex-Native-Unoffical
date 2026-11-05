@@ -880,11 +880,70 @@ _Reviewed: 2026-11-05_
 
 #### Deliberately deferred
 
-- The coordinator is not yet created by `RuntimeController`, driven by
-  `AppLifecycleState`, or presented in Android UI. Unit state-machine evidence is
-  not product/runtime integration.
+- Android runtime construction, lifecycle visibility wiring, and a bounded
+  read-only metadata panel are now integrated in the following slice. Pairing,
+  credential recovery actions, and full conversation behavior remain separate.
 - Only bounded model/thread metadata is authoritative. Remote history, output,
   turns, approvals, server requests, and every write remain unavailable.
 - Cursor-only cold resume remains intentionally disabled until there is a
   separately designed bounded durable projection. Reconnecting with a stale
   cursor and no matching state would be fast but incorrect.
+
+### Android Remote product lifecycle integration
+
+_Reviewed: 2026-11-05_
+
+#### Official lifecycle facts applied
+
+- Flutter's [`AppLifecycleState`](https://api.flutter.dev/flutter/dart-ui/AppLifecycleState.html)
+  documentation says Android `Activity.onPause` maps to Flutter `inactive`,
+  while Android `Activity.onStop` maps to Flutter `paused`. `inactive` can also
+  mean a visible app lost focus to a system dialog, notification shade, split
+  screen, or picture-in-picture, so it is too aggressive a disconnect boundary.
+- Flutter synthesizes `hidden` immediately before mobile `paused` and before
+  returning from `paused`; [`AppLifecycleListener`](https://api.flutter.dev/flutter/widgets/AppLifecycleListener-class.html)
+  provides matching `onHide` and `onShow` callbacks. These are the visibility
+  boundary used for Remote suspend/resume; desktop receives the callbacks too,
+  but desktop `RuntimeController` deliberately treats them as no-ops.
+- Flutter explicitly warns that lifecycle notifications may be skipped when the
+  process is killed or the device terminates unexpectedly. Correctness therefore
+  cannot depend on receiving hide/detach: cold start still refuses cursor-only
+  resume without an exactly matching in-memory projection.
+
+#### Adopted here
+
+- Android `RuntimeController` creates the secure credential/cursor adapters,
+  bounded projection, and lifecycle coordinator by default. Desktop continues
+  to locate/spawn the bundled Host and stock Codex through `ProcessTransport`.
+- Map each lifecycle phase to an explicit redacted product state. Unpaired,
+  unreadable credential, retry, revoked, suspended, and read-only ready are not
+  collapsed into a generic connection error. Socket negotiation alone never
+  produces the ready state.
+- Use `onHide` to suspend Remote, `onShow` to restart it, and detach for full
+  shutdown. Suspend closes the socket but preserves only the coordinator's
+  verified applied projection/cursor pair.
+- Present only the bounded ready projection: a virtualized list of at most 100
+  thread summaries plus model count/default model. The view is explicitly
+  labeled read-only. It does not instantiate a parallel conversation model or
+  expose create/resume/composer/approval/history/output/settings actions.
+- Existing gateway methods reject locally in Remote mode. This prevents future
+  widget reuse from silently issuing an RPC that the Host has not made safe.
+
+#### Validation and boundaries
+
+- Two integration tests cover state mapping and redaction, projection exposure,
+  local gateway rejection, read-only widget contents, and hide/show
+  suspend/resume. The first hidden-state test expected the screen to repaint to
+  “suspended”; Flutter intentionally stops visible frame scheduling while
+  paused, so the correct evidence is controller suspension while hidden and a
+  refreshed ready view after `onShow`. The first 412×915 run also exposed a
+  100-pixel overflow in the runtime status row; the status label now takes the
+  remaining row width and wraps on a phone viewport.
+- All 120 Flutter tests, fatal-info Dart analysis, formatting, Linux debug build,
+  and Android debug assembly pass. No emulator or physical device was available,
+  so Android Activity/process callbacks, Keystore access, WSS, network switching,
+  OS process death, and Human layout/interaction remain unverified.
+- The unpaired screen is intentionally a blocker, not fake onboarding. A secure
+  bounded pairing client, explicit recovery confirmation, and pairing-bound
+  local certificate identity are the next product slice. Record version 1 stays
+  limited to system-CA WSS.

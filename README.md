@@ -86,13 +86,14 @@ limits, ACK/resume, initial authoritative resync, and stale-resync rejection
 while reusing the typed protocol adapters. A separate lifecycle owner now adds
 device/session-bound applied-cursor persistence, bounded model/thread hydration,
 exact apply-before-persist sequencing, capped reconnect backoff, stale-attempt
-rejection, and terminal recovery/revocation states. It is not wired into the
-Android runtime or UI yet. A versioned system-CA connection profile and device
-bearer live behind platform secure storage with explicit unreadable/corrupt
-recovery and Android backup/transfer exclusions; the bearer is never put in
-ordinary preferences or diagnostics. Pairing-bound self-signed certificate
-trust, Android app/process lifecycle wiring, product integration, and real-device
-validation remain.
+rejection, and terminal recovery/revocation states. Android now constructs that
+stack, suspends it while hidden, resumes it when shown, and renders only the
+bounded model/thread metadata in an explicitly read-only virtualized panel. A
+versioned system-CA connection profile and device bearer live behind platform
+secure storage with explicit unreadable/corrupt recovery and Android
+backup/transfer exclusions; the bearer is never put in ordinary preferences or
+diagnostics. Pairing/onboarding, pairing-bound self-signed certificate trust,
+full conversation features, and real-device validation remain.
 
 ## Run locally
 

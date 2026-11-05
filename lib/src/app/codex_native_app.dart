@@ -64,6 +64,8 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _controller.addListener(_handleRuntimeState);
     _threadController.addListener(_handleThreadSelection);
     _lifecycleListener = AppLifecycleListener(
+      onHide: () => unawaited(_controller.handleAppHidden()),
+      onShow: () => unawaited(_controller.handleAppShown()),
       onDetach: () =>
           unawaited(widget.shutdownHandler?.call() ?? _controller.shutdown()),
     );
@@ -190,12 +192,116 @@ class RuntimeStatusScreen extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ] else if (controller.snapshot.state ==
+                        RuntimeConnectionState.remoteReadOnly) ...[
+                      const SizedBox(height: ThemeTokens.space4),
+                      Expanded(
+                        child: _RemoteReadOnlyPanel(controller: controller),
+                      ),
                     ],
                   ],
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RemoteReadOnlyPanel extends StatelessWidget {
+  const _RemoteReadOnlyPanel({required this.controller});
+
+  final RuntimeController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final models = controller.remoteModels;
+    final threads = controller.remoteThreads;
+    final defaultModel = models.where((model) => model.isDefault).firstOrNull;
+    return DecoratedBox(
+      key: const ValueKey('remote-read-only-panel'),
+      decoration: BoxDecoration(
+        color: ThemeTokens.surface,
+        border: Border.all(color: ThemeTokens.border),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(ThemeTokens.space4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.phone_android, size: 20),
+                const SizedBox(width: ThemeTokens.space2),
+                Expanded(
+                  child: Text(
+                    'Remote threads',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                const Chip(label: Text('Read-only')),
+              ],
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              '${threads.length} bounded thread summaries · '
+              '${models.length} models'
+              '${defaultModel == null ? '' : ' · default ${defaultModel.displayName}'}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: ThemeTokens.space3),
+            const Divider(height: 1),
+            if (threads.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    'The Host returned no thread metadata.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemCount: threads.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final thread = threads[index];
+                    return ListTile(
+                      key: ValueKey('remote-thread-${thread.id}'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: ThemeTokens.space2,
+                      ),
+                      title: Text(
+                        thread.displayTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${thread.cwd}  ·  ${thread.status.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (controller.remoteHasMoreThreads) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.only(top: ThemeTokens.space3),
+                child: Text(
+                  'More Host threads exist. Remote paging is not exposed in '
+                  'this read-only integration yet.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1568,11 +1674,14 @@ class _RuntimePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = switch (snapshot.state) {
-      RuntimeConnectionState.connected => ThemeTokens.connected,
+      RuntimeConnectionState.connected ||
+      RuntimeConnectionState.remoteReadOnly => ThemeTokens.connected,
       RuntimeConnectionState.error ||
       RuntimeConnectionState.processExited ||
       RuntimeConnectionState.notFound ||
-      RuntimeConnectionState.hostNotFound => ThemeTokens.error,
+      RuntimeConnectionState.hostNotFound ||
+      RuntimeConnectionState.remoteCredentialRecoveryRequired ||
+      RuntimeConnectionState.remoteRevoked => ThemeTokens.error,
       _ => ThemeTokens.pending,
     };
 
@@ -1611,7 +1720,7 @@ class _RuntimePanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: ThemeTokens.space2),
-                Text(snapshot.stateLabel),
+                Expanded(child: Text(snapshot.stateLabel)),
               ],
             ),
             if (snapshot.executablePath case final path?) ...[

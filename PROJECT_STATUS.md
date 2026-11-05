@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart Remote transport core, a recoverable platform credential owner, and an unwired reconnect/authoritative-hydration coordinator are implemented; pairing-bound local trust, writes/approvals, Android lifecycle wiring, and Android UI integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, and a bounded read-only metadata UI are implemented; pairing/onboarding, pairing-bound local trust, writes/approvals, and full conversation integration do not exist yet**
 
 ## Current repository state
 
@@ -29,8 +29,9 @@ This file is the repository's durable project memory. Update it whenever a task 
   production desktop uses `ProcessTransport`; a read-only `RemoteTransport`
   now reuses the typed model/thread/turn adapters. A separate `RemoteSession`
   seam, bounded projection, applied-cursor store, and reconnect coordinator own
-  resync/readiness without changing desktop behavior, but are deliberately not
-  wired into Android product runtime state yet.
+  resync/readiness without changing desktop behavior. Android now constructs
+  this stack from platform secure storage and exposes its explicit lifecycle
+  states plus bounded read-only metadata, without enabling unsupported gateways.
 - Typed thread operations now cover bounded `thread/list`, `thread/start`, metadata-only `thread/read`, history-excluding `thread/resume`, and exact-ID delete for smoke-test cleanup.
 - The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, and exposes select/resume actions. It does not retain turns or raw protocol JSON.
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
@@ -100,15 +101,49 @@ This file is the repository's durable project memory. Update it whenever a task 
   `host/remote/status`, `model/list`, bounded `thread/list`, and metadata-only
   `thread/read` through the same sanitized stock app-server process. Six bounded
   lifecycle/state notification methods feed sequenced live delivery and same-
-  session replay. Dart now has a bounded read-only client protocol core and an
-  unwired reconnect/authoritative-hydration coordinator, but there is still no
-  Remote write/approval path, Android product lifecycle/UI integration, or
-  pairing-bound Android certificate trust.
+  session replay. Android now maps hidden/shown application visibility to
+  suspend/resume and displays the bounded ready projection in a read-only panel.
+  There is still no Remote write/approval path, pairing/onboarding flow, full
+  conversation surface, or pairing-bound Android certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 Android Remote runtime and read-only product state
+
+- `RuntimeController` now selects the secure Remote stack by default on Android
+  while leaving desktop Host/process startup unchanged. It constructs one
+  platform secure-value adapter shared by credential and applied-cursor stores,
+  then owns the tested lifecycle coordinator and bounded projection.
+- Added explicit product states for unpaired, credential recovery, connecting,
+  authoritative hydration, bounded retry, read-only ready, revoked, and
+  suspended. Messages disclose no endpoint, bearer, close reason, or device
+  identity. A negotiated socket never maps directly to the ready state.
+- Wired Flutter's visibility lifecycle at `onHide`/`onShow`: hiding suspends and
+  closes Remote while retaining only verified applied state; showing starts the
+  coordinator again. Detach still performs full shutdown. Cold-process safety
+  does not depend on these callbacks because a process can be killed without a
+  lifecycle notification and cursor-only cold resume remains disabled.
+- Added a bounded, virtualized read-only Android surface for up to 100 hydrated
+  thread summaries plus model count/default model. It has explicit read-only
+  labeling and contains no create, resume, composer, approval, history, output,
+  or settings actions. Every existing gateway method still rejects locally in
+  Remote mode rather than accidentally reaching the Host.
+- Two integration tests cover state/redaction mapping, projection exposure,
+  local write-surface rejection, read-only widget contents, and hide/show
+  suspend/resume. The first hidden-state assertion expected a repaint, but
+  Flutter intentionally stops scheduling visible frames while paused; the test
+  now verifies controller suspension while hidden and the rendered state after
+  showing again. The first 412×915 phone-size run then exposed a 100-pixel
+  overflow in the longer Remote status label; constraining the label to the
+  status row's remaining width fixed the directly coupled mobile defect.
+- All 120 Flutter tests, `dart analyze --fatal-infos`, formatting, the Linux
+  debug build, and Android `assembleDebug` pass. The Android build still uses the
+  temporary ASCII Flutter-SDK property workaround and produces the restored
+  191,469,644-byte three-ABI APK. No emulator/physical-device lifecycle,
+  Keystore, WSS, network switching, or Human visual interaction was exercised.
 
 ### 2026-11-05 — Phase 4 Remote lifecycle and authoritative projection owner
 
@@ -830,19 +865,19 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Integrate the now-tested Remote lifecycle foundation into the Android product
-without weakening its fail-closed boundaries:
+Build a secure Android pairing/onboarding path for the now-integrated read-only
+Remote surface:
 
-1. add an Android runtime owner that constructs the secure credential/cursor
-   adapters and `RemoteLifecycleCoordinator`, maps app foreground/background and
-   detach transitions to start/suspend/stop, and exposes the typed lifecycle plus
-   bounded model/thread projection without making socket-connected mean ready;
-2. adapt the existing thread/settings presentation owners to consume the bounded
-   Remote projection on Android while keeping desktop `ProcessTransport`
-   unchanged. Keep unsupported history/output, turns, approvals, server
-   requests, and all writes visibly unavailable rather than falling through to
-   RPC errors;
-3. design the local self-signed pairing artifact so certificate/CA identity is
+1. add a bounded pairing client and state owner for the Host's one-use ticket
+   endpoint. Accept only a validated WSS Host endpoint, bounded pairing code and
+   device name; require system-CA trust for record version 1; impose body,
+   response, connection, and request deadlines; never log or display the bearer;
+2. save the returned endpoint/bearer/device identity atomically through the
+   existing credential owner, then start the lifecycle coordinator only after
+   verified write readback. Make pairing retry/error/recovery distinct and never
+   overwrite an unreadable existing record;
+3. provide an explicit unpaired/recovery UI with affirmative clear confirmation.
+   Design the local self-signed pairing artifact so certificate/CA identity is
    authenticated and stored through a new explicit record version; never use
    `badCertificateCallback` as onboarding;
 4. exercise the integrated path against an available emulator/device: cold
