@@ -1,5 +1,20 @@
 # AGENTS.md
 
+## Repository memory
+
+Before starting any non-trivial task:
+
+1. Read `PROJECT_STATUS.md` for the current phase, completed work, blockers, and next action.
+2. Read `docs/DECISIONS.md` for accepted architecture decisions.
+3. Read `docs/ARCHITECTURE.md` when the task touches system boundaries, transports, memory behavior, or remote design.
+
+Before finishing any task that materially changes the repository:
+
+- Update `PROJECT_STATUS.md` with what changed, current status, new blockers, and the next recommended action.
+- If you make or reverse a durable architecture/product decision, append an ADR entry to `docs/DECISIONS.md`.
+- Keep status factual. Do not mark work complete unless it is implemented and, where applicable, tested.
+- Include the relevant commit/test result in the status entry when useful.
+
 ## Project intent
 
 Build an unofficial native-first client for OpenAI Codex. The client must reuse the stock `codex app-server` and preserve the Codex harness rather than reimplementing an agent.
