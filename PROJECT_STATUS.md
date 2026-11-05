@@ -210,8 +210,17 @@ This file is the repository's durable project memory. Update it whenever a task 
   is rejected without mutating the operator file. A native test adds an
   `everyone allow read` ACL to an otherwise-`0600` fixture, and the macOS CI job
   now runs the Rust suite before its Flutter build. Local Linux format, Clippy,
-  and all 87 applicable Rust test instances pass; real Apple compilation and
-  ACL behavior remain pending the first code-bearing hosted run.
+  and all 87 applicable Rust test instances pass.
+- Final code-bearing CI `42124376817` at `b5dad38`, macOS 15 arm64 job
+  `127585024401`, passed 26 library, 57 binary, and 4 process-integration tests;
+  the real macOS extended-ACL fixture specifically passed. It then built the
+  macOS Flutter app and passed packaged Host `0.1.0` help plus native-license
+  byte-identity checks. Linux/Android job `127585024849` passed the full
+  repository and debug APK gates, and Windows job `127585024928` passed native
+  tests, build, and Host/license smoke. The macOS log retains one Xcode warning
+  from the Flutter template: its `Flutter Assemble` Run Script declares no
+  output dependency. It did not block the build and is separate from the ACL
+  behavior.
 - Windows ACL evidence follow-up CI `42117298358` at `5ce6b6b`, Windows job
   `127560231894`, passed the prior 85 native test instances with no `warning:`
   line, then passed the Windows Flutter build and Host/license smoke. Its
@@ -1614,9 +1623,10 @@ specific evidence boundaries.
   Windows current-user-only DACL creation/migration and native regression tests
   are hosted Windows Server 2022 verified. Operator TLS keys now have a bounded
   no-follow/owner/mode gate plus a hosted-Windows-verified protected-owner/DACL
-  gate; installed-service, installer, and macOS extended-ACL validation remain
-  separate. The current macOS Cargo phase also produces only the active build
-  architecture, not a universal Host binary.
+  gate and a hosted-macOS-verified no-extended-ACL gate; installed-service,
+  parent-directory custody, and installer validation remain separate. The
+  current macOS Cargo phase also produces only the active build architecture,
+  not a universal Host binary.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
   not automatically reread a loaded item, but deduplication or explicit release
@@ -1639,9 +1649,9 @@ specific evidence boundaries.
 - Operator-provided WSS is implemented and same-host release-tested, but the test
   connected through loopback to a wildcard listener. Real LAN routing, host
   firewall discovery, CA chain/renewal under installed service accounts, Windows
-  installed-service key custody, macOS extended ACLs, Android platform trust,
-  background reconnect, and pairing-bound self-signed identity remain
-  unverified. No Android code accepts arbitrary bad certificates.
+  and macOS installed-service key custody, parent-directory custody, Android
+  platform trust, background reconnect, and pairing-bound self-signed identity
+  remain unverified. No Android code accepts arbitrary bad certificates.
 - Long-running sessions must not cause Flutter to hydrate unbounded history.
   Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
   evidence now exist, but real app-server RSS and cross-platform installed-build

@@ -2151,6 +2151,11 @@ _Reviewed: 2026-11-06_
   retrieves it from a supplied descriptor when available, classifies the
   returned object, and releases it. The Host adopts the descriptor lifetime and
   release pattern, not gnulib code or its cross-platform policy.
+- uutils/coreutils at `4a8a9643904ffae87e42891a3632f6ab971a32b1`
+  (MIT) declares the same public macOS ACL type, checks for an extended entry,
+  releases the object, and tests with `chmod +a "everyone allow read"`. This
+  independently confirms the constant and native fixture syntax; no source code
+  is copied.
 - rsync at `a6b31adfa495513abf7ae002b81fabe29bc50986`
   (GPL-3.0-or-later) likewise maps its macOS access-ACL abstraction to
   `ACL_TYPE_EXTENDED` and iterates named entries. The Host deliberately does not
@@ -2180,6 +2185,15 @@ _Reviewed: 2026-11-06_
 - Do not claim parent-directory custody, installed service-account readability,
   installer ACL behavior, administrator isolation, signing/notarization, or
   Human installed-machine acceptance from this leaf-object gate.
-- A first code-bearing macOS 15 arm64 CI run is still required to compile the
-  FFI, prove APFS's absent-ACL result, create the extended-ACL fixture, and run
-  the packaged Host/license smoke.
+- Code-bearing CI `42124376817` at `b5dad38` passed all three jobs. macOS 15
+  arm64 job `127585024401` compiled the FFI and passed 26 library, 57 binary,
+  and 4 process-integration tests; the real macOS `0600` plus
+  `everyone allow read` case specifically passed. It then built the Flutter app
+  and passed packaged Host help plus native-license byte-identity checks.
+  Linux/Android job `127585024849` passed the complete repository and debug APK
+  gates, while
+  Windows job `127585024928` passed native tests, build, and Host/license smoke.
+  The macOS build retained one Flutter-template Xcode warning because `Flutter
+  Assemble` declares no output dependency. This closes the implemented
+  leaf-object ACL gate, not the remaining service, directory, installer,
+  signing/notarization, or Human gates.

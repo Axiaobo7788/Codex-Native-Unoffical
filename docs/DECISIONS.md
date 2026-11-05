@@ -973,8 +973,8 @@ every other query error. Release a returned ACL with `acl_free`. Do not parse,
 repair, or remove the operator's ACL.
 
 Run the native Host Rust suite on the hosted macOS job so a real Apple libc and
-APFS fixture exercise both a plain owner-only key and a `0600` key that also has
-an `everyone allow read` ACL.
+native macOS filesystem fixture exercise both a plain owner-only key and a
+`0600` key that also has an `everyone allow read` ACL.
 
 ### Why
 

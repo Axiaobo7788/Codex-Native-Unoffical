@@ -258,12 +258,12 @@ built Host. There is intentionally no direct app-server fallback.
 
 GitHub Actions is configured with explicit Flutter 3.47.1 and Rust 1.89.0
 toolchains for Linux/Android on Ubuntu 22.04 x64, Windows on Windows Server 2022
-x64, and macOS on macOS 15 arm64. The desktop jobs build the native app bundle,
-run the packaged Host's `--help` smoke, and compare the packaged native-license
-notice with the committed source. Top-level actions are pinned to immutable
-commit SHAs and checkout does not persist credentials. A configured workflow is
-not evidence for an unpublished local commit: inspect the corresponding hosted
-run after that commit is deliberately pushed.
+x64, and macOS on macOS 15 arm64. Both desktop jobs run the native Host tests,
+build the app bundle, run the packaged Host's `--help` smoke, and compare the
+packaged native-license notice with the committed source. Top-level actions are
+pinned to immutable commit SHAs and checkout does not persist credentials. A
+configured workflow is not evidence for an unpublished local commit: inspect
+the corresponding hosted run after that commit is deliberately pushed.
 
 ## Desktop review artifacts
 
