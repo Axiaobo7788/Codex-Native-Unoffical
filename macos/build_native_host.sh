@@ -4,10 +4,10 @@ set -euo pipefail
 repository_root="${SRCROOT}/.."
 target_dir="${DERIVED_FILE_DIR}/codex_native_host_target"
 profile="debug"
-release_argument=()
+cargo_arguments=(build --locked)
 if [[ "${CONFIGURATION}" != "Debug" ]]; then
   profile="release"
-  release_argument=(--release)
+  cargo_arguments+=(--release)
 fi
 
 cargo_executable="$(command -v cargo || true)"
@@ -19,7 +19,7 @@ if [[ -z "${cargo_executable}" ]]; then
   exit 1
 fi
 
-"${cargo_executable}" build --locked "${release_argument[@]}" \
+"${cargo_executable}" "${cargo_arguments[@]}" \
   --manifest-path "${repository_root}/Cargo.toml" \
   --target-dir "${target_dir}"
 
@@ -36,15 +36,16 @@ install -m 644 "${license_source}" \
 
 if [[ "${CODE_SIGNING_ALLOWED:-NO}" == "YES" ]]; then
   signing_identity="${EXPANDED_CODE_SIGN_IDENTITY:-}"
-  signing_options=()
   if [[ -z "${signing_identity}" ]]; then
     signing_identity="-"
   fi
+  signing_arguments=(--force --sign "${signing_identity}")
   if [[ "${CONFIGURATION}" != "Debug" ]]; then
-    signing_options=(--options runtime)
+    signing_arguments+=(--options runtime)
   fi
-  /usr/bin/codesign --force --sign "${signing_identity}" \
-    "${signing_options[@]}" \
-    --identifier "${PRODUCT_BUNDLE_IDENTIFIER}.codex-native-host" \
+  signing_arguments+=(
+    --identifier "${PRODUCT_BUNDLE_IDENTIFIER}.codex-native-host"
     "${destination}"
+  )
+  /usr/bin/codesign "${signing_arguments[@]}"
 fi

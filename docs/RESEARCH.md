@@ -1294,10 +1294,10 @@ _Reviewed: 2026-11-05_
   Host build phase installs it in `Contents/Resources` and declares that output
   to Xcode. A real Linux debug bundle contains a byte-identical 257,985-byte,
   mode-0644 notice beside the mode-0755 Host.
-- Windows and macOS packaging edits are source-reviewed only in this Linux
-  environment. Installed Windows/macOS artifacts and signing/notarization still
-  require their native machines; this work does not claim those platform passes
-  or legal advice.
+- This Linux slice initially source-reviewed only the Windows/macOS edits. The
+  later hosted matrix verified the built Windows bundle and exposed the macOS
+  Bash 3.2 defect documented below. Corrected macOS native execution,
+  installation, signing/notarization, and legal review remain distinct gates.
 
 ## Hosted CI hardening and cross-platform build gates
 
@@ -1337,6 +1337,18 @@ _Reviewed: 2026-11-06_
   `actions/cache@v5` steps. This workflow explicitly disables that cache, so
   those conditional steps do not execute; both top-level actions are pinned to
   reviewed full SHAs and checkout persistence is disabled.
+- The first current-tree run (`42063855051` at `a77e6ac`) supplied the native
+  evidence configuration review could not. Windows Server 2022 x64 passed the
+  complete debug bundle, Host/license placement, and Host execution gate.
+  Exact Rust 1.89 Clippy rejected a test-only explicit `drop` of a non-`Drop`
+  closure, and macOS 15 arm64's system Bash 3.2 rejected expansion of an empty
+  array under `set -u`. These are compiler/shell compatibility defects, not
+  reasons to weaken the gates.
+- The same run warned that the pinned checkout v4 build targeted Node 20 and
+  GitHub was forcing it onto Node 24. The official `actions/checkout` v7.0.1
+  release commit `3d3c42e5aac5ba805825da76410c181273ba90b1`
+  declares `runs.using: node24`, eliminating that compatibility shim without
+  restoring persisted checkout credentials.
 
 ### Adopted here and validation boundary
 
@@ -1349,17 +1361,19 @@ _Reviewed: 2026-11-06_
   verifies the native-license notice at the platform's real bundle location.
   PR CI remains read-only and unsigned; signing, notarization, installation,
   native ACL inspection, and Human use are separate release gates.
-- `actions/checkout` is pinned to
-  `11d5960a326750d5838078e36cf38b85af677262` with no persisted credentials;
+- `actions/checkout` v7.0.1 is pinned to
+  `3d3c42e5aac5ba805825da76410c181273ba90b1` with no persisted credentials;
   `subosito/flutter-action` is pinned to
   `1a449444c387b1966244ae4d4f8c696479add0b2` with cache disabled. Concurrency
   cancels superseded runs, and monthly Dependabot review is limited to the
   GitHub Actions ecosystem.
-- Pinned `actionlint` 1.7.12 and independent YAML parsing pass locally. Linux,
-  Android, and exact-MSRV product gates also pass locally, but the new workflow
-  and both native non-Linux jobs remain unexecuted until this commit is
-  deliberately pushed. No hosted-current, Windows, macOS, signing, or
-  notarization pass is claimed.
+- Pinned `actionlint` 1.7.12 and independent YAML parsing pass locally. After
+  the first hosted failures, lexical borrow scoping passes strict Clippy plus 84
+  tests on a fresh official Rust 1.89.0 toolchain, and non-empty macOS command
+  arrays pass shell parsing plus local Debug/Release packaging simulation.
+  Hosted Windows x64 is now a real pass. The corrected workflow/macOS path,
+  signing, notarization, installation, ACL inspection, and Human use remain
+  separate evidence until their respective gates run.
 
 ## Fail-closed Android release signing
 

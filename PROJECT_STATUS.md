@@ -67,13 +67,15 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Linux and Windows native builds compile/package the Host beside the app.
   macOS embeds and signs it in `Contents/MacOS`; v1 macOS is a direct notarized
   distribution because App Sandbox cannot preserve the required normal Codex
-  developer-workspace/toolchain model. Windows/macOS builds are not verified in
-  this Linux environment.
+  developer-workspace/toolchain model. Hosted Windows Server 2022 now verifies
+  the debug bundle, packaged Host/license pair, and Host `--help`. The first
+  hosted macOS 15 arm64 build exposed a Bash 3.2 empty-array failure; its local
+  source correction is verified, while the native rerun remains pending.
 - The native Host's complete lockfile-derived runtime license notice is committed
   and drift-checked with pinned `cargo-about` 0.9.3. Linux/Windows package it
-  beside the Host and macOS declares it under `Contents/Resources`; Linux bundle
-  byte identity is verified, while Windows/macOS artifact verification remains
-  native-platform work.
+  beside the Host and macOS declares it under `Contents/Resources`; Linux and
+  hosted Windows bundle byte identity are verified, while the corrected macOS
+  artifact path still awaits its hosted rerun.
 - Completed assistant messages use a project-owned safe Markdown allowlist only
   while in-progress streaming remains selectable plain text. Raw HTML is inert,
   images never load, links require an explicit click and absolute `http`/`https`
@@ -124,9 +126,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   macOS 15 arm64 runners; uses exact Flutter 3.47.1 and Rust 1.89.0 toolchains;
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
-  credentials are not persisted, and permissions remain read-only. The newest
-  remote green run predates this local workflow and current commits, so no
-  hosted-current or native Windows/macOS pass is claimed.
+  credentials are not persisted, and permissions remain read-only. The first
+  current-tree run (`42063855051`) passed Windows x64 but failed exact-Rust
+  Clippy and macOS Bash 3.2. Both failures have narrow local corrections and
+  exact/local validation; a new hosted run is required before the workflow can
+  be called green.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -134,6 +138,30 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — First hosted cross-platform run and failure-driven corrections
+
+- Published the previously local history and inspected current-tree GitHub
+  Actions run `42063855051` at `a77e6ac`. Windows Server 2022 x64 passed the
+  Flutter debug build, bundled Host/license assertions, and packaged Host
+  `--help`. This is real native build evidence, but not installation, ACL,
+  signing, or Human-use evidence.
+- Preserved both failures from the same run. Exact Rust 1.89 Clippy rejected an
+  explicit `drop` used only to end a closure borrow, while the newer local Rust
+  1.99 compiler had accepted it. A lexical scope now ends the borrow naturally;
+  a fresh isolated official Rust 1.89.0 toolchain passes strict Clippy and all
+  84 tests, and the current toolchain still passes format, Clippy, and tests.
+- macOS 15 arm64 reached Flutter's Xcode build but its system Bash 3.2 rejected
+  an empty `release_argument` array under `set -u`. The build and nested-signing
+  command arrays are now always non-empty. Shell parsing and local Debug/Release
+  packaging simulations both pass, including executable Host and license
+  placement; only a hosted macOS rerun can close the native failure.
+- The run also warned that the old checkout action targeted Node 20 and was
+  being forced onto Node 24. Official `actions/checkout` v7.0.1 itself targets
+  Node 24, so both jobs now pin its reviewed immutable commit
+  `3d3c42e5aac5ba805825da76410c181273ba90b1` while preserving
+  `persist-credentials: false`. Pinned actionlint 1.7.12 and independent YAML
+  parsing pass after the update.
 
 ### 2026-11-06 — Fail-closed Android release identity
 
@@ -193,12 +221,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   desktop app, runs the packaged Host's `--help`, and compares the bundled
   native-license notice at the real platform location. Superseded workflow runs
   are cancelled; monthly Dependabot review covers GitHub Actions only.
-- Pinned `actionlint` 1.7.12 and independent YAML parsing pass locally. The
-  latest remote CI run `42034034310` passed at `2c7f8b9`, but it predates all
-  newer local-only history and this workflow. Windows/macOS jobs, hosted
-  execution of the current tree, signing/notarization, native installation/ACL
-  inspection, and Human acceptance remain unrun rather than inferred from
-  configuration.
+- Pinned `actionlint` 1.7.12 and independent YAML parsing passed locally before
+  publication. The later first current-tree run and its failure-driven
+  corrections are recorded in the newer section above; signing/notarization,
+  native installation/ACL inspection, and Human acceptance remain separate.
 
 ### 2026-11-05 — Lockfile-derived native license packaging
 
@@ -231,9 +257,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   CI installs the exact generator/checks drift, and CI compares the Linux
   installed copy byte-for-byte.
 - A real Linux debug bundle contains the mode-0644, byte-identical 257,985-byte
-  notice beside the mode-0755 Host. Windows and macOS packaging remain
-  source-reviewed only here; no native build, signing, notarization, or installed
-  artifact claim is made for those unavailable platforms.
+  notice beside the mode-0755 Host. Later hosted Windows evidence verifies the
+  corresponding built bundle; corrected macOS packaging still awaits its hosted
+  rerun. No signing, notarization, native installation, or Human-use claim is
+  inferred from either build.
 
 ### 2026-11-05 — Phase 4 versioned pairing invitation and local certificate trust
 
@@ -1037,7 +1064,8 @@ specific evidence boundaries.
   native URL-launcher plugin.
 - Fresh `flutter build linux --debug`: PASS with byte-identical
   `NATIVE_HOST_THIRD_PARTY_LICENSES.txt` beside the Host; notice mode is 0644 and
-  Host mode is 0755. Windows/macOS package locations are not runtime-verified.
+  Host mode is 0755. A later hosted Windows build verifies its package location;
+  corrected macOS native verification remains pending.
 - Fresh Linux release-bundle Host runtime smoke after transactional storage
   recovery: PASS against stock Codex with a measured 32 ms close phase.
 - `flutter build apk --debug` from the real Unicode repository/SDK path: FAILED
@@ -1079,10 +1107,13 @@ specific evidence boundaries.
   PIDs, and zero new cache sessions.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
-- Hosted GitHub Actions CI: latest observed run `42034034310` is PASS at remote
-  commit `2c7f8b9`; it does not contain the newer local-only history or the new
-  matrix. Current-tree hosted CI is NOT RUN.
-- Windows/macOS builds and physical-device validation: NOT RUN in this Linux environment.
+- Hosted GitHub Actions CI: first current-tree run `42063855051` at `a77e6ac`
+  FAILED. Windows x64 passed; exact-Rust Clippy and macOS arm64 failed for the
+  preserved causes above. Corrections pass local exact-toolchain and packaging
+  gates, but their hosted rerun is PENDING.
+- Windows debug build/package execution: PASS on hosted Windows Server 2022 x64.
+  Windows install/ACL/Human validation, corrected hosted macOS build, macOS
+  signing/notarization, and physical-device validation remain unrun.
 
 ## Known risks / watch items
 
@@ -1181,8 +1212,11 @@ specific evidence boundaries.
 
 ## Next action
 
-Close the remaining pairing/device gate, then expand Remote without weakening
-its now-versioned trust boundary:
+First push the reviewed hosted-CI corrections and inspect every job in the new
+run through completion. Preserve and fix any further machine-verifiable native
+failure before returning to product work. Once that gate is green, close the
+remaining pairing/device gate, then expand Remote without weakening its
+now-versioned trust boundary:
 
 1. exercise both system-root and pairing-bound certificate invitations against
    an available emulator/physical device and real Host: cold start,
@@ -1202,8 +1236,8 @@ its now-versioned trust boundary:
    integrity/provenance manifests, installed-layout checks, and release
    documentation without claiming unavailable hosted or native-platform passes.
 
-Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
-installed-volume gates as RC requirements.
+Preserve the unavailable Phase 3 Human, native install/ACL/signing/notarization,
+physical-Android, and installed-volume gates as RC requirements.
 
 ## Milestone outline
 
@@ -1213,7 +1247,9 @@ installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: configured, not yet run.
+- Hosted CI: first current-tree matrix run completed with Windows x64 passing
+  and exact-Rust/macOS failures; corrections are locally verified and awaiting
+  the next hosted run.
 
 ### Phase 2 — Local Codex workflow
 

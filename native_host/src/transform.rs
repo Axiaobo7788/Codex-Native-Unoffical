@@ -571,15 +571,16 @@ mod tests {
                 Transformer::new(&self.store, Some("codex-remote:session:".to_owned()));
             let mut output = Vec::new();
             let mut remote = Vec::new();
-            let mut collect_remote = |response| {
-                remote.push(response);
-                Ok(())
-            };
-            for chunk in input.chunks(chunk_size) {
-                transformer.push(chunk, &mut output, &mut collect_remote)?;
+            {
+                let mut collect_remote = |response| {
+                    remote.push(response);
+                    Ok(())
+                };
+                for chunk in input.chunks(chunk_size) {
+                    transformer.push(chunk, &mut output, &mut collect_remote)?;
+                }
+                transformer.finish(&mut output, &mut collect_remote)?;
             }
-            transformer.finish(&mut output, &mut collect_remote)?;
-            drop(collect_remote);
             Ok((output, remote))
         }
     }

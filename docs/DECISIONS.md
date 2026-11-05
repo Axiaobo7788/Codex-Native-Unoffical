@@ -537,8 +537,9 @@ than silently disappear from the notice.
 - The shared desktop notice is conservative: it can list a platform-specific
   crate not present in one particular binary, but it must not omit a crate used
   by any supported desktop binary.
-- Native Windows/macOS packaging remains unverified until those platforms build
-  and inspect installed artifacts; Linux byte identity is locally verified.
+- Linux byte identity is locally verified and a later hosted Windows build
+  verifies its bundle copy. Corrected macOS native execution and installed
+  Windows/macOS artifact inspection remain outstanding.
 
 ---
 
@@ -585,8 +586,10 @@ artifact.
 - Ordinary CI produces unsigned debug artifacts only. Developer ID signing,
   notarization, Windows installation/ACL checks, release signing, and Human
   interaction remain independent release gates.
-- The workflow is configuration until a commit is pushed and its hosted run is
-  inspected. Local Linux validation does not establish Windows/macOS success.
+- Hosted results remain authoritative for native paths. The first inspected
+  current-tree run passed Windows x64 and exposed exact-Rust Clippy plus macOS
+  Bash 3.2 defects; local corrections do not establish the corrected macOS path
+  until the next hosted run completes.
 
 ---
 
