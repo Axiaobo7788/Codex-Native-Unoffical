@@ -2015,4 +2015,13 @@ _Reviewed: 2026-11-06_
   canonical SDDL alias `LA`. The production DACL was protected, inheritable, and
   current-user-only; the revised oracle uses `EqualSid` on the binary ACE and
   inspects the control flags, ACE count/type/mask, and inheritance directly.
-  Fresh hosted execution and the previously skipped bundle smoke remain required.
+- Final CI `42114960020` at `88d0270`, Windows Server 2022 job `127552522560`,
+  passed 85 native test instances, including the new/create, existing/migrate,
+  and hard-link-reject ACL cases in both library and binary crate contexts. It
+  then built the Flutter Windows debug bundle and passed the packaged Host
+  `0.1.0` help and native-license hash smoke. The same run's Linux/Android verify
+  and macOS bundle jobs passed. The successful Windows log retained one unrelated
+  test-helper parameter warning caused by a Unix-only body; the evidence
+  follow-up removes it. This establishes the Host-owned state boundary on that
+  hosted image, not operator TLS-key, installed-service, installer, or Human
+  acceptance behavior.

@@ -1837,11 +1837,11 @@ mod tests {
         (files, cert.der().to_vec())
     }
 
-    fn make_private(path: &std::path::Path) {
+    fn make_private(_path: &std::path::Path) {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+            fs::set_permissions(_path, fs::Permissions::from_mode(0o600)).unwrap();
         }
     }
 

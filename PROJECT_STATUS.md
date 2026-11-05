@@ -165,7 +165,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Completed
 
-### 2026-11-06 — Windows current-user Host state ACLs (hosted validation pending)
+### 2026-11-06 — Windows current-user Host state ACLs
 
 - Reviewed Microsoft Win32 security-descriptor/DACL APIs plus current OpenAI
   Codex, mise, turborepo, and Vercel agent-desktop implementations at pinned
@@ -182,9 +182,8 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Added native Windows regression tests that begin under an Everyone-readable
   parent and require new/migrated directories and files to retain only the exact
   current-user SID, with protected/inheritable directory rules. The Windows CI
-  job now runs the Rust suite before building Flutter. Local format, Cargo check,
-  and all 84 Linux Rust tests pass; Windows-only FFI/tests and the packaged Host
-  remain `VALIDATION PENDING` until a fresh Windows Server 2022 run.
+  job now runs the Rust suite before building Flutter. Local format, Clippy, all
+  84 Linux Rust tests, and native-license checks pass.
 - Preserve hosted CI `42112667012`, Windows job `127543995980`, as negative
   evidence: the first Windows compilation stopped before the ACL tests because
   `auth.rs` is part of the library crate while the Windows ACL module had only
@@ -195,8 +194,15 @@ This file is the repository's durable project memory. Update it whenever a task 
   shape tests rejected the valid canonical SDDL `D:PAI(A;OICI;FA;;;LA)` because
   Windows rendered the runner's current-user SID as its well-known `LA` alias.
   The corrected tests compare the binary ACE SID with `EqualSid` and inspect the
-  protected flag, ACE count/type/mask, and inheritance bits directly; fresh
-  hosted execution and the skipped packaged-Host smoke remain pending.
+  protected flag, ACE count/type/mask, and inheritance bits directly.
+- Final hosted CI `42114960020` at `88d0270`, Windows Server 2022 job
+  `127552522560`, passed 85 native test instances with the three ACL cases in
+  both library and binary crate contexts, then built the Flutter Windows debug
+  bundle and passed packaged Host `0.1.0` help plus native-license hash checks.
+  The run's Linux/Android verify and macOS Host bundle jobs also passed. The
+  Windows-only unused test-helper parameter warning observed in that successful
+  run is removed in the evidence follow-up; this does not broaden the result to
+  operator TLS keys, installed-service identities, installers, or Human review.
 
 ### 2026-11-06 — Fail-closed desktop review-artifact assembly
 
@@ -1552,9 +1558,9 @@ specific evidence boundaries.
   notarization, workspace access, and cleanup require a real macOS release gate.
 - Unix spool directories/files are explicitly restricted to `0700`/`0600`.
   Windows current-user-only DACL creation/migration and native regression tests
-  are implemented, but hosted Windows execution is still pending. Operator TLS
-  key and installed-service ACLs remain separate. The current macOS Cargo phase
-  also produces only the active build architecture, not a universal Host binary.
+  are hosted Windows Server 2022 verified. Operator TLS key, installed-service,
+  and installer ACLs remain separate. The current macOS Cargo phase also
+  produces only the active build architecture, not a universal Host binary.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
   not automatically reread a loaded item, but deduplication or explicit release
