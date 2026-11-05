@@ -34,6 +34,14 @@ distributions keep their provenance visible.
 - License: BSD 3-Clause. The complete license is distributed with the package
   and in the generated Flutter application notices.
 
+## qr 4.0.1
+
+- Source: <https://github.com/kevmoo/qr.dart>
+- Copyright 2014, the Dart QR project authors.
+- License: BSD 3-Clause. The package is pure Dart, performs QR generation
+  offline, and its complete license is distributed in the generated Flutter
+  application notices.
+
 ## Native Host Rust dependencies
 
 The native Host's exact resolved versions and checksums are recorded in

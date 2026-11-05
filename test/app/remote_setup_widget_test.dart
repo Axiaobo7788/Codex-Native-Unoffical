@@ -5,6 +5,7 @@ import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/remote_pairing_invitation.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_trust.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,11 @@ void main() {
       find.byKey(const ValueKey('remote-ticket-invitation')),
       findsOneWidget,
     );
+    expect(find.byKey(const ValueKey('remote-ticket-qr')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('remote-ticket-qr-unavailable')),
+      findsNothing,
+    );
     await tester.tap(
       find.byKey(const ValueKey('remote-copy-invitation-button')),
     );
@@ -62,6 +68,83 @@ void main() {
 
     expect(find.byKey(const ValueKey('remote-ticket-card')), findsNothing);
     expect(runtime.createCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expired tickets and QR projections leave the setup surface', (
+    tester,
+  ) async {
+    final runtime = await _pumpApp(
+      tester,
+      ticketLifetime: const Duration(seconds: 1),
+    );
+    await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remote-create-ticket-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('remote-ticket-card')), findsOneWidget);
+    expect(find.byKey(const ValueKey('remote-ticket-qr')), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('remote-ticket-card')), findsNothing);
+    expect(find.byKey(const ValueKey('remote-ticket-qr')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('remote-ticket-expired-message')),
+      findsOneWidget,
+    );
+    expect(runtime.createCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('oversized certificate invitations keep manual fallback', (
+    tester,
+  ) async {
+    await _pumpApp(
+      tester,
+      trust: RemoteCertificateTrust(List<int>.filled(3000, 0x41)),
+    );
+    await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remote-create-ticket-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('remote-ticket-qr')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('remote-ticket-qr-unavailable')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('remote-copy-invitation-button')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('constrained QR layouts preserve the manual fallback', (
+    tester,
+  ) async {
+    await _pumpApp(
+      tester,
+      trust: RemoteCertificateTrust(List<int>.filled(1100, 0x41)),
+      physicalSize: const Size(620, 1000),
+    );
+    await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remote-create-ticket-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('remote-ticket-qr')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('remote-ticket-qr-too-narrow')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('remote-copy-invitation-button')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -116,12 +199,19 @@ void main() {
 Future<_Runtime> _pumpApp(
   WidgetTester tester, {
   String? endpoint = 'wss://host.example/v1/ws',
+  RemoteTrust trust = const RemoteSystemTrust(),
+  Duration ticketLifetime = const Duration(minutes: 5),
+  Size physicalSize = const Size(1500, 1000),
 }) async {
-  tester.view.physicalSize = const Size(1500, 1000);
+  tester.view.physicalSize = physicalSize;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final runtime = _Runtime(endpoint: endpoint);
+  final runtime = _Runtime(
+    endpoint: endpoint,
+    trust: trust,
+    ticketLifetime: ticketLifetime,
+  );
   addTearDown(() async {
     await runtime.shutdown();
     runtime.dispose();
@@ -134,9 +224,15 @@ Future<_Runtime> _pumpApp(
 }
 
 final class _Runtime extends RuntimeController {
-  _Runtime({required this.endpoint});
+  _Runtime({
+    required this.endpoint,
+    required this.trust,
+    required this.ticketLifetime,
+  });
 
   final String? endpoint;
+  final RemoteTrust trust;
+  final Duration ticketLifetime;
   var createCalls = 0;
   var listCalls = 0;
   var revokeCalls = 0;
@@ -169,23 +265,29 @@ final class _Runtime extends RuntimeController {
     tls: true,
     scope: RemoteListenerScope.network,
     advertisedEndpoint: endpoint,
-    pairingTrust: RemotePairingTrustMode.system,
+    pairingTrust: trust.kind == RemoteTrustKind.system
+        ? RemotePairingTrustMode.system
+        : RemotePairingTrustMode.certificate,
   );
 
   @override
   Future<RemotePairingTicket> createRemotePairingTicket() async {
     createCalls += 1;
     final actualEndpoint = endpoint ?? 'wss://host.example/v1/ws';
-    final expiresAtMs = DateTime.now().millisecondsSinceEpoch + 300000;
+    final expiresAtMs =
+        DateTime.now().millisecondsSinceEpoch + ticketLifetime.inMilliseconds;
     return RemotePairingTicket(
       invitation: RemotePairingInvitation(
         endpoint: Uri.parse(actualEndpoint),
         code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
         expiresAtMs: expiresAtMs,
+        trust: trust,
       ).encode(),
       expiresAtMs: expiresAtMs,
       endpoint: actualEndpoint,
-      trust: RemotePairingTrustMode.system,
+      trust: trust.kind == RemoteTrustKind.system
+          ? RemotePairingTrustMode.system
+          : RemotePairingTrustMode.certificate,
     );
   }
 

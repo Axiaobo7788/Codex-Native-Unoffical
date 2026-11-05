@@ -102,9 +102,11 @@ then used for WSS.
 Unreadable or revoked profiles require an affirmative local clear. A trusted
 desktop setup surface now reports the listener/TLS/bind/advertised endpoint,
 creates a transient five-minute invitation only on request, offers an explicit
-clipboard action, and confirms device revocation without exposing stored
-bearers. QR rendering, full conversation features, and real-device validation
-remain.
+clipboard action, renders the exact invitation as one bounded medium-correction
+QR code when it fits, and confirms device revocation without exposing stored
+bearers. Oversized invitations retain their complete manual-copy fallback, and
+expired tickets plus their QR projections are removed automatically. Android
+camera scanning, full conversation features, and real-device validation remain.
 
 ## Run locally
 
@@ -178,8 +180,10 @@ token and never learns trust after sending the ticket. The desktop product does
 not yet verify real-network reachability; the operator remains responsible for
 DNS, firewall, proxy routing, endpoint hostname/SAN consistency, and
 transferring the invitation through a trusted local channel. QR rendering is
-not implemented yet; the desktop exposes selectable text and an explicit copy
-action.
+available only when the exact invitation fits one standard medium-correction
+symbol at an integer module scale. It never splits, compresses, or rewrites the
+protocol envelope; the desktop always retains selectable text and an explicit
+copy action. Android camera scanning is not implemented yet.
 
 ## Android release signing
 

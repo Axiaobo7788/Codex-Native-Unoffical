@@ -1454,3 +1454,76 @@ _Reviewed: 2026-11-06_
   Console application, Play App Signing enrollment, key backup/rotation plan,
   CI secret, store validation, publication, or physical-device install was
   created or claimed.
+
+## Bounded desktop pairing QR presentation
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- DENSO WAVE's official QR Code
+  [version](https://www.qrcode.com/en/about/version.html),
+  [error-correction](https://www.qrcode.com/en/about/error_correction.html), and
+  [symbol-construction](https://www.qrcode.com/en/howto/code.html) guidance.
+  Standard QR Code versions range from 1 to 40; the maximum Version 40 byte
+  capacity is 2,953 bytes only at low correction, higher correction consumes
+  capacity, and a four-module margin is required around the symbol.
+- The maintained [`qr` 4.0.1](https://pub.dev/packages/qr) package and its
+  [source/license](https://github.com/kevmoo/qr.dart). It is a pure-Dart,
+  offline matrix generator with Version 1-40 and standard error-correction
+  support. License: BSD 3-Clause.
+- The repository's exact `codex-native-pairing-v1` encoder/decoder and Host
+  constants. The protocol deliberately permits up to 24 KiB of invitation text
+  and 8 KiB of DER certificate material, so protocol validity cannot imply
+  single-symbol QR capacity.
+
+### Findings that changed the implementation
+
+- Do not derive a second compact pairing representation. Splitting an
+  invitation across symbols, compressing it, dropping trust material, or adding
+  a QR-only schema would add ordering, allocation, compatibility, and security
+  review surfaces. The exact existing envelope remains the only input.
+- Medium error correction is appropriate for a transient desktop display, but
+  it makes the single-symbol capacity smaller than the official low-correction
+  maximum. The encoder must therefore expose ordinary capacity failure as a UI
+  fallback, not a protocol error.
+- A QR matrix must retain the required four-module white quiet zone and integer
+  module geometry. The painter uses three logical pixels per module with
+  antialiasing disabled and refuses to shrink below that scale when the dialog
+  is too narrow.
+- The invitation is a five-minute one-use capability. Generating the matrix
+  only once per ticket avoids repeated encoding during rebuilds, and removing
+  the ticket at its authoritative expiry ensures the QR does not remain visible
+  after the represented capability is stale.
+
+### Adopted here and validation boundary
+
+- `RemotePairingQr.tryEncode` reuses the authoritative invitation decoder,
+  rejects noncanonical whitespace and non-ASCII bytes, encodes the exact bytes
+  at medium correction, and returns no object for malformed or Version 40
+  overflow input. Its diagnostics redact the payload.
+- The desktop setup keeps Copy invitation before the QR so the complete manual
+  path remains accessible even when a large symbol extends the dialog. Normal
+  system-root and bounded-certificate invitations render; a protocol-valid
+  invitation carrying a 3,000-byte certificate proves the single-symbol
+  overflow fallback. A 1,100-byte certificate produces a Version 40/M symbol
+  measuring 555 logical pixels including the quiet zone; at a 620-pixel window,
+  the constrained dialog refuses to shrink it and preserves manual copy.
+- `RemoteAdminController` schedules the accepted ticket's exact remaining
+  lifetime, cancels replacement/refresh/disposal timers, and removes the ticket
+  plus QR projection on expiry. No QR bitmap, matrix, or invitation is persisted.
+- Eight focused unit/widget tests pass. An attempted test-backend pixel capture
+  through `RenderRepaintBoundary.toImage()` hung indefinitely twice and had to
+  be interrupted, so it was removed rather than called a visual pass. Matrix
+  construction, fallback state, copy behavior, and expiry lifecycle are tested;
+  camera decoding, cross-device interoperability, display scaling, physical
+  Android behavior, and Human visual acceptance remain unverified.
+- A separate attempt to drive the complete desktop shell at 320 logical pixels
+  exposed existing horizontal overflows in its split workspace, runtime header,
+  and paired-device summary before a ticket could be created. That probe is not
+  counted as QR evidence. Compact desktop-window responsiveness remains a
+  distinct machine-actionable limitation rather than a hidden passing result.
+- Android scanner implementation remains deferred until camera permission,
+  selection, lifecycle, bounded decode input, accessibility/manual fallback,
+  and dependency licensing receive a separate review. Desktop generation does
+  not grant permission to loosen the invitation parser or trust boundary.

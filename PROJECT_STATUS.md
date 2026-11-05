@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, and a trusted desktop setup/device-management surface are implemented; real-device validation, QR presentation, writes/approvals, and full conversation integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, trusted desktop setup/device management, and bounded desktop QR presentation are implemented; real-device validation, Android QR scanning, writes/approvals, and full conversation integration do not exist yet**
 
 ## Current repository state
 
@@ -119,8 +119,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   ticket over system-root or invitation-scoped certificate HTTPS, verify and
   save the issued bearer/trust atomically, reuse the same trust for WSS, connect
   only after readback, and explicitly clear an unreadable/revoked profile. There
-  is still no Remote write/approval path, full conversation surface, QR scanner,
-  or physical-device evidence.
+  Desktop can project the exact invitation into one medium-correction QR symbol
+  when it fits, without splitting or rewriting the protocol; manual copy remains
+  complete for oversized payloads. The transient ticket and QR now disappear at
+  expiry. There is still no Remote write/approval path, full conversation
+  surface, Android QR scanner, or physical-device evidence.
 - GitHub Actions CI now fixes Ubuntu 22.04 x64, Windows Server 2022 x64, and
   macOS 15 arm64 runners; uses exact Flutter 3.47.1 and Rust 1.89.0 toolchains;
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
@@ -136,6 +139,50 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Bounded desktop Remote pairing QR presentation
+
+- Reviewed the QR Code inventor's version, byte-capacity, error-correction, and
+  four-module quiet-zone guidance plus the maintained pure-Dart `qr` 4.0.1
+  package and BSD 3-Clause license. The existing protocol permits up to 24 KiB,
+  while one standard symbol is bounded far below that, so QR availability is
+  explicitly narrower than invitation validity.
+- Added an offline projection of the exact validated ASCII
+  `codex-native-pairing-v1` invitation using one Version 1-40 symbol at medium
+  correction. The painter uses a white four-module quiet zone, integer three-
+  pixel modules, and no antialiasing. It never splits, compresses, truncates, or
+  invents a QR-only schema; an oversized or layout-constrained invitation keeps
+  the full selectable/copyable manual path.
+- The setup controller now owns ticket expiry. At the advertised deadline it
+  cancels and clears the ticket, drops the in-memory QR with its widget subtree,
+  and reports that a fresh ticket is required. Refresh, replacement, dialog
+  disposal, and controller disposal also cancel the timer and clear transient
+  material.
+- Focused protocol/widget tests cover system-root and bounded-certificate
+  symbols, malformed/noncanonical input, single-symbol overflow, explicit copy,
+  no automatic creation, expiry removal, oversized fallback, and a Version 40/M
+  symbol rejected by a safely constrained dialog. Eight focused tests pass. A
+  proposed `RepaintBoundary.toImage()` pixel check hung indefinitely in the
+  current Flutter test backend and was removed rather than presented as
+  evidence; data, layout-state, and lifecycle tests pass, but physical scanning
+  and Human visual acceptance remain unperformed.
+- A separate 320-logical-pixel whole-shell probe could not isolate QR behavior:
+  it exposed existing desktop split-pane, runtime-header, and setup-summary row
+  overflows before ticket creation. The valid 620-pixel constrained-symbol test
+  passes without an exception. Compact desktop-window responsiveness remains
+  machine-actionable work; it is not reported as fixed by this slice.
+- Added the direct dependency provenance to `THIRD_PARTY_NOTICES.md`. Android
+  camera selection/permission/lifecycle and bounded decoder intake remain the
+  next QR slice and require their own dependency/license review.
+- Final local gates pass: zero-change Dart formatting, fatal-info Dart analysis,
+  Flutter analysis through the established ASCII project alias, all 161 Flutter
+  tests, Linux debug bundle, native-license drift/packaging, Android release-
+  signing source contract, and Android `assembleDebug` (185 tasks; 191,469,644-
+  byte APK). Two direct Flutter CLI Android attempts failed before project
+  compilation because Flutter rewrote the SDK property to this machine's
+  Unicode path and Gradle decoded it as mojibake. Direct Gradle assembly with a
+  temporary ASCII SDK alias passed; the local property and alias were restored
+  and neither environment path is committed.
 
 ### 2026-11-06 — Hosted cross-platform failure-driven corrections
 
@@ -1011,9 +1058,10 @@ specific evidence boundaries.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test`: PASS, 156 tests, including the Remote transport, invitation,
+- `flutter test`: PASS, 161 tests, including the Remote transport, invitation,
   record-v1 migration/v2 certificate trust, lifecycle, pairing/onboarding,
-  trusted desktop administration/clipboard, and widget interaction gates.
+  trusted desktop administration/clipboard/QR, ticket-expiry behavior, and
+  widget interaction gates.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -1239,10 +1287,11 @@ its now-versioned trust boundary:
    foreground/background, process death, network loss/recovery, Host restart,
    credential rejection/revocation, wrong/expired/rotated certificate,
    unreadable Keystore state, pairing-save failure, and backup/restore behavior;
-2. research and implement QR generation/scanning only with bounded payload,
-   error-correction, camera-permission, lifecycle, dependency-license, and
-   manual-fallback behavior. The existing invitation version must remain the
-   protocol boundary; do not invent a QR-only security schema;
+2. implement Android QR scanning only after reviewing bounded decoder intake,
+   camera selection/permission and foreground/background lifecycle behavior,
+   plus dependency licensing. Desktop generation now preserves the existing
+   invitation version, medium correction, and manual fallback; do not invent a
+   QR-only security schema;
 3. only after pairing/setup is device-verified, extend the Remote product beyond
    bounded read-only metadata. Keep pagination, output, writes, approvals,
    idempotency, and attachment bounds explicit rather than reusing the desktop

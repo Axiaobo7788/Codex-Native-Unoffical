@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../domain/remote_admin_gateway.dart';
@@ -15,6 +17,8 @@ final class RemoteAdminController extends ChangeNotifier {
   RemoteHostStatus? _status;
   List<RemotePairedDevice> _devices = const [];
   RemotePairingTicket? _ticket;
+  Timer? _ticketExpiryTimer;
+  var _ticketExpired = false;
   String? _errorMessage;
   var _generation = 0;
   var _disposed = false;
@@ -23,6 +27,7 @@ final class RemoteAdminController extends ChangeNotifier {
   RemoteHostStatus? get status => _status;
   List<RemotePairedDevice> get devices => _devices;
   RemotePairingTicket? get ticket => _ticket;
+  bool get ticketExpired => _ticketExpired;
   String? get errorMessage => _errorMessage;
   bool get isBusy => switch (_phase) {
     RemoteAdminPhase.loading ||
@@ -41,7 +46,7 @@ final class RemoteAdminController extends ChangeNotifier {
     }
     final generation = ++_generation;
     _phase = RemoteAdminPhase.loading;
-    _ticket = null;
+    _clearTicket();
     _devices = const [];
     _errorMessage = null;
     notifyListeners();
@@ -83,7 +88,7 @@ final class RemoteAdminController extends ChangeNotifier {
     }
     final generation = ++_generation;
     _phase = RemoteAdminPhase.creatingTicket;
-    _ticket = null;
+    _clearTicket();
     _errorMessage = null;
     notifyListeners();
     try {
@@ -97,6 +102,7 @@ final class RemoteAdminController extends ChangeNotifier {
         throw StateError('Host pairing ticket did not match current status.');
       }
       _ticket = ticket;
+      _scheduleTicketExpiry(ticket);
       _phase = RemoteAdminPhase.ready;
     } on Object {
       if (!_isCurrent(generation)) {
@@ -150,11 +156,31 @@ final class RemoteAdminController extends ChangeNotifier {
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
 
+  void _clearTicket({bool expired = false}) {
+    _ticketExpiryTimer?.cancel();
+    _ticketExpiryTimer = null;
+    _ticket = null;
+    _ticketExpired = expired;
+  }
+
+  void _scheduleTicketExpiry(RemotePairingTicket ticket) {
+    _ticketExpiryTimer?.cancel();
+    final remainingMs = ticket.expiresAtMs - _now().millisecondsSinceEpoch;
+    final delay = Duration(milliseconds: remainingMs < 0 ? 0 : remainingMs);
+    _ticketExpiryTimer = Timer(delay, () {
+      if (_disposed || !identical(_ticket, ticket)) {
+        return;
+      }
+      _clearTicket(expired: true);
+      notifyListeners();
+    });
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _generation += 1;
-    _ticket = null;
+    _clearTicket();
     super.dispose();
   }
 }

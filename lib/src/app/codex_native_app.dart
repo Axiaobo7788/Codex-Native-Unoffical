@@ -21,6 +21,7 @@ import '../features/conversation/output_viewer_controller.dart';
 import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/settings/remote_admin_controller.dart';
+import '../features/settings/remote_pairing_qr.dart';
 import '../features/threads/thread_list_controller.dart';
 import '../transport/remote/remote_onboarding.dart';
 import 'runtime_controller.dart';
@@ -2094,6 +2095,17 @@ class _RemoteSetupContent extends StatelessWidget {
         if (ticket != null) ...[
           const SizedBox(height: ThemeTokens.space4),
           _RemoteTicketCard(ticket: ticket),
+        ] else if (controller.ticketExpired) ...[
+          const SizedBox(height: ThemeTokens.space4),
+          Container(
+            key: const ValueKey('remote-ticket-expired-message'),
+            padding: const EdgeInsets.all(ThemeTokens.space3),
+            color: ThemeTokens.pending.withValues(alpha: 0.08),
+            child: const Text(
+              'The one-use pairing ticket expired and was removed from this '
+              'screen. Create a fresh ticket before pairing.',
+            ),
+          ),
         ],
         const SizedBox(height: ThemeTokens.space6),
         Row(
@@ -2231,13 +2243,35 @@ class _RemoteListenerDetails extends StatelessWidget {
   }
 }
 
-class _RemoteTicketCard extends StatelessWidget {
+class _RemoteTicketCard extends StatefulWidget {
   const _RemoteTicketCard({required this.ticket});
 
   final RemotePairingTicket ticket;
 
   @override
+  State<_RemoteTicketCard> createState() => _RemoteTicketCardState();
+}
+
+class _RemoteTicketCardState extends State<_RemoteTicketCard> {
+  RemotePairingQr? _qr;
+
+  @override
+  void initState() {
+    super.initState();
+    _qr = RemotePairingQr.tryEncode(widget.ticket.invitation);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RemoteTicketCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ticket.invitation != widget.ticket.invitation) {
+      _qr = RemotePairingQr.tryEncode(widget.ticket.invitation);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ticket = widget.ticket;
     return Container(
       key: const ValueKey('remote-ticket-card'),
       padding: const EdgeInsets.all(ThemeTokens.space4),
@@ -2252,13 +2286,6 @@ class _RemoteTicketCard extends StatelessWidget {
           Text(
             'One-use pairing invitation',
             style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: ThemeTokens.space2),
-          SelectableText(
-            ticket.invitation,
-            key: const ValueKey('remote-ticket-invitation'),
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(fontFamily: 'monospace'),
           ),
           const SizedBox(height: ThemeTokens.space2),
           Align(
@@ -2283,6 +2310,15 @@ class _RemoteTicketCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: ThemeTokens.space2),
+          _RemotePairingQrView(qr: _qr),
+          const SizedBox(height: ThemeTokens.space2),
+          SelectableText(
+            ticket.invitation,
+            key: const ValueKey('remote-ticket-invitation'),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(fontFamily: 'monospace'),
+          ),
+          const SizedBox(height: ThemeTokens.space2),
           SelectableText(ticket.endpoint),
           const SizedBox(height: ThemeTokens.space2),
           Text(
@@ -2301,6 +2337,105 @@ class _RemoteTicketCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RemotePairingQrView extends StatelessWidget {
+  const _RemotePairingQrView({required this.qr});
+
+  final RemotePairingQr? qr;
+
+  @override
+  Widget build(BuildContext context) {
+    final qr = this.qr;
+    if (qr == null) {
+      return Container(
+        key: const ValueKey('remote-ticket-qr-unavailable'),
+        padding: const EdgeInsets.all(ThemeTokens.space3),
+        color: ThemeTokens.pending.withValues(alpha: 0.08),
+        child: const Text(
+          'This complete invitation is too large for one medium-correction QR '
+          'code. Use Copy invitation instead; no data was split or omitted.',
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < qr.logicalSize) {
+          return Container(
+            key: const ValueKey('remote-ticket-qr-too-narrow'),
+            padding: const EdgeInsets.all(ThemeTokens.space3),
+            color: ThemeTokens.pending.withValues(alpha: 0.08),
+            child: const Text(
+              'The window is too narrow to show this QR code without reducing '
+              'its module size. Enlarge the window or use Copy invitation.',
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Semantics(
+              image: true,
+              label: 'One-use pairing invitation QR code',
+              child: RepaintBoundary(
+                key: const ValueKey('remote-ticket-qr'),
+                child: CustomPaint(
+                  size: Size.square(qr.logicalSize),
+                  painter: _RemotePairingQrPainter(qr),
+                ),
+              ),
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              'Scan only with the Android device you intend to pair. The QR '
+              'contains the same five-minute one-use secret shown below.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RemotePairingQrPainter extends CustomPainter {
+  const _RemotePairingQrPainter(this.qr);
+
+  final RemotePairingQr qr;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final background = Paint()
+      ..color = Colors.white
+      ..isAntiAlias = false;
+    final foreground = Paint()
+      ..color = Colors.black
+      ..isAntiAlias = false;
+    canvas.drawRect(Offset.zero & size, background);
+    final scale = remotePairingQrLogicalPixelsPerModule;
+    final quiet = remotePairingQrQuietZoneModules * scale;
+    for (var row = 0; row < qr.moduleCount; row += 1) {
+      for (var column = 0; column < qr.moduleCount; column += 1) {
+        if (!qr.isDark(row, column)) {
+          continue;
+        }
+        canvas.drawRect(
+          Rect.fromLTWH(
+            quiet + column * scale,
+            quiet + row * scale,
+            scale,
+            scale,
+          ),
+          foreground,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RemotePairingQrPainter oldDelegate) =>
+      !identical(qr, oldDelegate.qr);
 }
 
 class _RemoteDeviceTile extends StatelessWidget {

@@ -480,9 +480,9 @@ arbitrary-certificate callback exists.
 
 ### Consequence
 
-- Desktop provides manual selectable/copyable invitations only. QR rendering is
-  a later presentation slice and must preserve this version boundary, review QR
-  dependency licensing, and validate realistic payload/error-correction limits.
+- Desktop initially provided manual selectable/copyable invitations only.
+  ADR-018 now permits one bounded QR projection while preserving this version
+  boundary, dependency licensing, and explicit capacity/fallback behavior.
 - Invitation possession grants a short-lived pairing capability and chosen
   trust identity. It must be transferred through the trusted local surface and
   is never logged, persisted by desktop UI state, or copied automatically.
@@ -642,3 +642,60 @@ authorization.
 - Release automation may add a secret-backed signing step later only after the
   exact repository/application, key custody, Play policy, workflow permissions,
   and publication boundary receive explicit Human approval.
+
+---
+
+## ADR-018 — Render pairing QR as a bounded projection of the exact invitation
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+The desktop may render the existing canonical
+`codex-native-pairing-v1.<base64url-json>` invitation as exactly one standard QR
+symbol. It first revalidates the invitation through the authoritative protocol
+decoder, encodes its exact ASCII bytes at medium error correction, uses QR
+versions 1 through 40, preserves a four-module white quiet zone, and paints
+integer three-logical-pixel modules without antialiasing.
+
+QR is an optional presentation, not another pairing protocol. If the complete
+invitation cannot fit one symbol or cannot be shown at the required module size,
+the UI explains that limitation and retains the full selectable/copyable manual
+fallback. It must not split, compress, truncate, omit fields from, or rewrite an
+invitation merely to fit. QR state exists only with the transient ticket card;
+the controller removes both at expiry and never persists the image or payload.
+
+Use the pure-Dart `qr` 4.0.1 package under its BSD 3-Clause license for offline
+matrix generation. Keep its provenance in `THIRD_PARTY_NOTICES.md` and Flutter's
+generated application notices.
+
+### Why
+
+- The protocol permits invitations much larger than any standard QR symbol so
+  that bounded certificates can be represented. Treating every protocol-valid
+  value as QR-encodable would either fail at runtime or pressure the security
+  envelope into a second, less-auditable schema.
+- Medium correction is a deliberate compromise for a secret normally scanned
+  from a desktop display. A four-module quiet zone and integer, non-antialiased
+  modules preserve the symbol geometry rather than shrinking it to fit a narrow
+  layout.
+- The existing manual path is complete, explicit, and protocol-identical. It is
+  the safe fallback for unusual certificate sizes, constrained windows, camera
+  permission denial, inaccessible cameras, or future scanner incompatibility.
+- Removing expired material from the visible tree narrows accidental exposure
+  and ensures a QR never outlives the one-use capability it represents.
+
+### Consequence
+
+- System-root invitations and realistically bounded certificate invitations
+  can be scanned once Android camera intake exists; larger yet protocol-valid
+  certificates remain manual-only by design.
+- Scanner selection, camera permission UX, lifecycle behavior, decoding bounds,
+  and real Android/device scanning remain a separate researched implementation
+  and release gate. Desktop generation tests do not prove camera interoperability
+  or Human visual acceptance.
+- Future invitation versions may reuse this projection only after their exact
+  payload and capacity behavior are reviewed. This ADR does not authorize a
+  QR-only wire format or automatic clipboard access.
