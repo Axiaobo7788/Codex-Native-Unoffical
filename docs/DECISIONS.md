@@ -312,3 +312,61 @@ trust by accepting an arbitrary bad certificate.
 - The current Host can serve operator-provided TLS, but self-signed Android
   onboarding is not complete until pairing securely binds certificate identity
   and platform-backed secret storage is implemented and device-tested.
+
+---
+
+## ADR-012 — Treat Android Remote credentials as recoverable device-bound state
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+Persist one versioned Remote device record through platform secure storage. The
+record contains the exact WSS endpoint, 256-bit bearer, bounded device identity,
+and an explicit trust kind. The first supported trust kind is ordinary Android
+system-CA trust; plaintext endpoints and arbitrary-certificate acceptance cannot
+be persisted.
+
+Android uses a dedicated secure-storage namespace with automatic reset disabled
+for normal reads and writes. Reads distinguish an absent record from an
+unreadable or structurally invalid record. Unreadable data is never silently
+removed or overwritten: retry and an explicit clear/re-pair action are separate
+recovery choices. Only that explicit clear uses the plugin's namespace reset so
+it can recover when the old wrapping key is already unusable. Writes are
+serialized, reject an invalid existing record, and are read back before success.
+The bearer and record details are redacted from object strings and storage
+exceptions.
+
+Disable application backup and independently exclude SharedPreferences from
+both legacy cloud backup and Android 12+ cloud/device transfer. The ciphertext
+must not be restored to a device whose non-exportable Keystore wrapping key was
+not restored with it.
+
+### Why
+
+- Host bearers are revocable and re-pairable, but a transient Keystore failure
+  must not be misreported as “never paired” or trigger an invisible destructive
+  reset.
+- Background reconnect cannot require a biometric prompt for every key use.
+- Android Keystore key material is device-bound, while SharedPreferences are
+  included in backup by default; restoring only encrypted preferences creates
+  predictably unreadable state.
+- Keeping the complete connection profile in one bounded secure value gives the
+  application one verified update boundary and keeps bearer data out of normal
+  preferences, routes, logs, and crash text.
+
+### Consequence
+
+- `flutter_secure_storage` 11.2.0 is the current platform adapter, configured
+  with `resetOnError: false`, algorithm migration, migration backup, and an
+  isolated namespace. Its open Android transient-Keystore replacement issue is
+  an availability risk: the application can surface recovery but cannot repair
+  a wrapping key already replaced inside the plugin. Physical-device fault and
+  backup/restore testing remains a release gate.
+- A future pairing-bound local certificate/CA identity requires a new explicit
+  record version and migration; it must not overload the current `system` trust
+  value.
+- Cursor durability and reconnect ownership remain outside the credential
+  record so a received-but-not-applied event can never advance durable state.

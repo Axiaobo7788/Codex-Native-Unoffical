@@ -725,12 +725,75 @@ _Reviewed: 2026-11-05_
 
 #### Deliberately deferred
 
-- Do not wire the transport into `RuntimeController` while endpoint/trust and
-  device credential ownership are transient strings and resync has no bounded
-  application projection owner.
-- Do not persist a bearer or cursor in ordinary preferences, route state, logs,
-  or crash text. Add platform-backed storage with backup exclusions and explicit
-  key-loss recovery first.
+- Do not wire the transport into `RuntimeController` while resync has no bounded
+  application projection and reconnect owner. Endpoint/trust/device credentials
+  are no longer transient strings, but storage alone is not runtime readiness.
+- Do not persist a cursor in the credential record or ordinary preferences
+  before its event has been applied. Bearers remain excluded from ordinary
+  preferences, route state, logs, and crash text.
 - Do not automatically retry writes or approval answers. The current client is
   read-only; reconnect/idempotency and durable pending interaction state remain
   separate future slices.
+
+### Android device credential storage and recovery
+
+_Reviewed: 2026-11-05_
+
+#### Primary sources and implementation evidence
+
+- Android's [Keystore documentation](https://developer.android.com/privacy-and-security/keystore)
+  establishes that key material is non-exportable and may remain inside secure
+  hardware. Its [Auto Backup documentation](https://developer.android.com/identity/data/autobackup)
+  says SharedPreferences are backed up by default and documents legacy and
+  Android 12+ include/exclude rules.
+- [`flutter_secure_storage` 11.2.0](https://pub.dev/packages/flutter_secure_storage/changelog)
+  is the current release. Version 11 uses RSA-OAEP wrapping plus AES-GCM by
+  default, requires Android API 24 with current Flutter, and supports a namespace
+  covering data preferences, wrapped keys, config markers, and Keystore aliases.
+  Its default `resetOnError` is true; this project explicitly sets it false.
+- Open [issue #1298](https://github.com/juliansteenbakker/flutter_secure_storage/issues/1298)
+  identifies a current availability defect: transient Android Keystore null
+  results can make the plugin replace the RSA wrapping pair before
+  `resetOnError` is checked. Stored ciphertext then becomes permanently
+  unreadable. This does not expose the bearer, but it means the application must
+  model unreadable state and re-pair recovery instead of promising transparent
+  persistence.
+
+#### Adopted here
+
+- Store one bounded versioned JSON record under one secure-storage key. Version
+  1 permits only an exact WSS `/v1/ws` endpoint, the Host's 43-character
+  base64url bearer, bounded/control-free device metadata, and `system` trust.
+  Self-signed or local-CA identity will require a new explicit schema version.
+- Treat absent, available, and recovery-required as distinct states. A storage
+  exception is not absence. Invalid or unreadable data is not deleted, and a
+  save cannot overwrite it until the user takes an explicit recovery action.
+  Serialize operations and verify every write and delete by readback.
+- Configure the Android adapter with `resetOnError: false`, algorithm migration,
+  migration backup, no per-operation biometric prompt, and the isolated
+  `codex_native_remote` namespace. Background reconnect needs key access without
+  an interactive biometric ceremony; the Host bearer remains revocable. The
+  plugin initializes storage before ordinary deletion, so an already lost
+  wrapping key can otherwise block recovery. Only the explicit clear path uses
+  the same namespace with `resetOnError: true`; routine reads and writes never do.
+- Use both `allowBackup=false` and explicit preference exclusions for legacy
+  cloud backup plus Android 12+ cloud/device transfer. The broader exclusion is
+  intentional: current local settings are reconstructable, while restoring any
+  device-bound secure-storage ciphertext is not safe.
+
+#### Validation and preserved boundaries
+
+- Nine tests cover strict/redacted serialization, plaintext and credential-URI
+  rejection, absent/available/unreadable/corrupt states, preservation until
+  explicit clear, verified writes, serialized concurrent saves, and exact
+  Android option values. All 99 Flutter tests and the Linux debug build pass.
+- Debug and R8-minified release Android builds pass after the existing temporary
+  Unicode SDK-path workaround. Merged manifests contain API 24, `INTERNET`,
+  `allowBackup=false`, and both backup rule resources. The universal three-ABI
+  release APK is 51,791,110 bytes. No runtime Android Keystore call was made.
+- The first ordinary Gradle invocation again failed before compilation because
+  Flutter's Unicode SDK path was decoded as mojibake. This known toolchain-path
+  failure is preserved; only the escaped-property run is a passing Android build.
+- Physical-device Keystore, transient service failure, backup/restore, device
+  transfer, uninstall/reinstall, and system-CA TLS behavior remain unrun. The
+  open upstream wrapping-key replacement defect remains a release watch item.

@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, and the bounded Dart Remote transport core are implemented; writes/approvals and the Android trust/credential/reconnect/UI flow do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart Remote transport core, and a recoverable platform credential owner are implemented; pairing-bound local trust, reconnect/resync ownership, writes/approvals, and Android UI integration do not exist yet**
 
 ## Current repository state
 
@@ -28,8 +28,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 - `CodexTransport` isolates feature/domain code from transport details. The
   production desktop uses `ProcessTransport`; a read-only `RemoteTransport`
   now reuses the typed model/thread/turn adapters but is deliberately not wired
-  into Android runtime state before credential, trust, resync, and reconnect
-  ownership exist.
+  into Android runtime state before resync and reconnect ownership exist.
 - Typed thread operations now cover bounded `thread/list`, `thread/start`, metadata-only `thread/read`, history-excluding `thread/resume`, and exact-ID delete for smoke-test cleanup.
 - The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, and exposes select/resume actions. It does not retain turns or raw protocol JSON.
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
@@ -81,7 +80,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   session/sequence/ACK resume, count-and-byte-bounded replay, multi-connection
   request correlation, bounded same-session write idempotency, single-use
   pairing, and hash-only scoped device credentials. The WS/WSS listener uses
-  these primitives; no Android credential flow exists yet.
+  these primitives. Android now has a strict platform-backed WSS/system-CA
+  device-record owner, but no pairing or runtime UI flow exists yet.
 - The desktop Host exposes trusted local `host/remote/pairing/create`,
   `host/remote/devices/list`, and `host/remote/devices/revoke` administration.
   Its credential registry is loaded lazily from a configurable user config file,
@@ -99,13 +99,50 @@ This file is the repository's durable project memory. Update it whenever a task 
   `thread/read` through the same sanitized stock app-server process. Six bounded
   lifecycle/state notification methods feed sequenced live delivery and same-
   session replay. Dart now has a bounded read-only client protocol core, but
-  there is still no Remote write/approval path, Android credential/reconnect
-  coordinator or UI, or pairing-bound Android certificate trust.
+  there is still no Remote write/approval path, Android reconnect coordinator or
+  UI, or pairing-bound Android certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 recoverable Android credential owner
+
+- Reviewed Android Keystore and Auto Backup guidance, the current
+  `flutter_secure_storage` 11.2.0 implementation/changelog, its namespace and
+  migration behavior, and open issue #1298 describing a transient Keystore
+  lookup replacing the wrapping key. ADR-012 treats the device bearer as
+  recoverable device-bound state rather than an infallible preference.
+- Added a strict versioned Remote device record for one WSS endpoint, the exact
+  43-character bearer, bounded device ID/name, and explicit `system` trust.
+  Plaintext, URI-embedded credentials, unknown/future schema fields, control
+  characters, and oversized records fail before persistence. Object strings and
+  all public storage errors redact endpoint, bearer, and record data.
+- Added a serialized credential owner with distinct absent, available, and
+  unreadable/corrupt recovery results. It validates existing data before
+  replacement, verifies every write by exact readback, never auto-deletes on a
+  read/decrypt error, and exposes clear as a separate explicit recovery action.
+  Only that action enables a namespace reset so a lost wrapping key cannot make
+  recovery itself impossible.
+- Added `flutter_secure_storage` 11.2.0 with a dedicated namespace,
+  `resetOnError: false`, algorithm migration, and migration backup. The bearer
+  is stored only through this adapter, not in ordinary preferences, routes, or
+  diagnostics. Background operation deliberately does not require biometric
+  authentication per access.
+- Disabled Android application backup and added independent legacy and Android
+  12+ rules excluding all SharedPreferences from cloud backup and device
+  transfer. The merged debug/release manifests retain these rules and API 24
+  minimum compatibility.
+- Nine credential/recovery tests bring the Flutter total to 99. Full Dart
+  analysis, all Flutter tests, and the Linux debug build pass. Android debug and
+  minified release builds pass through the documented temporary Unicode SDK
+  path workaround; the three-ABI artifacts are 191,469,644 and 51,791,110
+  bytes. The secure-storage dependency inflates the JIT debug kernel, while the
+  release artifact tree-shakes to a normal universal-APK range.
+- No emulator or physical device was available. Real Keystore encryption,
+  transient service failure, uninstall/reinstall, OS backup/restore, device
+  transfer, and system-CA network behavior remain unverified platform gates.
 
 ### 2026-11-05 — Phase 4 bounded Dart Remote transport core
 
@@ -566,8 +603,8 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 90 tests, including 18 bounded
-  Dart Remote transport tests.
+- `flutter test`: PASS, 99 tests, including 18 bounded Dart Remote transport
+  tests and 9 credential/recovery tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -669,6 +706,13 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   for the trusted Host implemented here, not proof that a compromised
   authenticated Host cannot fragment a larger message and cause a transient
   client allocation before the combined check. There is no accept-all TLS path.
+- `flutter_secure_storage` 11.2.0 has an open Android issue in which a transient
+  Keystore lookup can return null and cause its RSA wrapping pair to be replaced
+  before `resetOnError` is consulted. This project disables automatic reset and
+  surfaces unreadable/corrupt state without deleting it, but cannot recover an
+  already replaced non-exportable key. Because the Remote bearer is revocable,
+  explicit clear and re-pair is the bounded recovery; real device fault testing
+  and an upstream fix or re-evaluation remain release gates.
 - Safe assistant Markdown intentionally differs by lifecycle and size:
   in-progress messages are plain text, and completed messages above 16 KiB show
   only a labeled bounded tail rather than rich formatting. Actual external
@@ -737,21 +781,24 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Build the Android credential/trust and recovery owner around the now-tested
-read-only `RemoteTransport`:
+Build the Android lifecycle/reconnect and authoritative hydration owner around
+the now-tested read-only `RemoteTransport` and recoverable system-CA credential
+record:
 
-1. add platform-backed storage for the issued device credential with Android
-   backup exclusions and explicit unreadable/lost-key recovery. Do not persist a
-   bearer in preferences, logs, crash text, or navigation state;
-2. support ordinary system-CA certificates first. Design the local self-signed
-   pairing artifact so certificate/CA identity is authenticated and stored with
-   the device record; never use `badCertificateCallback` as onboarding;
-3. add a lifecycle/reconnect coordinator with bounded backoff, persisted
+1. add a lifecycle/reconnect coordinator with bounded backoff, persisted
    session/sequence only after applied events, initial and gap-triggered bounded
    authoritative reads, stale-attempt rejection, and explicit revoked/lost-key
    states. Dart automatically handles WebSocket ping/pong control frames; the
    coordinator must still own application readiness and request-timeout recovery;
-4. integrate Android runtime state only after those boundaries are real, then
+2. keep the cursor outside the secret record and persist it only after the
+   corresponding projection mutation succeeds; a fresh session, invalid cursor,
+   gap, or resync marker must discard incremental assumptions and rebuild only
+   bounded model/thread metadata;
+3. design the local self-signed pairing artifact so certificate/CA identity is
+   authenticated and stored through a new explicit record version; never use
+   `badCertificateCallback` as onboarding;
+4. integrate Android runtime state only after reconnect and hydration boundaries
+   are real, then
    exercise Host restart/session change, revocation, malformed/oversized input,
    bounded hydration, and process/background lifecycle in Dart tests and the
    available emulator/device/build gates. Keep server requests/approvals and

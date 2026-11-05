@@ -84,8 +84,11 @@ deltas, diffs, server requests, and writes/approvals remain unrouted. A bounded
 Dart `RemoteTransport` now enforces WSS-by-default negotiation, request/event
 limits, ACK/resume, initial authoritative resync, and stale-resync rejection
 while reusing the typed protocol adapters. It is not wired into the Android UI
-until pairing-bound certificate trust, platform-backed secure storage,
-reconnect/background recovery, and authoritative state hydration are complete.
+yet. A versioned system-CA connection profile and device bearer now live behind
+platform secure storage with explicit unreadable/corrupt recovery and Android
+backup/transfer exclusions; the bearer is never put in ordinary preferences or
+diagnostics. Pairing-bound self-signed certificate trust, reconnect/background
+recovery, authoritative state hydration, and product integration remain.
 
 ## Run locally
 

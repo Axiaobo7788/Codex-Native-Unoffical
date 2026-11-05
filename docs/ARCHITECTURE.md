@@ -124,10 +124,16 @@ bounded to 512 events and 8 MiB. History/output, writes, approvals, and server
 requests fail locally because the Host has not made those semantics remotely
 safe.
 
-This is a transport core, not Android application readiness. The Android runtime
-controller still needs a platform-backed credential/trust owner, persisted
-applied cursor, reconnect/backoff and process-lifecycle policy, and bounded
-authoritative hydration before it can select `RemoteTransport`. Dart 3.13's
+This is a transport core, not Android application readiness. The Android client
+now has a platform-backed owner for one versioned WSS/system-CA device record.
+It stores endpoint, bearer, bounded device metadata, and trust kind as one
+secure value, serializes and verifies mutations, distinguishes absent from
+unreadable/corrupt state, and never silently deletes an unreadable record.
+Android cloud backup and device transfer exclude all SharedPreferences because
+the corresponding Keystore wrapping key is device-bound. The runtime controller
+still needs a persisted applied cursor, reconnect/backoff and process-lifecycle
+policy, and bounded authoritative hydration before it can select
+`RemoteTransport`. Dart 3.13's
 socket is configured with a 1 MiB inbound frame cap and no compression, while
 the transport separately caps a delivered combined message. The authenticated
 Host also caps and emits one-frame messages. Dart exposes no aggregate
@@ -139,7 +145,7 @@ The remaining network and Android layers must still provide:
 - pairing-bound self-signed certificate identity or ordinary platform-CA trust;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
-- platform-backed Android credential storage, reconnect, and lifecycle recovery;
+- reconnect and lifecycle recovery around the platform-backed Android record;
 - Android runtime/UI integration and bounded authoritative resync projection.
 
 ## Fidelity mode
