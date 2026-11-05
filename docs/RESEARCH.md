@@ -297,6 +297,11 @@ _Reviewed: 2026-11-05_
   including phone/tablet navigation, draft ownership, stale-turn guards, and
   bounded diff/preview presentation. License: GPL-3.0; implementation code is
   research-only for this Apache-2.0 project.
+- Rust `getrandom` 0.4.3 for direct operating-system randomness, RustCrypto
+  `sha2` 0.11.0 for token/parameter digests, and `subtle` 2.6.1 for constant-time
+  digest comparison. All are permissively licensed. `sha2` is pinned to 0.11.0
+  because 0.11.1 requires Rust 1.88 while this Host declares Rust 1.87; 0.11.0
+  supports Rust 1.85.
 
 ### Upstream and failure evidence
 

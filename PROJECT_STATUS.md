@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research and ADR are complete; pure Host protocol core is next**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research plus the pure Host protocol, replay, correlation, idempotency, and device-auth core are implemented; no network listener or Android credential flow exists yet**
 
 ## Current repository state
 
@@ -73,17 +73,47 @@ This file is the repository's durable project memory. Update it whenever a task 
   complete yet. Those remaining Phase 3 gates require unavailable Human,
   Windows, macOS, or installed-volume evidence in this Linux session, so Phase 4
   machine-actionable work has started without misreporting those gates complete.
-- Android Remote has a researched Host-owned envelope design: explicit opt-in
-  listener, local single-use pairing, hashed scoped device credentials,
-  TLS-required non-loopback exposure, version/capability negotiation,
-  session/sequence/ACK resume, count-and-byte-bounded replay, same-session write
-  idempotency, and separate chunked large-object transfer. No Remote network
-  listener or Android credential flow is implemented yet.
+- Android Remote now has a pure Rust Host core for typed negotiation,
+  session/sequence/ACK resume, count-and-byte-bounded replay, multi-connection
+  request correlation, bounded same-session write idempotency, single-use
+  pairing, and hash-only scoped device credentials. The researched listener is
+  still not connected to a network socket or Android credential flow.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 Remote protocol and device-auth core
+
+- Added a reusable `codex_native_host::remote` library boundary without changing
+  the production desktop stdio path. Typed client/server messages reject RPCs
+  before `client_hello`, choose the highest common version, expose capabilities,
+  and distinguish same-session replay from explicit gap/process-change resync.
+- Added a strictly increasing event journal bounded independently by 512 events
+  and 8 MiB by default. Count eviction, byte eviction, oversized single events,
+  future cursors, and sequence exhaustion all fail closed; an unretained event
+  creates an explicit replay gap rather than silently skipping data.
+- Added monotonic ACK tracking and per-connection correlation namespaces. Equal
+  client request IDs can coexist on different devices, while duplicate pending
+  IDs on one connection, pending-count exhaustion, counter wrap, and disconnect
+  cleanup are tested.
+- Added a bounded same-session idempotency ledger keyed by device, method, and
+  caller key plus a SHA-256 parameter fingerprint. It distinguishes pending,
+  replayable result, pre-dispatch cancellation, and post-dispatch unconfirmed
+  state; a result too large to retain becomes unconfirmed rather than
+  re-executable.
+- Added 256-bit device tokens from the operating-system random source,
+  SHA-256-only persistence, constant-time digest comparison, typed scopes,
+  expiry, rotation, revocation, last-seen state, and short-lived single-use
+  pairing tickets. Unix credential files are atomically published as `0600`;
+  symlinked, non-regular, foreign-owner, or group/world-accessible stores are
+  rejected.
+- The new Remote library has 25 unit tests. Together with the existing 23 Host
+  binary tests and two executable failure-path tests, the Rust suite passes 50
+  tests; format and `clippy --all-targets -D warnings` also pass. Network/TLS,
+  concurrent registry writers, Windows ACL replacement semantics, live
+  revocation, and physical Android behavior remain unclaimed.
 
 ### 2026-11-05 — Phase 4 Remote transport research and protocol decision
 
@@ -434,22 +464,25 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Implement and adversarially test the pure Rust Host Remote protocol core before
-choosing a WebSocket dependency:
+Research/select the smallest maintained Rust WebSocket/TLS stack, then connect a
+first opt-in loopback Remote vertical slice without changing the existing desktop
+stdio path:
 
-1. typed version/capability/session handshake with no pre-ack RPC path;
-2. strictly sequenced replay journal bounded simultaneously by event count and
-   serialized bytes, plus exact same-session gap/resync decisions and contiguous
-   ACK validation;
-3. request-correlation namespaces and same-session write-idempotency state that
-   cannot silently cross a Host restart;
-4. cryptographic single-use pairing and hash-only device registry with
-   expiry/revocation/persistence failure gates.
+1. expose local trusted pairing/device administration through bounded `host/*`
+   methods and keep the registry single-owner;
+2. add a loopback-only-by-default listener with bounded HTTP/WebSocket messages,
+   handshake deadline, bearer authentication, per-connection outbound budget,
+   ping/pong progress, and live revocation;
+3. route protocol-native read-only Codex RPCs through remapped IDs and the
+   existing output sanitizer, while rejecting writes until the idempotency path
+   is wired end to end;
+4. add executable reconnect/replay/gap/slow-reader tests before exposing Android
+   UI or non-loopback configuration.
 
-After the semantics pass independently, research/select the smallest maintained
-Rust WebSocket/TLS stack and connect an opt-in loopback listener without changing
-the existing desktop stdio path. Preserve the unavailable Phase 3 Human,
-Windows/macOS, and installed-volume gates as RC requirements.
+TLS-required non-loopback exposure, Android secure credential storage, writes,
+approvals, and chunked attachments follow only after that loopback slice passes.
+Preserve the unavailable Phase 3 Human, Windows/macOS, and installed-volume gates
+as RC requirements.
 
 ## Milestone outline
 
