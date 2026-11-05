@@ -1,6 +1,8 @@
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/protocol/remote_admin_protocol.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_pairing_invitation.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_trust.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -14,7 +16,9 @@ void main() {
             endpoint: 'wss://host.example:4317/v1/ws',
           ),
           'host/remote/pairing/create' => {
-            'code': 'AAAAAAAAAAAAAAAAAAAAAAAA',
+            'invitation': _invitation(
+              endpoint: 'wss://host.example:4317/v1/ws',
+            ),
             'expiresAt': 5000,
             'endpoint': 'wss://host.example:4317/v1/ws',
           },
@@ -30,10 +34,12 @@ void main() {
     expect(status.scope, RemoteListenerScope.network);
     expect(status.tls, isTrue);
     expect(status.canCreatePairingTicket, isTrue);
+    expect(status.pairingTrust, RemotePairingTrustMode.system);
     expect(status.advertisedEndpoint, 'wss://host.example:4317/v1/ws');
-    expect(ticket.code, 'AAAAAAAAAAAAAAAAAAAAAAAA');
+    expect(ticket.invitation, startsWith(remotePairingInvitationPrefix));
     expect(ticket.endpoint, status.advertisedEndpoint);
-    expect(ticket.toString(), isNot(contains(ticket.code)));
+    expect(ticket.trust, RemotePairingTrustMode.system);
+    expect(ticket.toString(), isNot(contains(ticket.invitation)));
     expect(status.toString(), isNot(contains('host.example')));
     expect(requests, ['host/status', 'host/remote/pairing/create']);
   });
@@ -128,7 +134,7 @@ void main() {
     () async {
       final adapter = RemoteAdminProtocolAdapter(
         request: (_, [params = const {}]) async => {
-          'code': 'AAAAAAAAAAAAAAAAAAAAAAAA',
+          'invitation': _invitation(),
           'expiresAt': 5000,
           'endpoint': 'wss://host.example/v1/ws',
           'bearer': 'must-not-enter-desktop-state',
@@ -154,8 +160,19 @@ Map<String, Object?> _hostStatus({required Object? endpoint}) => {
     'tls': true,
     'scope': 'network',
     'advertisedEndpoint': endpoint,
+    'pairingTrust': 'system',
   },
 };
+
+String _invitation({
+  String endpoint = 'wss://host.example/v1/ws',
+  RemoteTrust trust = const RemoteSystemTrust(),
+}) => RemotePairingInvitation(
+  endpoint: Uri.parse(endpoint),
+  code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
+  expiresAtMs: 5000,
+  trust: trust,
+).encode();
 
 Map<String, Object?> _device({List<String>? scopes}) => {
   'id': 'AAAAAAAAAAAAAAAAAAAAAA',

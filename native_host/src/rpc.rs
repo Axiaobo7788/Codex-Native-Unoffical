@@ -1,4 +1,5 @@
 use crate::remote_bridge::is_reserved_host_id;
+use crate::remote_pairing_invitation::RemotePairingTrust;
 use crate::remote_tls::RemoteTlsReloader;
 use crate::spool::{OutputChunk, OutputStat, SpoolStore};
 use base64::Engine;
@@ -34,6 +35,7 @@ struct RemoteListenerStatus {
     address: SocketAddr,
     tls: bool,
     advertised_endpoint: Option<String>,
+    pairing_trust: RemotePairingTrust,
 }
 
 impl RemoteAdmin {
@@ -103,11 +105,13 @@ impl RemoteAdmin {
         tls: bool,
         tls_reloader: Option<RemoteTlsReloader>,
         advertised_endpoint: Option<String>,
+        pairing_trust: RemotePairingTrust,
     ) {
         self.listener = Some(RemoteListenerStatus {
             address,
             tls,
             advertised_endpoint,
+            pairing_trust,
         });
         self.tls_reloader = tls_reloader;
     }
@@ -127,6 +131,7 @@ impl RemoteAdmin {
                 "tls": listener.tls,
                 "scope": if listener.address.ip().is_loopback() { "loopback" } else { "network" },
                 "advertisedEndpoint": listener.advertised_endpoint.as_deref(),
+                "pairingTrust": listener.pairing_trust.kind(),
             }),
             None => serde_json::json!({"enabled": false}),
         }
@@ -194,11 +199,19 @@ pub(crate) fn route_client_message(
             let mut admin = remote_admin
                 .lock()
                 .map_err(|_| io::Error::other("Remote administration lock poisoned"))?;
+            let listener = admin
+                .listener
+                .clone()
+                .ok_or_else(|| invalid_params("Remote listener is not enabled"))?;
+            let endpoint = listener
+                .advertised_endpoint
+                .ok_or_else(|| invalid_params("Remote advertised endpoint is not configured"))?;
             let ticket = admin.create_pairing_ticket()?;
+            let invitation = listener.pairing_trust.invitation(&endpoint, &ticket)?;
             Ok(serde_json::json!({
-                "code": ticket.code,
+                "invitation": invitation,
                 "expiresAt": ticket.expires_at_ms,
-                "endpoint": admin.listener.as_ref().and_then(|listener| listener.advertised_endpoint.as_deref()),
+                "endpoint": endpoint,
             }))
         }
         "host/remote/devices/list" => {
@@ -453,6 +466,13 @@ mod tests {
         use std::collections::BTreeSet;
 
         let (_temp, store, _, remote_admin) = fixture();
+        remote_admin.lock().unwrap().set_listener(
+            "127.0.0.1:4317".parse().unwrap(),
+            false,
+            None,
+            Some("wss://host.example/v1/ws".into()),
+            RemotePairingTrust::System,
+        );
         let create = serde_json::to_vec(&serde_json::json!({
             "id": 1,
             "method": "host/remote/pairing/create",
@@ -460,10 +480,18 @@ mod tests {
         }))
         .unwrap();
         let created = response(route_client_message(create, &store, &remote_admin));
-        let code = created["result"]["code"].as_str().unwrap().to_owned();
+        let invitation = created["result"]["invitation"].as_str().unwrap();
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(invitation.strip_prefix("codex-native-pairing-v1.").unwrap())
+            .unwrap();
+        let payload: Value = serde_json::from_slice(&payload).unwrap();
+        let code = payload["code"].as_str().unwrap().to_owned();
         assert_eq!(code.len(), 24);
         assert_eq!(created["result"]["expiresAt"], 301_000);
-        assert_eq!(created["result"]["endpoint"], Value::Null);
+        assert_eq!(created["result"]["endpoint"], "wss://host.example/v1/ws");
+        assert_eq!(payload["endpoint"], created["result"]["endpoint"]);
+        assert_eq!(payload["expiresAtMs"], created["result"]["expiresAt"]);
+        assert_eq!(payload["trust"], serde_json::json!({"type": "system"}));
 
         let issued = remote_admin
             .lock()
@@ -509,6 +537,7 @@ mod tests {
             true,
             None,
             Some("wss://host.example:4317/v1/ws".into()),
+            RemotePairingTrust::System,
         );
 
         let status = response(route_client_message(
@@ -518,6 +547,7 @@ mod tests {
         ));
         assert_eq!(status["result"]["remote"]["address"], "0.0.0.0:4317");
         assert_eq!(status["result"]["remote"]["scope"], "network");
+        assert_eq!(status["result"]["remote"]["pairingTrust"], "system");
         assert_eq!(
             status["result"]["remote"]["advertisedEndpoint"],
             "wss://host.example:4317/v1/ws"
@@ -532,6 +562,30 @@ mod tests {
             created["result"]["endpoint"],
             "wss://host.example:4317/v1/ws"
         );
+        assert!(
+            created["result"]["invitation"]
+                .as_str()
+                .unwrap()
+                .starts_with("codex-native-pairing-v1.")
+        );
+    }
+
+    #[test]
+    fn pairing_invitation_requires_an_explicit_client_endpoint() {
+        let (_temp, store, _, remote_admin) = fixture();
+        remote_admin.lock().unwrap().set_listener(
+            "127.0.0.1:4317".parse().unwrap(),
+            false,
+            None,
+            None,
+            RemotePairingTrust::System,
+        );
+        let failed = response(route_client_message(
+            br#"{"id":2,"method":"host/remote/pairing/create","params":{}}"#.to_vec(),
+            &store,
+            &remote_admin,
+        ));
+        assert_eq!(failed["error"]["code"], -32602);
     }
 
     #[test]

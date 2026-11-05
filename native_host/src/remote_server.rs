@@ -1509,6 +1509,7 @@ mod tests {
             server.is_tls(),
             server.tls_reloader(),
             Some("wss://remote.example/v1/ws".into()),
+            crate::remote_pairing_invitation::RemotePairingTrust::System,
         );
         assert!(server.is_tls());
         assert!(!server.address().ip().is_loopback());

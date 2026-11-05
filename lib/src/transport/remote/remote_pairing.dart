@@ -3,14 +3,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../protocol/remote_pairing_invitation.dart';
+import '../../protocol/remote_trust.dart';
 import 'remote_credentials.dart';
+import 'remote_http_client.dart';
 import 'remote_protocol.dart';
 
 const _pairingProtocolVersion = 1;
-const _pairingCodeLength = 24;
 const _deviceIdLength = 22;
 const _maximumDeviceNameCharacters = 80;
-const _maximumEndpointCharacters = 2048;
 const _maximumPairingBodyBytes = 8 * 1024;
 
 enum RemotePairingFailure {
@@ -37,8 +38,7 @@ final class RemotePairingException implements Exception {
 
 abstract interface class RemotePairingGateway {
   Future<RemoteCredentialRecord> pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   });
 }
@@ -66,6 +66,7 @@ final class RemotePairingHttpRequest {
     required this.connectionTimeout,
     required this.requestTimeout,
     required this.maximumResponseBytes,
+    required this.trust,
   });
 
   final Uri uri;
@@ -73,6 +74,7 @@ final class RemotePairingHttpRequest {
   final Duration connectionTimeout;
   final Duration requestTimeout;
   final int maximumResponseBytes;
+  final RemoteTrust trust;
 
   @override
   String toString() => 'RemotePairingHttpRequest(<redacted>)';
@@ -104,16 +106,17 @@ final class IoRemotePairingHttpExchange implements RemotePairingHttpExchange {
   Future<RemotePairingHttpResponse> post(
     RemotePairingHttpRequest request,
   ) async {
-    final client = HttpClient()
-      ..autoUncompress = false
-      ..connectionTimeout = request.connectionTimeout
-      ..idleTimeout = request.requestTimeout
-      ..maxConnectionsPerHost = 1;
+    HttpClient? client;
     try {
+      client = createRemoteHttpClient(request.trust)
+        ..autoUncompress = false
+        ..connectionTimeout = request.connectionTimeout
+        ..idleTimeout = request.requestTimeout
+        ..maxConnectionsPerHost = 1;
       return await _post(client, request).timeout(
         request.requestTimeout,
         onTimeout: () {
-          client.close(force: true);
+          client?.close(force: true);
           throw const RemotePairingExchangeException(
             RemotePairingExchangeFailure.timeout,
           );
@@ -121,7 +124,7 @@ final class IoRemotePairingHttpExchange implements RemotePairingHttpExchange {
       );
     } on RemotePairingExchangeException {
       rethrow;
-    } on HandshakeException {
+    } on TlsException {
       throw const RemotePairingExchangeException(
         RemotePairingExchangeFailure.tlsRejected,
       );
@@ -138,7 +141,7 @@ final class IoRemotePairingHttpExchange implements RemotePairingHttpExchange {
         RemotePairingExchangeFailure.timeout,
       );
     } finally {
-      client.close(force: true);
+      client?.close(force: true);
     }
   }
 
@@ -182,41 +185,58 @@ final class RemotePairingClient implements RemotePairingGateway {
     RemotePairingHttpExchange exchange = const IoRemotePairingHttpExchange(),
     Duration connectionTimeout = const Duration(seconds: 5),
     Duration requestTimeout = const Duration(seconds: 15),
+    DateTime Function()? now,
   }) {
     if (connectionTimeout <= Duration.zero || requestTimeout <= Duration.zero) {
       throw ArgumentError('Remote pairing timeouts must be positive.');
     }
-    return RemotePairingClient._(exchange, connectionTimeout, requestTimeout);
+    return RemotePairingClient._(
+      exchange,
+      connectionTimeout,
+      requestTimeout,
+      now ?? DateTime.now,
+    );
   }
 
   RemotePairingClient._(
     this._exchange,
     this.connectionTimeout,
     this.requestTimeout,
+    this._now,
   );
 
   final RemotePairingHttpExchange _exchange;
   final Duration connectionTimeout;
   final Duration requestTimeout;
+  final DateTime Function() _now;
 
   @override
   Future<RemoteCredentialRecord> pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) async {
-    final parsedEndpoint = _validatedEndpoint(endpoint);
-    final pairingCode = _validatedPairingCode(code);
+    final RemotePairingInvitation parsedInvitation;
+    try {
+      parsedInvitation = RemotePairingInvitation.decode(invitation);
+    } on FormatException {
+      throw const RemotePairingException(RemotePairingFailure.invalidInput);
+    }
+    if (parsedInvitation.expiresAtMs <= _now().millisecondsSinceEpoch) {
+      throw const RemotePairingException(RemotePairingFailure.invalidInput);
+    }
     final boundedDeviceName = _validatedDeviceName(deviceName);
     final requestBody = Uint8List.fromList(
       utf8.encode(
-        jsonEncode({'code': pairingCode, 'deviceName': boundedDeviceName}),
+        jsonEncode({
+          'code': parsedInvitation.code,
+          'deviceName': boundedDeviceName,
+        }),
       ),
     );
     if (requestBody.length > _maximumPairingBodyBytes) {
       throw const RemotePairingException(RemotePairingFailure.invalidInput);
     }
-    final pairingUri = parsedEndpoint.replace(
+    final pairingUri = parsedInvitation.endpoint.replace(
       scheme: 'https',
       path: '/v1/pair',
     );
@@ -231,6 +251,7 @@ final class RemotePairingClient implements RemotePairingGateway {
               connectionTimeout: connectionTimeout,
               requestTimeout: requestTimeout,
               maximumResponseBytes: _maximumPairingBodyBytes,
+              trust: parsedInvitation.trust,
             ),
           )
           .timeout(requestTimeout);
@@ -278,31 +299,11 @@ final class RemotePairingClient implements RemotePairingGateway {
         RemotePairingFailure.malformedResponse,
       );
     }
-    return _decodeResponse(parsedEndpoint, response.body);
-  }
-
-  static Uri _validatedEndpoint(String value) {
-    if (value.isEmpty || value.length > _maximumEndpointCharacters) {
-      throw const RemotePairingException(RemotePairingFailure.invalidInput);
-    }
-    final endpoint = Uri.tryParse(value);
-    if (endpoint == null) {
-      throw const RemotePairingException(RemotePairingFailure.invalidInput);
-    }
-    try {
-      validateRemoteEndpoint(endpoint);
-    } on Object {
-      throw const RemotePairingException(RemotePairingFailure.invalidInput);
-    }
-    return endpoint;
-  }
-
-  static String _validatedPairingCode(String value) {
-    final code = value.trim();
-    if (!_isUrlSafe(code, exactLength: _pairingCodeLength)) {
-      throw const RemotePairingException(RemotePairingFailure.invalidInput);
-    }
-    return code;
+    return _decodeResponse(
+      parsedInvitation.endpoint,
+      response.body,
+      parsedInvitation.trust,
+    );
   }
 
   static String _validatedDeviceName(String value) {
@@ -315,7 +316,11 @@ final class RemotePairingClient implements RemotePairingGateway {
     return name;
   }
 
-  static RemoteCredentialRecord _decodeResponse(Uri endpoint, Uint8List body) {
+  static RemoteCredentialRecord _decodeResponse(
+    Uri endpoint,
+    Uint8List body,
+    RemoteTrust trust,
+  ) {
     try {
       final decoded = jsonDecode(utf8.decode(body));
       if (decoded is! Map<String, Object?>) {
@@ -373,6 +378,7 @@ final class RemotePairingClient implements RemotePairingGateway {
         credential: token,
         deviceId: id,
         deviceName: name,
+        trust: trust,
       );
     } on Object {
       throw const RemotePairingException(

@@ -200,6 +200,7 @@ dependencies = [
  "getrandom 0.4.3",
  "json-skimmer",
  "libc",
+ "pem",
  "rcgen",
  "rustls",
  "serde",

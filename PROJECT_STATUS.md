@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, secure default-root pairing/recovery onboarding, a bounded read-only metadata UI, and a trusted desktop setup/device-management surface are implemented; pairing-bound local-certificate trust, writes/approvals, and full conversation integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, and a trusted desktop setup/device-management surface are implemented; real-device validation, QR presentation, writes/approvals, and full conversation integration do not exist yet**
 
 ## Current repository state
 
@@ -109,15 +109,68 @@ This file is the repository's durable project memory. Update it whenever a task 
   lifecycle/state notification methods feed sequenced live delivery and same-
   session replay. Android now maps hidden/shown application visibility to
   suspend/resume and displays the bounded ready projection in a read-only panel.
-  Android can now exchange a one-use ticket over default-root HTTPS, verify and
-  save the issued bearer atomically, connect only after readback, and explicitly
-  clear an unreadable/revoked profile. There is still no Remote write/approval
-  path, full conversation surface, or pairing-bound local-certificate trust.
+  Android can now decode one bounded versioned invitation, exchange its one-use
+  ticket over system-root or invitation-scoped certificate HTTPS, verify and
+  save the issued bearer/trust atomically, reuse the same trust for WSS, connect
+  only after readback, and explicitly clear an unreadable/revoked profile. There
+  is still no Remote write/approval path, full conversation surface, QR scanner,
+  or physical-device evidence.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 versioned pairing invitation and local certificate trust
+
+- Re-reviewed the installed Dart 3.13.1 TLS source and current official Dart
+  APIs, rustls strict one-root parsing, Syncthing certificate identity, and the
+  pinned `codex-remote`/`codex-remote-android` pairing flows. Corrected the prior
+  over-broad root-store statement: Linux/Windows use Dart's Mozilla roots while
+  macOS/iOS/Android use the platforms' built-in stores. Research changed the
+  design by keeping client trust as an explicit independent operator value
+  rather than guessing a certificate from the Host chain or listener.
+- Added `CODEX_NATIVE_REMOTE_PAIRING_TRUST_CERT`/
+  `--remote-pairing-trust-cert`. It requires a listener plus explicit advertised
+  endpoint and accepts exactly one bounded DER or PEM certificate. rustls
+  validates it before bind/stock-Codex startup; malformed, multiple, oversized,
+  or missing-endpoint configurations fail closed without exposing certificate
+  bytes. The trust snapshot is separate from server TLS so a reverse proxy can
+  own the client-visible identity.
+- Replaced desktop endpoint/ticket output and Android's separate input fields
+  with one exact-key, size-bounded `codex-native-pairing-v1` envelope binding
+  endpoint, single-use code, expiry, and either system roots or certificate DER
+  plus verified SHA-256. Desktop still creates nothing on dialog open, retains
+  the invitation only for that dialog, and writes it to the clipboard only after
+  an explicit action with a short-lived-secret warning. Manual transfer is
+  usable; QR rendering/scanning is not implemented.
+- Added credential-record version 2 under the existing secure-storage key.
+  Version-1 system records remain readable and upgrade only on a later verified
+  save. Certificate mode creates an empty per-connection `SecurityContext` and
+  uses only the invitation certificate for both same-origin HTTPS pairing and
+  WSS; system mode retains default roots. No global trust mutation,
+  `badCertificateCallback`, TOFU after ticket disclosure, or silent trust
+  migration exists. Stable private CA trust supports leaf rotation; exact
+  self-signed-leaf changes require restart and re-pairing.
+- Preserved two directly coupled negative results. The first release smoke
+  showed Dart/Linux rejecting the canonical raw DER leaf even though rustls had
+  accepted it as a root; official API semantics require PEM generally and DER
+  specifically on iOS, so the stored canonical DER is converted per platform.
+  A later clipboard widget assertion initially observed no snackbar because the
+  test had not installed/awaited the platform channel; a controlled mock now
+  proves exactly one explicit `Clipboard.setData` call and the warning.
+- The corrected release Host plus stock app-server passed in 10.701 seconds with
+  a generated self-signed identity: ordinary system trust rejected both HTTPS
+  pairing and WSS, the exact invitation-bound context then paired and connected,
+  eight models and metadata-only history loaded, live revocation closed the
+  socket, temporary state was removed, and Host exit was zero. This is
+  same-Linux-host evidence, not Android TLS-provider, Keystore, LAN, lifecycle,
+  QR, or Human evidence.
+- All 156 Flutter tests and 84 Rust tests, fatal-info analysis, formatting,
+  strict Clippy, Rust release, Linux debug, and Android debug builds pass. The
+  Android build used only the reversible ASCII Flutter-SDK property workaround,
+  restored `local.properties`, removed the temporary link, and produced the
+  unchanged 191,469,644-byte APK. Device inventory still contains only Linux.
 
 ### 2026-11-05 — Phase 4 trusted desktop Remote setup and device management
 
@@ -795,9 +848,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test`: PASS, 151 tests, including the Remote transport, credential,
-  lifecycle, pairing/onboarding, trusted desktop administration, and widget
-  interaction gates.
+- `flutter test`: PASS, 156 tests, including the Remote transport, invitation,
+  record-v1 migration/v2 certificate trust, lifecycle, pairing/onboarding,
+  trusted desktop administration/clipboard, and widget interaction gates.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -808,8 +861,8 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 26 Remote-library tests, 49 Host-binary tests,
-  and 3 executable failure-path tests (78 total), including real TCP/WSS,
+- `cargo test --workspace`: PASS, 26 Remote-library tests, 54 Host-binary tests,
+  and 4 executable failure-path tests (84 total), including real TCP/WSS,
   exact event replay/gap recovery, abrupt reconnect, slow-reader disconnection,
   live revocation, certificate trust/rotation/rollback, protocol-close shutdown,
   deterministic storage failure, and cache/TLS startup gates.
@@ -830,12 +883,13 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   `codex-native-v1`, read 8 models, listed and metadata-read a real thread,
   observed no internal ID on local stdout, live-revoked the device, removed its
   temporary state, and observed Host exit code zero.
-- TLS-configured `dart run tool/remote_smoke.dart`: PASS in 10.828 seconds
-  against release Host and the same stock app-server. The Host bound
-  `0.0.0.0:0`, reported `scope=network`/`tls=true`, and Dart trusted the generated
-  self-signed certificate only through an explicit `SecurityContext`; pairing,
-  WSS negotiation, eight-model and metadata-thread reads, internal-ID isolation,
-  live revocation, temporary-state cleanup, and zero Host exit all passed.
+- TLS-configured `dart run tool/remote_smoke.dart`: PASS in 10.701 seconds
+  against release Host and the same stock app-server. The Host bound network
+  scope, reported certificate invitation trust, and Dart first rejected the
+  generated self-signed identity under ordinary system trust for both HTTPS and
+  WSS. The exact versioned invitation trust then completed pairing and WSS,
+  eight-model and metadata-thread reads, internal-ID isolation, live revocation,
+  temporary-state cleanup, and zero Host exit.
 - `dart run tool/host_memory_benchmark.dart`: PASS three times for 3/30/300 MiB.
   Fixture deltas were 6,303,744/62,926,848/629,157,888,
   6,303,744/62,926,848/629,157,888, and
@@ -975,23 +1029,26 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Make the secure pairing path operable end to end without asking users to invoke
-raw Host RPCs or weakening certificate identity:
+Close the remaining pairing/device gate, then expand Remote without weakening
+its now-versioned trust boundary:
 
-1. design a versioned pairing invitation for QR/manual transfer with exact
-   endpoint and ticket fields plus pairing-bound local certificate/CA identity.
-   Add a new credential-record version and scoped TLS context only after the
-   bootstrap proves Host identity; never use `badCertificateCallback`, TOFU after
-   sending the ticket, or silent trust migration;
-2. exercise the current default-root path against an available emulator/device
-   and real Host: cold start, foreground/background, process death, network
-   loss/recovery, Host restart, credential rejection/revocation,
-   invalid/untrusted certificate, unreadable Keystore state, pairing save
-   failure, and backup/restore behavior before claiming Android readiness;
-3. only after pairing/setup is usable and device-verified, extend the Remote
-   product beyond bounded read-only metadata. Keep pagination, output, writes,
-   approvals, idempotency, and attachment bounds explicit rather than reusing the
-   desktop surface optimistically.
+1. exercise both system-root and pairing-bound certificate invitations against
+   an available emulator/physical device and real Host: cold start,
+   foreground/background, process death, network loss/recovery, Host restart,
+   credential rejection/revocation, wrong/expired/rotated certificate,
+   unreadable Keystore state, pairing-save failure, and backup/restore behavior;
+2. research and implement QR generation/scanning only with bounded payload,
+   error-correction, camera-permission, lifecycle, dependency-license, and
+   manual-fallback behavior. The existing invitation version must remain the
+   protocol boundary; do not invent a QR-only security schema;
+3. only after pairing/setup is device-verified, extend the Remote product beyond
+   bounded read-only metadata. Keep pagination, output, writes, approvals,
+   idempotency, and attachment bounds explicit rather than reusing the desktop
+   surface optimistically;
+4. while a physical Android device is unavailable, continue independent
+   machine-actionable RC work such as lockfile-derived native license packaging,
+   Windows/macOS build-path review, and hosted-CI readiness without claiming
+   unavailable platform passes.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

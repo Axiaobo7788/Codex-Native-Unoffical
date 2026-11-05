@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../domain/diff_models.dart';
 import '../domain/execution_settings.dart';
@@ -239,16 +240,14 @@ class _RemotePairingPanel extends StatefulWidget {
 }
 
 class _RemotePairingPanelState extends State<_RemotePairingPanel> {
-  final TextEditingController _endpointController = TextEditingController();
-  final TextEditingController _codeController = TextEditingController();
+  final TextEditingController _invitationController = TextEditingController();
   final TextEditingController _deviceNameController = TextEditingController(
     text: 'Android device',
   );
 
   @override
   void dispose() {
-    _endpointController.dispose();
-    _codeController.dispose();
+    _invitationController.dispose();
     _deviceNameController.dispose();
     super.dispose();
   }
@@ -275,38 +274,24 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
             const SizedBox(height: ThemeTokens.space2),
             Text(
               'On the trusted desktop Host, create a one-use pairing ticket. '
-              'This build accepts only a default-root-trusted WSS endpoint and '
-              'never displays the issued device bearer.',
+              'Paste its complete versioned invitation here. It can carry '
+              'either system trust or one pairing-bound certificate, and this '
+              'app never displays the issued device bearer.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: ThemeTokens.space4),
             TextField(
-              key: const ValueKey('remote-endpoint-field'),
-              controller: _endpointController,
-              enabled: !state.isBusy,
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-              enableSuggestions: false,
-              maxLength: 2048,
-              decoration: const InputDecoration(
-                labelText: 'WSS endpoint',
-                hintText: 'wss://host.example/v1/ws',
-                helperText:
-                    'Exact /v1/ws endpoint; HTTPS pairing is same-origin.',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: ThemeTokens.space3),
-            TextField(
-              key: const ValueKey('remote-pairing-code-field'),
-              controller: _codeController,
+              key: const ValueKey('remote-pairing-invitation-field'),
+              controller: _invitationController,
               enabled: !state.isBusy,
               autocorrect: false,
               enableSuggestions: false,
               obscureText: true,
-              maxLength: 24,
+              maxLength: 24 * 1024,
               decoration: const InputDecoration(
-                labelText: 'One-use pairing code',
+                labelText: 'Pairing invitation',
+                hintText: 'codex-native-pairing-v1.…',
+                helperText: 'Includes endpoint, one-use ticket, expiry, and trust mode.',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -340,8 +325,7 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
                   ? null
                   : () => unawaited(
                       widget.controller.pairRemote(
-                        endpoint: _endpointController.text,
-                        code: _codeController.text,
+                        invitation: _invitationController.text,
                         deviceName: _deviceNameController.text,
                       ),
                     ),
@@ -476,14 +460,14 @@ String? _remoteOnboardingMessage(
   RemoteOnboardingPhase.clearing => 'Clearing the saved Remote profile…',
   RemoteOnboardingPhase.failed => switch (state.failure) {
     RemoteOnboardingFailure.invalidInput =>
-      'Enter an exact WSS /v1/ws endpoint, a 24-character ticket, and a '
-          'device name of 1–80 characters.',
+      'Paste a complete, current codex-native-pairing-v1 invitation and enter '
+          'a device name of 1–80 characters.',
     RemoteOnboardingFailure.timeout =>
       'The bounded pairing request timed out. Check Host reachability and '
           'create a fresh ticket if the previous one may have been used.',
     RemoteOnboardingFailure.tlsRejected =>
-      'Android did not trust the Host certificate. Record version 1 accepts '
-          'only the runtime default roots; no certificate bypass was attempted.',
+      'Android rejected the Host certificate under the invitation trust mode. '
+          'No certificate bypass was attempted.',
     RemoteOnboardingFailure.networkUnavailable =>
       'The Host could not be reached securely.',
     RemoteOnboardingFailure.ticketRejected =>
@@ -2189,6 +2173,15 @@ class _RemoteListenerDetails extends StatelessWidget {
             value: status.tls == true ? 'Enabled' : 'Not enabled',
           ),
           const SizedBox(height: ThemeTokens.space2),
+          _Detail(
+            label: 'Invitation trust',
+            value: switch (status.pairingTrust) {
+              RemotePairingTrustMode.system => 'System roots',
+              RemotePairingTrustMode.certificate => 'Bound certificate',
+              null => 'Unavailable',
+            },
+          ),
+          const SizedBox(height: ThemeTokens.space2),
           if (endpoint == null)
             const Text(
               'No client endpoint is advertised. Set '
@@ -2207,6 +2200,18 @@ class _RemoteListenerDetails extends StatelessWidget {
             SelectableText(
               endpoint,
               key: const ValueKey('remote-advertised-endpoint'),
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              status.pairingTrust == RemotePairingTrustMode.certificate
+                  ? 'Invitations carry the explicitly configured local trust '
+                        'certificate. Changing that identity requires a Host '
+                        'restart and affected devices may need re-pairing.'
+                  : 'Invitations use Android runtime system roots. For a local '
+                        'private CA or self-signed Host, configure '
+                        'CODEX_NATIVE_REMOTE_PAIRING_TRUST_CERT with exactly '
+                        'one certificate and restart the Host.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             if (status.tls == false) ...[
               const SizedBox(height: ThemeTokens.space2),
@@ -2245,18 +2250,47 @@ class _RemoteTicketCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'One-use pairing ticket',
+            'One-use pairing invitation',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: ThemeTokens.space2),
           SelectableText(
-            ticket.code,
-            key: const ValueKey('remote-ticket-code'),
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontFamily: 'monospace', letterSpacing: 1.5),
+            ticket.invitation,
+            key: const ValueKey('remote-ticket-invitation'),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(fontFamily: 'monospace'),
           ),
           const SizedBox(height: ThemeTokens.space2),
-          SelectableText(ticket.endpoint ?? 'Endpoint unavailable'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey('remote-copy-invitation-button'),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: ticket.invitation));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Invitation copied. The clipboard now contains a '
+                        'five-minute one-use secret.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy invitation'),
+            ),
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          SelectableText(ticket.endpoint),
+          const SizedBox(height: ThemeTokens.space2),
+          Text(
+            ticket.trust == RemotePairingTrustMode.certificate
+                ? 'Trust: pairing-bound certificate'
+                : 'Trust: Android runtime system roots',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: ThemeTokens.space2),
           Text(
             'Expires ${_formatUtc(ticket.expiresAtMs)}. It is replaced by any '

@@ -4,13 +4,25 @@ import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_pairing_invitation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('trusted setup creates tickets only after affirmative action', (
     tester,
   ) async {
+    final platformCalls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          platformCalls.add(call);
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
     final runtime = await _pumpApp(tester);
 
     await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
@@ -29,7 +41,19 @@ void main() {
 
     expect(runtime.createCalls, 1);
     expect(find.byKey(const ValueKey('remote-ticket-card')), findsOneWidget);
-    expect(find.text('AAAAAAAAAAAAAAAAAAAAAAAA'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('remote-ticket-invitation')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('remote-copy-invitation-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Invitation copied'), findsOneWidget);
+    expect(
+      platformCalls.where((call) => call.method == 'Clipboard.setData'),
+      hasLength(1),
+    );
 
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
@@ -145,15 +169,23 @@ final class _Runtime extends RuntimeController {
     tls: true,
     scope: RemoteListenerScope.network,
     advertisedEndpoint: endpoint,
+    pairingTrust: RemotePairingTrustMode.system,
   );
 
   @override
   Future<RemotePairingTicket> createRemotePairingTicket() async {
     createCalls += 1;
+    final actualEndpoint = endpoint ?? 'wss://host.example/v1/ws';
+    final expiresAtMs = DateTime.now().millisecondsSinceEpoch + 300000;
     return RemotePairingTicket(
-      code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
-      expiresAtMs: DateTime.now().millisecondsSinceEpoch + 300000,
-      endpoint: endpoint,
+      invitation: RemotePairingInvitation(
+        endpoint: Uri.parse(actualEndpoint),
+        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
+        expiresAtMs: expiresAtMs,
+      ).encode(),
+      expiresAtMs: expiresAtMs,
+      endpoint: actualEndpoint,
+      trust: RemotePairingTrustMode.system,
     );
   }
 

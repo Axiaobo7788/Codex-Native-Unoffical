@@ -2,6 +2,7 @@ mod config;
 mod events;
 mod json_string;
 mod remote_bridge;
+mod remote_pairing_invitation;
 mod remote_server;
 mod remote_tls;
 mod rpc;
@@ -36,6 +37,7 @@ fn run() -> io::Result<()> {
     };
     let cache_dir = config.cache_dir.clone();
     let remote_advertise_endpoint = config.remote_advertise_endpoint.clone();
+    let remote_pairing_trust = config.remote_pairing_trust.clone();
     let remote_admin = Arc::new(Mutex::new(RemoteAdmin::new(
         config.remote_device_file.clone(),
     )));
@@ -56,6 +58,7 @@ fn run() -> io::Result<()> {
                     server.is_tls(),
                     server.tls_reloader(),
                     remote_advertise_endpoint,
+                    remote_pairing_trust,
                 );
             Some(server)
         }

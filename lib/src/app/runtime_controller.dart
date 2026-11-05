@@ -142,19 +142,14 @@ class RuntimeController extends ChangeNotifier
   }
 
   Future<void> pairRemote({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) {
     final onboarding = _remoteOnboarding;
     if (onboarding == null) {
       throw UnsupportedError('Remote pairing is unavailable.');
     }
-    return onboarding.pair(
-      endpoint: endpoint,
-      code: code,
-      deviceName: deviceName,
-    );
+    return onboarding.pair(invitation: invitation, deviceName: deviceName);
   }
 
   Future<void> clearRemoteProfile() {

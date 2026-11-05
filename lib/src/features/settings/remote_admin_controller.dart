@@ -74,7 +74,11 @@ final class RemoteAdminController extends ChangeNotifier {
 
   Future<void> createPairingTicket() async {
     final expectedEndpoint = _status?.advertisedEndpoint;
-    if (!canCreatePairingTicket || expectedEndpoint == null || _disposed) {
+    final expectedTrust = _status?.pairingTrust;
+    if (!canCreatePairingTicket ||
+        expectedEndpoint == null ||
+        expectedTrust == null ||
+        _disposed) {
       return;
     }
     final generation = ++_generation;
@@ -88,6 +92,7 @@ final class RemoteAdminController extends ChangeNotifier {
         return;
       }
       if (ticket.endpoint != expectedEndpoint ||
+          ticket.trust != expectedTrust ||
           ticket.expiresAtMs <= _now().millisecondsSinceEpoch) {
         throw StateError('Host pairing ticket did not match current status.');
       }

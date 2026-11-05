@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:codex_native_unofficial/src/transport/remote/remote_pairing.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_pairing_invitation.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_trust.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _code = 'AAAAAAAAAAAAAAAAAAAAAAAA';
@@ -19,8 +21,7 @@ void main() {
         final client = RemotePairingClient(exchange: exchange);
 
         final record = await client.pair(
-          endpoint: 'wss://host.example:8443/v1/ws',
-          code: '  $_code  ',
+          invitation: _invitation(endpoint: 'wss://host.example:8443/v1/ws'),
           deviceName: '  Test phone  ',
         );
 
@@ -34,6 +35,7 @@ void main() {
         expect(request.connectionTimeout, const Duration(seconds: 5));
         expect(request.requestTimeout, const Duration(seconds: 15));
         expect(request.maximumResponseBytes, 8 * 1024);
+        expect(request.trust.kind, RemoteTrustKind.system);
         expect(jsonDecode(utf8.decode(request.body)), {
           'code': _code,
           'deviceName': 'Test phone',
@@ -47,40 +49,30 @@ void main() {
     test('rejects unsafe or unbounded inputs before network access', () async {
       final exchange = _FakeExchange(response: _validResponse());
       final client = RemotePairingClient(exchange: exchange);
-      final cases = [
-        (endpoint: 'ws://127.0.0.1/v1/ws', code: _code, name: 'Phone'),
-        (endpoint: 'wss://user@host.example/v1/ws', code: _code, name: 'Phone'),
+      final cases = <({String invitation, String name})>[
+        (invitation: 'not-an-invitation', name: 'Phone'),
         (
-          endpoint: 'wss://host.example/v1/ws?ticket=secret',
-          code: _code,
-          name: 'Phone',
-        ),
-        (endpoint: 'wss://host.example/pair', code: _code, name: 'Phone'),
-        (endpoint: 'wss://host.example/v1/ws', code: 'short', name: 'Phone'),
-        (
-          endpoint: 'wss://host.example/v1/ws',
-          code: '${_code.substring(1)}!',
+          invitation: _rawInvitation(
+            endpoint: 'ws://127.0.0.1/v1/ws',
+            code: _code,
+          ),
           name: 'Phone',
         ),
         (
-          endpoint: 'wss://host.example/v1/ws',
-          code: _code,
-          name: 'Phone\nInjected',
+          invitation: _rawInvitation(
+            endpoint: 'wss://host.example/v1/ws',
+            code: 'short',
+          ),
+          name: 'Phone',
         ),
-        (
-          endpoint: 'wss://host.example/v1/ws',
-          code: _code,
-          name: List.filled(81, 'x').join(),
-        ),
+        (invitation: _invitation(), name: 'Phone\nInjected'),
+        (invitation: _invitation(), name: List.filled(81, 'x').join()),
+        (invitation: _invitation(expiresAtMs: 1), name: 'Phone'),
       ];
 
       for (final input in cases) {
         await expectLater(
-          client.pair(
-            endpoint: input.endpoint,
-            code: input.code,
-            deviceName: input.name,
-          ),
+          client.pair(invitation: input.invitation, deviceName: input.name),
           throwsA(
             isA<RemotePairingException>().having(
               (error) => error.failure,
@@ -114,11 +106,7 @@ void main() {
           );
 
           await expectLater(
-            client.pair(
-              endpoint: 'wss://host.example/v1/ws',
-              code: _code,
-              deviceName: 'Phone',
-            ),
+            client.pair(invitation: _invitation(), deviceName: 'Phone'),
             throwsA(
               isA<RemotePairingException>()
                   .having((error) => error.failure, 'failure', entry.value)
@@ -130,6 +118,30 @@ void main() {
             ),
           );
         }
+      },
+    );
+
+    test(
+      'carries one certificate trust into pairing and saved record',
+      () async {
+        final trust = RemoteCertificateTrust([0x30, 0x01, 0x00]);
+        final exchange = _FakeExchange(response: _validResponse());
+        final client = RemotePairingClient(exchange: exchange);
+
+        final record = await client.pair(
+          invitation: _invitation(trust: trust),
+          deviceName: 'Phone',
+        );
+
+        expect(
+          exchange.requests.single.trust.kind,
+          RemoteTrustKind.certificate,
+        );
+        expect(record.trustKind, RemoteTrustKind.certificate);
+        expect(
+          (record.trust as RemoteCertificateTrust).certificate,
+          trust.certificate,
+        );
       },
     );
 
@@ -166,11 +178,7 @@ void main() {
             exchange: _FakeExchange(response: response),
           );
           await expectLater(
-            client.pair(
-              endpoint: 'wss://host.example/v1/ws',
-              code: _code,
-              deviceName: 'Phone',
-            ),
+            client.pair(invitation: _invitation(), deviceName: 'Phone'),
             throwsA(
               isA<RemotePairingException>().having(
                 (error) => error.failure,
@@ -191,11 +199,7 @@ void main() {
       );
 
       await expectLater(
-        client.pair(
-          endpoint: 'wss://host.example/v1/ws',
-          code: _code,
-          deviceName: 'Phone',
-        ),
+        client.pair(invitation: _invitation(), deviceName: 'Phone'),
         throwsA(
           isA<RemotePairingException>().having(
             (error) => error.failure,
@@ -206,6 +210,30 @@ void main() {
       );
     });
   });
+}
+
+String _invitation({
+  String endpoint = 'wss://host.example/v1/ws',
+  int expiresAtMs = 4102444800000,
+  RemoteTrust trust = const RemoteSystemTrust(),
+}) => RemotePairingInvitation(
+  endpoint: Uri.parse(endpoint),
+  code: _code,
+  expiresAtMs: expiresAtMs,
+  trust: trust,
+).encode();
+
+String _rawInvitation({required String endpoint, required String code}) {
+  final payload = utf8.encode(
+    jsonEncode({
+      'version': 1,
+      'endpoint': endpoint,
+      'code': code,
+      'expiresAtMs': 4102444800000,
+      'trust': {'type': 'system'},
+    }),
+  );
+  return '$remotePairingInvitationPrefix${base64Url.encode(payload).replaceAll('=', '')}';
 }
 
 Map<String, Object?> _validPayload() => {

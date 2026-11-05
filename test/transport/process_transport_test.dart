@@ -115,6 +115,7 @@ void main() {
             'tls': false,
             'scope': 'loopback',
             'advertisedEndpoint': 'wss://host.example/v1/ws',
+            'pairingTrust': 'system',
           },
         },
       });

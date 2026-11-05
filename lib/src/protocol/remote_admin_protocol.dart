@@ -1,6 +1,8 @@
 import '../domain/remote_admin_models.dart';
 import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
+import 'remote_pairing_invitation.dart';
+import 'remote_trust.dart';
 import 'thread_protocol.dart';
 
 const _maximumEndpointCharacters = 2048;
@@ -51,6 +53,7 @@ final class RemoteAdminProtocolAdapter {
       'tls',
       'scope',
       'advertisedEndpoint',
+      'pairingTrust',
     });
     final tls = remote['tls'];
     if (tls is! bool) {
@@ -64,6 +67,13 @@ final class RemoteAdminProtocolAdapter {
       ),
     };
     final endpoint = _optionalEndpoint(remote, 'advertisedEndpoint');
+    final pairingTrust = switch (remote['pairingTrust']) {
+      'system' => RemotePairingTrustMode.system,
+      'certificate' => RemotePairingTrustMode.certificate,
+      _ => throw const ProtocolViolation(
+        'Host Remote pairing trust mode is unsupported.',
+      ),
+    };
     return RemoteHostStatus(
       hostVersion: version,
       enabled: true,
@@ -71,20 +81,39 @@ final class RemoteAdminProtocolAdapter {
       tls: tls,
       scope: scope,
       advertisedEndpoint: endpoint,
+      pairingTrust: pairingTrust,
     );
   }
 
   Future<RemotePairingTicket> createPairingTicket() async {
     final response = await request('host/remote/pairing/create');
-    _requireExactKeys(response, const {'code', 'expiresAt', 'endpoint'});
-    final code = _boundedString(response, 'code', maximumCharacters: 24);
-    if (!_isUrlSafe(code, exactLength: 24)) {
+    _requireExactKeys(response, const {'invitation', 'expiresAt', 'endpoint'});
+    final invitationText = _boundedString(
+      response,
+      'invitation',
+      maximumCharacters: remotePairingInvitationMaxCharacters,
+    );
+    final RemotePairingInvitation invitation;
+    try {
+      invitation = RemotePairingInvitation.decode(invitationText);
+    } on FormatException {
       throw const ProtocolViolation('Host pairing ticket is malformed.');
     }
+    final endpoint = _optionalEndpoint(response, 'endpoint');
+    final expiresAtMs = _timestamp(response, 'expiresAt');
+    if (endpoint == null ||
+        invitation.endpoint.toString() != endpoint ||
+        invitation.expiresAtMs != expiresAtMs) {
+      throw const ProtocolViolation('Host pairing ticket is inconsistent.');
+    }
     return RemotePairingTicket(
-      code: code,
-      expiresAtMs: _timestamp(response, 'expiresAt'),
-      endpoint: _optionalEndpoint(response, 'endpoint'),
+      invitation: invitationText,
+      expiresAtMs: expiresAtMs,
+      endpoint: endpoint,
+      trust: switch (invitation.trust.kind) {
+        RemoteTrustKind.system => RemotePairingTrustMode.system,
+        RemoteTrustKind.certificate => RemotePairingTrustMode.certificate,
+      },
     );
   }
 

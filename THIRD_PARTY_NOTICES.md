@@ -27,6 +27,13 @@ distributions keep their provenance visible.
   implementations, is distributed in the generated Flutter application
   notices.
 
+## crypto 3.0.8
+
+- Source: <https://github.com/dart-lang/core/tree/main/pkgs/crypto>
+- Copyright 2015, the Dart project authors.
+- License: BSD 3-Clause. The complete license is distributed with the package
+  and in the generated Flutter application notices.
+
 ## Native Host Rust dependencies
 
 The native Host's exact resolved versions and checksums are recorded in
@@ -42,6 +49,9 @@ The native Host's exact resolved versions and checksums are recorded in
 - `json-skimmer` 1.0.0 — <https://github.com/joeledwards/json-skimmer> — MIT.
 - `libc` 0.2.191 (Unix targets) — <https://github.com/rust-lang/libc> — MIT OR
   Apache-2.0.
+- `pem` 3.0.6 — <https://github.com/jcreekmore/pem-rs> — MIT.
+- `rustls` 0.23.46 — <https://github.com/rustls/rustls> — Apache-2.0 OR ISC OR
+  MIT.
 - `serde` 1.0.229 and `serde_json` 1.0.154 —
   <https://github.com/serde-rs/serde> and
   <https://github.com/serde-rs/json> — MIT OR Apache-2.0.

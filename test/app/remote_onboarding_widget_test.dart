@@ -39,12 +39,8 @@ void main() {
     expect(find.text('Send'), findsNothing);
 
     await tester.enterText(
-      find.byKey(const ValueKey('remote-endpoint-field')),
-      'wss://host.example/v1/ws',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('remote-pairing-code-field')),
-      'AAAAAAAAAAAAAAAAAAAAAAAA',
+      find.byKey(const ValueKey('remote-pairing-invitation-field')),
+      'codex-native-pairing-v1.fixture',
     );
     await tester.enterText(
       find.byKey(const ValueKey('remote-device-name-field')),
@@ -54,13 +50,9 @@ void main() {
     await tester.pump();
 
     expect(onboarding.pairCalls, 1);
-    expect(onboarding.endpoint, 'wss://host.example/v1/ws');
-    expect(onboarding.code, 'AAAAAAAAAAAAAAAAAAAAAAAA');
+    expect(onboarding.invitation, 'codex-native-pairing-v1.fixture');
     expect(onboarding.deviceName, 'Test phone');
-    expect(
-      find.textContaining('Enter an exact WSS /v1/ws endpoint'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Paste a complete, current'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -145,8 +137,7 @@ final class _FakeOnboarding implements RemoteOnboardingOwner {
   RemoteOnboardingState _state = const RemoteOnboardingState.idle();
   var pairCalls = 0;
   var clearCalls = 0;
-  String? endpoint;
-  String? code;
+  String? invitation;
   String? deviceName;
 
   @override
@@ -157,13 +148,11 @@ final class _FakeOnboarding implements RemoteOnboardingOwner {
 
   @override
   Future<void> pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) async {
     pairCalls += 1;
-    this.endpoint = endpoint;
-    this.code = code;
+    this.invitation = invitation;
     this.deviceName = deviceName;
     _state = const RemoteOnboardingState(
       phase: RemoteOnboardingPhase.failed,

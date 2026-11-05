@@ -117,10 +117,14 @@ endpoint through `--remote-advertise-endpoint` or
 `CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`. It is never inferred from the bind
 socket: wildcard addresses are not client destinations, and a reverse proxy may
 make the public endpoint intentionally different. Trusted local status reports
-both values. The desktop setup dialog uses a local-only typed administration
-gateway outside `CodexTransport`, creates a five-minute ticket only after an
-affirmative action, retains it only for the dialog lifetime, and requires the
-ticket response endpoint to match current status. It can list and explicitly
+both values. An optional, independently configured pairing trust certificate is
+strictly parsed at startup rather than inferred from the listener chain, because
+a reverse proxy may terminate the client-visible TLS identity. The desktop setup
+dialog uses a local-only typed administration gateway outside `CodexTransport`,
+creates a five-minute versioned invitation only after an affirmative action,
+retains it only for the dialog lifetime, and requires its endpoint, expiry, and
+trust mode to match current status. It can explicitly copy but never
+automatically publishes the invitation. It can list and explicitly
 revoke at most 32 public device records. It cannot enable or reconfigure the
 listener, and Android Remote has no access to these administration methods.
 
@@ -136,11 +140,15 @@ bounded to 512 events and 8 MiB. History/output, writes, approvals, and server
 requests fail locally because the Host has not made those semantics remotely
 safe.
 
-The Android client now has a platform-backed owner for one versioned
-WSS/default-runtime-root device record.
-It stores endpoint, bearer, bounded device metadata, and trust kind as one
+The Android client now has a platform-backed owner for one versioned WSS device
+record. Version 2 stores endpoint, bearer, bounded device metadata, and either
+system trust or one exact certificate trust object as one
 secure value, serializes and verifies mutations, distinguishes absent from
 unreadable/corrupt state, and never silently deletes an unreadable record.
+Version-1 system records remain readable and are upgraded only by a later
+verified save under the same secure-storage key. Certificate bytes are retained
+as bounded canonical DER plus a verified SHA-256 fingerprint; a fresh empty
+per-connection `SecurityContext` uses that identity for both HTTPS and WSS.
 Android cloud backup and device transfer exclude all SharedPreferences because
 the corresponding Keystore wrapping key is device-bound.
 
@@ -161,13 +169,15 @@ Existing desktop controllers and process transport are unchanged, while every
 unsupported Remote gateway rejects locally.
 
 The unpaired product state now owns a separate bounded onboarding coordinator.
-It accepts only an exact WSS `/v1/ws` endpoint, derives the same-origin HTTPS
-`/v1/pair` route, and sends one validated 24-character ticket plus a bounded
-device name. Redirects and automatic decompression are disabled; connection,
-whole-request, request-body, response-body, content-type, status, protocol,
-device, scope, timestamp, and bearer bounds are fail-closed. Record version 1
-uses only the Dart runtime's default trusted root set. It has no arbitrary bad-
-certificate callback and does not attempt local self-signed onboarding.
+It accepts one exact `codex-native-pairing-v1` invitation plus a bounded device
+name. The invitation binds an exact WSS `/v1/ws` endpoint, one validated
+24-character ticket, expiry, and either runtime-system or single-certificate
+trust before network contact. It derives the same-origin HTTPS `/v1/pair` route.
+Redirects and automatic decompression are disabled; invitation, certificate,
+connection, whole-request, request-body, response-body, content-type, status,
+protocol, device, scope, timestamp, and bearer bounds are fail-closed. There is
+no arbitrary bad-certificate callback, global trust mutation, TOFU after ticket
+disclosure, or silent trust migration.
 
 The returned record is written and read back through secure storage before a new
 Remote lifecycle generation starts. An older credential load is stopped first,
@@ -187,12 +197,13 @@ boundary.
 
 The remaining network and Android layers must still provide:
 
-- pairing-bound self-signed certificate identity or real-device evidence for
-  the current default-root trust path;
+- real-device evidence for both system-root and pairing-bound certificate trust,
+  including Android TLS-provider and Keystore behavior;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
-- versioned pairing-bound local-certificate onboarding; the current form covers
-  only a manually supplied default-root WSS endpoint and one-use ticket;
+- QR presentation for the existing versioned invitation only after payload and
+  error-correction limits are measured; manual selectable/copyable transfer is
+  implemented;
 - paged/selectable Remote metadata and later conversation features only after
   their Host semantics are bounded end to end.
 

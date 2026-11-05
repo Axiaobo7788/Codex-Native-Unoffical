@@ -1,3 +1,4 @@
+use crate::remote_pairing_invitation::RemotePairingTrust;
 use crate::remote_tls::RemoteTlsFiles;
 use axum::http::Uri;
 use std::env;
@@ -21,6 +22,7 @@ pub(crate) struct Config {
     pub(crate) remote_listen: Option<SocketAddr>,
     pub(crate) remote_tls: Option<RemoteTlsFiles>,
     pub(crate) remote_advertise_endpoint: Option<String>,
+    pub(crate) remote_pairing_trust: RemotePairingTrust,
     pub(crate) max_output_bytes: u64,
     pub(crate) max_session_bytes: u64,
     pub(crate) max_forward_message_bytes: u64,
@@ -46,6 +48,8 @@ impl Config {
         let mut remote_tls_key = optional_path("CODEX_NATIVE_REMOTE_TLS_KEY")?;
         let mut remote_advertise_endpoint =
             optional_string("CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT")?;
+        let mut remote_pairing_trust_cert =
+            optional_path("CODEX_NATIVE_REMOTE_PAIRING_TRUST_CERT")?;
 
         let mut arguments = env::args_os().skip(1);
         while let Some(argument) = arguments.next() {
@@ -71,9 +75,15 @@ impl Config {
                         "--remote-advertise-endpoint",
                     )?)
                 }
+                "--remote-pairing-trust-cert" => {
+                    remote_pairing_trust_cert = Some(required_path(
+                        &mut arguments,
+                        "--remote-pairing-trust-cert",
+                    )?)
+                }
                 "-h" | "--help" => {
                     println!(
-                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen IP:PORT [--remote-tls-cert CERT.pem --remote-tls-key KEY.pem] [--remote-advertise-endpoint wss://host.example/v1/ws]]",
+                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen IP:PORT [--remote-tls-cert CERT.pem --remote-tls-key KEY.pem] [--remote-advertise-endpoint wss://host.example/v1/ws [--remote-pairing-trust-cert CERT.pem]]]]",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -94,6 +104,11 @@ impl Config {
         let remote_tls = validate_remote_transport(remote_listen, remote_tls_cert, remote_tls_key)?;
         let remote_advertise_endpoint =
             validate_remote_advertise_endpoint(remote_listen, remote_advertise_endpoint)?;
+        let remote_pairing_trust = validate_remote_pairing_trust(
+            remote_listen,
+            remote_advertise_endpoint.as_deref(),
+            remote_pairing_trust_cert,
+        )?;
 
         Ok(Some(Self {
             codex_executable,
@@ -102,6 +117,7 @@ impl Config {
             remote_listen,
             remote_tls,
             remote_advertise_endpoint,
+            remote_pairing_trust,
             max_output_bytes: positive_u64(
                 "CODEX_NATIVE_MAX_OUTPUT_BYTES",
                 DEFAULT_MAX_OUTPUT_BYTES,
@@ -290,6 +306,23 @@ fn invalid_remote_advertise_endpoint() -> io::Error {
     )
 }
 
+fn validate_remote_pairing_trust(
+    listener: Option<SocketAddr>,
+    advertised_endpoint: Option<&str>,
+    certificate: Option<PathBuf>,
+) -> io::Result<RemotePairingTrust> {
+    let Some(certificate) = certificate else {
+        return Ok(RemotePairingTrust::System);
+    };
+    if listener.is_none() || advertised_endpoint.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Remote pairing trust certificate requires a listener and advertised endpoint",
+        ));
+    }
+    RemotePairingTrust::from_certificate_file(&certificate)
+}
+
 fn default_cache_dir() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
@@ -333,6 +366,8 @@ fn invalid_environment(name: &str) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rcgen::{CertifiedKey, generate_simple_self_signed};
+    use tempfile::TempDir;
 
     #[test]
     fn remote_address_requires_a_literal_ip() {
@@ -424,6 +459,43 @@ mod tests {
                     .kind(),
                 io::ErrorKind::InvalidInput
             );
+        }
+    }
+
+    #[test]
+    fn pairing_trust_is_explicit_valid_and_endpoint_bound() {
+        let listener = Some("0.0.0.0:4317".parse().unwrap());
+        assert_eq!(
+            validate_remote_pairing_trust(listener, Some("wss://host.example/v1/ws"), None)
+                .unwrap()
+                .kind(),
+            "system"
+        );
+
+        let temp = TempDir::new().unwrap();
+        let CertifiedKey { cert, .. } =
+            generate_simple_self_signed(vec!["host.example".to_owned()]).unwrap();
+        let certificate = temp.path().join("root.pem");
+        std::fs::write(&certificate, cert.pem()).unwrap();
+        assert_eq!(
+            validate_remote_pairing_trust(
+                listener,
+                Some("wss://host.example/v1/ws"),
+                Some(certificate.clone()),
+            )
+            .unwrap()
+            .kind(),
+            "certificate"
+        );
+        for result in [
+            validate_remote_pairing_trust(
+                None,
+                Some("wss://host.example/v1/ws"),
+                Some(certificate.clone()),
+            ),
+            validate_remote_pairing_trust(listener, None, Some(certificate.clone())),
+        ] {
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput);
         }
     }
 }

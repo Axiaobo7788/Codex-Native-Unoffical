@@ -954,15 +954,16 @@ _Reviewed: 2026-11-05_
 
 #### Sources re-reviewed
 
-- Dart 3.13 [`HttpClient`](https://api.dart.dev/dart-io/HttpClient-class.html)
+- Dart 3.13 [`HttpClient`](https://api.dart.dev/dart-io/HttpClient-class.html),
+  [`SecurityContext`](https://api.dart.dev/dart-io/SecurityContext-class.html),
   and [`connectionTimeout`](https://api.dart.dev/dart-io/HttpClient/connectionTimeout.html)
-  documentation. The connection timeout applies only to establishing a new
-  connection; a separate whole-operation deadline is required. Response bodies
-  are streams that must be consumed or drained. Default HTTPS accepts chains to
-  the runtime's built-in trusted roots; the documentation describes a compiled
-  Mozilla root list rather than promising arbitrary Android user-installed CAs.
-  It also recommends a higher-level/native client when platform proxy/VPN
-  integration matters, which remains a physical-device validation concern.
+  documentation plus the installed Dart 3.13.1 SDK source. The connection
+  timeout applies only to establishing a new connection; a separate whole-
+  operation deadline is required. Response bodies are streams that must be
+  consumed or drained. The exact SDK says Linux/Windows default roots come from
+  Mozilla while macOS/iOS/Android roots come from the platforms' built-in trust
+  stores. This corrects the earlier over-broad Mozilla-root description without
+  claiming that every Android user-added CA, proxy, or VPN behavior is covered.
 - This repository's actual Host router and auth implementation: exact
   `/v1/pair`, 8 KiB HTTP body limit, ten attempts/minute, 24-character URL-safe
   single-use tickets, 80-character Host-bounded names, 22-character device IDs,
@@ -1132,3 +1133,98 @@ _Reviewed: 2026-11-05_
   `tls=false`, and the independently configured WSS endpoint, then exited zero
   on EOF. This verifies propagation, not endpoint network reachability. Linux is
   still the only available device and no Human visual acceptance was performed.
+
+### Versioned pairing invitation and local-certificate trust
+
+_Reviewed: 2026-11-05_
+
+#### Sources reviewed
+
+- The installed Dart 3.13.1 `dart:io` source and current official
+  [`SecurityContext` constructor](https://api.dart.dev/dart-io/SecurityContext/SecurityContext.html),
+  [`setTrustedCertificatesBytes`](https://api.dart.dev/dart-io/SecurityContext/setTrustedCertificatesBytes.html),
+  and [`HttpClient` constructor](https://api.dart.dev/dart-io/HttpClient/HttpClient.html).
+  A new context has no roots by default; an injected context can therefore be
+  scoped to one connection identity rather than changing global process trust.
+- rustls 0.23
+  [`RootCertStore::add`](https://docs.rs/rustls/latest/rustls/struct.RootCertStore.html#method.add),
+  which strictly parses one expected DER trust anchor rather than silently
+  accepting the valid subset of an arbitrary bundle. License: Apache-2.0 OR ISC
+  OR MIT.
+- Syncthing's maintained
+  [device-ID](https://github.com/syncthing/syncthing/blob/main/man/syncthing-device-ids.7)
+  and [security](https://github.com/syncthing/syncthing/blob/main/man/syncthing-security.7)
+  documentation. It derives peer identity from certificate DER and compares the
+  presented identity with preconfigured expectation; loss of the corresponding
+  private key permits impersonation. License: MPL-2.0; no source code is copied.
+- The already pinned `codex-remote` `fcdf784` public-URL/pairing flow and
+  `codex-remote-android` `372581a` host-key confirmation flow. They reinforce
+  explicit transient invitation state and identity confirmation before
+  credentials, but their HTTP/SSH transports and licensing do not replace this
+  project's WSS/Host boundary.
+
+#### Findings that changed the implementation
+
+- Do not infer the mobile trust anchor from the Host listener certificate
+  chain. The client-visible endpoint may terminate at a reverse proxy, a chain
+  may contain several candidates, and automatically choosing a leaf or CA can
+  silently produce unusable or over-broad trust. Add a separate explicit trust-
+  certificate setting instead.
+- A certificate fingerprint inside an unauthenticated exchange is too late: the
+  one-use ticket would already have been exposed to an impersonator. Endpoint,
+  ticket, expiry, and trust identity must arrive together through the trusted
+  local setup surface before the first HTTPS request.
+- The certificate bytes are the actual per-connection trust anchor. The SHA-256
+  value is a canonical consistency/fingerprint field, not an independent proof
+  of authenticity. Authenticity comes from trusted transfer of the invitation.
+- A stable private CA permits ordinary leaf rotation without changing Android
+  state. Binding an exact self-signed leaf is narrower but requires Host restart,
+  a fresh invitation, and re-pairing after that leaf changes. TLS reload alone
+  must never silently migrate saved trust.
+- The first product-path release smoke preserved a platform-specific negative
+  result: Linux rejected the invitation's raw DER leaf through Dart
+  `SecurityContext`, although rustls accepted the same DER as a root. The
+  official API describes PEM/PKCS#12 generally and single DER specifically for
+  iOS. The client now stores canonical DER but supplies PEM on non-iOS and DER
+  on iOS. The next smoke then proved both HTTPS pairing and authenticated WSS;
+  no arbitrary-certificate callback was introduced.
+
+#### Adopted here
+
+- `CODEX_NATIVE_REMOTE_PAIRING_TRUST_CERT`/
+  `--remote-pairing-trust-cert` accepts exactly one bounded DER or PEM
+  certificate only when both a listener and explicit advertised WSS endpoint
+  exist. Host startup validates it with rustls before stock Codex starts. The
+  setting is independent from server TLS files and is snapshotted until restart.
+- Trusted-local ticket creation now returns one opaque
+  `codex-native-pairing-v1.<base64url-json>` invitation. Its exact schema binds
+  version 1, canonical WSS endpoint, 24-character single-use code, expiry, and
+  either `{type: system}` or one certificate's SHA-256 plus DER. Both inner
+  certificate and outer invitation have hard byte/character caps and exact-key
+  parsing.
+- Android accepts only that complete invitation plus its user-owned device
+  name. It builds an empty, invitation-scoped trust context for certificate
+  mode, performs same-origin HTTPS pairing, persists record version 2, and
+  rebuilds the same scoped context for WSS. Version-1 system records remain
+  readable and are upgraded only on a later verified save; the secure-storage
+  key does not change.
+- Desktop creates no invitation on open, retains it only for the dialog, and
+  copies it only after an explicit user action that warns about the short-lived
+  clipboard secret. Manual transfer is implemented; QR rendering is deferred
+  until a QR encoder and practical payload/error-correction limits are reviewed.
+
+#### Deliberate non-adoptions and remaining validation
+
+- No TOFU after network contact, `badCertificateCallback`, global trust-store
+  mutation, certificate-chain guessing, listener-address guessing, silent trust
+  migration, or automatic clipboard write.
+- The manual/base64 envelope is intentionally simple and auditable. Do not add
+  compression merely to fit every possible 8 KiB certificate into a QR code;
+  a later QR slice must measure real certificate sizes and define scan/error-
+  correction behavior while preserving this version boundary.
+- The release Host plus stock app-server now proves a generated self-signed
+  certificate is rejected by ordinary system trust for both pairing and WSS,
+  then accepted through the exact invitation-bound context; pairing, model/list,
+  metadata history, live revocation, temporary cleanup, and Host exit all pass.
+  This remains same-Linux-host evidence, not Android Secure Storage, camera/QR,
+  LAN/firewall, Android TLS-provider, lifecycle, or Human acceptance evidence.

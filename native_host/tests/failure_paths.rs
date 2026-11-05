@@ -60,6 +60,34 @@ fn invalid_tls_material_fails_before_the_codex_child_is_started() {
     assert!(!stderr.contains("failed to start `codex-child-must-not-start`"));
 }
 
+#[test]
+fn invalid_pairing_trust_fails_before_the_codex_child_is_started() {
+    let temp = TempDir::new().unwrap();
+    let certificate = temp.path().join("invalid-pairing-trust.pem");
+    let marker = "PAIRING-TRUST-MARKER-MUST-NOT-LEAK";
+    fs::write(&certificate, marker).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_codex-native-host"))
+        .args([
+            "--codex",
+            "codex-child-must-not-start",
+            "--remote-listen",
+            "127.0.0.1:0",
+            "--remote-advertise-endpoint",
+            "wss://host.example/v1/ws",
+            "--remote-pairing-trust-cert",
+            certificate.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Remote pairing trust"));
+    assert!(!stderr.contains(marker));
+    assert!(!stderr.contains("failed to start `codex-child-must-not-start`"));
+}
+
 #[cfg(unix)]
 #[test]
 fn unwritable_cache_parent_is_reported_before_child_start() {

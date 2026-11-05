@@ -2,6 +2,8 @@ enum RemoteListenerScope { loopback, network }
 
 enum RemoteDeviceScope { read, write, approvalsRespond, deviceRotate }
 
+enum RemotePairingTrustMode { system, certificate }
+
 final class RemoteHostStatus {
   const RemoteHostStatus({
     required this.hostVersion,
@@ -10,6 +12,7 @@ final class RemoteHostStatus {
     this.tls,
     this.scope,
     this.advertisedEndpoint,
+    this.pairingTrust,
   });
 
   final String hostVersion;
@@ -18,10 +21,12 @@ final class RemoteHostStatus {
   final bool? tls;
   final RemoteListenerScope? scope;
   final String? advertisedEndpoint;
+  final RemotePairingTrustMode? pairingTrust;
 
   bool get canCreatePairingTicket =>
       enabled &&
       advertisedEndpoint != null &&
+      pairingTrust != null &&
       scope != null &&
       (tls == true || scope == RemoteListenerScope.loopback);
 
@@ -33,14 +38,16 @@ final class RemoteHostStatus {
 
 final class RemotePairingTicket {
   const RemotePairingTicket({
-    required this.code,
+    required this.invitation,
     required this.expiresAtMs,
     required this.endpoint,
+    required this.trust,
   });
 
-  final String code;
+  final String invitation;
   final int expiresAtMs;
-  final String? endpoint;
+  final String endpoint;
+  final RemotePairingTrustMode trust;
 
   DateTime get expiresAt => DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
 

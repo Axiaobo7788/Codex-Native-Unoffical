@@ -47,8 +47,8 @@ Pre-alpha. Phase 1 is implemented: the Flutter desktop app locates a stock
 `codex` executable, starts the bundled Rust Host, completes the stock app-server
 initialization handshake, displays typed runtime state, and owns the process
 lifecycle. Linux, Windows, macOS, and Android project shells are in the
-repository; the bounded Android Remote transport foundation is in progress and
-is not yet connected to product runtime state.
+repository; the bounded Android Remote path is in progress and currently exposes
+only a read-only model/thread metadata surface after secure pairing.
 
 Phase 2 is locally implemented. The current desktop slice lists bounded pages
 of thread metadata, starts threads, reads stored thread metadata without turns,
@@ -89,18 +89,21 @@ exact apply-before-persist sequencing, capped reconnect backoff, stale-attempt
 rejection, and terminal recovery/revocation states. Android now constructs that
 stack, suspends it while hidden, resumes it when shown, and renders only the
 bounded model/thread metadata in an explicitly read-only virtualized panel. A
-versioned default-root connection profile and device bearer live behind platform
+versioned connection profile and device bearer live behind platform
 secure storage with explicit unreadable/corrupt recovery and Android
 backup/transfer exclusions; the bearer is never put in ordinary preferences or
-diagnostics. Android now also has bounded one-use-ticket onboarding for an exact
-WSS `/v1/ws` endpoint: the same-origin HTTPS exchange has strict input/response
-schemas, 8 KiB body limits, connection/request deadlines, no redirect or
-certificate bypass, and verified secure-storage readback before Remote starts.
+diagnostics. Android now accepts one bounded `codex-native-pairing-v1`
+invitation carrying the exact WSS `/v1/ws` endpoint, one-use ticket, expiry, and
+either system-root trust or one explicitly pairing-bound certificate. The
+same-origin HTTPS exchange has strict input/response schemas, 8 KiB body limits,
+connection/request deadlines, no redirect or certificate bypass, and verified
+secure-storage readback before Remote starts. The same scoped TLS identity is
+then used for WSS.
 Unreadable or revoked profiles require an affirmative local clear. A trusted
 desktop setup surface now reports the listener/TLS/bind/advertised endpoint,
-creates a transient five-minute ticket only on request, and confirms device
-revocation without exposing stored bearers. Pairing-bound self-signed
-certificate trust, full conversation features, and real-device validation
+creates a transient five-minute invitation only on request, offers an explicit
+clipboard action, and confirms device revocation without exposing stored
+bearers. QR rendering, full conversation features, and real-device validation
 remain.
 
 ## Run locally
@@ -149,19 +152,34 @@ reverse-proxy, NAT, and split-DNS deployments. It must not contain credentials,
 query parameters, or fragments. The UI reports a missing value and will not
 guess one or enable networking.
 
+For a private CA or self-signed deployment, additionally set
+`--remote-pairing-trust-cert CERT.pem` (or
+`CODEX_NATIVE_REMOTE_PAIRING_TRUST_CERT`) to exactly one certificate that
+should anchor this endpoint. This file is public trust material, not the private
+key. It can be the direct self-signed leaf or, preferably for planned server
+certificate rotation, a stable private CA. The Host validates and snapshots it
+at startup, then embeds its DER identity in each versioned invitation. It is
+deliberately separate from `--remote-tls-cert` because a reverse proxy may own
+the client-visible certificate. Without this setting, invitations explicitly
+use the Dart/Android runtime system roots. Changing an exact self-signed leaf
+requires Host restart and re-pairing; rotating a leaf under the same configured
+CA does not change the stored trust anchor.
+
 `tool/remote_smoke.dart` remains plaintext-loopback by default. To exercise WSS,
 set `CODEX_NATIVE_REMOTE_SMOKE_TLS_CERT` and
-`CODEX_NATIVE_REMOTE_SMOKE_TLS_KEY`; its Dart clients build an explicit trust
-context from that certificate and never use an accept-all callback.
+`CODEX_NATIVE_REMOTE_SMOKE_TLS_KEY`; its Dart clients build the explicit trust
+context from the versioned Host invitation, prove that ordinary system trust
+rejects the generated self-signed identity for both HTTPS and WSS, and never use
+an accept-all callback.
 
-The current Android onboarding form accepts only an exact
-`wss://host.example/v1/ws` endpoint whose certificate chains to the Dart
-runtime's default trusted roots, plus the Host's 24-character one-use ticket.
-It never accepts or displays a bearer token. The desktop product does not yet
-verify real-network reachability, but its trusted setup screen now creates the
-ticket on demand and presents only the explicit advertised endpoint. The
-operator remains responsible for DNS/firewall/proxy and a certificate trusted
-by the Android runtime.
+The current Android onboarding form accepts only the complete versioned
+invitation plus a bounded device name. It never accepts or displays a bearer
+token and never learns trust after sending the ticket. The desktop product does
+not yet verify real-network reachability; the operator remains responsible for
+DNS, firewall, proxy routing, endpoint hostname/SAN consistency, and
+transferring the invitation through a trusted local channel. QR rendering is
+not implemented yet; the desktop exposes selectable text and an explicit copy
+action.
 
 ## Verify
 

@@ -365,9 +365,9 @@ not restored with it.
   an availability risk: the application can surface recovery but cannot repair
   a wrapping key already replaced inside the plugin. Physical-device fault and
   backup/restore testing remains a release gate.
-- A future pairing-bound local certificate/CA identity requires a new explicit
-  record version and migration; it must not overload the current `system` trust
-  value.
+- Pairing-bound local certificate/CA identity must use a new explicit record
+  version rather than overloading `system` trust. ADR-014 implements that
+  requirement as record version 2 while preserving version-1 reads.
 - Cursor durability and reconnect ownership remain outside the credential
   record so a received-but-not-applied event can never advance durable state.
 
@@ -426,7 +426,69 @@ making the durable store unbounded.
 - Operators must configure a fixed reachable WSS endpoint and restart the Host;
   reachability, DNS, firewall, proxy, and certificate correctness still require
   real-network validation.
-- The initial desktop surface presents endpoint and manual ticket text only. A
-  future QR invitation and pairing-bound local CA identity require a versioned
-  artifact and credential-record migration; they must not silently extend this
-  schema.
+- The initial desktop surface presented endpoint and manual ticket text only.
+  ADR-014 supersedes this consequence with a versioned manual invitation and
+  record migration; QR rendering remains a separate presentation decision.
+
+---
+
+## ADR-014 — Bind Remote trust before the pairing request
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+Replace the separate endpoint/ticket Android input with one bounded versioned
+pairing invitation created by the trusted local Host surface. Version 1 is an
+opaque `codex-native-pairing-v1.<base64url-json>` envelope that binds the exact
+WSS endpoint, single-use code, expiry, and one explicit trust mode before any
+network request. Trust is either the Dart/Android runtime system roots or one
+bounded DER certificate plus its SHA-256 consistency fingerprint.
+
+A private/self-signed deployment must configure exactly one public trust
+certificate through `CODEX_NATIVE_REMOTE_PAIRING_TRUST_CERT`/
+`--remote-pairing-trust-cert`. It requires both a listener and explicit
+advertised endpoint, is parsed and validated before stock Codex starts, and is
+snapshotted until Host restart. It is intentionally separate from the Host TLS
+certificate chain because a reverse proxy may own the client-visible identity.
+The Host never guesses a leaf or CA from a chain.
+
+Android record version 2 persists the same trust object with endpoint, bearer,
+and device metadata. Version-1 system-trust records remain readable; verified
+saves write version 2 under the existing secure-storage key. Certificate mode
+constructs a per-connection empty `SecurityContext`, adds only the invitation
+certificate, and uses that context for both HTTPS pairing and WSS. Canonical DER
+is persisted; Dart receives PEM on non-iOS and DER on iOS according to the
+documented platform container behavior. No global store is modified and no
+arbitrary-certificate callback exists.
+
+### Why
+
+- Learning a fingerprint from the pairing response is too late because an
+  impersonator would already have received the one-use ticket.
+- An explicit trust artifact supports direct self-signed Host TLS, a stable
+  private CA, and TLS termination at a reverse proxy without conflating bind and
+  client identity.
+- The certificate is the actual scoped trust anchor. Its fingerprint detects
+  representation drift but is not presented as independent authentication;
+  trusted local transfer of the complete invitation is the bootstrap.
+- Stable CA trust allows leaf rotation without device migration. Exact leaf
+  trust is narrower, but changing it must visibly require restart and re-pairing
+  rather than silently accepting a new identity during TLS reload.
+
+### Consequence
+
+- Desktop provides manual selectable/copyable invitations only. QR rendering is
+  a later presentation slice and must preserve this version boundary, review QR
+  dependency licensing, and validate realistic payload/error-correction limits.
+- Invitation possession grants a short-lived pairing capability and chosen
+  trust identity. It must be transferred through the trusted local surface and
+  is never logged, persisted by desktop UI state, or copied automatically.
+- Host startup rejects malformed, multiple, empty, or oversized trust
+  certificates. A full PEM chain is not accepted as an ambiguous trust choice;
+  operators supply exactly the intended leaf or CA certificate.
+- Real Android TLS-provider, Keystore, backup/restore, LAN, lifecycle, and Human
+  interaction validation remain release gates. Same-host Linux WSS evidence does
+  not satisfy them.

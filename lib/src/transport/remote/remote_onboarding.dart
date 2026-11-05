@@ -57,11 +57,7 @@ abstract interface class RemoteOnboardingOwner {
   RemoteOnboardingState get state;
   Stream<RemoteOnboardingState> get states;
 
-  Future<void> pair({
-    required String endpoint,
-    required String code,
-    required String deviceName,
-  });
+  Future<void> pair({required String invitation, required String deviceName});
 
   Future<void> clearProfile();
 
@@ -109,11 +105,7 @@ final class RemoteOnboardingCoordinator implements RemoteOnboardingOwner {
   Stream<RemoteOnboardingState> get states => _states.stream;
 
   @override
-  Future<void> pair({
-    required String endpoint,
-    required String code,
-    required String deviceName,
-  }) {
+  Future<void> pair({required String invitation, required String deviceName}) {
     if (_stopped) {
       return Future<void>.value();
     }
@@ -121,11 +113,7 @@ final class RemoteOnboardingCoordinator implements RemoteOnboardingOwner {
     if (active != null) {
       return active;
     }
-    final operation = _pair(
-      endpoint: endpoint,
-      code: code,
-      deviceName: deviceName,
-    );
+    final operation = _pair(invitation: invitation, deviceName: deviceName);
     _operation = operation;
     return operation.whenComplete(() {
       if (identical(_operation, operation)) {
@@ -135,8 +123,7 @@ final class RemoteOnboardingCoordinator implements RemoteOnboardingOwner {
   }
 
   Future<void> _pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) async {
     if (_lifecycle.state.phase != RemoteLifecyclePhase.unpaired) {
@@ -149,8 +136,7 @@ final class RemoteOnboardingCoordinator implements RemoteOnboardingOwner {
     final RemoteCredentialRecord record;
     try {
       record = await _pairingGateway.pair(
-        endpoint: endpoint,
-        code: code,
+        invitation: invitation,
         deviceName: deviceName,
       );
     } on RemotePairingException catch (error) {
@@ -292,12 +278,10 @@ final class _DefaultPairingGateway implements RemotePairingGateway {
 
   @override
   Future<RemoteCredentialRecord> pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) => RemotePairingClient().pair(
-    endpoint: endpoint,
-    code: code,
+    invitation: invitation,
     deviceName: deviceName,
   );
 }

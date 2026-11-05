@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:codex_native_unofficial/src/transport/remote/remote_credentials.dart';
 import 'package:codex_native_unofficial/src/transport/remote/remote_secure_storage.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_trust.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _credential = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -19,6 +20,24 @@ void main() {
       expect(decoded.trustKind, RemoteTrustKind.system);
       expect(record.toString(), isNot(contains(_credential)));
       expect(record.toString(), isNot(contains('host.example')));
+    });
+
+    test('migrates v1 system trust and round trips v2 certificate trust', () {
+      final v1 = jsonDecode(_record().encode()) as Map<String, Object?>
+        ..['version'] = 1;
+      final migrated = RemoteCredentialRecord.decode(jsonEncode(v1));
+      expect(migrated.trustKind, RemoteTrustKind.system);
+      expect(jsonDecode(migrated.encode()), containsPair('version', 2));
+
+      final certificate = RemoteCertificateTrust([0x30, 0x01, 0x00]);
+      final record = _record(trust: certificate);
+      final decoded = RemoteCredentialRecord.decode(record.encode());
+      expect(decoded.trustKind, RemoteTrustKind.certificate);
+      expect(
+        (decoded.trust as RemoteCertificateTrust).certificate,
+        certificate.certificate,
+      );
+      expect(record.toString(), isNot(contains(certificate.fingerprint)));
     });
 
     test('rejects plaintext, URI credentials, and malformed fields', () {
@@ -87,12 +106,12 @@ void main() {
     test('rejects unknown, oversized, and future-version saved records', () {
       final valid = jsonDecode(_record().encode()) as Map<String, Object?>;
       final withUnknown = Map<String, Object?>.from(valid)..['extra'] = true;
-      final futureVersion = Map<String, Object?>.from(valid)..['version'] = 2;
+      final futureVersion = Map<String, Object?>.from(valid)..['version'] = 3;
 
       for (final encoded in [
         jsonEncode(withUnknown),
         jsonEncode(futureVersion),
-        List.filled(8193, 'x').join(),
+        List.filled(24 * 1024 + 1, 'x').join(),
       ]) {
         expect(
           () => RemoteCredentialRecord.decode(encoded),
@@ -262,13 +281,16 @@ void main() {
   });
 }
 
-RemoteCredentialRecord _record({String deviceId = 'device-1'}) =>
-    RemoteCredentialRecord(
-      endpoint: Uri.parse('wss://host.example/v1/ws'),
-      credential: _credential,
-      deviceId: deviceId,
-      deviceName: 'Pixel',
-    );
+RemoteCredentialRecord _record({
+  String deviceId = 'device-1',
+  RemoteTrust trust = const RemoteSystemTrust(),
+}) => RemoteCredentialRecord(
+  endpoint: Uri.parse('wss://host.example/v1/ws'),
+  credential: _credential,
+  deviceId: deviceId,
+  deviceName: 'Pixel',
+  trust: trust,
+);
 
 final class _FakeSecureValueStore implements RemoteSecureValueStore {
   _FakeSecureValueStore({this.delay = Duration.zero});

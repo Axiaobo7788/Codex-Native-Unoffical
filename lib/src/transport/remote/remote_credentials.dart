@@ -1,15 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../../protocol/remote_trust.dart';
 import 'remote_protocol.dart';
 
-const _recordVersion = 1;
-const _maxRecordBytes = 8 * 1024;
+const _recordVersion = 2;
+const _maxRecordBytes = 24 * 1024;
 const _maxEndpointLength = 2048;
 const _maxDeviceIdLength = 128;
 const _maxDeviceNameCharacters = 80;
-
-enum RemoteTrustKind { system }
 
 final class RemoteCredentialRecord {
   factory RemoteCredentialRecord({
@@ -17,7 +16,7 @@ final class RemoteCredentialRecord {
     required String credential,
     required String deviceId,
     required String deviceName,
-    RemoteTrustKind trustKind = RemoteTrustKind.system,
+    RemoteTrust trust = const RemoteSystemTrust(),
   }) {
     _validateEndpoint(endpoint);
     validateRemoteCredential(credential);
@@ -36,7 +35,7 @@ final class RemoteCredentialRecord {
       credential: credential,
       deviceId: deviceId,
       deviceName: deviceName,
-      trustKind: trustKind,
+      trust: trust,
     );
   }
 
@@ -45,7 +44,7 @@ final class RemoteCredentialRecord {
     required this.credential,
     required this.deviceId,
     required this.deviceName,
-    required this.trustKind,
+    required this.trust,
   });
 
   factory RemoteCredentialRecord.decode(String encoded) {
@@ -65,7 +64,8 @@ final class RemoteCredentialRecord {
         'device',
         'trust',
       });
-      if (decoded['version'] != _recordVersion) {
+      final version = decoded['version'];
+      if (version != 1 && version != _recordVersion) {
         throw const FormatException();
       }
       final endpointText = decoded['endpoint'];
@@ -81,12 +81,13 @@ final class RemoteCredentialRecord {
         throw const FormatException();
       }
       _requireExactKeys(device, const {'id', 'name'});
-      _requireExactKeys(trust, const {'type'});
       final deviceId = device['id'];
       final deviceName = device['name'];
-      if (deviceId is! String ||
-          deviceName is! String ||
-          trust['type'] != 'system') {
+      if (deviceId is! String || deviceName is! String) {
+        throw const FormatException();
+      }
+      final decodedTrust = RemoteTrust.decode(trust);
+      if (version == 1 && decodedTrust.kind != RemoteTrustKind.system) {
         throw const FormatException();
       }
       final endpoint = Uri.tryParse(endpointText);
@@ -98,6 +99,7 @@ final class RemoteCredentialRecord {
         credential: credential,
         deviceId: deviceId,
         deviceName: deviceName,
+        trust: decodedTrust,
       );
     } on Object {
       throw const FormatException(
@@ -110,20 +112,22 @@ final class RemoteCredentialRecord {
   final String credential;
   final String deviceId;
   final String deviceName;
-  final RemoteTrustKind trustKind;
+  final RemoteTrust trust;
+
+  RemoteTrustKind get trustKind => trust.kind;
 
   String encode() => jsonEncode({
     'version': _recordVersion,
     'endpoint': endpoint.toString(),
     'credential': credential,
     'device': {'id': deviceId, 'name': deviceName},
-    'trust': {'type': trustKind.name},
+    'trust': trust.toJson(),
   });
 
   @override
   String toString() =>
       'RemoteCredentialRecord(endpoint: <redacted>, credential: <redacted>, '
-      'device: <redacted>, trust: ${trustKind.name})';
+      'device: <redacted>, trust: ${trust.kind.name})';
 
   static void _validateEndpoint(Uri endpoint) {
     if (endpoint.toString().length > _maxEndpointLength) {

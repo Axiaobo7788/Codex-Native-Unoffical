@@ -4,7 +4,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_pairing_invitation.dart';
 import 'package:codex_native_unofficial/src/transport/process/codex_executable_locator.dart';
+import 'package:codex_native_unofficial/src/transport/remote/remote_http_client.dart';
+import 'package:codex_native_unofficial/src/transport/remote/remote_pairing.dart';
 
 const _timeout = Duration(seconds: 10);
 
@@ -33,20 +36,24 @@ Future<void> main() async {
     return;
   }
   final useTls = tlsCert != null;
-  final listenAddress =
+  var listenAddress =
       Platform.environment['CODEX_NATIVE_REMOTE_SMOKE_LISTEN'] ??
       (useTls ? '0.0.0.0:0' : '127.0.0.1:0');
+  if (useTls && _portFromAddress(listenAddress) == 0) {
+    listenAddress = _replacePort(listenAddress, await _reserveLoopbackPort());
+  }
   final expectedScope = _listenerScope(listenAddress);
   Process? process;
   _LocalPeer? local;
   WebSocket? socket;
-  HttpClient? pairClient;
   HttpClient? webSocketClient;
   StreamSubscription<dynamic>? socketSubscription;
   final socketMessages = _MessageQueue();
   final stderrTail = _BoundedText(16 * 1024);
   final stopwatch = Stopwatch()..start();
   var succeeded = false;
+  var systemTrustRejectedPairing = false;
+  var systemTrustRejectedWebSocket = false;
   try {
     final deviceFile = File('${temporary.path}/devices.json');
     final arguments = [
@@ -58,11 +65,15 @@ Future<void> main() async {
       deviceFile.path,
       '--remote-listen',
       listenAddress,
+      '--remote-advertise-endpoint',
+      'wss://127.0.0.1:${_portFromAddress(listenAddress) == 0 ? 443 : _portFromAddress(listenAddress)}/v1/ws',
       if (useTls) ...[
         '--remote-tls-cert',
         tlsCert,
         '--remote-tls-key',
         tlsKey!,
+        '--remote-pairing-trust-cert',
+        tlsCert,
       ],
     ];
     process = await Process.start(host, arguments);
@@ -74,7 +85,8 @@ Future<void> main() async {
     if (remote is! Map<String, dynamic> ||
         remote['enabled'] != true ||
         remote['scope'] != expectedScope ||
-        remote['tls'] != useTls) {
+        remote['tls'] != useTls ||
+        remote['pairingTrust'] != (useTls ? 'certificate' : 'system')) {
       throw StateError('Host did not report the requested Remote listener.');
     }
     final address = remote['address'];
@@ -82,19 +94,14 @@ Future<void> main() async {
       throw StateError('Host did not report its Remote address.');
     }
     final endpoint = _parseAddress(address, allowUnspecified: useTls);
-    if (useTls) {
-      final certificate = await File(tlsCert).readAsBytes();
-      pairClient = _trustedClient(certificate);
-      webSocketClient = _trustedClient(certificate);
-    }
-
     final ticket = _result(
       await local.request(2, 'host/remote/pairing/create', const {}),
     );
-    final code = ticket['code'];
-    if (code is! String || code.isEmpty) {
-      throw StateError('Host did not issue a pairing ticket.');
+    final invitationText = ticket['invitation'];
+    if (invitationText is! String || invitationText.isEmpty) {
+      throw StateError('Host did not issue a pairing invitation.');
     }
+    final invitation = RemotePairingInvitation.decode(invitationText);
 
     final initialized = await local.request(
       3,
@@ -107,25 +114,84 @@ Future<void> main() async {
     }
     await local.notify('initialized', const {});
 
-    final paired = await _pair(endpoint, code, client: pairClient, tls: useTls);
-    final token = paired['token'];
-    final device = paired['device'];
-    if (token is! String ||
-        token.length != 43 ||
-        device is! Map<String, dynamic>) {
-      throw StateError('Pairing response was invalid.');
-    }
-    final deviceId = device['id'];
-    if (deviceId is! String || deviceId.isEmpty) {
-      throw StateError('Pairing response had no device ID.');
+    final String token;
+    final String deviceId;
+    if (useTls) {
+      final systemTrustInvitation = RemotePairingInvitation(
+        endpoint: invitation.endpoint,
+        code: invitation.code,
+        expiresAtMs: invitation.expiresAtMs,
+      ).encode();
+      try {
+        await RemotePairingClient().pair(
+          invitation: systemTrustInvitation,
+          deviceName: 'Must not pair',
+        );
+      } on RemotePairingException catch (error) {
+        systemTrustRejectedPairing =
+            error.failure == RemotePairingFailure.tlsRejected;
+      }
+      if (!systemTrustRejectedPairing) {
+        throw StateError(
+          'System trust unexpectedly accepted the self-signed pairing endpoint.',
+        );
+      }
+      final record = await RemotePairingClient().pair(
+        invitation: invitationText,
+        deviceName: 'Remote smoke phone',
+      );
+      token = record.credential;
+      deviceId = record.deviceId;
+      webSocketClient = createRemoteHttpClient(record.trust);
+    } else {
+      final paired = await _pair(
+        endpoint,
+        invitation.code,
+        client: null,
+        tls: false,
+      );
+      final pairedToken = paired['token'];
+      final device = paired['device'];
+      if (pairedToken is! String ||
+          pairedToken.length != 43 ||
+          device is! Map<String, dynamic> ||
+          device['id'] is! String) {
+        throw StateError('Pairing response was invalid.');
+      }
+      token = pairedToken;
+      deviceId = device['id']! as String;
     }
     final stored = await deviceFile.readAsString();
     if (stored.contains(token)) {
       throw StateError('Device store retained the bearer token in plaintext.');
     }
 
+    final socketEndpoint =
+        '${useTls ? 'wss' : 'ws'}://${endpoint.address.address}:${endpoint.port}/v1/ws';
+    if (useTls) {
+      final systemClient = HttpClient();
+      try {
+        final rejected = await WebSocket.connect(
+          socketEndpoint,
+          headers: {HttpHeaders.authorizationHeader: 'Bearer $token'},
+          protocols: const ['codex-native-v1'],
+          compression: CompressionOptions.compressionOff,
+          customClient: systemClient,
+        ).timeout(_timeout);
+        await rejected.close();
+      } on HandshakeException {
+        systemTrustRejectedWebSocket = true;
+      } finally {
+        systemClient.close(force: true);
+      }
+      if (!systemTrustRejectedWebSocket) {
+        throw StateError(
+          'System trust unexpectedly accepted the self-signed WebSocket endpoint.',
+        );
+      }
+    }
     socket = await WebSocket.connect(
-      '${useTls ? 'wss' : 'ws'}://${endpoint.address.address}:${endpoint.port}/v1/ws',
+      socketEndpoint,
       headers: {HttpHeaders.authorizationHeader: 'Bearer $token'},
       protocols: const ['codex-native-v1'],
       customClient: webSocketClient,
@@ -251,9 +317,17 @@ Future<void> main() async {
     stdout.writeln('INTERNAL_ID_LEAK=false');
     stdout.writeln('LIVE_REVOCATION=true');
     stdout.writeln('TLS=$useTls');
+    stdout.writeln('PAIRING_TRUST=${remote['pairingTrust']}');
+    stdout.writeln('SYSTEM_TRUST_REJECTED_PAIRING=$systemTrustRejectedPairing');
+    stdout.writeln(
+      'SYSTEM_TRUST_REJECTED_WEBSOCKET=$systemTrustRejectedWebSocket',
+    );
     stdout.writeln('LISTENER_SCOPE=${remote['scope']}');
   } catch (error, stackTrace) {
     stderr.writeln('REMOTE_SMOKE=FAIL');
+    if (error is RemotePairingException) {
+      stderr.writeln('PAIRING_FAILURE=${error.failure.name}');
+    }
     stderr.writeln(error);
     stderr.writeln(stackTrace);
     exitCode = 1;
@@ -262,7 +336,6 @@ Future<void> main() async {
     if (socket != null && socket.readyState != WebSocket.closed) {
       await socket.close();
     }
-    pairClient?.close(force: true);
     webSocketClient?.close(force: true);
     if (process != null) {
       await process.stdin.close();
@@ -333,12 +406,6 @@ Future<Map<String, dynamic>> _pair(
       client.close(force: true);
     }
   }
-}
-
-HttpClient _trustedClient(List<int> certificate) {
-  final context = SecurityContext(withTrustedRoots: false)
-    ..setTrustedCertificatesBytes(certificate);
-  return HttpClient(context: context);
 }
 
 Future<Map<String, dynamic>> _remoteRequest(
@@ -414,6 +481,29 @@ String _listenerScope(String value) {
     throw FormatException('Listener must use a literal IP address: $value');
   }
   return address.isLoopback ? 'loopback' : 'network';
+}
+
+int _portFromAddress(String value) {
+  final separator = value.lastIndexOf(':');
+  if (separator <= 0) {
+    throw FormatException('Invalid listener address: $value');
+  }
+  return int.parse(value.substring(separator + 1));
+}
+
+String _replacePort(String value, int port) {
+  final separator = value.lastIndexOf(':');
+  if (separator <= 0) {
+    throw FormatException('Invalid listener address: $value');
+  }
+  return '${value.substring(0, separator + 1)}$port';
+}
+
+Future<int> _reserveLoopbackPort() async {
+  final reservation = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = reservation.port;
+  await reservation.close();
+  return port;
 }
 
 final class _Endpoint {

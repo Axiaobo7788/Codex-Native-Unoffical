@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codex_native_unofficial/src/domain/remote_admin_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/features/settings/remote_admin_controller.dart';
+import 'package:codex_native_unofficial/src/protocol/remote_pairing_invitation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -23,7 +24,10 @@ void main() {
     await controller.createPairingTicket();
 
     expect(gateway.createCalls, 1);
-    expect(controller.ticket?.code, 'AAAAAAAAAAAAAAAAAAAAAAAA');
+    expect(
+      controller.ticket?.invitation,
+      startsWith(remotePairingInvitationPrefix),
+    );
   });
 
   test('missing advertised endpoint disables invitation creation', () async {
@@ -121,6 +125,7 @@ final class _Gateway implements RemoteAdminGateway {
     tls: true,
     scope: RemoteListenerScope.network,
     advertisedEndpoint: endpoint,
+    pairingTrust: RemotePairingTrustMode.system,
   );
 
   @override
@@ -130,10 +135,16 @@ final class _Gateway implements RemoteAdminGateway {
   @override
   Future<RemotePairingTicket> createRemotePairingTicket() async {
     createCalls += 1;
+    final actualEndpoint = ticketEndpoint ?? 'wss://host.example/v1/ws';
     return RemotePairingTicket(
-      code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
+      invitation: RemotePairingInvitation(
+        endpoint: Uri.parse(actualEndpoint),
+        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
+        expiresAtMs: 5000,
+      ).encode(),
       expiresAtMs: 5000,
-      endpoint: ticketEndpoint,
+      endpoint: actualEndpoint,
+      trust: RemotePairingTrustMode.system,
     );
   }
 

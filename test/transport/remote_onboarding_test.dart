@@ -9,6 +9,7 @@ import 'package:codex_native_unofficial/src/transport/remote/remote_projection.d
 import 'package:flutter_test/flutter_test.dart';
 
 const _token = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+const _invitation = 'codex-native-pairing-v1.fixture';
 
 void main() {
   test(
@@ -27,11 +28,7 @@ void main() {
         pairingGateway: _FakePairingGateway(events: events),
       );
 
-      await coordinator.pair(
-        endpoint: 'wss://host.example/v1/ws',
-        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
-        deviceName: 'Phone',
-      );
+      await coordinator.pair(invitation: _invitation, deviceName: 'Phone');
 
       expect(coordinator.state.phase, RemoteOnboardingPhase.idle);
       expect(lifecycle.startCalls, 1);
@@ -61,11 +58,7 @@ void main() {
         pairingGateway: _FakePairingGateway(),
       )..setApplicationVisible(false);
 
-      await coordinator.pair(
-        endpoint: 'wss://host.example/v1/ws',
-        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
-        deviceName: 'Phone',
-      );
+      await coordinator.pair(invitation: _invitation, deviceName: 'Phone');
 
       expect(lifecycle.startCalls, 0);
       expect(lifecycle.stopCalls, 1);
@@ -89,11 +82,7 @@ void main() {
         pairingGateway: _FakePairingGateway(),
       );
 
-      await coordinator.pair(
-        endpoint: 'wss://host.example/v1/ws',
-        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
-        deviceName: 'Phone',
-      );
+      await coordinator.pair(invitation: _invitation, deviceName: 'Phone');
 
       expect(lifecycle.startCalls, 0);
       expect(coordinator.state.phase, RemoteOnboardingPhase.failed);
@@ -122,11 +111,7 @@ void main() {
         pairingGateway: gateway,
       );
 
-      await coordinator.pair(
-        endpoint: 'wss://host.example/v1/ws',
-        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
-        deviceName: 'Phone',
-      );
+      await coordinator.pair(invitation: _invitation, deviceName: 'Phone');
 
       expect(gateway.calls, 0);
       expect(coordinator.state.failure, RemoteOnboardingFailure.invalidState);
@@ -185,8 +170,7 @@ void main() {
       );
 
       final pairing = coordinator.pair(
-        endpoint: 'wss://host.example/v1/ws',
-        code: 'AAAAAAAAAAAAAAAAAAAAAAAA',
+        invitation: _invitation,
         deviceName: 'Phone',
       );
       final stopping = coordinator.stop();
@@ -252,8 +236,7 @@ final class _FakePairingGateway implements RemotePairingGateway {
 
   @override
   Future<RemoteCredentialRecord> pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) async {
     calls += 1;
@@ -267,8 +250,7 @@ final class _PendingPairingGateway implements RemotePairingGateway {
 
   @override
   Future<RemoteCredentialRecord> pair({
-    required String endpoint,
-    required String code,
+    required String invitation,
     required String deviceName,
   }) => _result.future;
 
