@@ -190,6 +190,13 @@ This file is the repository's durable project memory. Update it whenever a task 
   `auth.rs` is part of the library crate while the Windows ACL module had only
   been declared by the binary crate. The follow-up declares the same private
   module in `lib.rs`; its fresh hosted result remains pending.
+- Preserve follow-up CI `42113511534`, Windows job `127547477153`, separately:
+  all Remote auth tests and the hard-link rejection passed, while the two DACL
+  shape tests rejected the valid canonical SDDL `D:PAI(A;OICI;FA;;;LA)` because
+  Windows rendered the runner's current-user SID as its well-known `LA` alias.
+  The corrected tests compare the binary ACE SID with `EqualSid` and inspect the
+  protected flag, ACE count/type/mask, and inheritance bits directly; fresh
+  hosted execution and the skipped packaged-Host smoke remain pending.
 
 ### 2026-11-06 — Fail-closed desktop review-artifact assembly
 

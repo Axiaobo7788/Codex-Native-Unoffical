@@ -2009,3 +2009,10 @@ _Reviewed: 2026-11-06_
   crate, but the Windows ACL module had only been declared in the binary crate.
   The corrective library-module declaration still requires a fresh hosted run;
   a later pass must not relabel this first attempt as green.
+- Follow-up CI `42113511534`, Windows job `127547477153`, compiled the Win32
+  boundary and passed Remote auth plus hard-link rejection, then exposed a test
+  oracle defect: Windows represented the runner's exact current-user SID as the
+  canonical SDDL alias `LA`. The production DACL was protected, inheritable, and
+  current-user-only; the revised oracle uses `EqualSid` on the binary ACE and
+  inspects the control flags, ACE count/type/mask, and inheritance directly.
+  Fresh hosted execution and the previously skipped bundle smoke remain required.

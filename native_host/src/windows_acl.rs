@@ -382,8 +382,15 @@ impl Drop for LocalWideString {
 mod tests {
     use super::*;
     use windows_sys::Win32::Security::Authorization::{
-        ConvertSecurityDescriptorToStringSecurityDescriptorW, GetNamedSecurityInfoW,
+        ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertStringSidToSidW,
+        GetNamedSecurityInfoW,
     };
+    use windows_sys::Win32::Security::{
+        ACCESS_ALLOWED_ACE, CONTAINER_INHERIT_ACE, EqualSid, GetAce, GetSecurityDescriptorControl,
+        OBJECT_INHERIT_ACE, PSID, SE_DACL_PROTECTED,
+    };
+    use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
+    use windows_sys::Win32::System::SystemServices::ACCESS_ALLOWED_ACE_TYPE;
 
     #[test]
     fn creates_current_user_only_directory_and_file() {
@@ -436,23 +443,77 @@ mod tests {
     }
 
     fn assert_private(path: &Path, directory: bool) {
-        let sddl = dacl_sddl(path).unwrap();
-        let sid = current_user_sid_string().unwrap();
-        assert!(sddl.starts_with("D:P"), "unprotected DACL: {sddl}");
-        assert!(sddl.contains(&sid), "current user SID missing: {sddl}");
-        assert!(!sddl.contains(";;;WD)"), "Everyone retains access: {sddl}");
-        assert_eq!(
-            sddl.matches("(A;").count(),
-            1,
-            "unexpected allow ACE: {sddl}"
+        let descriptor = named_security_descriptor(path).unwrap();
+        let diagnostic = dacl_sddl(path).unwrap();
+        let mut control = 0_u16;
+        let mut revision = 0_u32;
+        // SAFETY: descriptor is valid and both output pointers are initialized.
+        assert_ne!(
+            unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) },
+            0,
+            "cannot read DACL control: {diagnostic}"
         );
+        assert_ne!(
+            control & SE_DACL_PROTECTED,
+            0,
+            "unprotected DACL: {diagnostic}"
+        );
+
+        let dacl = descriptor.dacl().unwrap();
+        // SAFETY: the DACL is borrowed from the live security descriptor.
+        assert_eq!(
+            unsafe { (*dacl).AceCount },
+            1,
+            "unexpected ACE count: {diagnostic}"
+        );
+        let mut raw_ace = ptr::null_mut();
+        // SAFETY: the DACL has exactly one ACE and raw_ace is a valid output.
+        assert_ne!(
+            unsafe { GetAce(dacl, 0, &mut raw_ace) },
+            0,
+            "cannot read the private ACE: {diagnostic}"
+        );
+        // SAFETY: SDDL created a standard access-allowed ACE and GetAce returned
+        // a pointer into the live descriptor.
+        let ace = unsafe { &*raw_ace.cast::<ACCESS_ALLOWED_ACE>() };
+        assert_eq!(
+            u32::from(ace.Header.AceType),
+            ACCESS_ALLOWED_ACE_TYPE,
+            "private ACE is not access-allowed: {diagnostic}"
+        );
+        assert_eq!(
+            ace.Mask, FILE_ALL_ACCESS,
+            "private ACE is not full access: {diagnostic}"
+        );
+
+        let expected_sid = local_sid(&current_user_sid_string().unwrap()).unwrap();
+        let actual_sid = ptr::addr_of!(ace.SidStart).cast_mut().cast();
+        // SAFETY: actual_sid points at the variable-length SID embedded directly
+        // after the fixed ACCESS_ALLOWED_ACE fields; both SIDs remain alive.
+        assert_ne!(
+            unsafe { EqualSid(actual_sid, expected_sid.0) },
+            0,
+            "private ACE does not target the current user: {diagnostic}"
+        );
+
+        let flags = u32::from(ace.Header.AceFlags);
+        let inheritance = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
         if directory {
-            assert!(sddl.contains("OI"), "directory ACE misses OI: {sddl}");
-            assert!(sddl.contains("CI"), "directory ACE misses CI: {sddl}");
+            assert_eq!(
+                flags & inheritance,
+                inheritance,
+                "directory ACE misses inheritance: {diagnostic}"
+            );
+        } else {
+            assert_eq!(
+                flags & inheritance,
+                0,
+                "file ACE unexpectedly inherits to children: {diagnostic}"
+            );
         }
     }
 
-    fn dacl_sddl(path: &Path) -> io::Result<String> {
+    fn named_security_descriptor(path: &Path) -> io::Result<SecurityDescriptor> {
         let wide_path = wide_path(path)?;
         let mut descriptor = ptr::null_mut();
         // SAFETY: the path is NUL-terminated and descriptor is an output pointer.
@@ -471,7 +532,11 @@ mod tests {
         if status != ERROR_SUCCESS {
             return Err(io::Error::from_raw_os_error(status as i32));
         }
-        let descriptor = SecurityDescriptor(descriptor);
+        Ok(SecurityDescriptor(descriptor))
+    }
+
+    fn dacl_sddl(path: &Path) -> io::Result<String> {
+        let descriptor = named_security_descriptor(path)?;
         let mut text = ptr::null_mut();
         // SAFETY: descriptor is valid and text is an output pointer.
         if unsafe {
@@ -492,5 +557,26 @@ mod tests {
         // SAFETY: length is inside the allocation measured above.
         String::from_utf16(unsafe { std::slice::from_raw_parts(text.0, length) })
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "DACL SDDL is not UTF-16"))
+    }
+
+    fn local_sid(value: &str) -> io::Result<LocalSid> {
+        let wide: Vec<u16> = value.encode_utf16().chain(Some(0)).collect();
+        let mut sid = ptr::null_mut();
+        // SAFETY: value is NUL-terminated and sid is a valid output pointer.
+        if unsafe { ConvertStringSidToSidW(wide.as_ptr(), &mut sid) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(LocalSid(sid))
+    }
+
+    struct LocalSid(PSID);
+
+    impl Drop for LocalSid {
+        fn drop(&mut self) {
+            // SAFETY: ConvertStringSidToSidW allocated this SID with LocalAlloc.
+            unsafe {
+                LocalFree(self.0);
+            }
+        }
     }
 }

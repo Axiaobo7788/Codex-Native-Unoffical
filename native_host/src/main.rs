@@ -9,6 +9,9 @@ mod rpc;
 mod spool;
 mod transform;
 #[cfg(windows)]
+// This shared source also backs the library's device store, so each crate sees
+// one helper that is intentionally used only by the other crate.
+#[allow(dead_code)]
 mod windows_acl;
 
 use config::Config;
