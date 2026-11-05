@@ -2004,3 +2004,8 @@ _Reviewed: 2026-11-06_
 - Local Linux compilation and tests do not validate the Windows-only FFI. A
   fresh hosted Windows Server 2022 Rust test plus bundle/Host smoke is required
   before this implementation is marked machine-verified.
+- Hosted CI `42112667012`, Windows job `127543995980`, first failed during
+  compilation before any ACL behavior ran: `auth.rs` belongs to the library
+  crate, but the Windows ACL module had only been declared in the binary crate.
+  The corrective library-module declaration still requires a fresh hosted run;
+  a later pass must not relabel this first attempt as green.

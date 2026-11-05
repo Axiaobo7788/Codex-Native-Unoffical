@@ -185,6 +185,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   job now runs the Rust suite before building Flutter. Local format, Cargo check,
   and all 84 Linux Rust tests pass; Windows-only FFI/tests and the packaged Host
   remain `VALIDATION PENDING` until a fresh Windows Server 2022 run.
+- Preserve hosted CI `42112667012`, Windows job `127543995980`, as negative
+  evidence: the first Windows compilation stopped before the ACL tests because
+  `auth.rs` is part of the library crate while the Windows ACL module had only
+  been declared by the binary crate. The follow-up declares the same private
+  module in `lib.rs`; its fresh hosted result remains pending.
 
 ### 2026-11-06 — Fail-closed desktop review-artifact assembly
 
