@@ -1791,3 +1791,85 @@ _Reviewed: 2026-11-06_
   debug-build jobs. None of this establishes installed dependency behavior,
   Developer ID/notarization/Gatekeeper, Authenticode/installer/ACL/SmartScreen,
   distribution signing, or Human acceptance.
+
+## Relocatable Linux runtime and extracted-archive gate
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Flutter's official Linux
+  [build guidance](https://docs.flutter.dev/platform-integration/linux/building)
+  defines the complete `bundle/` directory as the deployment unit and directs
+  distributors to inspect the application with `ldd`, because the bundle still
+  relies on system libraries. This supports a dependency-closure gate but does
+  not itself choose a package format or prove compatibility beyond the tested
+  distribution.
+- CMake's official
+  [`BUILD_WITH_INSTALL_RPATH`](https://cmake.org/cmake/help/latest/prop_tgt/BUILD_WITH_INSTALL_RPATH.html)
+  and
+  [`INSTALL_RPATH`](https://cmake.org/cmake/help/latest/prop_tgt/INSTALL_RPATH.html)
+  documentation confirms that a target can be linked with its final install
+  RPATH in the build tree, avoiding a later relink/edit step. That is relevant
+  here because Flutter's generated Linux install logic copies plugin target
+  files into the bundle instead of installing those targets.
+- LocalSend at `92e133aa43869e94d394fd04fa70c50a0f796a64` builds on Ubuntu
+  22.04 and archives the entire Flutter release bundle. It confirms the portable
+  tar layout used by a mature Flutter desktop app, but its tar workflow does not
+  independently extract, execute, or audit dynamic-library resolution.
+- Invoice Ninja Flutter at `7b2dc0ea77c50c9a9558086015846022b587130d`
+  builds on Ubuntu 22.04, keeps the runner, `lib/`, and `data/` colocated in its
+  AppDir specifically because the runner uses `$ORIGIN/lib`, and then delegates
+  broader GTK bundling to `linuxdeploy`. That supports the colocated relative
+  lookup rule; adopting AppImage/linuxdeploy remains a separate distribution
+  and update-policy decision rather than an implicit extension of review-only
+  tar artifacts.
+
+### Direct evidence and adopted boundary
+
+- Before the fix, the main release runner correctly used `$ORIGIN/lib`, and an
+  ordinary `ldd` of that runner resolved both plugins and the Flutter engine from
+  `bundle/lib`. Inspecting the plugin ELF files directly exposed contradictory
+  evidence: both `libflutter_secure_storage_linux_plugin.so` and
+  `liburl_launcher_linux_plugin.so` retained the absolute repository path
+  `linux/flutter/ephemeral` as RUNPATH. The already-successful hosted Linux
+  artifact from run `42095949000` reproduces the defect after download: the new
+  native verifier rejects its extracted secure-storage plugin path under
+  `/home/runner/work/.../linux/flutter/ephemeral`. Its earlier checksum and
+  structural passes remain valid, but it is not relocated-runtime evidence.
+- The Linux CMake shell now links generated plugin targets with
+  `BUILD_WITH_INSTALL_RPATH` and an install RPATH of `$ORIGIN`. A fresh local
+  release build gives both plugins exactly `$ORIGIN`; after copying the entire
+  bundle to an unrelated temporary directory and changing cwd to `/`, `ldd`
+  resolves their Flutter engine from that copied `lib/` directory rather than
+  the repository.
+- `tool/verify_linux_runtime_bundle.dart` now requires ELF64 x86-64 runner and
+  Host identities, the runner's exact `$ORIGIN/lib` search path, successful
+  runner/Host dependency closure with `LD_LIBRARY_PATH` and `LD_PRELOAD`
+  removed, exact resolution of bundled SONAMEs from `bundle/lib`, and no
+  non-relative RUNPATH on every bundled library reachable from the runner. The
+  real local release bundle passed with the Flutter engine and both plugins in
+  its bundled closure and 83 resolved system-library names. This records the
+  observed local-host closure; it does not claim that 83 packages must be
+  installed separately or that another distribution supplies compatible ABIs.
+  The same gate passes the debug bundle and now follows the ordinary CI Linux
+  debug build, while the manual review workflow applies it to the independently
+  extracted release archive.
+- The archive verifier accepts `--native-runtime`. On the matching host it now
+  runs the Host from the extracted tar, and Linux also runs the dependency gate
+  against that extracted payload. A new local dirty-source archive passed
+  assembly and native verification at SHA-256
+  `68b706e82834800da336dadc652e1ec458af41329de87cb6bd6a492c553716bd`.
+  Focused fixtures cover the successful extracted path, build-tree RUNPATH
+  rejection, and unresolved-dependency rejection. The full 175-test Flutter
+  suite, fatal-info Dart analysis, Linux release build, 84 Rust tests with
+  formatting/Clippy, actionlint 1.7.12, and `flutter analyze` from an independent
+  ASCII path all pass. Direct-path `flutter analyze` still reproduces the known
+  Flutter 3.47.1 Unicode-path LSP truncated-JSON failure. Windows and macOS use
+  the same extracted Host smoke but retain their separate installer, ACL,
+  signing, notarization, Gatekeeper, and Human gates.
+- The bundle also contains `libdartjni.so`, a transitive native asset with a
+  system JVM RUNPATH. It is not in the Linux runner or Host dependency closure,
+  and the product exposes scanning only on Android. The current gate therefore
+  does not misreport it as a Linux startup dependency; removal or platform-
+  selective packaging remains a separate size/hygiene investigation.

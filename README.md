@@ -267,7 +267,11 @@ JSON sidecar. Inside the tar are the full Flutter payload, a sorted per-file
 manifest, `SHA256SUMS`, and a review-only warning. Assembly checks Git `HEAD`
 and clean/dirty state, release AOT layout, both notice files, absence of a debug
 kernel, and the packaged Host's `--help`; verification extracts and reinventories
-the result before upload.
+the result before upload. The hosted verifier also runs the extracted Host on
+the matching operating system. On Linux it checks the ELF64 x86-64 identities,
+the runner's `$ORIGIN/lib` lookup, every runtime-reachable bundled library's
+relocatable RUNPATH, and the runner/Host dependency closures with build-time
+`LD_LIBRARY_PATH` and `LD_PRELOAD` removed.
 
 To exercise the same gate locally after a platform release build, pass the
 bundle path and the matching target. The command refuses to overwrite an
@@ -286,11 +290,16 @@ dart run tool/assemble_desktop_review_artifact.dart \
   --build-origin local
 
 dart run tool/verify_desktop_review_artifact.dart \
-  --provenance build/review-artifacts/codex-native-unofficial-0.1.0+1-linux-x64-review-only.provenance.json
+  --provenance build/review-artifacts/codex-native-unofficial-0.1.0+1-linux-x64-review-only.provenance.json \
+  --native-runtime
 ```
 
 Use `dirty` only when Git status is actually dirty; the assembler verifies the
-claim. These checksums and manifests establish internal consistency, not a
+claim. Omit `--native-runtime` when inspecting an artifact for a different host
+operating system; structural and checksum verification remains cross-platform.
+Linux native verification requires `readelf` and `ldd` (the hosted workflow
+installs `binutils` explicitly and uses the runner's libc tooling).
+These checksums and manifests establish internal consistency, not a
 cryptographic publisher identity. GitHub artifact attestations and production
 release permissions remain a separate, explicitly reviewed future step.
 

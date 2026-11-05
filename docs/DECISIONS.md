@@ -783,7 +783,12 @@ manual, read-only GitHub Actions workflow, but label every result
 bundle rather than a standalone executable. Before archiving, require the
 platform's release AOT/runtime files, the bundled native Host, exact application
 and native-license notices, absence of a debug kernel blob, and a successful
-native Host `--help` smoke.
+native Host `--help` smoke. On a matching hosted operating system, independently
+extract the completed archive and run the extracted Host smoke again. The Linux
+gate must additionally prove ELF64 x86-64 runner/Host identity, the runner's
+`$ORIGIN/lib` lookup, no unresolved runner/Host dependencies with build-time
+loader overrides removed, and relocatable runtime paths for the bundled
+libraries reachable from the runner.
 
 Wrap each bundle in a tar archive before uploading it so Unix executable modes,
 case, and macOS framework symlinks survive GitHub artifact transport. Include a
@@ -822,6 +827,11 @@ a real external upload identity for release variants.
   cannot prove publisher identity, tamper resistance outside the workflow,
   platform installation, Gatekeeper/SmartScreen behavior, ACLs, dependency
   compatibility on other distributions, or Human acceptance.
+- Linux plugins are copied into `bundle/lib` as files rather than installed as
+  CMake targets, so they are linked with their final `$ORIGIN` install RPATH
+  from the start. The native archive verifier rejects a build-tree plugin path
+  even when the main runner would happen to preload the same engine library and
+  mask that defect during an ordinary launch.
 - The assembler refuses existing outputs, unsafe paths and escaping symlinks,
   mismatched Git revision/tree state, missing or empty layout files, notice
   drift, debug kernel blobs, Host smoke failure, and archive/manifest/checksum

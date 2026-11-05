@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
+import 'linux_runtime_gate.dart';
+
 enum DesktopArtifactPlatform {
   linux,
   windows,
@@ -242,7 +244,11 @@ Future<DesktopReviewArtifactResult> assembleDesktopReviewArtifact(
   }
 }
 
-Future<void> verifyDesktopReviewArtifact(File provenanceFile) async {
+Future<void> verifyDesktopReviewArtifact(
+  File provenanceFile, {
+  bool verifyNativeRuntime = false,
+  LinuxRuntimeCommandRunner? linuxRuntimeCommandRunner,
+}) async {
   final provenance = await _readJsonObject(provenanceFile);
   _requireExact(provenance, 'schemaVersion', 1);
   _requireExact(
@@ -350,6 +356,12 @@ Future<void> verifyDesktopReviewArtifact(File provenanceFile) async {
     final platform = DesktopArtifactPlatform.parse(
       _requiredString(target, 'platform'),
     );
+    if (verifyNativeRuntime && !_isCurrentPlatform(platform)) {
+      throw DesktopReviewArtifactException(
+        'native runtime verification for ${platform.slug} requires a '
+        'matching host operating system',
+      );
+    }
     _requireExact(target, 'buildMode', 'release');
     final expectedEntries = manifest['files'];
     if (expectedEntries is! List<Object?> || expectedEntries.isEmpty) {
@@ -374,13 +386,27 @@ Future<void> verifyDesktopReviewArtifact(File provenanceFile) async {
       platform: platform,
       payloadDirectory: payload,
       repositoryRoot: null,
-      runHostSmoke: false,
+      runHostSmoke: verifyNativeRuntime,
     );
+    if (verifyNativeRuntime && platform == DesktopArtifactPlatform.linux) {
+      await verifyLinuxRuntimeBundle(
+        payload,
+        commandRunner: linuxRuntimeCommandRunner,
+      );
+    }
   } finally {
     if (await extractionParent.exists()) {
       await extractionParent.delete(recursive: true);
     }
   }
+}
+
+bool _isCurrentPlatform(DesktopArtifactPlatform platform) {
+  return switch (platform) {
+    DesktopArtifactPlatform.linux => Platform.isLinux,
+    DesktopArtifactPlatform.windows => Platform.isWindows,
+    DesktopArtifactPlatform.macos => Platform.isMacOS,
+  };
 }
 
 Future<_ApplicationMetadata> _validateConfig(

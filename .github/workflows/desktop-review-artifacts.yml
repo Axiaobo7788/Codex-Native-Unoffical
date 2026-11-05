@@ -39,7 +39,7 @@ jobs:
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libsecret-1-dev ninja-build
+        run: sudo apt-get update && sudo apt-get install -y binutils libgtk-3-dev libsecret-1-dev ninja-build
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -71,7 +71,10 @@ jobs:
           --build-origin "github-actions:${{ github.repository }}:${{ github.run_id }}:${{ github.run_attempt }}"
 
       - name: Verify the assembled archive independently
-        run: dart run tool/verify_desktop_review_artifact.dart --directory build/review-artifacts
+        run: >-
+          dart run tool/verify_desktop_review_artifact.dart
+          --directory build/review-artifacts
+          --native-runtime
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:

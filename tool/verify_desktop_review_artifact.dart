@@ -4,18 +4,32 @@ import 'src/desktop_review_artifact.dart';
 
 Future<void> main(List<String> arguments) async {
   try {
-    if (arguments.length != 2 ||
-        (arguments.first != '--provenance' &&
-            arguments.first != '--directory')) {
+    final nativeRuntimeCount = arguments
+        .where((argument) => argument == '--native-runtime')
+        .length;
+    if (nativeRuntimeCount > 1) {
+      throw const FormatException('--native-runtime may be supplied once');
+    }
+    final verifyNativeRuntime = nativeRuntimeCount == 1;
+    final selectorArguments = arguments
+        .where((argument) => argument != '--native-runtime')
+        .toList();
+    if (selectorArguments.length != 2 ||
+        (selectorArguments.first != '--provenance' &&
+            selectorArguments.first != '--directory')) {
       throw const FormatException(
         'usage: dart run tool/verify_desktop_review_artifact.dart '
-        '(--provenance <file> | --directory <directory>)',
+        '(--provenance <file> | --directory <directory>) '
+        '[--native-runtime]',
       );
     }
-    final provenance = arguments.first == '--provenance'
-        ? File(arguments[1])
-        : await _findProvenance(Directory(arguments[1]));
-    await verifyDesktopReviewArtifact(provenance);
+    final provenance = selectorArguments.first == '--provenance'
+        ? File(selectorArguments[1])
+        : await _findProvenance(Directory(selectorArguments[1]));
+    await verifyDesktopReviewArtifact(
+      provenance,
+      verifyNativeRuntime: verifyNativeRuntime,
+    );
     stdout.writeln('DESKTOP_REVIEW_ARTIFACT_VERIFY=PASS');
   } on Object catch (error) {
     stderr.writeln('DESKTOP_REVIEW_ARTIFACT_VERIFY=FAIL');

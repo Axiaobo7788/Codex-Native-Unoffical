@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../tool/src/desktop_review_artifact.dart';
+import '../../tool/src/linux_runtime_gate.dart';
 
 void main() {
   test(
@@ -104,6 +105,150 @@ void main() {
       );
     },
   );
+
+  test(
+    'native verification exercises the extracted Linux runtime closure',
+    () async {
+      final fixture = await _createLinuxFixture();
+      addTearDown(() => fixture.root.delete(recursive: true));
+      final result = await assembleDesktopReviewArtifact(fixture.config);
+
+      await verifyDesktopReviewArtifact(
+        result.provenance,
+        verifyNativeRuntime: true,
+        linuxRuntimeCommandRunner: _fakeLinuxRuntimeCommand,
+      );
+    },
+  );
+
+  test('Linux runtime gate rejects a build-tree library RUNPATH', () async {
+    final fixture = await _createLinuxFixture();
+    addTearDown(() => fixture.root.delete(recursive: true));
+
+    await expectLater(
+      verifyLinuxRuntimeBundle(
+        fixture.bundle,
+        commandRunner: _fakeUnsafeLinuxRuntimeCommand,
+      ),
+      throwsA(
+        isA<LinuxRuntimeGateException>().having(
+          (error) => error.message,
+          'message',
+          contains('non-relocatable RUNPATH'),
+        ),
+      ),
+    );
+  });
+
+  test('Linux runtime gate rejects an unresolved runner dependency', () async {
+    final fixture = await _createLinuxFixture();
+    addTearDown(() => fixture.root.delete(recursive: true));
+
+    await expectLater(
+      verifyLinuxRuntimeBundle(
+        fixture.bundle,
+        commandRunner: _fakeMissingLinuxRuntimeCommand,
+      ),
+      throwsA(
+        isA<LinuxRuntimeGateException>().having(
+          (error) => error.message,
+          'message',
+          contains('unresolved dependency'),
+        ),
+      ),
+    );
+  });
+}
+
+Future<LinuxRuntimeCommandResult> _fakeLinuxRuntimeCommand(
+  String executable,
+  List<String> arguments, {
+  required String workingDirectory,
+}) {
+  return _fakeLinuxCommand(executable, arguments, unsafeLibraryRunpath: false);
+}
+
+Future<LinuxRuntimeCommandResult> _fakeUnsafeLinuxRuntimeCommand(
+  String executable,
+  List<String> arguments, {
+  required String workingDirectory,
+}) {
+  return _fakeLinuxCommand(executable, arguments, unsafeLibraryRunpath: true);
+}
+
+Future<LinuxRuntimeCommandResult> _fakeLinuxCommand(
+  String executable,
+  List<String> arguments, {
+  required bool unsafeLibraryRunpath,
+}) async {
+  if (executable == 'readelf' && arguments.first == '-h') {
+    return const LinuxRuntimeCommandResult(
+      exitCode: 0,
+      stdout:
+          '  Class:                             ELF64\n'
+          '  Machine:                           '
+          'Advanced Micro Devices X86-64\n',
+      stderr: '',
+    );
+  }
+  if (executable == 'readelf' && arguments.first == '-d') {
+    final file = arguments.last.replaceAll('\\', '/');
+    final runtimePath = file.endsWith('/codex_native_unofficial')
+        ? r'$ORIGIN/lib'
+        : unsafeLibraryRunpath && file.endsWith('/libflutter_linux_gtk.so')
+        ? '/repository/linux/flutter/ephemeral'
+        : r'$ORIGIN';
+    return LinuxRuntimeCommandResult(
+      exitCode: 0,
+      stdout:
+          ' 0x000000000000001d (RUNPATH) '
+          'Library runpath: [$runtimePath]\n',
+      stderr: '',
+    );
+  }
+  if (executable == 'env' && arguments.contains('ldd')) {
+    final file = File(arguments.last).absolute;
+    if (file.path.endsWith('codex-native-host')) {
+      return const LinuxRuntimeCommandResult(
+        exitCode: 0,
+        stdout: 'libc.so.6 => /lib/libc.so.6 (0x00000001)\n',
+        stderr: '',
+      );
+    }
+    final engine = File('${file.parent.path}/lib/libflutter_linux_gtk.so')
+        .absolute
+        .path;
+    return LinuxRuntimeCommandResult(
+      exitCode: 0,
+      stdout:
+          'libflutter_linux_gtk.so => $engine (0x00000001)\n'
+          'libc.so.6 => /lib/libc.so.6 (0x00000002)\n',
+      stderr: '',
+    );
+  }
+  return LinuxRuntimeCommandResult(
+    exitCode: 127,
+    stdout: '',
+    stderr: 'unexpected command: $executable ${arguments.join(' ')}',
+  );
+}
+
+Future<LinuxRuntimeCommandResult> _fakeMissingLinuxRuntimeCommand(
+  String executable,
+  List<String> arguments, {
+  required String workingDirectory,
+}) async {
+  if (executable == 'env' &&
+      arguments.last
+          .replaceAll('\\', '/')
+          .endsWith('/codex_native_unofficial')) {
+    return const LinuxRuntimeCommandResult(
+      exitCode: 0,
+      stdout: 'libflutter_linux_gtk.so => not found\n',
+      stderr: '',
+    );
+  }
+  return _fakeLinuxCommand(executable, arguments, unsafeLibraryRunpath: false);
 }
 
 Future<_LinuxFixture> _createLinuxFixture() async {

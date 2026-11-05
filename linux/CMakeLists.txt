@@ -105,6 +105,18 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# Flutter copies plugin targets into bundle/lib as ordinary files, so CMake
+# does not get a later install(TARGETS) opportunity to replace their build-tree
+# RUNPATH. Link them with their final colocated runtime path from the start.
+# This keeps a relocated bundle from retaining an absolute
+# linux/flutter/ephemeral dependency path.
+foreach(plugin ${FLUTTER_PLUGIN_LIST})
+  set_target_properties(${plugin}_plugin PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "$ORIGIN"
+    INSTALL_RPATH_USE_LINK_PATH FALSE)
+endforeach(plugin)
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

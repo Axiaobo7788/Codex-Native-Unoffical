@@ -150,8 +150,12 @@ This file is the repository's durable project memory. Update it whenever a task 
   is explicitly `review-only` and `distributionReady=false`. Hosted run
   `42095949000` at `e71e5ac` passed all three targets; the downloaded Linux,
   Windows, and macOS outputs each passed a fresh independent verifier run and
-  exact sidecar checksum comparison. This is complete machine-review evidence,
-  not signing, native installation, publisher identity, or Human acceptance.
+  exact sidecar checksum comparison. A later native-runtime audit preserved a
+  narrower Linux defect that those structural checks could not see: both linked
+  plugin libraries retained a build-tree RUNPATH. The CMake/runtime-gate fix is
+  locally verified; a fresh hosted run is required for clean-commit evidence.
+  None of these artifacts proves signing, native installation, publisher
+  identity, or Human acceptance.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -250,6 +254,45 @@ This file is the repository's durable project memory. Update it whenever a task 
   Windows x64 and macOS arm64 debug-build jobs. Native installation, Linux
   dependency compatibility, Windows installer/ACL/SmartScreen, macOS Developer
   ID/notarization/Gatekeeper, and Human review remain separate unrun gates.
+
+### 2026-11-06 — Relocatable Linux runtime and extracted-archive gate
+
+- Direct ELF inspection preserved a defect hidden by the prior successful
+  runner-level smoke: `codex_native_unofficial` correctly resolved its engine and
+  plugins from `$ORIGIN/lib`, but both linked plugin files retained an absolute
+  `linux/flutter/ephemeral` RUNPATH. Re-running the new native verifier against
+  the downloaded Linux artifact from `42095949000` fails closed on its exact
+  `/home/runner/work/...` build path. The prior checksum, structure, and source-
+  provenance evidence remains valid, but it is not relocated-runtime evidence.
+- Flutter's Linux CMake integration copies plugin targets as files, bypassing a
+  target install-time RPATH rewrite. Those generated plugin targets now build
+  with their final `$ORIGIN` install RPATH. A fresh release build gives both
+  plugins exactly `$ORIGIN`, and an unrelated temporary copy resolves the
+  Flutter engine from that copy's `lib/` even when launched from `/` with loader
+  overrides removed.
+- Added a reusable Linux runtime gate for ELF64 x86-64 runner/Host identity,
+  exact runner `$ORIGIN/lib`, missing dependency detection, exact bundled-library
+  resolution, and rejection of non-relocatable paths on the runner's bundled
+  closure. The real release bundle passed with three bundled runtime libraries
+  and 83 system-library names. That count describes the resolved local host
+  closure, not a cross-distribution package manifest. The same gate passes the
+  debug bundle and now runs in ordinary push CI after every Linux debug build;
+  the stronger extracted release check remains in the manual artifact workflow.
+- Matching-host archive verification now runs the extracted Host, with the Linux
+  dependency gate applied to the extracted payload. The focused artifact suite
+  covers a successful extracted runtime plus build-tree RUNPATH and unresolved-
+  dependency rejection. A locally assembled dirty-source archive passed the new
+  verifier at
+  `68b706e82834800da336dadc652e1ec458af41329de87cb6bd6a492c553716bd`.
+  The full Flutter suite passes 175/175, fatal-info Dart analysis passes, an
+  independent ASCII-path copy passes `flutter analyze`, the Linux release build
+  and real runtime gate pass, all 84 Rust tests plus formatting/Clippy pass, and
+  actionlint 1.7.12 accepts both workflows. Direct-path `flutter analyze` still
+  reproduces Flutter 3.47.1's known Unicode-path LSP truncated-JSON failure; the
+  later ASCII pass does not erase that toolchain result.
+  Windows/macOS extracted Host execution will receive native hosted evidence
+  after push; Linux distribution compatibility, GUI launch from a clean runtime
+  image, installers/ACLs, signing/notarization, and Human use remain distinct.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
@@ -1485,9 +1528,10 @@ its now-versioned trust boundary:
    bounded read-only metadata. Keep pagination, output, writes, approvals,
    idempotency, and attachment bounds explicit rather than reusing the desktop
    surface optimistically;
-3. while a physical Android device is unavailable, execute and inspect the new
-   clean-commit three-platform review-artifact workflow, then continue
-   independent installed-layout/dependency/ACL and release-documentation work.
+3. while a physical Android device is unavailable, prove the corrected Linux
+   relocation and all three extracted Host smokes on a fresh clean-commit
+   review-artifact run, then continue independent clean-runtime/dependency/ACL
+   and release-documentation work.
    Keep signing, notarization, installer/store identity, GitHub permission
    increases, publication, and Human acceptance behind their explicit gates.
 
@@ -1502,9 +1546,10 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: latest completed code-bearing run `42087567359` at `879c26d`
+- Hosted CI: latest completed code-bearing run `42095935941` at `e71e5ac`
   passed exact-Rust, Dart/Flutter, Linux, Android debug, Windows x64, and macOS
-  arm64 gates.
+  arm64 gates; the newer local Linux relocation/runtime-gate slice still needs
+  hosted evidence.
 
 ### Phase 2 — Local Codex workflow
 
