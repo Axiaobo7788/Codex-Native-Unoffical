@@ -129,7 +129,7 @@ This file is the repository's durable project memory. Update it whenever a task 
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
   credentials are not persisted, and permissions remain read-only. Run
-  `42068745322` at `e11a36c` passed all three jobs: exact-Rust/Dart/Flutter
+  `42076435647` at `36b7102` passed all three jobs: exact-Rust/Dart/Flutter
   verification, Linux and Android debug builds, and native Windows x64/macOS
   arm64 bundle/Host/license gates.
 - Android release variants no longer inherit the public debug certificate or
@@ -183,6 +183,12 @@ This file is the repository's durable project memory. Update it whenever a task 
   Unicode path and Gradle decoded it as mojibake. Direct Gradle assembly with a
   temporary ASCII SDK alias passed; the local property and alias were restored
   and neither environment path is committed.
+- Hosted GitHub Actions run `42076435647` at implementation commit `36b7102`
+  passed all three jobs. Ubuntu re-ran exact Rust 1.89 format/Clippy/84 tests,
+  license and release-signing source gates, Flutter analysis/161 tests, Linux
+  bundle verification, and Android debug assembly/artifact checks. Windows x64
+  and macOS arm64 each built the Flutter bundle, executed the packaged Host, and
+  verified the packaged native-license notice.
 
 ### 2026-11-06 — Hosted cross-platform failure-driven corrections
 
@@ -1172,7 +1178,7 @@ specific evidence boundaries.
   PIDs, and zero new cache sessions.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
-- Hosted GitHub Actions CI: run `42068745322` at `e11a36c` PASS. Ubuntu verify,
+- Hosted GitHub Actions CI: run `42076435647` at `36b7102` PASS. Ubuntu verify,
   Windows x64, and macOS arm64 all completed successfully; Android debug assembly
   and its non-empty artifact assertion passed under explicit Temurin 17.
 - Exact local OpenJDK 17.0.20.1 Android `assembleDebug`: PASS, 185 tasks and a
@@ -1312,7 +1318,7 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: current implementation run `42068745322` passed exact-Rust,
+- Hosted CI: current implementation run `42076435647` passed exact-Rust,
   Dart/Flutter, Linux, Android debug, Windows x64, and macOS arm64 gates.
 
 ### Phase 2 — Local Codex workflow
