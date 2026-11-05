@@ -34,7 +34,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 - The desktop UI now provides a virtualized recent-activity timeline, composer, race-safe stop action, pending-approval banner, execution settings, changed-file summary, and selected-file diff.
 - A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
 - Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns and can return directly to the newest page.
-- Selecting a stored item loads ascending `thread/items/list` pages for exactly one turn, retaining at most 100 items and replacing that turn's summary projection. Switching threads discards all stored-history state immediately.
+- The typed history layer can load ascending `thread/items/list` pages for exactly one turn with a 100-item cap, and the real smoke verifies it. The production UI intentionally does not expose that full-item action yet because one command item can contain unbounded `aggregatedOutput`. Switching threads discards all stored-history state immediately.
 - Stored and live entries are merged by item ID into one virtualized list so a resumed active turn does not render duplicate items.
 - Lazy full command-output retrieval, Markdown parsing policy, log viewer, and measured process-memory evidence are not implemented yet. Android remote control remains Phase 4 work.
 - Lightweight GitHub Actions CI is configured for format, analyze, tests, and a Linux debug build. Hosted CI has not run for the local Phase 1 commit yet.
@@ -46,9 +46,10 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Added typed `thread/turns/list` and `thread/items/list` adapters with server-owned opaque cursors.
 - Turn pages explicitly request summary items; command history retains only a bounded command label and never `aggregatedOutput`.
 - Added a history controller with 20-turn/25-item pages, 100-turn and 100-selected-item hard caps, cursor-based load-more, ID deduplication, stale-response generation guards, immediate inactive-thread eviction, and a fixed-size older-turn window that evicts its newest edge while browsing backwards.
-- Merged paged history with the bounded live projection by item ID and kept the timeline virtualized. Selecting a summary item loads only that turn's item pages.
+- Merged paged summary history with the bounded live projection by item ID and kept the timeline virtualized. Full-item pagination remains typed/tested but is deliberately not exposed in the UI until heavy payloads can be requested safely.
 - Added synthetic 1,000-turn/200-item-per-turn coverage proving the controller walks all 50 source pages while retaining only its configured 100-turn/50-selected-item test window. A separate 3 MiB `aggregatedOutput` fixture proves command output is not copied into the typed presentation projection.
 - Added a production-App widget test with 1,000 projected history rows; after real thread selection, fewer than 100 history row widgets exist in the element tree and the last off-screen row is absent, proving `ListView.builder` virtualization rather than eager construction.
+- Added `tool/history_memory_benchmark.dart`. Across two recorded runs, walking 1,000 source turns while retaining 100 increased RSS by 1,482,752–1,564,672 bytes. Decoding and immediately discarding ten 3 MiB command outputs then increased RSS by another 29,085,696–31,879,168 bytes, quantifying the upstream full-payload limitation rather than hiding it.
 - Extended the real coding smoke to read the completed turn through both pagination APIs before deleting it; the server returned one turn and nine items.
 
 ### 2026-11-05 — Phase 2 execution controls, bounded diff, and coding-task gate
@@ -113,6 +114,7 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart run tool/approval_smoke.dart`: PASS against the installed stock Codex; an untrusted command produced a typed approval, the client rejected it, the turn completed, and the smoke-owned thread was deleted without executing the command.
 - `dart run tool/model_smoke.dart`: PASS; the installed app-server advertised 8 visible models, identified `gpt-6.1-sol` as default, and advertised `low` as its default reasoning effort.
 - `flutter test tool/coding_task_smoke.dart --reporter expanded`: PASS after history integration in 29 seconds; production controllers completed the exact temporary-file task, projected one changed file/one addition, observed zero approvals, paged back one turn/nine items, and cleaned both thread and workspace.
+- `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
@@ -135,11 +137,10 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 Continue Phase 3 with measured memory/rendering evidence around the supported protocol surface:
 
-1. add a reproducible process-memory benchmark for 1,000 synthetic turns, the 100-turn sliding window, and repeated 3 MiB discarded command outputs;
-2. add widget-count evidence that the virtualized timeline builds only visible rows;
-3. define lazy Markdown parsing for only visible assistant blocks and cache only the active window;
-4. keep historical command output summarized/disabled with an explicit upstream-limitation message rather than invoking full-payload `thread/items/list` as a log viewer;
-5. re-check newer stock app-server schemas periodically for an item/offset/byte-range output API.
+1. define lazy Markdown parsing for only visible assistant blocks and cache only the active window;
+2. keep historical command output summarized/disabled with an explicit upstream-limitation message rather than invoking full-payload `thread/items/list` as a log viewer;
+3. repeat RSS measurements on release builds and Windows/macOS to establish comparable baselines;
+4. re-check newer stock app-server schemas periodically for an item/offset/byte-range output API.
 
 Do not begin Android remote transport or ecosystem management until bounded stored-history behavior is implemented and measured.
 

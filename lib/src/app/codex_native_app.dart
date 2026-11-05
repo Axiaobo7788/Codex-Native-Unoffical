@@ -376,7 +376,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final footerCount =
         widget.historyController.canLoadOlderTurns ||
             widget.historyController.canReturnToNewest ||
-            widget.historyController.canLoadMoreItems ||
             widget.historyController.loadingTurns ||
             widget.historyController.loadingItems
         ? 1
@@ -391,8 +390,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           return _HistoryEntryView(
             key: ValueKey('history-${item.id}'),
             item: item,
-            onLoadTurn: () =>
-                widget.historyController.loadTurnItems(item.turnId),
           );
         }
         final liveIndex = index - historyItems.length;
@@ -927,14 +924,9 @@ class _ApprovalBanner extends StatelessWidget {
 }
 
 class _HistoryEntryView extends StatelessWidget {
-  const _HistoryEntryView({
-    super.key,
-    required this.item,
-    required this.onLoadTurn,
-  });
+  const _HistoryEntryView({super.key, required this.item});
 
   final HistoryItem item;
-  final VoidCallback onLoadTurn;
 
   @override
   Widget build(BuildContext context) {
@@ -945,20 +937,13 @@ class _HistoryEntryView extends StatelessWidget {
       HistoryItemKind.reasoning ||
       HistoryItemKind.unknown => ConversationEntryKind.activity,
     };
-    return Tooltip(
-      message: 'Load the full bounded item page for this turn',
-      child: InkWell(
-        onTap: onLoadTurn,
-        borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
-        child: _ConversationEntryView(
-          entry: ConversationEntry(
-            id: item.id,
-            kind: kind,
-            text: item.text,
-            completed: true,
-            status: item.status,
-          ),
-        ),
+    return _ConversationEntryView(
+      entry: ConversationEntry(
+        id: item.id,
+        kind: kind,
+        text: item.text,
+        completed: true,
+        status: item.status,
       ),
     );
   }
@@ -995,11 +980,6 @@ class _HistoryFooter extends StatelessWidget {
           TextButton(
             onPressed: controller.refresh,
             child: const Text('Return to newest'),
-          ),
-        if (controller.canLoadMoreItems)
-          TextButton(
-            onPressed: controller.loadMoreItems,
-            child: const Text('Load more items in turn'),
           ),
       ],
     );

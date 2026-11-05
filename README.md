@@ -81,6 +81,7 @@ dart run tool/turn_smoke.dart
 dart run tool/approval_smoke.dart
 dart run tool/model_smoke.dart
 flutter test tool/coding_task_smoke.dart --reporter expanded
+flutter test tool/history_memory_benchmark.dart --reporter expanded
 ```
 
 ## Verify
