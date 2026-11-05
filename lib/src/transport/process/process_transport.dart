@@ -2,11 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../../domain/approval_models.dart';
 import '../../domain/thread_models.dart';
+import '../../domain/turn_models.dart';
+import '../../protocol/approval_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/protocol_models.dart';
 import '../../protocol/thread_protocol.dart';
+import '../../protocol/turn_protocol.dart';
 import '../codex_transport.dart';
 import 'child_process.dart';
 
@@ -30,6 +34,16 @@ class ProcessTransport implements CodexTransport {
       writer: process.write,
     );
     _threadProtocol = ThreadProtocolAdapter(request: _peer.request);
+    _turnProtocol = TurnProtocolAdapter(
+      request: _peer.request,
+      notifications: _peer.notifications,
+    );
+    _approvalProtocol = ApprovalProtocolAdapter(
+      serverRequests: _peer.serverRequests,
+      notifications: _peer.notifications,
+      respond: _peer.respond,
+      respondError: _peer.respondError,
+    );
     _stderrSubscription = process.stderr
         .transform(utf8.decoder)
         .listen(_captureStderr);
@@ -44,6 +58,8 @@ class ProcessTransport implements CodexTransport {
       StreamController<ProcessExit>.broadcast();
   late final JsonRpcPeer _peer;
   late final ThreadProtocolAdapter _threadProtocol;
+  late final TurnProtocolAdapter _turnProtocol;
+  late final ApprovalProtocolAdapter _approvalProtocol;
   late final StreamSubscription<String> _stderrSubscription;
   late final Future<void> _exitWatcher;
   Future<void>? _closeOperation;
@@ -83,6 +99,12 @@ class ProcessTransport implements CodexTransport {
   Stream<ProtocolViolation> get protocolErrors => _peer.protocolErrors;
 
   @override
+  Stream<TurnEvent> get turnEvents => _turnProtocol.events;
+
+  @override
+  Stream<ApprovalEvent> get approvalEvents => _approvalProtocol.events;
+
+  @override
   Future<InitializeResult> initialize(InitializeRequest request) async {
     final response = await _peer
         .request('initialize', request.toJson())
@@ -111,6 +133,24 @@ class ProcessTransport implements CodexTransport {
   @override
   Future<void> deleteThread(String threadId) =>
       _threadProtocol.deleteThread(threadId);
+
+  @override
+  Future<TurnHandle> startTurn({
+    required String threadId,
+    required String text,
+  }) => _turnProtocol.startTurn(threadId: threadId, text: text);
+
+  @override
+  Future<void> interruptTurn({
+    required String threadId,
+    required String turnId,
+  }) => _turnProtocol.interruptTurn(threadId: threadId, turnId: turnId);
+
+  @override
+  Future<void> decideApproval({
+    required Object requestId,
+    required ApprovalDecision decision,
+  }) => _approvalProtocol.decide(requestId: requestId, decision: decision);
 
   void _captureStderr(String chunk) {
     _stderrTail += chunk;
@@ -156,6 +196,7 @@ class ProcessTransport implements CodexTransport {
 
     await _exitWatcher;
     await _stderrSubscription.cancel();
+    await _approvalProtocol.dispose();
     await _peer.close();
     await _exits.close();
   }

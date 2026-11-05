@@ -3,16 +3,21 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/approval_gateway.dart';
+import '../domain/approval_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
+import '../domain/turn_gateway.dart';
+import '../domain/turn_models.dart';
 import '../protocol/protocol_models.dart';
 import '../transport/process/codex_executable_locator.dart';
 import '../transport/process/process_transport.dart';
 
 typedef TransportStarter = Future<ProcessTransport> Function(String executable);
 
-class RuntimeController extends ChangeNotifier implements ThreadGateway {
+class RuntimeController extends ChangeNotifier
+    implements ThreadGateway, TurnGateway, ApprovalGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     TransportStarter? transportStarter,
@@ -26,11 +31,23 @@ class RuntimeController extends ChangeNotifier implements ThreadGateway {
   ProcessTransport? _transport;
   StreamSubscription<ProcessExit>? _exitSubscription;
   StreamSubscription<ProtocolViolation>? _protocolErrorSubscription;
+  StreamSubscription<TurnEvent>? _turnEventSubscription;
+  StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
+  final StreamController<TurnEvent> _turnEvents =
+      StreamController<TurnEvent>.broadcast();
+  final StreamController<ApprovalEvent> _approvalEvents =
+      StreamController<ApprovalEvent>.broadcast();
   Future<void>? _startOperation;
   var _disposed = false;
   var _stopping = false;
 
   RuntimeSnapshot get snapshot => _snapshot;
+
+  @override
+  Stream<TurnEvent> get turnEvents => _turnEvents.stream;
+
+  @override
+  Stream<ApprovalEvent> get approvalEvents => _approvalEvents.stream;
 
   Future<void> start() => _startOperation ??= _start();
 
@@ -50,6 +67,27 @@ class RuntimeController extends ChangeNotifier implements ThreadGateway {
   Future<ThreadSummary> resumeThread(String threadId) =>
       _connectedTransport().resumeThread(threadId);
 
+  @override
+  Future<TurnHandle> startTurn({
+    required String threadId,
+    required String text,
+  }) => _connectedTransport().startTurn(threadId: threadId, text: text);
+
+  @override
+  Future<void> interruptTurn({
+    required String threadId,
+    required String turnId,
+  }) => _connectedTransport().interruptTurn(threadId: threadId, turnId: turnId);
+
+  @override
+  Future<void> decideApproval({
+    required Object requestId,
+    required ApprovalDecision decision,
+  }) => _connectedTransport().decideApproval(
+    requestId: requestId,
+    decision: decision,
+  );
+
   ProcessTransport _connectedTransport() {
     final transport = _transport;
     if (transport == null ||
@@ -68,6 +106,7 @@ class RuntimeController extends ChangeNotifier implements ThreadGateway {
           message: 'Android will connect through RemoteTransport in Phase 4.',
         ),
       );
+
       return;
     }
 
@@ -100,6 +139,14 @@ class RuntimeController extends ChangeNotifier implements ThreadGateway {
       _exitSubscription = transport.exits.listen(_handleExit);
       _protocolErrorSubscription = transport.protocolErrors.listen(
         _handleProtocolError,
+      );
+      _turnEventSubscription = transport.turnEvents.listen(
+        _turnEvents.add,
+        onError: _handleTurnStreamError,
+      );
+      _approvalEventSubscription = transport.approvalEvents.listen(
+        _approvalEvents.add,
+        onError: _approvalEvents.addError,
       );
       final result = await transport.initialize(const InitializeRequest());
       if (_stopping || _disposed) {
@@ -162,6 +209,15 @@ class RuntimeController extends ChangeNotifier implements ThreadGateway {
     );
   }
 
+  void _handleTurnStreamError(Object error, StackTrace stackTrace) {
+    if (!_turnEvents.isClosed) {
+      _turnEvents.addError(error, stackTrace);
+    }
+    _handleProtocolError(
+      ProtocolViolation('Malformed turn notification.', error),
+    );
+  }
+
   static String _withStderr(String message, String? stderr) {
     final tail = stderr?.trim();
     return tail == null || tail.isEmpty ? message : '$message\n$tail';
@@ -174,7 +230,11 @@ class RuntimeController extends ChangeNotifier implements ThreadGateway {
     _stopping = true;
     await _exitSubscription?.cancel();
     await _protocolErrorSubscription?.cancel();
+    await _turnEventSubscription?.cancel();
+    await _approvalEventSubscription?.cancel();
     await _transport?.close();
+    await _turnEvents.close();
+    await _approvalEvents.close();
     if (!_disposed) {
       _setSnapshot(
         RuntimeSnapshot(

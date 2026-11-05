@@ -47,8 +47,11 @@ repository; Android remote control is a later phase.
 
 Phase 2 is in progress. The current desktop slice lists bounded pages of thread
 metadata, starts threads, reads stored thread metadata without turns, and
-resumes threads without hydrating their history. The UI retains at most 100
-thread rows; conversation/turn rendering is not implemented yet.
+resumes threads without hydrating their history. It can also start and stop
+turns, coalesce assistant streaming into a bounded recent timeline, summarize
+tool activity, and surface explicit approve-once/reject prompts. The UI retains
+at most 100 thread rows and 200 recent conversation entries; stored turn-history
+pagination and diff viewing are not implemented yet.
 
 ## Run locally
 
@@ -67,6 +70,8 @@ The transport-only stock runtime check is also available:
 ```sh
 dart run tool/runtime_smoke.dart
 dart run tool/thread_smoke.dart
+dart run tool/turn_smoke.dart
+dart run tool/approval_smoke.dart
 ```
 
 ## Verify

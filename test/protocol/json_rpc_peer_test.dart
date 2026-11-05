@@ -82,4 +82,13 @@ void main() {
       ),
     );
   });
+
+  test('writes JSON-RPC errors for unsupported server requests', () async {
+    await peer.respondError('server-request-1', -32000, 'Rejected');
+
+    expect(jsonDecode(output.single), {
+      'id': 'server-request-1',
+      'error': {'code': -32000, 'message': 'Rejected'},
+    });
+  });
 }

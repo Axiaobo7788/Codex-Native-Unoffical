@@ -4,6 +4,15 @@ enum ThreadSortKey { createdAt, updatedAt, recencyAt }
 
 enum SortDirection { ascending, descending }
 
+/// Optional per-thread approval policy overrides supported by app-server v2.
+///
+/// Production callers normally leave this unset so Codex uses the user's
+/// configured policy. Explicit values are useful for settings UI and bounded
+/// protocol smoke tests.
+enum ThreadApprovalPolicy { untrusted, onRequest, never }
+
+enum ThreadSandboxMode { readOnly, workspaceWrite, dangerFullAccess }
+
 class ThreadSummary {
   const ThreadSummary({
     required this.id,
@@ -66,8 +75,15 @@ class ThreadListQuery {
 }
 
 class ThreadStartOptions {
-  const ThreadStartOptions({required this.cwd, this.ephemeral = false});
+  const ThreadStartOptions({
+    required this.cwd,
+    this.ephemeral = false,
+    this.approvalPolicy,
+    this.sandbox,
+  });
 
   final String cwd;
   final bool ephemeral;
+  final ThreadApprovalPolicy? approvalPolicy;
+  final ThreadSandboxMode? sandbox;
 }

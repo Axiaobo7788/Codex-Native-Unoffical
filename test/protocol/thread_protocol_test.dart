@@ -82,6 +82,28 @@ void main() {
     expect(requests.single.params, isNot(contains('developerInstructions')));
   });
 
+  test('serializes explicit approval and sandbox overrides', () async {
+    responses['thread/start'] = {'thread': _threadJson(id: 'thread-4')};
+
+    await adapter.startThread(
+      const ThreadStartOptions(
+        cwd: '/workspace/project',
+        approvalPolicy: ThreadApprovalPolicy.untrusted,
+        sandbox: ThreadSandboxMode.readOnly,
+      ),
+    );
+
+    expect(
+      requests.single,
+      _Request('thread/start', {
+        'cwd': '/workspace/project',
+        'ephemeral': false,
+        'approvalPolicy': 'untrusted',
+        'sandbox': 'read-only',
+      }),
+    );
+  });
+
   test('deletes only the explicitly identified thread', () async {
     responses['thread/delete'] = const {};
 

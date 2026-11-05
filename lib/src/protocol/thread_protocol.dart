@@ -40,6 +40,9 @@ final class ThreadProtocolAdapter {
     final response = await request('thread/start', {
       'cwd': options.cwd,
       'ephemeral': options.ephemeral,
+      if (options.approvalPolicy case final approvalPolicy?)
+        'approvalPolicy': _approvalPolicy(approvalPolicy),
+      if (options.sandbox case final sandbox?) 'sandbox': _sandbox(sandbox),
     });
     return _parseThreadContainer(response, 'thread/start');
   }
@@ -153,5 +156,18 @@ final class ThreadProtocolAdapter {
   static String _sortDirection(SortDirection direction) => switch (direction) {
     SortDirection.ascending => 'asc',
     SortDirection.descending => 'desc',
+  };
+
+  static String _approvalPolicy(ThreadApprovalPolicy policy) =>
+      switch (policy) {
+        ThreadApprovalPolicy.untrusted => 'untrusted',
+        ThreadApprovalPolicy.onRequest => 'on-request',
+        ThreadApprovalPolicy.never => 'never',
+      };
+
+  static String _sandbox(ThreadSandboxMode sandbox) => switch (sandbox) {
+    ThreadSandboxMode.readOnly => 'read-only',
+    ThreadSandboxMode.workspaceWrite => 'workspace-write',
+    ThreadSandboxMode.dangerFullAccess => 'danger-full-access',
   };
 }

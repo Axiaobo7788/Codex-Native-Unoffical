@@ -64,6 +64,11 @@ final class JsonRpcPeer {
   Future<void> respond(Object id, JsonObject result) =>
       _write({'id': id, 'result': result});
 
+  Future<void> respondError(Object id, int code, String message) => _write({
+    'id': id,
+    'error': {'code': code, 'message': message},
+  });
+
   Future<void> _write(JsonObject message) async {
     if (_isClosed) {
       throw const TransportClosedException();
