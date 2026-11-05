@@ -587,3 +587,48 @@ artifact.
   interaction remain independent release gates.
 - The workflow is configuration until a commit is pushed and its hosted run is
   inspected. Local Linux validation does not establish Windows/macOS success.
+
+---
+
+## ADR-017 — Android release builds require an external upload identity
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Never sign an Android release variant with the SDK-generated debug key and never
+silently treat an unsigned artifact as a release candidate. Debug variants keep
+the standard debug identity. A release variant requires an external keystore and
+all four Git-ignored `key.properties` values (`storeFile`, `storePassword`,
+`keyAlias`, and `keyPassword`); missing, incomplete, or unreadable material fails
+at `preReleaseBuild` without exposing values.
+
+Prefer a signed Android App Bundle for future Play distribution. Keep creation,
+custody, backup, rotation, Play App Signing enrollment, and CI injection of the
+real upload key outside the repository and behind a separate explicit release
+authorization.
+
+### Why
+
+- Android's debug certificate is insecure by design and is not a stable product
+  identity. Shipping it would prevent the repository from making an honest RC
+  or update-continuity claim.
+- A signing key becomes part of the application's long-term update identity;
+  generating one opportunistically in source or CI would be an external product
+  decision with irreversible custody consequences.
+- Contributors and untrusted PR validation do not need access to release
+  credentials. Keeping CI on debug APKs preserves useful compilation evidence
+  without widening secret exposure.
+
+### Consequence
+
+- `flutter run --release`, `flutter build apk --release`, and
+  `flutter build appbundle --release` intentionally fail until the operator
+  supplies the private local contract.
+- Earlier minified APK builds that used Flutter's template debug-signing fallback
+  remain compilation evidence only and are not valid release-signing evidence.
+- Release automation may add a secret-backed signing step later only after the
+  exact repository/application, key custody, Play policy, workflow permissions,
+  and publication boundary receive explicit Human approval.

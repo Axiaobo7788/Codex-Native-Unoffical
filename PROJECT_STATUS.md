@@ -127,8 +127,41 @@ This file is the repository's durable project memory. Update it whenever a task 
   credentials are not persisted, and permissions remain read-only. The newest
   remote green run predates this local workflow and current commits, so no
   hosted-current or native Windows/macOS pass is claimed.
+- Android release variants no longer inherit the public debug certificate or
+  emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
+  keystore contract is required at `preReleaseBuild`; debug CI remains
+  credential-free. No production key, Play configuration, or signing secret is
+  stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Fail-closed Android release identity
+
+- Reviewed Flutter's current Kotlin DSL release-signing flow and Android's
+  official debug/upload/app-signing identity guidance. The existing template
+  still assigned `signingConfigs.debug` to the release variant, so every prior
+  minified "release" APK proved compilation but carried an insecure development
+  identity and could not support an honest RC claim.
+- Added a private `android/key.properties` contract with a placeholder-only
+  tracked example. Gradle requires all four non-empty fields and a readable
+  external keystore, creates the release signing config only when that contract
+  is complete, and otherwise stops `preReleaseBuild` with redacted diagnostics.
+  Debug builds and IDE configuration remain available without release secrets.
+  A CI-owned source validator rejects debug-signing fallback, missing fail-closed
+  markers, incomplete ignore rules, or a non-placeholder example without ever
+  opening a developer's ignored private properties. Its first run exposed an
+  invalid instance `File.isFileSync` call; switching to the correct static
+  `FileSystemEntity.isFileSync` API made the validator and fatal-info analysis
+  pass rather than hiding the implementation failure.
+- The no-key failure path rejected `assembleRelease` with the intended bounded
+  error, while `assembleDebug` still passed 185 actionable tasks. A temporary
+  local 30-day RSA keystore then built both release APK and AAB; `apksigner`
+  verified the 54,019,334-byte APK and exact certificate digest, and `jarsigner`
+  verified the 52,739,360-byte AAB. The temporary private key, ignored property
+  file, ASCII SDK alias, and test-signed outputs were explicitly removed.
+- No production upload key, Play Console app, Play App Signing enrollment,
+  key-custody/backup policy, CI secret, publication permission, store upload, or
+  device installation was created. Those remain Human/release authority gates.
 
 ### 2026-11-06 — Hosted CI hardening and cross-platform build gates
 
@@ -465,7 +498,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   minified release builds pass through the documented temporary Unicode SDK
   path workaround; the three-ABI artifacts are 191,469,644 and 51,791,110
   bytes. The secure-storage dependency inflates the JIT debug kernel, while the
-  release artifact tree-shakes to a normal universal-APK range.
+  release artifact tree-shakes to a normal universal-APK range. That historical
+  release APK used the Flutter template's debug signing fallback; it remains
+  compilation/size evidence only and has been superseded by the fail-closed
+  upload-key requirement.
 - No emulator or physical device was available. Real Keystore encryption,
   transient service failure, uninstall/reinstall, OS backup/restore, device
   transfer, and system-CA network behavior remain unverified platform gates.
@@ -948,6 +984,10 @@ specific evidence boundaries.
 - `dart run tool/verify_native_license_packaging.dart`: PASS,
   `NATIVE_LICENSE_PACKAGING=SOURCE_PASS`, 257,985 notice bytes, with Linux,
   Windows, and macOS source packaging contracts present.
+- `dart run tool/verify_android_release_signing.dart`: PASS,
+  `ANDROID_RELEASE_SIGNING=SOURCE_PASS`; debug fallback, fail-closed markers,
+  private-file ignore rules, and placeholder-only example are enforced without
+  reading ignored signing material.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
 - `cargo test --workspace`: PASS, 26 Remote-library tests, 54 Host-binary tests,
   and 4 executable failure-path tests (84 total), including real TCP/WSS,
@@ -1009,6 +1049,13 @@ specific evidence boundaries.
   native outputs. The file and symlink were restored/removed afterward. This
   proves the Android product and plugin build under the path workaround, not a
   clean ordinary-path build.
+- Android release-signing contract: PASS for both failure and success paths.
+  Without `android/key.properties`, `assembleRelease` stopped at the intended
+  redacted configuration error; `assembleDebug` still passed 185 tasks. A
+  temporary external RSA keystore produced a 54,019,334-byte APK and
+  52,739,360-byte AAB; `apksigner` matched the exact temporary certificate and
+  `jarsigner` verified the bundle. All temporary signing material and signed
+  outputs were removed. No production-key or store claim is made.
 - Packaged Linux GUI runtime launch: PASS; direct process inspection showed
   Flutter -> adjacent bundled Host -> separately located stock Codex. SIGINT
   removed all three processes. Existing ATK/cursor-theme warnings remained.
@@ -1061,6 +1108,11 @@ specific evidence boundaries.
   already replaced non-exportable key. Because the Remote bearer is revocable,
   explicit clear and re-pair is the bounded recovery; real device fault testing
   and an upstream fix or re-evaluation remain release gates.
+- Android production release identity is intentionally unconfigured. Release
+  builds now fail closed until an operator supplies an external upload key, but
+  key generation/custody/backup, Play App Signing enrollment, CI secret
+  injection, store validation, and update-continuity recovery have no Human
+  decision or live evidence yet.
 - Safe assistant Markdown intentionally differs by lifecycle and size:
   in-progress messages are plain text, and completed messages above 16 KiB show
   only a labeled bounded tail rather than rich formatting. Actual external

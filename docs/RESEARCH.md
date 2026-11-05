@@ -790,7 +790,9 @@ _Reviewed: 2026-11-05_
 - Debug and R8-minified release Android builds pass after the existing temporary
   Unicode SDK-path workaround. Merged manifests contain API 24, `INTERNET`,
   `allowBackup=false`, and both backup rule resources. The universal three-ABI
-  release APK is 51,791,110 bytes. No runtime Android Keystore call was made.
+  release APK is 51,791,110 bytes. That historical artifact used the Flutter
+  template's debug certificate, so it is compilation/size evidence rather than
+  release-identity evidence. No runtime Android Keystore call was made.
 - The first ordinary Gradle invocation again failed before compilation because
   Flutter's Unicode SDK path was decoded as mojibake. This known toolchain-path
   failure is preserved; only the escaped-property run is a passing Android build.
@@ -1358,3 +1360,60 @@ _Reviewed: 2026-11-06_
   and both native non-Linux jobs remain unexecuted until this commit is
   deliberately pushed. No hosted-current, Windows, macOS, signing, or
   notarization pass is claimed.
+
+## Fail-closed Android release signing
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Flutter's official [Android release guide](https://docs.flutter.dev/deployment/android),
+  including the Kotlin DSL `key.properties` flow, private-file warning, signed
+  App Bundle output, and preference for AAB distribution through Google Play.
+- Android's official [app-signing guidance](https://developer.android.com/studio/publish/app-signing),
+  which distinguishes the insecure, SDK-generated debug certificate from the
+  upload/app-signing identities required for publication and emphasizes that
+  private signing material must remain protected.
+- Android's official [build-variant signing behavior](https://developer.android.com/build/build-variants#signing),
+  which states that release artifacts are not signed unless an explicit release
+  signing configuration is defined and recommends keeping signing data outside
+  source build files.
+
+### Findings that changed the implementation
+
+- The Flutter template's temporary `signingConfig = debug` was still active.
+  Earlier 51,791,110-byte "release" APK evidence therefore proved R8/native
+  compilation only; it did not prove a distributable release identity and must
+  not be treated as RC signing evidence.
+- Silently emitting an unsigned archive would still leave an ambiguous artifact
+  that could be mislabeled later. Release assembly should stop before expensive
+  packaging when the external upload-key contract is missing, while debug
+  builds and IDE sync must remain usable for contributors without private keys.
+- The keystore path and three credential values are operator-owned secrets. The
+  repository can define and test their shape, but creating a production key,
+  choosing Play App Signing policy, storing CI secrets, and granting publication
+  permissions require a separate explicit Human/release decision.
+
+### Adopted here and validation boundary
+
+- `android/app/build.gradle.kts` loads only the Git-ignored
+  `android/key.properties`, requires non-empty `storeFile`, `storePassword`,
+  `keyAlias`, and `keyPassword`, and verifies that the external store is a
+  readable file. It creates the release signing configuration only when the
+  complete contract is present. `preReleaseBuild` otherwise fails with bounded
+  diagnostics containing property names but no values or keystore contents.
+- The repository ships only `android/key.properties.example` placeholders.
+  A CI-owned static validator checks the release-only Gradle contract, explicit
+  absence of debug-signing fallback, private-file ignore rules, and exact
+  placeholders without reading any ignored local signing file.
+  Debug assembly still passes all 185 actionable tasks. With no private config,
+  `assembleRelease` stops on the intended signing error. With a temporary
+  30-day local RSA test keystore, `assembleRelease bundleRelease` passed;
+  `apksigner` verified the 54,019,334-byte APK and its certificate digest exactly
+  matched the temporary key, while `jarsigner` verified the 52,739,360-byte AAB.
+  The private key, ignored properties, SDK alias, and signed test artifacts were
+  then removed.
+- This is build-contract evidence, not production signing. No upload key, Play
+  Console application, Play App Signing enrollment, key backup/rotation plan,
+  CI secret, store validation, publication, or physical-device install was
+  created or claimed.

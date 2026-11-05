@@ -181,6 +181,25 @@ transferring the invitation through a trusted local channel. QR rendering is
 not implemented yet; the desktop exposes selectable text and an explicit copy
 action.
 
+## Android release signing
+
+Android debug builds use the normal local debug certificate. Release builds do
+not fall back to that certificate and do not produce an unsigned artifact. Copy
+`android/key.properties.example` to the ignored `android/key.properties`, point
+`storeFile` at an external upload keystore, and provide all four values before
+running a release build. Keep both files containing secrets outside version
+control; the example contains placeholders only.
+
+```sh
+flutter build appbundle --release
+```
+
+The Android App Bundle is the preferred Play upload format. A missing,
+incomplete, or unreadable signing configuration fails at `preReleaseBuild`
+without printing property values. No production upload key or Play App Signing
+account is configured by this repository, and CI intentionally builds only the
+debug APK until a separately authorized signing workflow exists.
+
 ## Verify
 
 ```sh
@@ -189,6 +208,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ./tool/generate_native_licenses.sh --check
+dart run tool/verify_android_release_signing.dart
 flutter analyze
 flutter test
 flutter build linux --debug
