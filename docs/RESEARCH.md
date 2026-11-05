@@ -1622,3 +1622,105 @@ _Reviewed: 2026-11-06_
   process death, rotation, front-only/camera-less device, dense Version 40
   recognition, or desktop-to-phone interoperability was exercised. These remain
   explicit device/Human gates rather than inferred passes.
+
+## Desktop review-artifact assembly and provenance boundary
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Flutter's official Linux
+  [build](https://docs.flutter.dev/platform-integration/linux/building) and
+  [deployment](https://docs.flutter.dev/deployment/linux), Windows
+  [build](https://docs.flutter.dev/platform-integration/windows/building) and
+  [deployment](https://docs.flutter.dev/deployment/windows), and macOS
+  [build](https://docs.flutter.dev/platform-integration/macos/building) and
+  [deployment](https://docs.flutter.dev/deployment/macos) guidance. Desktop
+  distribution carries the complete generated bundle; Windows Store identity,
+  macOS Developer ID/hardened-runtime/notarization, Linux packaging, and native
+  dependencies remain distinct platform concerns.
+- GitHub's official workflow-artifact
+  [guidance](https://docs.github.com/en/actions/tutorials/store-and-share-data),
+  artifact-attestation
+  [guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations),
+  and [immutable-release](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
+  model, plus `actions/upload-artifact` v7.0.0 at immutable commit
+  `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f`. Directory upload normalizes file
+  permissions, while pre-archiving preserves modes and case. Attestation needs
+  `id-token: write` plus `attestations: write`; Release creation is a separate
+  publication boundary.
+- OpenAI Codex's release workflow at `be765f1` stages per-target outputs,
+  separates unsigned macOS inputs from protected signing, pins upload actions,
+  validates tag/version identity, and finalizes artifacts only after the target
+  jobs. It is evidence for explicit staging and signing separation, not
+  authorization to copy its protected environments or publication permissions.
+- TuxCodex at `1905fc4` builds and smokes native Linux packages on multiple
+  distributions and produces Windows/macOS installers before a tag-only release
+  job. Its stronger installer breadth confirms that successful compilation is
+  not installed-package evidence; this Flutter project does not yet have those
+  packaging identities or installed-runtime gates.
+- `moyi888/codex-remote-android` at `2bbf50a` uses a simple tag/manual workflow
+  to upload versioned Windows executables and an Android debug APK, then grants
+  a tag-only job `contents: write` to create a prerelease. Its explicit release
+  contract is useful, but a debug APK and individually copied executable are not
+  acceptable production identities or complete Flutter desktop bundles here.
+
+### Findings that changed the implementation
+
+- GitHub's default artifact ZIP cannot be the only packaging layer for Linux or
+  macOS because executable modes are normalized and framework symlink/case
+  behavior must remain intact. Each platform now creates a tar.gz before the
+  upload action; the workflow uploads that opaque archive plus checksum and
+  provenance sidecars.
+- A release-mode executable alone is incomplete. The platform gate requires the
+  full Flutter layout, AOT runtime, ICU, application assets and notices, bundled
+  Host and native notice. It rejects `kernel_blob.bin`, so a mislabeled debug
+  bundle does not pass merely because its runner launches.
+- Checksums prove byte consistency only relative to the sidecar that carries
+  them; they are not publisher authentication. The archive is therefore named
+  `review-only`, its inner and outer metadata both state
+  `distributionReady=false`, and platform-specific signing/notarization gaps are
+  machine-readable rather than hidden in release prose.
+- Source provenance must not trust a free-form workflow argument. Assembly
+  verifies the supplied 40-character revision against repository `HEAD` and the
+  declared clean/dirty state against Git status before recording either.
+- Enabling GitHub attestations now would add OIDC and attestation write
+  permissions; creating a Release would add content write authority. Neither is
+  necessary for this machine-review slice, so the manual workflow remains
+  `contents: read` and performs no tag, Release, signing, or publication action.
+- Android cannot join an “unsigned review release” matrix without contradicting
+  ADR-017. Its release variant continues to fail closed until the operator
+  supplies the separately authorized upload identity.
+
+### Adopted result and evidence boundary
+
+- Added one shared Dart assembler/verifier for Linux x64, Windows x64, and macOS
+  arm64. It rejects unsafe/control-character paths, absolute or escaping
+  symlinks, existing outputs, notice drift, missing/empty installed-layout
+  files, debug kernels, and a failing/ten-second-stalled Host help smoke. Failure
+  removes only the exact partial outputs and private staging directory it owns.
+- The archive contains the complete payload, sorted per-file SHA-256/size/mode
+  or symlink-target manifest, canonical `SHA256SUMS`, and a prominent review-only
+  warning. The sidecar binds archive bytes, manifest digest, app version/build,
+  source revision/tree state, target, build mode, toolchains, origin, and signing
+  boundary. Independent verification checks the outer digest and byte count,
+  safe archive root, extraction, inner/outer metadata identity, exact payload
+  inventory, sums, preserved layout, and release-only AOT markers.
+- Three focused tests prove successful Linux assembly/reverification, rejection
+  after one post-provenance archive byte is appended, and fail-closed behavior
+  when `lib/libapp.so` is absent. A real local Flutter 3.47.1/Rust 1.89.0 Linux
+  release bundle produced a 13,250,342-byte archive with digest
+  `2ce56b20e1ae712c8c2fb05ce2f747c0ea76c7f4f705e75e47b44296fde7b8d4`;
+  it self-verified, preserved executable modes, carried both exact notices, and
+  contained no debug kernel. Because the source tree included this uncommitted
+  implementation, its provenance truthfully records `treeState: dirty` and it
+  is local validation only. Direct-path Flutter analysis reproduced the known
+  Flutter 3.47.1 Unicode-path LSP truncated-JSON crash; strict Dart analysis and
+  an independent ASCII repository copy both passed, so no project diagnostic
+  was hidden behind that toolchain failure.
+- `.github/workflows/desktop-review-artifacts.yml` is manual-only, read-only,
+  immutable-action pinned, fail-independent across the three desktop targets,
+  and retains review artifacts for 14 days. Hosted execution after publication,
+  downloaded-artifact verification, native installation, Linux dependency
+  compatibility, Windows ACL/installer/SmartScreen behavior, macOS Developer ID
+  signing/notarization/Gatekeeper behavior, and Human use remain separate gates.

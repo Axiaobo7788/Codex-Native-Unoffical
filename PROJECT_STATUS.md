@@ -136,9 +136,16 @@ This file is the repository's durable project memory. Update it whenever a task 
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
   credentials are not persisted, and permissions remain read-only. Run
-  `42084742395` at `1299fb8` passed all three jobs: exact-Rust/Dart/Flutter
+  `42087567359` at `879c26d` passed all three jobs: exact-Rust/Dart/Flutter
   verification, Linux and Android debug builds, and native Windows x64/macOS
   arm64 bundle/Host/license gates.
+- A separate manual, read-only desktop review-artifact workflow now builds
+  release-mode Linux x64, Windows x64, and macOS arm64 bundles without creating
+  tags or Releases. Its assembler requires platform AOT/runtime layout, exact
+  notices, no debug kernel, Host execution, source identity, per-file SHA-256,
+  archive provenance, and extraction/reinventory verification. Every artifact
+  is explicitly `review-only` and `distributionReady=false`; hosted execution
+  for the new workflow is pending its deliberate push.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -146,6 +153,44 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Fail-closed desktop review-artifact assembly
+
+- Reviewed Flutter's complete desktop-bundle deployment requirements, GitHub
+  artifact permission loss/attestation/immutable-release boundaries, OpenAI
+  Codex's staged protected release workflow, TuxCodex's multi-distribution
+  installer smokes, and codex-remote-android's simpler prerelease contract.
+  ADR-020 separates useful release-mode review artifacts from any claim of
+  production signing, installation, publisher identity, or release authority.
+- Added one cross-platform assembler/verifier for the currently hosted desktop
+  targets. It validates the supplied Git revision and clean/dirty state, refuses
+  existing outputs and unsafe/escaping paths, requires the platform's release
+  AOT/runtime files, exact application/native notices, bundled Host and a
+  ten-second-bounded Host help smoke, and rejects any debug kernel blob.
+- Each tar archive preserves Unix modes, case, and macOS symlinks that GitHub's
+  ordinary directory upload would normalize. It contains a sorted per-file
+  SHA-256/size/mode-or-link manifest, canonical sums, the full Flutter payload,
+  and an explicit review warning. The sidecar binds the archive digest/size,
+  manifest digest, app version/build, source, target, exact toolchains, build
+  origin, and platform signing gap. Verification safely lists, extracts,
+  reinventories, and rechecks inner/outer metadata and release layout.
+- Added a manual-only, `contents: read`, immutable-action-pinned workflow for
+  Linux x64, Windows x64, and macOS arm64. It uploads the archive, checksum, and
+  provenance for 14 days but never creates a tag or Release, requests OIDC or
+  attestation/write permission, provisions signing, or builds an Android
+  release. Android remains behind its external upload-key contract.
+- Three focused tests and the full 171-test Flutter suite pass, as do strict
+  Dart analysis, formatting, and pinned actionlint 1.7.12. The focused cases
+  cover complete Linux assembly plus independent verify,
+  post-provenance archive tamper rejection, and missing-AOT fail-closed cleanup.
+  A real local release build produced and reverified a 13,250,342-byte archive
+  (`sha256:2ce56b20e1ae712c8c2fb05ce2f747c0ea76c7f4f705e75e47b44296fde7b8d4`)
+  with exact notices and executable modes. Its provenance correctly says
+  `treeState: dirty`, so it is local implementation evidence, not a clean-commit
+  or hosted artifact. Direct-path `flutter analyze` again failed in Flutter
+  3.47.1's Unicode-path LSP reader with truncated JSON; an independent ASCII
+  repository copy passed Flutter analysis with no issues. Hosted three-platform
+  workflow execution is pending push.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
@@ -168,8 +213,9 @@ This file is the repository's durable project memory. Update it whenever a task 
   ASCII-path Flutter analysis passes, and the Linux debug build succeeds.
 - This is deterministic layout evidence, not Human visual or input acceptance.
   Real window resizing, nested-scroll feel, keyboard navigation, text scaling,
-  and platform rendering remain Human/cross-platform review gates. Hosted CI for
-  this code-bearing responsive change is pending its deliberate push.
+  and platform rendering remain Human/cross-platform review gates. Hosted run
+  `42087567359` at `879c26d` passed Ubuntu verification plus Android debug,
+  Windows x64, and macOS arm64 build/package gates.
 
 ### 2026-11-06 — Bounded Android Remote pairing QR intake
 
@@ -1380,10 +1426,11 @@ its now-versioned trust boundary:
    bounded read-only metadata. Keep pagination, output, writes, approvals,
    idempotency, and attachment bounds explicit rather than reusing the desktop
    surface optimistically;
-3. while a physical Android device is unavailable, continue independent
-   machine-actionable RC work such as unsigned release-artifact assembly,
-   integrity/provenance manifests, installed-layout checks, and release
-   documentation without claiming unavailable hosted or native-platform passes.
+3. while a physical Android device is unavailable, execute and inspect the new
+   clean-commit three-platform review-artifact workflow, then continue
+   independent installed-layout/dependency/ACL and release-documentation work.
+   Keep signing, notarization, installer/store identity, GitHub permission
+   increases, publication, and Human acceptance behind their explicit gates.
 
 Preserve the unavailable Phase 3 Human, native install/ACL/signing/notarization,
 physical-Android, and installed-volume gates as RC requirements.
@@ -1396,7 +1443,7 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: latest completed code-bearing run `42084742395` at `1299fb8`
+- Hosted CI: latest completed code-bearing run `42087567359` at `879c26d`
   passed exact-Rust, Dart/Flutter, Linux, Android debug, Windows x64, and macOS
   arm64 gates.
 

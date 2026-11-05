@@ -250,6 +250,50 @@ commit SHAs and checkout does not persist credentials. A configured workflow is
 not evidence for an unpublished local commit: inspect the corresponding hosted
 run after that commit is deliberately pushed.
 
+## Desktop review artifacts
+
+The manual `Desktop review artifacts` workflow builds Linux x64, Windows x64,
+and macOS arm64 in release mode and uploads complete review bundles for 14 days.
+It has read-only repository permission and does not create a tag or GitHub
+Release. Every output is deliberately named `review-only` and records
+`distributionReady=false`: no Developer ID/notarization, Authenticode/installer,
+Linux distribution signature, installed-platform behavior, or Human acceptance
+is implied. Android is excluded because its release variant requires the real
+external upload identity described above.
+
+Each workflow artifact contains three files: a tar.gz preserving executable
+modes, case, and macOS symlinks; a canonical archive SHA-256; and a provenance
+JSON sidecar. Inside the tar are the full Flutter payload, a sorted per-file
+manifest, `SHA256SUMS`, and a review-only warning. Assembly checks Git `HEAD`
+and clean/dirty state, release AOT layout, both notice files, absence of a debug
+kernel, and the packaged Host's `--help`; verification extracts and reinventories
+the result before upload.
+
+To exercise the same gate locally after a platform release build, pass the
+bundle path and the matching target. The command refuses to overwrite an
+existing output:
+
+```sh
+dart run tool/assemble_desktop_review_artifact.dart \
+  --bundle build/linux/x64/release/bundle \
+  --output build/review-artifacts \
+  --platform linux \
+  --architecture x64 \
+  --source-revision "$(git rev-parse HEAD)" \
+  --source-tree-state clean \
+  --flutter-version 3.47.1 \
+  --rust-version 1.89.0 \
+  --build-origin local
+
+dart run tool/verify_desktop_review_artifact.dart \
+  --provenance build/review-artifacts/codex-native-unofficial-0.1.0+1-linux-x64-review-only.provenance.json
+```
+
+Use `dirty` only when Git status is actually dirty; the assembler verifies the
+claim. These checksums and manifests establish internal consistency, not a
+cryptographic publisher identity. GitHub artifact attestations and production
+release permissions remain a separate, explicitly reviewed future step.
+
 ## License
 
 Apache License 2.0. Dependency provenance and complete native license texts are

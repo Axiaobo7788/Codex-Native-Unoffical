@@ -766,3 +766,67 @@ complete manual pairing path.
   permission-settings recovery, rotation, dense Version 40 recognition, or
   cross-device interoperability. Both system-root and pairing-bound invitations
   remain physical-device and Human release gates.
+
+---
+
+## ADR-020 — Separate desktop review artifacts from production release authority
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Build Linux x64, Windows x64, and macOS arm64 release-mode desktop bundles in a
+manual, read-only GitHub Actions workflow, but label every result
+`review-only` with `distributionReady=false`. Package the complete Flutter
+bundle rather than a standalone executable. Before archiving, require the
+platform's release AOT/runtime files, the bundled native Host, exact application
+and native-license notices, absence of a debug kernel blob, and a successful
+native Host `--help` smoke.
+
+Wrap each bundle in a tar archive before uploading it so Unix executable modes,
+case, and macOS framework symlinks survive GitHub artifact transport. Include a
+sorted per-file SHA-256 manifest, canonical `SHA256SUMS`, source revision and
+tree state, application version/build number, exact Flutter/Rust versions,
+target/build mode, and an explicit platform signing boundary. Publish an outer
+archive SHA-256 plus provenance sidecar and verify the archive by listing,
+extracting, reinventorying, and rechecking its layout before upload.
+
+Do not create a tag or GitHub Release, request `contents: write`, enable OIDC or
+artifact-attestation permissions, provision signing identities, or call these
+archives release candidates. Android remains excluded because ADR-017 requires
+a real external upload identity for release variants.
+
+### Why
+
+- Flutter desktop deployment requires the complete generated bundle. Shipping
+  only the runner executable omits engine, AOT, plugin, ICU, asset, Host, and
+  license files.
+- GitHub's artifact transport does not preserve file permissions when it zips a
+  directory. Archiving first preserves executable bits and the macOS bundle's
+  symlink topology while still allowing ordinary workflow-artifact retention.
+- The repository does not yet possess or authorize the durable identities and
+  platform gates needed for a production distribution: Developer ID plus
+  notarization on macOS, an Authenticode/installer choice on Windows, a Linux
+  distribution/signature policy, or the Android upload key.
+- GitHub attestations require new `id-token` and `attestations` write
+  permissions, and Releases require content write authority. A checksum and
+  self-consistency manifest are useful preparation without silently expanding
+  repository permissions or implying signed provenance.
+
+### Consequence
+
+- A manual workflow artifact can prove that one clean commit produced a
+  complete release-mode bundle with internally consistent bytes and layout. It
+  cannot prove publisher identity, tamper resistance outside the workflow,
+  platform installation, Gatekeeper/SmartScreen behavior, ACLs, dependency
+  compatibility on other distributions, or Human acceptance.
+- The assembler refuses existing outputs, unsafe paths and escaping symlinks,
+  mismatched Git revision/tree state, missing or empty layout files, notice
+  drift, debug kernel blobs, Host smoke failure, and archive/manifest/checksum
+  mismatch. Partial outputs are removed on failure.
+- A future production workflow should consume these validated bundle contracts
+  only after each platform's signing/installer decisions and the exact GitHub
+  permission increase receive explicit review. It must not relabel historical
+  review-only artifacts as releases.
