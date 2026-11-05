@@ -64,6 +64,24 @@ void main() {
         ),
         throwsArgumentError,
       );
+      expect(
+        () => RemoteCredentialRecord(
+          endpoint: Uri.parse('wss://host.example/v1/ws'),
+          credential: _credential,
+          deviceId: 'device-1',
+          deviceName: List.filled(81, '🙂').join(),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        RemoteCredentialRecord(
+          endpoint: Uri.parse('wss://host.example/v1/ws'),
+          credential: _credential,
+          deviceId: 'device-1',
+          deviceName: List.filled(80, '🙂').join(),
+        ).deviceName.runes.length,
+        80,
+      );
     });
 
     test('rejects unknown, oversized, and future-version saved records', () {

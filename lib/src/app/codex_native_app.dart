@@ -18,6 +18,7 @@ import '../features/conversation/output_viewer_controller.dart';
 import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/threads/thread_list_controller.dart';
+import '../transport/remote/remote_onboarding.dart';
 import 'runtime_controller.dart';
 import 'theme_tokens.dart';
 
@@ -198,6 +199,21 @@ class RuntimeStatusScreen extends StatelessWidget {
                       Expanded(
                         child: _RemoteReadOnlyPanel(controller: controller),
                       ),
+                    ] else if (controller.snapshot.state ==
+                        RuntimeConnectionState.remoteUnpaired) ...[
+                      const SizedBox(height: ThemeTokens.space4),
+                      Expanded(
+                        child: _RemotePairingPanel(controller: controller),
+                      ),
+                    ] else if (controller.snapshot.state ==
+                            RuntimeConnectionState
+                                .remoteCredentialRecoveryRequired ||
+                        controller.snapshot.state ==
+                            RuntimeConnectionState.remoteRevoked) ...[
+                      const SizedBox(height: ThemeTokens.space4),
+                      Expanded(
+                        child: _RemoteRecoveryPanel(controller: controller),
+                      ),
                     ],
                   ],
                 ),
@@ -209,6 +225,290 @@ class RuntimeStatusScreen extends StatelessWidget {
     );
   }
 }
+
+class _RemotePairingPanel extends StatefulWidget {
+  const _RemotePairingPanel({required this.controller});
+
+  final RuntimeController controller;
+
+  @override
+  State<_RemotePairingPanel> createState() => _RemotePairingPanelState();
+}
+
+class _RemotePairingPanelState extends State<_RemotePairingPanel> {
+  final TextEditingController _endpointController = TextEditingController();
+  final TextEditingController _codeController = TextEditingController();
+  final TextEditingController _deviceNameController = TextEditingController(
+    text: 'Android device',
+  );
+
+  @override
+  void dispose() {
+    _endpointController.dispose();
+    _codeController.dispose();
+    _deviceNameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.controller.remoteOnboardingState;
+    return DecoratedBox(
+      key: const ValueKey('remote-pairing-panel'),
+      decoration: BoxDecoration(
+        color: ThemeTokens.surface,
+        border: Border.all(color: ThemeTokens.border),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(ThemeTokens.space4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Pair this Android device',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              'On the trusted desktop Host, create a one-use pairing ticket. '
+              'This build accepts only a default-root-trusted WSS endpoint and '
+              'never displays the issued device bearer.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: ThemeTokens.space4),
+            TextField(
+              key: const ValueKey('remote-endpoint-field'),
+              controller: _endpointController,
+              enabled: !state.isBusy,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              enableSuggestions: false,
+              maxLength: 2048,
+              decoration: const InputDecoration(
+                labelText: 'WSS endpoint',
+                hintText: 'wss://host.example/v1/ws',
+                helperText:
+                    'Exact /v1/ws endpoint; HTTPS pairing is same-origin.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: ThemeTokens.space3),
+            TextField(
+              key: const ValueKey('remote-pairing-code-field'),
+              controller: _codeController,
+              enabled: !state.isBusy,
+              autocorrect: false,
+              enableSuggestions: false,
+              obscureText: true,
+              maxLength: 24,
+              decoration: const InputDecoration(
+                labelText: 'One-use pairing code',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: ThemeTokens.space3),
+            TextField(
+              key: const ValueKey('remote-device-name-field'),
+              controller: _deviceNameController,
+              enabled: !state.isBusy,
+              maxLength: 80,
+              decoration: const InputDecoration(
+                labelText: 'Device name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (_remoteOnboardingMessage(state) case final message?) ...[
+              const SizedBox(height: ThemeTokens.space2),
+              Text(
+                message,
+                key: const ValueKey('remote-onboarding-message'),
+                style: TextStyle(
+                  color: state.phase == RemoteOnboardingPhase.failed
+                      ? ThemeTokens.error
+                      : null,
+                ),
+              ),
+            ],
+            const SizedBox(height: ThemeTokens.space4),
+            FilledButton.icon(
+              key: const ValueKey('remote-pair-button'),
+              onPressed: state.isBusy || !widget.controller.hasRemoteOnboarding
+                  ? null
+                  : () => unawaited(
+                      widget.controller.pairRemote(
+                        endpoint: _endpointController.text,
+                        code: _codeController.text,
+                        deviceName: _deviceNameController.text,
+                      ),
+                    ),
+              icon: state.isBusy
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.link),
+              label: const Text('Pair and connect'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RemoteRecoveryPanel extends StatelessWidget {
+  const _RemoteRecoveryPanel({required this.controller});
+
+  final RuntimeController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = controller.remoteOnboardingState;
+    final revoked =
+        controller.snapshot.state == RuntimeConnectionState.remoteRevoked;
+    return DecoratedBox(
+      key: const ValueKey('remote-recovery-panel'),
+      decoration: BoxDecoration(
+        color: ThemeTokens.surface,
+        border: Border.all(color: ThemeTokens.border),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(ThemeTokens.space4),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(
+              revoked ? Icons.link_off : Icons.lock_reset,
+              size: 40,
+              color: ThemeTokens.error,
+            ),
+            const SizedBox(height: ThemeTokens.space3),
+            Text(
+              revoked
+                  ? 'Remote credential rejected'
+                  : 'Remote profile needs recovery',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              revoked
+                  ? 'The Host rejected or revoked this device. Clear the saved '
+                        'profile, then create a fresh one-use ticket to pair again.'
+                  : 'The saved secure profile could not be read or validated. '
+                        'It was preserved instead of being silently overwritten.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (_remoteOnboardingMessage(state) case final message?) ...[
+              const SizedBox(height: ThemeTokens.space3),
+              Text(
+                message,
+                key: const ValueKey('remote-onboarding-message'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: state.phase == RemoteOnboardingPhase.failed
+                      ? ThemeTokens.error
+                      : null,
+                ),
+              ),
+            ],
+            const SizedBox(height: ThemeTokens.space4),
+            OutlinedButton.icon(
+              key: const ValueKey('remote-clear-profile-button'),
+              onPressed: state.isBusy || !controller.hasRemoteOnboarding
+                  ? null
+                  : () => unawaited(_confirmClear(context)),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Clear saved Remote profile'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmClear(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear saved Remote profile?'),
+        content: const Text(
+          'This removes the device credential and resume cursor from this '
+          'Android device. It does not revoke the Host-side device entry. '
+          'You will need a fresh one-use ticket to pair again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('remote-confirm-clear-button'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear profile'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await controller.clearRemoteProfile();
+    }
+  }
+}
+
+String? _remoteOnboardingMessage(
+  RemoteOnboardingState state,
+) => switch (state.phase) {
+  RemoteOnboardingPhase.idle => null,
+  RemoteOnboardingPhase.pairing =>
+    'Exchanging the one-use ticket with the Host…',
+  RemoteOnboardingPhase.saving =>
+    'Host accepted the ticket. Verifying secure device storage…',
+  RemoteOnboardingPhase.activating =>
+    'Secure profile verified. Connecting to the Host…',
+  RemoteOnboardingPhase.clearing => 'Clearing the saved Remote profile…',
+  RemoteOnboardingPhase.failed => switch (state.failure) {
+    RemoteOnboardingFailure.invalidInput =>
+      'Enter an exact WSS /v1/ws endpoint, a 24-character ticket, and a '
+          'device name of 1–80 characters.',
+    RemoteOnboardingFailure.timeout =>
+      'The bounded pairing request timed out. Check Host reachability and '
+          'create a fresh ticket if the previous one may have been used.',
+    RemoteOnboardingFailure.tlsRejected =>
+      'Android did not trust the Host certificate. Record version 1 accepts '
+          'only the runtime default roots; no certificate bypass was attempted.',
+    RemoteOnboardingFailure.networkUnavailable =>
+      'The Host could not be reached securely.',
+    RemoteOnboardingFailure.ticketRejected =>
+      'The pairing ticket is invalid, expired, or already used.',
+    RemoteOnboardingFailure.deviceLimitReached =>
+      'The Host paired-device limit has been reached. Revoke an old device '
+          'from the trusted local Host surface, then use a fresh ticket.',
+    RemoteOnboardingFailure.rateLimited =>
+      'The Host pairing attempt limit was reached. Wait before retrying.',
+    RemoteOnboardingFailure.incompatibleHost =>
+      'The endpoint is not a compatible Codex Native Host pairing service.',
+    RemoteOnboardingFailure.malformedResponse =>
+      'The Host returned an invalid or oversized pairing response.',
+    RemoteOnboardingFailure.hostFailed =>
+      'The Host could not complete pairing. Create a fresh local ticket.',
+    RemoteOnboardingFailure.secureStorageFailed =>
+      'The Host accepted this ticket, but Android could not verify the '
+          'secure save. Create a fresh ticket; the Host-side device entry '
+          'may need local revocation.',
+    RemoteOnboardingFailure.activationFailed =>
+      'The profile was saved, but Remote startup failed. Reopen the app to '
+          'retry without entering the bearer.',
+    RemoteOnboardingFailure.clearFailed =>
+      'The saved profile could not be cleared. Nothing was overwritten.',
+    RemoteOnboardingFailure.invalidState ||
+    null => 'Remote profile state changed before this operation could run.',
+  },
+};
 
 class _RemoteReadOnlyPanel extends StatelessWidget {
   const _RemoteReadOnlyPanel({required this.controller});

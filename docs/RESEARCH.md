@@ -943,7 +943,115 @@ _Reviewed: 2026-11-05_
   and Android debug assembly pass. No emulator or physical device was available,
   so Android Activity/process callbacks, Keystore access, WSS, network switching,
   OS process death, and Human layout/interaction remain unverified.
-- The unpaired screen is intentionally a blocker, not fake onboarding. A secure
-  bounded pairing client, explicit recovery confirmation, and pairing-bound
-  local certificate identity are the next product slice. Record version 1 stays
-  limited to system-CA WSS.
+- At this slice boundary the unpaired screen remained an intentional blocker;
+  the following slice adds bounded default-root pairing and explicit recovery.
+  Pairing-bound local certificate identity remains separate and record version 1
+  remains limited to the runtime's default trusted roots.
+
+### Bounded Android pairing and credential recovery onboarding
+
+_Reviewed: 2026-11-05_
+
+#### Sources re-reviewed
+
+- Dart 3.13 [`HttpClient`](https://api.dart.dev/dart-io/HttpClient-class.html)
+  and [`connectionTimeout`](https://api.dart.dev/dart-io/HttpClient/connectionTimeout.html)
+  documentation. The connection timeout applies only to establishing a new
+  connection; a separate whole-operation deadline is required. Response bodies
+  are streams that must be consumed or drained. Default HTTPS accepts chains to
+  the runtime's built-in trusted roots; the documentation describes a compiled
+  Mozilla root list rather than promising arbitrary Android user-installed CAs.
+  It also recommends a higher-level/native client when platform proxy/VPN
+  integration matters, which remains a physical-device validation concern.
+- This repository's actual Host router and auth implementation: exact
+  `/v1/pair`, 8 KiB HTTP body limit, ten attempts/minute, 24-character URL-safe
+  single-use tickets, 80-character Host-bounded names, 22-character device IDs,
+  43-character device tokens, read/device-rotate scopes, 401/409/429 failure
+  classes, and an exact protocol-version-1 response.
+- `codex-remote` at
+  [`fcdf784`](https://github.com/Venompool888/codex-remote/commit/fcdf784e6365735ad9efde5cb43c5126042f4556),
+  re-reading `PairingLink.kt`, `AddConnectionController.kt`, `RemoteClient.kt`,
+  `SecureTokenStore.kt`, and the Host pair route. Its useful ideas are transient
+  one-use-code fields, explicit server confirmation, generation-scoped async UI
+  callbacks, Host-side rate limits, and encrypted per-Host device tokens. Its
+  source-available license remains research-only here.
+- `codex-remote-android` at
+  [`372581a`](https://github.com/liuhao-labs/codex-remote-android/commit/372581ad5cc66677d5322a9a447a03277d36ce15),
+  re-reading `SshAppServerTransport.kt`, `ConnectionStore.kt`, and the host-key
+  confirmation UI. It blocks unknown/changed SSH identity before sending a
+  password or private key and requires explicit fingerprint acceptance. That is
+  compatibility/security evidence for a future local-certificate bootstrap,
+  not a reason to adopt SSH as this project's primary transport.
+
+#### Adopted here
+
+- Accept exactly the persisted record-v1 WSS `/v1/ws` endpoint, derive only its
+  same-origin HTTPS `/v1/pair` route, and reject userinfo, query, fragment,
+  plaintext, wrong paths, invalid ticket alphabets/lengths, control characters,
+  and names above 80 Unicode scalar values before network access.
+- Use a fresh `HttpClient` for one POST with automatic decompression off,
+  redirects off, one connection per Host, an identity encoding request, a
+  five-second connection timeout, a 15-second whole-operation timeout, and an
+  8 KiB streamed response cap. The exchange is injectable for deterministic
+  protocol tests. No error includes the URI, code, response body, token, or TLS
+  details, and no `badCertificateCallback` exists.
+- Require HTTP 200 plus JSON content type and exact versioned response keys.
+  Validate the Host's device identity/name, both required scopes, monotonic
+  issuance/expiry, null initial rotation/revocation/last-seen fields, and bearer
+  format before constructing the existing strict credential record.
+- Keep pairing state separate from connection readiness. A successful exchange
+  is written and read back through the existing serialized secure credential
+  owner, then the prior lifecycle generation is stopped before a new load starts.
+  This prevents an older foreground absent-credential read from winning after a
+  successful save. Hiding or detaching never starts a socket; an accepted token
+  is still saved so the one-use credential is not intentionally orphaned.
+- Recovery cannot be reached through the pairing form and cannot overwrite an
+  unreadable record. An affirmative dialog stops the lifecycle, verifies cursor
+  deletion first, then verifies credential deletion. Failure restarts persisted-
+  state discovery while visible; success returns to unpaired. Clearing this
+  device never claims Host-side revocation.
+
+#### Deliberate non-adoptions and remaining boundaries
+
+- Do not adopt the reference client's HTTP/USB onboarding, automatic protocol
+  fallback after 404, full response-body string reads, raw Host error messages,
+  asynchronous unverified preference writes, or decrypt-error-as-absence
+  behavior. Do not send Android model/device metadata automatically; the user
+  owns the bounded display name.
+- Record version 1 does not trust a self-signed certificate and does not accept
+  a fingerprint learned after the ticket has already been sent. The future local
+  certificate flow needs a pairing invitation that binds endpoint, ticket, and
+  certificate/CA identity through the trusted local surface, a new record
+  version, and one scoped client trust context.
+- `HttpClient` evidence does not prove Android proxy, VPN, user-added CA,
+  captive-portal, Doze, or network-switching behavior. The pairing and WebSocket
+  implementations must also be tested with the same real certificate chain; a
+  pairing-only success is not connection readiness.
+- The Host local RPC can create a ticket, but the desktop product cannot yet
+  present a verified client-reachable endpoint or manage devices. The Android
+  form is therefore a real bounded path for operator-configured Hosts, not a
+  complete end-user setup experience.
+
+#### Validation and preserved negative evidence
+
+- Pairing, onboarding, cursor, runtime integration, and 412×915 widget tests now
+  contribute to 135 passing Flutter tests. Fatal-info analysis, formatting, the
+  Linux debug build, and Android debug assembly also pass; the unchanged
+  three-ABI APK is 191,469,644 bytes. Tests cover exact request derivation,
+  all current Host status classes, timeout, malformed/oversized success,
+  readback-before-start, hidden and shutdown races, recovery preservation,
+  explicit clear, clear failure, and affirmative UI confirmation.
+- The first route assertion showed that `Uri.replace(query: '', fragment: '')`
+  emits an unwanted trailing `?#` even when both components are empty. The code
+  now replaces only scheme/path, relying on prior endpoint validation, and the
+  test requires the exact `/v1/pair` URI.
+- Concurrency review found that an application-show reload could still be
+  finishing an absent-credential read when pairing saved a new record. A direct
+  `start()` could then no-op while active and leave the later absent result as
+  final. Pair activation now stops that generation before starting the verified
+  record. The same review found clear failure could leave the lifecycle stopped;
+  visible recovery now restarts state discovery after failure.
+- Linux is the only connected Flutter device in this environment. No Android
+  Keystore call, default-root HTTPS exchange, IME flow, Activity lifecycle,
+  backup/restore, process kill, or Human interaction was executed. Those remain
+  release gates rather than inferred passes.

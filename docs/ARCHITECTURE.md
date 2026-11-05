@@ -125,7 +125,7 @@ requests fail locally because the Host has not made those semantics remotely
 safe.
 
 The Android client now has a platform-backed owner for one versioned
-WSS/system-CA device record.
+WSS/default-runtime-root device record.
 It stores endpoint, bearer, bounded device metadata, and trust kind as one
 secure value, serializes and verifies mutations, distinguishes absent from
 unreadable/corrupt state, and never silently deletes an unreadable record.
@@ -148,6 +148,24 @@ and exposes only the ready projection through a bounded read-only metadata view.
 Existing desktop controllers and process transport are unchanged, while every
 unsupported Remote gateway rejects locally.
 
+The unpaired product state now owns a separate bounded onboarding coordinator.
+It accepts only an exact WSS `/v1/ws` endpoint, derives the same-origin HTTPS
+`/v1/pair` route, and sends one validated 24-character ticket plus a bounded
+device name. Redirects and automatic decompression are disabled; connection,
+whole-request, request-body, response-body, content-type, status, protocol,
+device, scope, timestamp, and bearer bounds are fail-closed. Record version 1
+uses only the Dart runtime's default trusted root set. It has no arbitrary bad-
+certificate callback and does not attempt local self-signed onboarding.
+
+The returned record is written and read back through secure storage before a new
+Remote lifecycle generation starts. An older credential load is stopped first,
+so a late absent result cannot overwrite a successful pairing. If the app is
+hidden, an accepted credential is still saved but no socket starts until the
+next show/cold-start load. Shutdown waits for this narrow save boundary. An
+unreadable record cannot be overwritten by pairing: recovery explicitly stops
+Remote, verifies cursor deletion before credential deletion, and reloads actual
+persisted state. This client-side clear never claims to revoke the Host entry.
+
 Dart 3.13's socket is configured with a 1 MiB inbound frame cap and no
 compression, while
 the transport separately caps a delivered combined message. The authenticated
@@ -157,10 +175,14 @@ boundary.
 
 The remaining network and Android layers must still provide:
 
-- pairing-bound self-signed certificate identity or ordinary platform-CA trust;
+- pairing-bound self-signed certificate identity or real-device evidence for
+  the current default-root trust path;
+- a trusted desktop setup/invitation surface that creates tickets and presents a
+  client-reachable endpoint without deriving it from a wildcard bind;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
-- pairing/onboarding plus explicit credential recovery UI;
+- versioned pairing-bound local-certificate onboarding; the current form covers
+  only a manually supplied default-root WSS endpoint and one-use ticket;
 - paged/selectable Remote metadata and later conversation features only after
   their Host semantics are bounded end to end.
 

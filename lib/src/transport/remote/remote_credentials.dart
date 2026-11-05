@@ -6,7 +6,8 @@ import 'remote_protocol.dart';
 const _recordVersion = 1;
 const _maxRecordBytes = 8 * 1024;
 const _maxEndpointLength = 2048;
-const _maxDeviceFieldLength = 128;
+const _maxDeviceIdLength = 128;
+const _maxDeviceNameCharacters = 80;
 
 enum RemoteTrustKind { system }
 
@@ -20,8 +21,16 @@ final class RemoteCredentialRecord {
   }) {
     _validateEndpoint(endpoint);
     validateRemoteCredential(credential);
-    _validateText(deviceId, field: 'device ID');
-    _validateText(deviceName, field: 'device name');
+    _validateText(
+      deviceId,
+      field: 'device ID',
+      maximumCharacters: _maxDeviceIdLength,
+    );
+    _validateText(
+      deviceName,
+      field: 'device name',
+      maximumCharacters: _maxDeviceNameCharacters,
+    );
     return RemoteCredentialRecord._(
       endpoint: endpoint,
       credential: credential,
@@ -123,9 +132,13 @@ final class RemoteCredentialRecord {
     validateRemoteEndpoint(endpoint);
   }
 
-  static void _validateText(String value, {required String field}) {
+  static void _validateText(
+    String value, {
+    required String field,
+    required int maximumCharacters,
+  }) {
     if (value.isEmpty ||
-        value.length > _maxDeviceFieldLength ||
+        value.runes.length > maximumCharacters ||
         value.runes.any((rune) => rune < 0x20 || rune == 0x7f)) {
       throw ArgumentError('Invalid Remote $field.');
     }

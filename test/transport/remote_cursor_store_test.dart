@@ -100,6 +100,21 @@ void main() {
           await store.load(deviceId: 'device-1') as RemoteCursorAvailable;
       expect(loaded.cursor.sequence, 2);
     });
+
+    test('explicit clear verifies that the cursor was removed', () async {
+      final backend = _FakeSecureValueStore();
+      final store = RemoteAppliedCursorStore(backend);
+      await store.save(
+        deviceId: 'device-1',
+        cursor: const RemoteResumeCursor(sessionId: 'session-1', sequence: 2),
+      );
+
+      await store.clear();
+
+      expect(backend.value, isNull);
+      expect(backend.deleteCalls, 1);
+      expect(await store.load(deviceId: 'device-1'), isA<RemoteCursorAbsent>());
+    });
   });
 }
 

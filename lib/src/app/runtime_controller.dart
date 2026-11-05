@@ -23,6 +23,7 @@ import '../transport/process/process_transport.dart';
 import '../transport/remote/remote_credentials.dart';
 import '../transport/remote/remote_cursor_store.dart';
 import '../transport/remote/remote_lifecycle_coordinator.dart';
+import '../transport/remote/remote_onboarding.dart';
 import '../transport/remote/remote_projection.dart';
 import '../transport/remote/remote_secure_storage.dart';
 
@@ -45,6 +46,7 @@ class RuntimeController extends ChangeNotifier
     TransportStarter? transportStarter,
     bool? useRemote,
     RemoteLifecycleOwner? remoteLifecycle,
+    RemoteOnboardingOwner? remoteOnboarding,
   }) {
     _transportStarter =
         transportStarter ??
@@ -52,16 +54,31 @@ class RuntimeController extends ChangeNotifier
           hostExecutablePath: hostExecutable,
           codexExecutablePath: codexExecutable,
         ));
-    _usesRemote = useRemote ?? (remoteLifecycle != null || Platform.isAndroid);
-    if (!_usesRemote && remoteLifecycle != null) {
+    _usesRemote =
+        useRemote ??
+        (remoteLifecycle != null ||
+            remoteOnboarding != null ||
+            Platform.isAndroid);
+    if (!_usesRemote && (remoteLifecycle != null || remoteOnboarding != null)) {
       throw ArgumentError(
-        'A Remote lifecycle owner requires Remote runtime mode.',
-        'remoteLifecycle',
+        'Remote owners require Remote runtime mode.',
+        'useRemote',
       );
     }
-    _remoteLifecycle =
-        remoteLifecycle ??
-        (_usesRemote ? _createDefaultRemoteLifecycle() : null);
+    if (remoteOnboarding != null && remoteLifecycle == null) {
+      throw ArgumentError(
+        'A Remote onboarding owner requires a Remote lifecycle owner.',
+        'remoteOnboarding',
+      );
+    }
+    if (_usesRemote && remoteLifecycle == null) {
+      final stack = _createDefaultRemoteStack();
+      _remoteLifecycle = stack.lifecycle;
+      _remoteOnboarding = stack.onboarding;
+    } else {
+      _remoteLifecycle = remoteLifecycle;
+      _remoteOnboarding = remoteOnboarding;
+    }
   }
 
   final CodexExecutableLocator locator;
@@ -69,6 +86,7 @@ class RuntimeController extends ChangeNotifier
   late final TransportStarter _transportStarter;
   late final bool _usesRemote;
   late final RemoteLifecycleOwner? _remoteLifecycle;
+  late final RemoteOnboardingOwner? _remoteOnboarding;
   RuntimeSnapshot _snapshot = const RuntimeSnapshot.idle();
   ProcessTransport? _transport;
   StreamSubscription<ProcessExit>? _exitSubscription;
@@ -76,6 +94,7 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<TurnEvent>? _turnEventSubscription;
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
+  StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
   final StreamController<TurnEvent> _turnEvents =
       StreamController<TurnEvent>.broadcast();
   final StreamController<ApprovalEvent> _approvalEvents =
@@ -92,6 +111,9 @@ class RuntimeController extends ChangeNotifier
       _remoteLifecycle?.projection?.threads ?? const [];
   bool get remoteHasMoreThreads =>
       _remoteLifecycle?.projection?.nextThreadCursor != null;
+  bool get hasRemoteOnboarding => _remoteOnboarding != null;
+  RemoteOnboardingState get remoteOnboardingState =>
+      _remoteOnboarding?.state ?? const RemoteOnboardingState.idle();
 
   @override
   Stream<TurnEvent> get turnEvents => _turnEvents.stream;
@@ -106,11 +128,39 @@ class RuntimeController extends ChangeNotifier
     if (!_usesRemote || _stopping || _disposed) {
       return;
     }
+    _remoteOnboarding?.setApplicationVisible(false);
     await _remoteLifecycle!.suspend();
     _handleRemoteState(_remoteLifecycle.state);
   }
 
-  Future<void> handleAppShown() => start();
+  Future<void> handleAppShown() {
+    _remoteOnboarding?.setApplicationVisible(true);
+    return start();
+  }
+
+  Future<void> pairRemote({
+    required String endpoint,
+    required String code,
+    required String deviceName,
+  }) {
+    final onboarding = _remoteOnboarding;
+    if (onboarding == null) {
+      throw UnsupportedError('Remote pairing is unavailable.');
+    }
+    return onboarding.pair(
+      endpoint: endpoint,
+      code: code,
+      deviceName: deviceName,
+    );
+  }
+
+  Future<void> clearRemoteProfile() {
+    final onboarding = _remoteOnboarding;
+    if (onboarding == null) {
+      throw UnsupportedError('Remote profile recovery is unavailable.');
+    }
+    return onboarding.clearProfile();
+  }
 
   @override
   Future<ThreadPage> listThreads(ThreadListQuery query) =>
@@ -310,6 +360,11 @@ class RuntimeController extends ChangeNotifier
         );
       },
     );
+    _remoteOnboardingSubscription ??= _remoteOnboarding?.states.listen((_) {
+      if (!_stopping && !_disposed) {
+        notifyListeners();
+      }
+    });
     _handleRemoteState(lifecycle.state);
     await lifecycle.start();
     _handleRemoteState(lifecycle.state);
@@ -328,8 +383,8 @@ class RuntimeController extends ChangeNotifier
       RemoteLifecyclePhase.unpaired => const RuntimeSnapshot(
         state: RuntimeConnectionState.remoteUnpaired,
         message:
-            'This device is not paired with a Codex Native Host. Pairing UI '
-            'is not available in this build yet.',
+            'This device is not paired with a Codex Native Host. Create a '
+            'one-use ticket on the trusted local Host to continue.',
       ),
       RemoteLifecyclePhase.credentialRecoveryRequired => const RuntimeSnapshot(
         state: RuntimeConnectionState.remoteCredentialRecoveryRequired,
@@ -430,8 +485,10 @@ class RuntimeController extends ChangeNotifier
     await _protocolErrorSubscription?.cancel();
     await _turnEventSubscription?.cancel();
     await _approvalEventSubscription?.cancel();
+    await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
     await _remoteStateSubscription?.cancel();
+    await _remoteOnboardingSubscription?.cancel();
     await _transport?.close();
     await _turnEvents.close();
     await _approvalEvents.close();
@@ -447,12 +504,22 @@ class RuntimeController extends ChangeNotifier
     }
   }
 
-  static RemoteLifecycleOwner _createDefaultRemoteLifecycle() {
+  static _DefaultRemoteStack _createDefaultRemoteStack() {
     final storage = FlutterRemoteSecureValueStore();
-    return RemoteLifecycleCoordinator(
-      credentialStore: RemoteCredentialStore(storage),
-      cursorStore: RemoteAppliedCursorStore(storage),
+    final credentialStore = RemoteCredentialStore(storage);
+    final cursorStore = RemoteAppliedCursorStore(storage);
+    final lifecycle = RemoteLifecycleCoordinator(
+      credentialStore: credentialStore,
+      cursorStore: cursorStore,
       projection: BoundedRemoteProjection(),
+    );
+    return _DefaultRemoteStack(
+      lifecycle: lifecycle,
+      onboarding: RemoteOnboardingCoordinator(
+        credentialStore: credentialStore,
+        cursorStore: cursorStore,
+        lifecycle: lifecycle,
+      ),
     );
   }
 
@@ -470,4 +537,14 @@ class RuntimeController extends ChangeNotifier
     unawaited(shutdown());
     super.dispose();
   }
+}
+
+final class _DefaultRemoteStack {
+  const _DefaultRemoteStack({
+    required this.lifecycle,
+    required this.onboarding,
+  });
+
+  final RemoteLifecycleOwner lifecycle;
+  final RemoteOnboardingOwner onboarding;
 }

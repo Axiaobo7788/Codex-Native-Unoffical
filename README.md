@@ -89,10 +89,15 @@ exact apply-before-persist sequencing, capped reconnect backoff, stale-attempt
 rejection, and terminal recovery/revocation states. Android now constructs that
 stack, suspends it while hidden, resumes it when shown, and renders only the
 bounded model/thread metadata in an explicitly read-only virtualized panel. A
-versioned system-CA connection profile and device bearer live behind platform
+versioned default-root connection profile and device bearer live behind platform
 secure storage with explicit unreadable/corrupt recovery and Android
 backup/transfer exclusions; the bearer is never put in ordinary preferences or
-diagnostics. Pairing/onboarding, pairing-bound self-signed certificate trust,
+diagnostics. Android now also has bounded one-use-ticket onboarding for an exact
+WSS `/v1/ws` endpoint: the same-origin HTTPS exchange has strict input/response
+schemas, 8 KiB body limits, connection/request deadlines, no redirect or
+certificate bypass, and verified secure-storage readback before Remote starts.
+Unreadable or revoked profiles require an affirmative local clear. A trusted
+desktop setup/invitation surface, pairing-bound self-signed certificate trust,
 full conversation features, and real-device validation remain.
 
 ## Run locally
@@ -137,6 +142,14 @@ valid certificate.
 set `CODEX_NATIVE_REMOTE_SMOKE_TLS_CERT` and
 `CODEX_NATIVE_REMOTE_SMOKE_TLS_KEY`; its Dart clients build an explicit trust
 context from that certificate and never use an accept-all callback.
+
+The current Android onboarding form accepts only an exact
+`wss://host.example/v1/ws` endpoint whose certificate chains to the Dart
+runtime's default trusted roots, plus the Host's 24-character one-use ticket.
+It never accepts or displays a bearer token. The desktop product does not yet
+provide the trusted setup screen that creates a ticket and presents a verified
+client-reachable endpoint, so this is an integrated Android security path rather
+than a complete end-user setup workflow.
 
 ## Verify
 

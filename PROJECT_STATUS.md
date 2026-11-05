@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, and a bounded read-only metadata UI are implemented; pairing/onboarding, pairing-bound local trust, writes/approvals, and full conversation integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, secure default-root pairing/recovery onboarding, and a bounded read-only metadata UI are implemented; a trusted desktop setup surface, pairing-bound local-certificate trust, writes/approvals, and full conversation integration do not exist yet**
 
 ## Current repository state
 
@@ -83,8 +83,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   session/sequence/ACK resume, count-and-byte-bounded replay, multi-connection
   request correlation, bounded same-session write idempotency, single-use
   pairing, and hash-only scoped device credentials. The WS/WSS listener uses
-  these primitives. Android now has a strict platform-backed WSS/system-CA
-  device-record owner, but no pairing or runtime UI flow exists yet.
+  these primitives. Android now has a strict platform-backed WSS/default-root
+  device-record owner plus a bounded WSS pairing/recovery UI. The Android flow
+  still requires an exact operator-provided endpoint and a ticket created through
+  the local Host RPC because the desktop setup surface does not exist yet.
 - The desktop Host exposes trusted local `host/remote/pairing/create`,
   `host/remote/devices/list`, and `host/remote/devices/revoke` administration.
   Its credential registry is loaded lazily from a configurable user config file,
@@ -103,13 +105,73 @@ This file is the repository's durable project memory. Update it whenever a task 
   lifecycle/state notification methods feed sequenced live delivery and same-
   session replay. Android now maps hidden/shown application visibility to
   suspend/resume and displays the bounded ready projection in a read-only panel.
-  There is still no Remote write/approval path, pairing/onboarding flow, full
-  conversation surface, or pairing-bound Android certificate trust.
+  Android can now exchange a one-use ticket over default-root HTTPS, verify and
+  save the issued bearer atomically, connect only after readback, and explicitly
+  clear an unreadable/revoked profile. There is still no Remote write/approval
+  path, full conversation surface, desktop pairing/setup UX, or pairing-bound
+  local-certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 bounded Android pairing and recovery onboarding
+
+- Added a strict pairing client for the Host's exact `/v1/pair` contract. Input
+  accepts only an exact WSS `/v1/ws` endpoint, the Host's 24-character URL-safe
+  ticket, and a trimmed control-free 1–80-character device name. It derives one
+  same-origin HTTPS route, does not follow redirects, disables response
+  decompression, and caps request and response bodies at 8 KiB with five-second
+  connection and 15-second whole-request deadlines.
+- Successful responses require HTTP 200 JSON, protocol version 1, exact device
+  fields, the 22-character device ID, `read` plus `device_rotate` scopes, valid
+  issue/expiry ordering, and the 43-character bearer. Ticket rejection, device
+  limit, rate limit, incompatible route, Host failure, TLS rejection, network
+  failure, timeout, and malformed/oversized data remain distinct but redacted.
+  Neither request/response diagnostics nor object strings expose the endpoint,
+  ticket, bearer, device identity, or server error body.
+- Added a pairing/recovery coordinator over the existing verified credential and
+  applied-cursor stores. A bearer is never used until its complete versioned
+  record has been written and read back. The coordinator invalidates any older
+  credential-load generation before starting Remote, saves an accepted pairing
+  while hidden without connecting, waits for that save during shutdown, refuses
+  to overwrite recovery-required state, and never auto-retries a single-use
+  ticket. A post-acceptance secure-save failure explicitly warns that the local
+  Host may need to revoke the orphaned device entry.
+- Recovery for unreadable or revoked state now requires an affirmative dialog.
+  It stops Remote, deletes and verifies the non-secret cursor before deleting and
+  verifying the credential, then reloads persisted state. A failed clear restarts
+  state discovery when visible instead of leaving the product on a stopped
+  screen. No clear action claims Host-side revocation.
+- Added phone-sized unpaired and recovery surfaces with no bearer entry/display,
+  no insecure-certificate option, and no accidental conversation/write controls.
+  The default Android stack shares one secure-storage adapter across credential,
+  cursor, lifecycle, and onboarding owners; desktop process behavior is
+  unchanged.
+- Targeted review of `codex-remote` at `fcdf784` confirmed the value of transient
+  one-use-code UI state and generation-scoped callbacks, while also showing
+  failure boundaries this project does not adopt: HTTP onboarding, version
+  fallback, unbounded response-string parsing, asynchronous unverified
+  preference writes, and treating decrypt failure as absence.
+  `codex-remote-android` at `372581a` confirms that unknown/changed Host identity
+  should block before credentials are sent; its SSH fingerprint confirmation is
+  reference evidence for the future pairing-bound local-certificate flow, not an
+  architecture to copy.
+- Preserved three directly coupled negative results. The first URI test exposed
+  that explicitly replacing empty query/fragment generated a trailing `?#`;
+  pairing now changes only scheme/path and proves the exact route. Concurrency
+  review found a foreground absent-credential load could outlive a pairing save,
+  so the prior lifecycle generation is now stopped before the verified record is
+  activated. The same review found a failed clear could strand the runtime in
+  `stopped`; visible state discovery now restarts after that failure.
+- All 135 Flutter tests, `dart analyze --fatal-infos`, formatting, the Linux
+  debug build, and Android `assembleDebug` pass. Android still requires the
+  temporary ASCII Flutter-SDK property workaround and produces the unchanged
+  191,469,644-byte three-ABI debug APK. The available device inventory contains
+  only Linux; no Android emulator or physical device exists, so none of real
+  HTTPS trust, Keystore write/readback, Activity lifecycle, keyboard/IME
+  behavior, network switching, or Human interaction is proven here.
 
 ### 2026-11-05 — Phase 4 Android Remote runtime and read-only product state
 
@@ -865,26 +927,28 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Build a secure Android pairing/onboarding path for the now-integrated read-only
-Remote surface:
+Make the secure pairing path operable end to end without asking users to invoke
+raw Host RPCs or weakening certificate identity:
 
-1. add a bounded pairing client and state owner for the Host's one-use ticket
-   endpoint. Accept only a validated WSS Host endpoint, bounded pairing code and
-   device name; require system-CA trust for record version 1; impose body,
-   response, connection, and request deadlines; never log or display the bearer;
-2. save the returned endpoint/bearer/device identity atomically through the
-   existing credential owner, then start the lifecycle coordinator only after
-   verified write readback. Make pairing retry/error/recovery distinct and never
-   overwrite an unreadable existing record;
-3. provide an explicit unpaired/recovery UI with affirmative clear confirmation.
-   Design the local self-signed pairing artifact so certificate/CA identity is
-   authenticated and stored through a new explicit record version; never use
-   `badCertificateCallback` as onboarding;
-4. exercise the integrated path against an available emulator/device: cold
-   start, suspend/resume, network loss, Host restart/session change, revocation,
-   malformed/oversized input, process death, Keystore recovery, bounded
-   hydration, and system-CA WSS. Keep server requests/approvals and writes
-   rejected until pending interaction state and idempotency are wired end to end.
+1. add a trusted desktop Remote setup surface that reports disabled/listener/TLS
+   state, creates exactly one short-lived ticket on an affirmative action, shows
+   the client-reachable WSS `/v1/ws` endpoint without guessing it from a wildcard
+   bind, and supports explicit device list/revocation. Do not auto-enable a
+   listener or expose a ticket in logs;
+2. design a versioned pairing invitation for QR/manual transfer with exact
+   endpoint and ticket fields plus pairing-bound local certificate/CA identity.
+   Add a new credential-record version and scoped TLS context only after the
+   bootstrap proves Host identity; never use `badCertificateCallback`, TOFU after
+   sending the ticket, or silent trust migration;
+3. exercise the current default-root path against an available emulator/device
+   and real Host: cold start, foreground/background, process death, network
+   loss/recovery, Host restart, credential rejection/revocation,
+   invalid/untrusted certificate, unreadable Keystore state, pairing save
+   failure, and backup/restore behavior before claiming Android readiness;
+4. only after pairing/setup is usable and device-verified, extend the Remote
+   product beyond bounded read-only metadata. Keep pagination, output, writes,
+   approvals, idempotency, and attachment bounds explicit rather than reusing the
+   desktop surface optimistically.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

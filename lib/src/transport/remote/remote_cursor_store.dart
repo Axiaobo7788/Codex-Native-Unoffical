@@ -89,6 +89,19 @@ final class RemoteAppliedCursorStore {
     }
   });
 
+  Future<void> clear() => _serialized(() async {
+    try {
+      await _storage.delete(storageKey);
+      if (await _storage.read(storageKey) != null) {
+        throw const RemoteCursorStoreException();
+      }
+    } on RemoteCursorStoreException {
+      rethrow;
+    } on Object {
+      throw const RemoteCursorStoreException();
+    }
+  });
+
   static String _encode({
     required String deviceId,
     required RemoteResumeCursor cursor,
