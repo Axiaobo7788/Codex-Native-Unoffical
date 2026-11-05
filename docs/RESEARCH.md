@@ -161,4 +161,3 @@ mandatory.
   deltas remain bounded/sublinear; app-server is reported separately.
 - A real installed app-server smoke must still pass initialization, thread/turn
   flows, approvals, interruption, history, and one coding task through the Host.
-

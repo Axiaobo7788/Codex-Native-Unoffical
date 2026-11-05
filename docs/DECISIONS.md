@@ -135,3 +135,46 @@ Use Apache License 2.0 for the project.
 ### Why
 
 It matches the upstream Codex project's permissive style, is friendly to community ports and packaging, and includes explicit patent terms without adding copyleft restrictions.
+
+---
+
+## ADR-008 — Put a bounded native Host between Flutter and app-server
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+Desktop production transport runs a lightweight Rust `codex-native-host`. The
+Host supervises the stock `codex app-server`, incrementally validates its JSONL
+stdout, removes large command-output strings before Flutter receives a message,
+and exposes bounded output reads through opaque references.
+
+The Host is a transport and lifecycle boundary. It does not replace Codex
+prompts, tools, compaction, protocol semantics, or the agent loop. Remote clients
+will later connect to this same boundary rather than introduce a second harness.
+
+### Why
+
+- Dart's normal JSON decoder must materialize a complete JSON string before a
+  typed adapter can discard `aggregatedOutput`.
+- Current app-server item reads can still return an entire command output in one
+  response; upstream output deferral makes list responses safer but does not
+  provide byte ranges.
+- An incremental native boundary can keep both the Host and Flutter projection
+  bounded, spool selected output with explicit caps, isolate process failure, and
+  become the natural owner of authenticated Remote transport.
+
+### Consequence
+
+- Desktop release bundles must build and ship `codex-native-host` beside the
+  Flutter executable.
+- Flutter receives sanitized JSON plus output descriptors and must request only
+  bounded ranges/tails.
+- Spool files are session-scoped, owner-only, capped, and addressed only by
+  opaque IDs. Paths never cross the protocol boundary.
+- The Host cannot eliminate app-server's own serialization allocation because
+  the reviewed upstream stdio writer creates a complete serialized `String`
+  before writing. App-server, Host, and Flutter memory must be measured and
+  reported separately.

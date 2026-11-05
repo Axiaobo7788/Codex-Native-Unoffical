@@ -1,0 +1,3 @@
+[workspace]
+members = ["native_host"]
+resolver = "2"

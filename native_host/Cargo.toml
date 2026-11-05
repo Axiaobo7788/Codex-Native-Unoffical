@@ -1,0 +1,22 @@
+[package]
+name = "codex-native-host"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+license = "Apache-2.0"
+description = "Bounded transport host for Codex Native (Unofficial)"
+publish = false
+
+[dependencies]
+base64 = "0.22.1"
+dirs = "6.0.0"
+fs2 = "0.4.3"
+json-skimmer = "=1.0.0"
+serde_json = "1.0.145"
+uuid = { version = "1.18.1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.177"
+
+[dev-dependencies]
+tempfile = "3.23.0"

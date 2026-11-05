@@ -5,6 +5,7 @@
 .pub/
 build/
 coverage/
+target/
 .flutter-plugins
 .flutter-plugins-dependencies
 

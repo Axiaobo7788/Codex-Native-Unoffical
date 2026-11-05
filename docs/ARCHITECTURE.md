@@ -14,13 +14,21 @@ Codex Native is a presentation and remote-control client around the official Cod
        stdio / JSONL                resumable WebSocket
             |                                |
             v                                v
-+------------------------+       +------------------------+
-| stock codex app-server |<------| Host bridge            |
-| Rust / Codex harness   |       | auth / resume / stream |
-+-----------+------------+       +------------------------+
-            |
-            v
-        OpenAI/Codex
++---------------------------------------------------------+
+| codex-native-host                                       |
+| lifecycle / bounded output spool / future auth + resume |
++----------------------------+----------------------------+
+                             |
+                       stdio / JSONL
+                             |
+                             v
+                +------------------------+
+                | stock codex app-server |
+                | Rust / Codex harness   |
+                +-----------+------------+
+                            |
+                            v
+                        OpenAI/Codex
 ```
 
 ## Transport boundary
@@ -29,8 +37,16 @@ All feature code talks to a typed `CodexTransport` abstraction.
 
 Initial implementations:
 
-- `ProcessTransport`: desktop child process using stdio/JSONL.
+- `ProcessTransport`: desktop stdio/JSONL client. In production it starts the
+  bundled `codex-native-host`, which then owns the app-server child.
 - `RemoteTransport`: Android/remote clients using an authenticated WebSocket protocol.
+
+The Host consumes only its reserved `host/*` request namespace. Every ordinary
+Codex request, notification, server request, and response remains on the stock
+app-server protocol. Large `aggregatedOutput` values are decoded incrementally
+to private capped files and replaced with typed descriptors before the ordinary
+JSON reaches Dart. Flutter can read only capped byte ranges or tails using opaque
+references; it cannot submit filesystem paths.
 
 Possible future implementation:
 
@@ -43,7 +59,7 @@ The app-server/thread store is authoritative. Flutter retains only the current w
 - Thread list: metadata only.
 - Active conversation: recent page(s) only.
 - Old turns: fetched on scroll.
-- Tool output: summary in timeline, full output on demand.
+- Tool output: summary in timeline, bounded file-backed ranges on demand.
 - Diff: file summary first, file/hunk content on demand.
 - Inactive thread: unload UI models and caches.
 
