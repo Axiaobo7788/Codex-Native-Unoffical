@@ -214,8 +214,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   and native-license identity. Windows job `127602082839` passed native tests,
   debug build, Host, and license checks. Linux/Android job `127602082633` passed
   the complete repository gate, including hosted `flutter analyze`, Linux
-  runtime closure, and debug APK verification. The macOS build retains the
-  known Flutter-template warning that `Flutter Assemble` declares no output.
+  runtime closure, and debug APK verification. The macOS build retains Xcode's
+  known Flutter-template warning about `Flutter Assemble`; the phase does
+  declare generated input/output file lists and intentionally retains dependency
+  analysis.
 - Manual read-only review run `42131127906` at the same revision passed Linux
   x64 job `127607720970`, Windows x64 job `127607721434`, macOS universal job
   `127607721455`, and Linux clean-runtime job `127610652373`. The macOS job
@@ -279,9 +281,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   byte-identity checks. Linux/Android job `127585024849` passed the full
   repository and debug APK gates, and Windows job `127585024928` passed native
   tests, build, and Host/license smoke. The macOS log retains one Xcode warning
-  from the Flutter template: its `Flutter Assemble` Run Script declares no
-  output dependency. It did not block the build and is separate from the ACL
-  behavior.
+  from the Flutter template about its `Flutter Assemble` Run Script. The phase
+  does declare generated input/output file lists; Flutter's open triaged issue
+  #123735 treats this as an Xcode diagnostic defect and maintainers advise
+  against disabling dependency analysis. It did not block the build and is
+  separate from the ACL behavior.
 - Windows ACL evidence follow-up CI `42117298358` at `5ce6b6b`, Windows job
   `127560231894`, passed the prior 85 native test instances with no `warning:`
   line, then passed the Windows Flutter build and Host/license smoke. Its

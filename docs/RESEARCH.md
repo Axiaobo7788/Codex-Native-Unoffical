@@ -2193,10 +2193,11 @@ _Reviewed: 2026-11-06_
   Linux/Android job `127585024849` passed the complete repository and debug APK
   gates, while
   Windows job `127585024928` passed native tests, build, and Host/license smoke.
-  The macOS build retained one Flutter-template Xcode warning because `Flutter
-  Assemble` declares no output dependency. This closes the implemented
-  leaf-object ACL gate, not the remaining service, directory, installer,
-  signing/notarization, or Human gates.
+  The macOS build retained Xcode's known Flutter-template warning about
+  `Flutter Assemble`; the phase does declare generated input/output file lists
+  and retains dependency analysis as documented below. This closes the
+  implemented leaf-object ACL gate, not the remaining service, directory,
+  installer, signing/notarization, or Human gates.
 
 ## macOS universal nested-Host packaging
 
@@ -2269,8 +2270,8 @@ _Reviewed: 2026-11-06_
   and executing Host `0.1.0`. Windows job `127602082839` and the full Linux/
   Android job `127602082633` also passed; the latter includes hosted
   `flutter analyze`, all Flutter tests, Linux runtime closure, and debug APK
-  verification. The known Flutter-template Xcode output-dependency warning
-  remains present and unrelated to architecture correctness.
+  verification. Xcode's known warning remains present despite the Flutter-
+  generated output file list and is unrelated to architecture correctness.
 - Manual read-only workflow `42131127906` at the same revision passed Linux x64
   job `127607720970`, Windows x64 job `127607721434`, macOS universal job
   `127607721455`, and clean Ubuntu 22.04 runtime job `127610652373`. The macOS
@@ -2280,3 +2281,43 @@ _Reviewed: 2026-11-06_
   `7e98452d0e0be660497c4ee564902daf026d0f75ce10a50216d787fa7ef955d0`;
   GitHub reports 24,774,088 bytes for the uploaded artifact container. These are
   review-only outputs with `distributionReady=false`, not signed releases.
+
+## macOS Flutter Assemble dependency-warning boundary
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Apple's official WWDC22 build-parallelization guidance says a script phase
+  that participates in dependency analysis must declare its complete inputs and
+  outputs. Those declarations let Xcode skip unchanged work and prevent unsafe
+  scheduling; disabling dependency analysis deliberately gives up that model.
+- Flutter issue
+  [#123735](https://github.com/flutter/flutter/issues/123735) remains open and
+  triaged. Flutter maintainers identify the `Flutter Assemble` warning as an
+  Xcode false positive: the aggregate target correctly keeps dependency analysis
+  enabled and declares `FlutterInputs.xcfilelist` plus
+  `FlutterOutputs.xcfilelist`. They note that Flutter could filter the diagnostic
+  from CLI output, but it would still appear in Xcode.
+- Earlier Flutter issue
+  [#112015](https://github.com/flutter/flutter/issues/112015) explicitly warns
+  against adding `alwaysOutOfDate = 1` to this assemble phase because the phase
+  does perform proper input/output dependency analysis.
+- The repository-pinned Flutter 3.47.1 template and Flutter's current upstream
+  macOS template were inspected directly. Both match this repository: only the
+  separate embed phase is always out of date; `Flutter Assemble` keeps its input
+  and output file lists and the `tripwire` bootstrap input.
+
+### Adopted boundary
+
+- Preserve Flutter's dependency-aware aggregate phase exactly. Do not suppress
+  the warning by setting `alwaysOutOfDate = 1`, inventing a synthetic output, or
+  removing the generated file lists. A warning-free log would not justify
+  weakening correct incremental-build semantics.
+- Treat the observed Xcode 16.4 line as a known upstream diagnostic, not evidence
+  that this repository omitted a build output. Continue to fail on real build,
+  universal-slice, Host, license, and runtime errors, and preserve the warning in
+  hosted evidence until Flutter/Xcode resolves it upstream.
+- This review makes no code change and does not prove that future Flutter or
+  Xcode versions retain the same behavior. Re-audit the pinned template and open
+  issue when either toolchain is upgraded.
