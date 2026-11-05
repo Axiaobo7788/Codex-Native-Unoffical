@@ -99,15 +99,20 @@ read-only `host/remote/status`, `model/list`, bounded `thread/list`, and
 metadata-only `thread/read` methods. Codex responses reuse the same Host output
 sanitizer, are correlated through a per-process reserved namespace, and are
 delivered through a per-connection count-and-byte-bounded queue without leaking
-the internal response to desktop stdout. Codex notifications/event replay and
-all writes are deliberately not routed through it yet.
+the internal response to desktop stdout. The same sanitizer now publishes only
+`turn/started`, `turn/completed`, `item/started`, `item/completed`,
+`thread/status/changed`, and `error` notifications to the existing 512-event,
+8 MiB journal. A socket subscribes before negotiation, skips the journal
+baseline already represented by `hello_ack`, then accepts only the exact next
+sequence. Same-session retained suffixes replay; an evicted cursor, receiver
+lag, or live sequence gap requires authoritative resync. Token deltas, diffs,
+server requests, approvals, and all writes remain deliberately unrouted.
 
 The remaining network and Android layers must still provide:
 
 - TLS-required non-loopback transport and certificate policy;
-- sanitized replayable Codex notification/event routing;
 - chunked/resumable file transfer;
-- executable replay/gap/slow-reader and large-payload recovery gates;
+- broader notification/diff delivery only after method-specific payload bounds;
 - platform-backed Android credential storage and lifecycle recovery.
 
 ## Fidelity mode

@@ -1,4 +1,6 @@
-use crate::events::AppServerRemoteResponse;
+use crate::events::{
+    AppServerRemoteNotification, AppServerRemoteObservation, AppServerRemoteResponse,
+};
 use crate::json_string::JsonStringDecoder;
 use crate::spool::{CandidateFile, OutputSpool, SpoolStore};
 use json_skimmer::{Event, Mode, Parser, StringKind};
@@ -9,16 +11,19 @@ const INPUT_BUFFER_BYTES: usize = 16 * 1024;
 const MAX_JSON_DEPTH: usize = 256;
 const TARGET_KEY: &[u8] = b"aggregatedOutput";
 const ID_KEY: &[u8] = b"id";
+const METHOD_KEY: &[u8] = b"method";
 const MAX_KEY_BYTES: usize = 256;
 const MAX_REMOTE_ID_BYTES: usize = 128;
+const MAX_REMOTE_METHOD_BYTES: usize = 128;
 const MAX_REMOTE_RESPONSE_BYTES: usize = 1024 * 1024 - 4096;
+const MAX_REMOTE_NOTIFICATION_BYTES: usize = 256 * 1024;
 
 pub(crate) fn transform_stream(
     mut input: impl Read,
     mut output: impl Write,
     store: &SpoolStore,
     remote_id_prefix: Option<String>,
-    mut on_remote_response: impl FnMut(AppServerRemoteResponse) -> io::Result<()>,
+    mut on_remote_observation: impl FnMut(AppServerRemoteObservation) -> io::Result<()>,
 ) -> io::Result<()> {
     let mut transformer = Transformer::new(store, remote_id_prefix);
     let mut buffer = [0_u8; INPUT_BUFFER_BYTES];
@@ -29,9 +34,9 @@ pub(crate) fn transform_stream(
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error),
         };
-        transformer.push(&buffer[..count], &mut output, &mut on_remote_response)?;
+        transformer.push(&buffer[..count], &mut output, &mut on_remote_observation)?;
     }
-    transformer.finish(&mut output, &mut on_remote_response)
+    transformer.finish(&mut output, &mut on_remote_observation)
 }
 
 struct Transformer<'a> {
@@ -54,7 +59,7 @@ impl<'a> Transformer<'a> {
         &mut self,
         input: &[u8],
         output: &mut impl Write,
-        on_remote_response: &mut dyn FnMut(AppServerRemoteResponse) -> io::Result<()>,
+        on_remote_observation: &mut dyn FnMut(AppServerRemoteObservation) -> io::Result<()>,
     ) -> io::Result<()> {
         let base = self.parser.offset();
         if self.processor.cursor != base {
@@ -63,7 +68,8 @@ impl<'a> Transformer<'a> {
         let processor = &mut self.processor;
         self.parser.push(input, |event| {
             if processor.error.is_none()
-                && let Err(error) = processor.handle(event, input, base, output, on_remote_response)
+                && let Err(error) =
+                    processor.handle(event, input, base, output, on_remote_observation)
             {
                 processor.error = Some(error);
             }
@@ -79,14 +85,14 @@ impl<'a> Transformer<'a> {
     fn finish(
         &mut self,
         output: &mut impl Write,
-        on_remote_response: &mut dyn FnMut(AppServerRemoteResponse) -> io::Result<()>,
+        on_remote_observation: &mut dyn FnMut(AppServerRemoteObservation) -> io::Result<()>,
     ) -> io::Result<()> {
         let parser_offset = self.parser.offset();
         let processor = &mut self.processor;
         self.parser.finish(|event| {
             if processor.error.is_none()
                 && let Err(error) =
-                    processor.handle(event, &[], parser_offset, output, on_remote_response)
+                    processor.handle(event, &[], parser_offset, output, on_remote_observation)
             {
                 processor.error = Some(error);
             }
@@ -111,9 +117,13 @@ struct Processor<'a> {
     key: Option<KeyCollector>,
     pending_target_depth: Option<usize>,
     pending_id_depth: Option<usize>,
+    pending_method_depth: Option<usize>,
     active_output: Option<ActiveOutput<'a>>,
     active_id: Option<BoundedStringCollector>,
+    active_method: Option<BoundedStringCollector>,
     remote_response_id: Option<String>,
+    notification_method: Option<String>,
+    top_level_has_id: bool,
     remote_id_prefix: Option<String>,
     completed_candidate: bool,
     separator_has_line_break: bool,
@@ -130,9 +140,13 @@ impl<'a> Processor<'a> {
             key: None,
             pending_target_depth: None,
             pending_id_depth: None,
+            pending_method_depth: None,
             active_output: None,
             active_id: None,
+            active_method: None,
             remote_response_id: None,
+            notification_method: None,
+            top_level_has_id: false,
             remote_id_prefix,
             completed_candidate: false,
             separator_has_line_break: false,
@@ -146,7 +160,7 @@ impl<'a> Processor<'a> {
         input: &[u8],
         base: u64,
         output: &mut impl Write,
-        on_remote_response: &mut dyn FnMut(AppServerRemoteResponse) -> io::Result<()>,
+        on_remote_observation: &mut dyn FnMut(AppServerRemoteObservation) -> io::Result<()>,
     ) -> io::Result<()> {
         match event {
             Event::CandidateStart { offset, .. } => {
@@ -164,9 +178,13 @@ impl<'a> Processor<'a> {
                 self.key = None;
                 self.pending_target_depth = None;
                 self.pending_id_depth = None;
+                self.pending_method_depth = None;
                 self.active_output = None;
                 self.active_id = None;
+                self.active_method = None;
                 self.remote_response_id = None;
+                self.notification_method = None;
+                self.top_level_has_id = false;
                 self.separator_has_line_break = false;
             }
             Event::ObjectStart { .. } | Event::ArrayStart { .. } => {
@@ -191,6 +209,10 @@ impl<'a> Processor<'a> {
                     StringKind::Value => {
                         if self.pending_id_depth.take() == Some(self.depth) {
                             self.active_id = Some(BoundedStringCollector::new(MAX_REMOTE_ID_BYTES));
+                        }
+                        if self.pending_method_depth.take() == Some(self.depth) {
+                            self.active_method =
+                                Some(BoundedStringCollector::new(MAX_REMOTE_METHOD_BYTES));
                         }
                         if self.pending_target_depth.take() == Some(self.depth) {
                             self.candidate_mut()?.write_all(b"null")?;
@@ -217,6 +239,9 @@ impl<'a> Processor<'a> {
                     if let Some(id) = self.active_id.as_mut() {
                         id.feed(bytes)?;
                     }
+                    if let Some(method) = self.active_method.as_mut() {
+                        method.feed(bytes)?;
+                    }
                     self.copy_until(offset, input, base)?;
                     let active = self.active_output.as_mut().expect("checked above");
                     active
@@ -228,6 +253,9 @@ impl<'a> Processor<'a> {
                     if let Some(id) = self.active_id.as_mut() {
                         id.feed(bytes)?;
                     }
+                    if let Some(method) = self.active_method.as_mut() {
+                        method.feed(bytes)?;
+                    }
                 }
             },
             Event::StringEnd { kind, offset } => match kind {
@@ -238,12 +266,19 @@ impl<'a> Processor<'a> {
                         .ok_or_else(|| invalid_data("missing JSON key state"))?;
                     if let Some(key) = key.finish() {
                         self.pending_target_depth = (key == TARGET_KEY).then_some(self.depth);
-                        self.pending_id_depth =
-                            (self.depth == 1 && key == ID_KEY).then_some(self.depth);
+                        if self.depth == 1 && key == ID_KEY {
+                            self.top_level_has_id = true;
+                            self.pending_id_depth = Some(self.depth);
+                        } else {
+                            self.pending_id_depth = None;
+                        }
+                        self.pending_method_depth =
+                            (self.depth == 1 && key == METHOD_KEY).then_some(self.depth);
                     }
                 }
                 StringKind::Value if self.active_output.is_some() => {
                     self.finish_active_id();
+                    self.finish_active_method();
                     self.copy_until(offset, input, base)?;
                     self.cursor = offset + 1;
                     let active = self.active_output.take().expect("checked above");
@@ -253,7 +288,10 @@ impl<'a> Processor<'a> {
                         .write_all(b",\"_codexNativeOutput\":")?;
                     serde_json::to_writer(self.candidate_mut()?, &descriptor.to_wire_value())?;
                 }
-                StringKind::Value => self.finish_active_id(),
+                StringKind::Value => {
+                    self.finish_active_id();
+                    self.finish_active_method();
+                }
             },
             Event::NumberStart { .. } | Event::Boolean { .. } | Event::Null { .. } => {
                 self.clear_pending_for_non_string_value();
@@ -264,8 +302,10 @@ impl<'a> Processor<'a> {
                     || self.key.is_some()
                     || self.pending_target_depth.is_some()
                     || self.pending_id_depth.is_some()
+                    || self.pending_method_depth.is_some()
                     || self.active_output.is_some()
                     || self.active_id.is_some()
+                    || self.active_method.is_some()
                 {
                     return Err(invalid_data("incomplete JSON transformer state"));
                 }
@@ -275,11 +315,27 @@ impl<'a> Processor<'a> {
                     .ok_or_else(|| invalid_data("missing JSON candidate"))?;
                 if let Some(host_id) = self.remote_response_id.take() {
                     let captured = candidate.capture_bounded(MAX_REMOTE_RESPONSE_BYTES)?;
-                    on_remote_response(AppServerRemoteResponse {
-                        host_id,
-                        payload: captured.payload,
-                        total_bytes: captured.total_bytes,
-                    })?;
+                    on_remote_observation(AppServerRemoteObservation::Response(
+                        AppServerRemoteResponse {
+                            host_id,
+                            payload: captured.payload,
+                            total_bytes: captured.total_bytes,
+                        },
+                    ))?;
+                } else if let Some(method) = self
+                    .notification_method
+                    .take()
+                    .filter(|method| !self.top_level_has_id && is_remote_notification(method))
+                {
+                    let captured =
+                        candidate.publish_to_with_capture(output, MAX_REMOTE_NOTIFICATION_BYTES)?;
+                    on_remote_observation(AppServerRemoteObservation::Notification(
+                        AppServerRemoteNotification {
+                            method,
+                            payload: captured.payload,
+                            total_bytes: captured.total_bytes,
+                        },
+                    ))?;
                 } else {
                     candidate.publish_to(output)?;
                 }
@@ -330,6 +386,9 @@ impl<'a> Processor<'a> {
         if self.pending_id_depth == Some(self.depth) {
             self.pending_id_depth = None;
         }
+        if self.pending_method_depth == Some(self.depth) {
+            self.pending_method_depth = None;
+        }
     }
 
     fn candidate_mut(&mut self) -> io::Result<&mut CandidateFile> {
@@ -344,8 +403,11 @@ impl<'a> Processor<'a> {
         self.key.take();
         self.pending_target_depth = None;
         self.pending_id_depth = None;
+        self.pending_method_depth = None;
         self.active_id.take();
+        self.active_method.take();
         self.remote_response_id.take();
+        self.notification_method.take();
     }
 
     fn finish_active_id(&mut self) {
@@ -364,6 +426,27 @@ impl<'a> Processor<'a> {
             self.remote_response_id = Some(id);
         }
     }
+
+    fn finish_active_method(&mut self) {
+        let Some(method) = self.active_method.take() else {
+            return;
+        };
+        if self.remote_id_prefix.is_some() {
+            self.notification_method = method.finish();
+        }
+    }
+}
+
+fn is_remote_notification(method: &str) -> bool {
+    matches!(
+        method,
+        "turn/started"
+            | "turn/completed"
+            | "item/started"
+            | "item/completed"
+            | "thread/status/changed"
+            | "error"
+    )
 }
 
 struct ActiveOutput<'a> {
@@ -483,7 +566,7 @@ mod tests {
             &self,
             input: &[u8],
             chunk_size: usize,
-        ) -> io::Result<(Vec<u8>, Vec<AppServerRemoteResponse>)> {
+        ) -> io::Result<(Vec<u8>, Vec<AppServerRemoteObservation>)> {
             let mut transformer =
                 Transformer::new(&self.store, Some("codex-remote:session:".to_owned()));
             let mut output = Vec::new();
@@ -577,12 +660,15 @@ mod tests {
             "codex-remote:other-session:1"
         );
         assert_eq!(remote.len(), 1);
-        assert_eq!(remote[0].host_id, "codex-remote:session:1");
-        let captured: Value = serde_json::from_slice(remote[0].payload.as_ref().unwrap()).unwrap();
+        let AppServerRemoteObservation::Response(response) = &remote[0] else {
+            panic!("expected a Remote response observation");
+        };
+        assert_eq!(response.host_id, "codex-remote:session:1");
+        let captured: Value = serde_json::from_slice(response.payload.as_ref().unwrap()).unwrap();
         assert!(captured["result"]["aggregatedOutput"].is_null());
         assert_eq!(captured["result"]["_codexNativeOutput"]["bytes"], 13);
         assert!(
-            !String::from_utf8_lossy(remote[0].payload.as_ref().unwrap()).contains("secret output")
+            !String::from_utf8_lossy(response.payload.as_ref().unwrap()).contains("secret output")
         );
     }
 
@@ -597,8 +683,60 @@ mod tests {
         let (output, remote) = fixture.transform_with_remote(&input, 8192).unwrap();
         assert!(output.is_empty());
         assert_eq!(remote.len(), 1);
-        assert!(remote[0].payload.is_none());
-        assert!(remote[0].total_bytes > MAX_REMOTE_RESPONSE_BYTES as u64);
+        let AppServerRemoteObservation::Response(response) = &remote[0] else {
+            panic!("expected a Remote response observation");
+        };
+        assert!(response.payload.is_none());
+        assert!(response.total_bytes > MAX_REMOTE_RESPONSE_BYTES as u64);
+    }
+
+    #[test]
+    fn captures_only_allowlisted_notifications_after_sanitizing_desktop_output() {
+        let fixture = Fixture::new(1024, 4096);
+        let input =
+            br#"{"method":"item/completed","params":{"item":{"aggregatedOutput":"secret output"}}}
+{"method":"item/completed","id":7,"params":{"request":"not an event"}}
+{"method":"item/agentMessage/delta","params":{"delta":"token"}}
+"#;
+        let (output, remote) = fixture.transform_with_remote(input, 3).unwrap();
+        assert_eq!(std::str::from_utf8(&output).unwrap().lines().count(), 3);
+        assert_eq!(remote.len(), 1);
+        let AppServerRemoteObservation::Notification(notification) = &remote[0] else {
+            panic!("expected a Remote notification observation");
+        };
+        assert_eq!(notification.method, "item/completed");
+        let captured: Value =
+            serde_json::from_slice(notification.payload.as_ref().unwrap()).unwrap();
+        assert!(captured["params"]["item"]["aggregatedOutput"].is_null());
+        assert_eq!(
+            captured["params"]["item"]["_codexNativeOutput"]["bytes"],
+            13
+        );
+        assert!(
+            !String::from_utf8_lossy(notification.payload.as_ref().unwrap())
+                .contains("secret output")
+        );
+    }
+
+    #[test]
+    fn reports_an_oversized_notification_without_materializing_it_for_remote() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = serde_json::to_vec(&serde_json::json!({
+            "method": "turn/completed",
+            "params": {"padding": "x".repeat(MAX_REMOTE_NOTIFICATION_BYTES)},
+        }))
+        .unwrap();
+        let (output, remote) = fixture.transform_with_remote(&input, 8192).unwrap();
+        assert_eq!(output.len(), input.len() + 1);
+        assert_eq!(&output[..input.len()], input);
+        assert_eq!(output.last(), Some(&b'\n'));
+        assert_eq!(remote.len(), 1);
+        let AppServerRemoteObservation::Notification(notification) = &remote[0] else {
+            panic!("expected a Remote notification observation");
+        };
+        assert_eq!(notification.method, "turn/completed");
+        assert!(notification.payload.is_none());
+        assert!(notification.total_bytes > MAX_REMOTE_NOTIFICATION_BYTES as u64);
     }
 
     #[test]

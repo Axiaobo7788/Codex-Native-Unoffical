@@ -436,6 +436,32 @@ impl CandidateFile {
             total_bytes: self.bytes,
         })
     }
+
+    pub(crate) fn publish_to_with_capture(
+        mut self,
+        output: &mut impl Write,
+        max_bytes: usize,
+    ) -> io::Result<CandidateCapture> {
+        self.file.flush()?;
+        self.file.seek(SeekFrom::Start(0))?;
+        io::copy(&mut self.file, output)?;
+        output.write_all(b"\n")?;
+        output.flush()?;
+        let payload = if self.bytes <= max_bytes as u64 {
+            self.file.seek(SeekFrom::Start(0))?;
+            let mut payload = Vec::with_capacity(self.bytes as usize);
+            self.file.read_to_end(&mut payload)?;
+            Some(payload)
+        } else {
+            None
+        };
+        self.finished = true;
+        fs::remove_file(&self.path)?;
+        Ok(CandidateCapture {
+            payload,
+            total_bytes: self.bytes,
+        })
+    }
 }
 
 impl Write for CandidateFile {

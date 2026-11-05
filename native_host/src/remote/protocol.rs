@@ -63,6 +63,12 @@ pub enum ServerMessage {
         id: Value,
         error: Value,
     },
+    ResyncRequired {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        sequence: u64,
+        reason: String,
+    },
     ProtocolError {
         error: String,
     },

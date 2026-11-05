@@ -29,3 +29,16 @@ pub(crate) struct AppServerRemoteResponse {
     pub(crate) payload: Option<Vec<u8>>,
     pub(crate) total_bytes: u64,
 }
+
+#[derive(Debug)]
+pub(crate) struct AppServerRemoteNotification {
+    pub(crate) method: String,
+    pub(crate) payload: Option<Vec<u8>>,
+    pub(crate) total_bytes: u64,
+}
+
+#[derive(Debug)]
+pub(crate) enum AppServerRemoteObservation {
+    Response(AppServerRemoteResponse),
+    Notification(AppServerRemoteNotification),
+}

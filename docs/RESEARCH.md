@@ -479,7 +479,73 @@ _Reviewed: 2026-11-05_
   connection so disconnect cleanup releases every pending correlation; it does
   not leave retryable-looking requests resident indefinitely.
 
-Deliberately deferred: stock notifications are not published to the replay
-journal yet, so resume currently negotiates but has no Codex event suffix to
-recover. Write methods, approvals, output-range transfer, non-loopback TLS, and
-Android secure storage remain unavailable.
+### Bounded app-server notification publication
+
+_Reviewed: 2026-11-05_
+
+#### Sources reviewed
+
+- OpenAI Codex `ServerNotificationEnvelope` generated TypeScript union:
+  <https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/typescript/ServerNotificationEnvelope.ts>
+- OpenAI Codex app-server protocol definitions:
+  <https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs>
+- OpenAI Codex app-server README:
+  <https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md>
+- The installed stock app-server `0.166.0-alpha.5.1` schema and the already
+  implemented desktop typed notification projector.
+
+#### Observed approaches and pitfalls
+
+- The official notification envelope is a large evolving union. It mixes small
+  lifecycle/state events with token/output deltas, full diff updates, account
+  state, MCP progress, and other method-specific payloads. Treating every
+  top-level `method` as equally replayable would turn the bounded journal into a
+  second unreviewed app-server transport.
+- Current app-server envelopes may include an optional top-level `emittedAtMs`.
+  The Host sequence remains the Remote ordering authority; retaining the stock
+  `params` without inventing a timestamp ordering rule avoids two competing
+  clocks.
+- `item/agentMessage/delta` and other deltas can arrive per token/chunk. A
+  512-item journal would rapidly evict terminal evidence while retaining data
+  that `item/completed` already supplies. `turn/diff/updated` can also be large
+  and needs file/hunk chunking rather than an ordinary replay event.
+- JSON-RPC server requests also have a top-level `method`, but additionally have
+  a top-level `id`. Method allowlisting alone is therefore insufficient: the
+  capture boundary must reject every request-shaped object independently of the
+  ID value type.
+
+#### Adopted here
+
+- Publish only `turn/started`, `turn/completed`, `item/started`,
+  `item/completed`, `thread/status/changed`, and `error` for the initial event
+  slice. Unknown notifications, token/output/reasoning deltas, diffs, approval
+  requests, and other server requests remain desktop-only.
+- Detect the method and the presence of any top-level `id` in the incremental
+  sanitizer. The ordinary desktop message is published first; Remote observes a
+  copy only after every `aggregatedOutput` field has been replaced by its opaque
+  bounded descriptor. Remote capture is capped at 256 KiB.
+- Convert an allowlisted event above that cap into the small sequenced
+  `host/resyncRequired` marker instead of allocating or silently dropping the
+  payload. The mobile client can then perform bounded authoritative reads.
+- Subscribe each socket to a capacity-64 live broadcast before handshake. The
+  negotiation journal snapshot defines the baseline, buffered events at or
+  below it are skipped, and only a contiguous next sequence is accepted. A
+  broadcast lag/gap emits `resync_required` and closes the socket; application
+  queue or socket-write exhaustion also disconnects the slow peer.
+
+#### Validation in this project
+
+- Streaming-transform tests cover fragmented method parsing, sanitized capture,
+  numeric-ID server-request exclusion, delta exclusion, and oversize capture
+  without Remote materialization.
+- Real TCP tests cover live delivery, ACK, retained same-session replay, abrupt
+  unacknowledged reconnect, count eviction with explicit handshake resync, no
+  partial replay, oversize resync markers, bounded outbound queues, and a slow
+  reader disconnected under an 18 MiB fanout.
+- The release Host still passes pairing and the read-only stock app-server smoke.
+  That smoke does not start a paid/mutating turn, so it does not claim a real
+  stock turn notification was observed end to end.
+
+Deliberately deferred: write methods, pending approval state, output-range
+transfer, diff chunking, non-loopback TLS, Android secure storage, and the
+Android Remote client remain unavailable.

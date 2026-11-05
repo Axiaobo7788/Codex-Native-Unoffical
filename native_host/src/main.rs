@@ -8,7 +8,7 @@ mod spool;
 mod transform;
 
 use config::Config;
-use events::{HOST_EVENT_CAPACITY, HostEvent};
+use events::{AppServerRemoteObservation, HOST_EVENT_CAPACITY, HostEvent};
 use remote_bridge::RemoteCoordinator;
 use remote_server::RemoteServer;
 use rpc::{ClientMessage, RemoteAdmin, route_client_message};
@@ -116,6 +116,7 @@ fn run() -> io::Result<()> {
     let output_lock = Arc::clone(&stdout_lock);
     let output_tx = events_tx.clone();
     let remote_id_prefix = remote_server.as_ref().map(RemoteServer::correlation_prefix);
+    let remote_event_publisher = remote_server.as_ref().map(RemoteServer::publisher);
     let output_thread = thread::Builder::new()
         .name("host-app-server-output".into())
         .spawn(move || {
@@ -124,10 +125,18 @@ fn run() -> io::Result<()> {
                 LockedStdout::new(&output_lock),
                 &output_store,
                 remote_id_prefix,
-                |response| {
-                    output_tx
+                |observation| match observation {
+                    AppServerRemoteObservation::Response(response) => output_tx
                         .send(HostEvent::AppServerRemoteResponse(response))
-                        .map_err(|_| io::Error::other("Host event loop is unavailable"))
+                        .map_err(|_| io::Error::other("Host event loop is unavailable")),
+                    AppServerRemoteObservation::Notification(notification) => {
+                        remote_event_publisher
+                            .as_ref()
+                            .ok_or_else(|| {
+                                io::Error::other("Remote event publisher is unavailable")
+                            })?
+                            .publish(notification)
+                    }
                 },
             );
             let _ = output_tx.send(HostEvent::OutputFinished(result));

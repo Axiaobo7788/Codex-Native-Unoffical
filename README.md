@@ -73,9 +73,11 @@ Phase 4 has started behind an explicit loopback-only Host option. Local trusted
 administration can issue one-use pairing tickets and revoke hash-only device
 credentials. The authenticated `codex-native-v1` WebSocket currently exposes a
 strict read-only subset—`model/list`, bounded `thread/list`, and metadata-only
-`thread/read`—through the same stock app-server and output sanitizer. Event
-replay, writes/approvals, TLS/non-loopback exposure, Android secure storage, and
-the Android UI are not implemented yet.
+`thread/read`—through the same stock app-server and output sanitizer. A small
+allowlist of sanitized lifecycle notifications now uses a 512-event/8 MiB
+sequence journal with ACK, same-session replay, and explicit gap resync. Token
+deltas, diffs, server requests, writes/approvals, TLS/non-loopback exposure,
+Android secure storage, and the Android UI are not implemented yet.
 
 ## Run locally
 

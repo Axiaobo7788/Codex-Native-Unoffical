@@ -1,4 +1,4 @@
-use crate::events::{HostEvent, RemoteRpcCall};
+use crate::events::{AppServerRemoteNotification, HostEvent, RemoteRpcCall};
 use crate::remote_bridge::{remote_error, validate_read_only_request};
 use crate::rpc::RemoteAdmin;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
@@ -8,7 +8,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router, middleware};
 use codex_native_host::remote::{
-    AuthError, ClientMessage, ConnectionAction, Device, DeviceScope, EventJournal, HOST_ID_PREFIX,
+    AuthError, ClientMessage, ConnectionAction, DEFAULT_MAX_JOURNAL_BYTES,
+    DEFAULT_MAX_JOURNAL_EVENTS, Device, DeviceScope, EventJournal, HOST_ID_PREFIX, JournalEvent,
     ProtocolConnection, ReplayDisposition, ServerMessage,
 };
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, mpsc::SyncSender};
 use std::thread;
 use std::time::{Duration, Instant};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, broadcast, mpsc, watch};
 use uuid::Uuid;
 
 const WS_PROTOCOL: &str = "codex-native-v1";
@@ -31,6 +32,7 @@ const WS_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 const MAX_CONNECTIONS: usize = 8;
 const OUTBOUND_QUEUE_MESSAGES: usize = 16;
 const OUTBOUND_QUEUE_BYTES: usize = 2 * 1024 * 1024;
+const EVENT_BROADCAST_MESSAGES: usize = 64;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(not(test))]
 const REMOTE_RPC_TIMEOUT: Duration = Duration::from_secs(30);
@@ -49,6 +51,7 @@ const PAIR_ATTEMPTS_PER_MINUTE: usize = 10;
 pub(crate) struct RemoteServer {
     address: SocketAddr,
     session_id: Arc<str>,
+    publisher: RemoteEventPublisher,
     shutdown: Option<watch::Sender<bool>>,
     thread: Option<thread::JoinHandle<io::Result<()>>>,
 }
@@ -70,15 +73,22 @@ impl RemoteServer {
         let address = listener.local_addr()?;
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let session_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
+        let journal = Arc::new(Mutex::new(
+            EventJournal::new(DEFAULT_MAX_JOURNAL_EVENTS, DEFAULT_MAX_JOURNAL_BYTES).map_err(
+                |error| io::Error::other(format!("failed to create Remote journal: {error}")),
+            )?,
+        ));
+        let (event_sender, _) = broadcast::channel(EVENT_BROADCAST_MESSAGES);
+        let publisher = RemoteEventPublisher {
+            journal: Arc::clone(&journal),
+            event_sender: event_sender.clone(),
+        };
         let state = ServerState {
             admin,
             events,
             session_id: Arc::clone(&session_id),
-            journal: Arc::new(Mutex::new(
-                EventJournal::new(512, 8 * 1024 * 1024).map_err(|error| {
-                    io::Error::other(format!("failed to create Remote journal: {error}"))
-                })?,
-            )),
+            journal,
+            event_sender,
             connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             pair_budget: Arc::new(Mutex::new(AttemptBudget::new(
                 PAIR_ATTEMPTS_PER_MINUTE,
@@ -92,6 +102,7 @@ impl RemoteServer {
         Ok(Self {
             address,
             session_id,
+            publisher,
             shutdown: Some(shutdown_tx),
             thread: Some(thread),
         })
@@ -107,6 +118,10 @@ impl RemoteServer {
 
     pub(crate) fn correlation_prefix(&self) -> String {
         format!("{HOST_ID_PREFIX}{}:", self.session_id)
+    }
+
+    pub(crate) fn publisher(&self) -> RemoteEventPublisher {
+        self.publisher.clone()
     }
 
     pub(crate) fn stop(mut self) -> io::Result<()> {
@@ -133,11 +148,74 @@ impl Drop for RemoteServer {
 }
 
 #[derive(Clone)]
+pub(crate) struct RemoteEventPublisher {
+    journal: Arc<Mutex<EventJournal>>,
+    event_sender: broadcast::Sender<JournalEvent>,
+}
+
+impl RemoteEventPublisher {
+    pub(crate) fn publish(&self, notification: AppServerRemoteNotification) -> io::Result<()> {
+        let (method, params) = match notification.payload {
+            Some(payload) => {
+                let message: serde_json::Value =
+                    serde_json::from_slice(&payload).map_err(|error| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("captured app-server notification is invalid JSON: {error}"),
+                        )
+                    })?;
+                let object = message.as_object().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "captured app-server notification is not an object",
+                    )
+                })?;
+                if object.contains_key("id")
+                    || object.get("method").and_then(serde_json::Value::as_str)
+                        != Some(notification.method.as_str())
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "captured app-server notification identity changed after sanitization",
+                    ));
+                }
+                (
+                    notification.method,
+                    object
+                        .get("params")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null),
+                )
+            }
+            None => (
+                "host/resyncRequired".to_owned(),
+                serde_json::json!({
+                    "reason": "eventTooLarge",
+                    "sourceMethod": notification.method,
+                    "bytes": notification.total_bytes,
+                }),
+            ),
+        };
+        let mut journal = self
+            .journal
+            .lock()
+            .map_err(|_| io::Error::other("Remote event journal lock poisoned"))?;
+        let event = journal
+            .publish(&method, params)
+            .map_err(|error| io::Error::other(format!("failed to publish Remote event: {error}")))?
+            .event;
+        let _ = self.event_sender.send(event);
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
 struct ServerState {
     admin: Arc<Mutex<RemoteAdmin>>,
     events: SyncSender<HostEvent>,
     session_id: Arc<str>,
     journal: Arc<Mutex<EventJournal>>,
+    event_sender: broadcast::Sender<JournalEvent>,
     connections: Arc<Semaphore>,
     pair_budget: Arc<Mutex<AttemptBudget>>,
     shutdown: watch::Receiver<bool>,
@@ -396,6 +474,10 @@ struct OutboundQueue {
 impl OutboundQueue {
     fn try_send(&self, message: ServerMessage) -> bool {
         let text = serde_json::to_string(&message).expect("Remote server message is serializable");
+        self.try_send_text(text)
+    }
+
+    fn try_send_text(&self, text: String) -> bool {
         if text.len() > WS_MAX_MESSAGE_BYTES || text.len() > u32::MAX as usize {
             self.signal_fatal();
             return false;
@@ -446,9 +528,10 @@ async fn socket_loop_inner(
     connection_id: &str,
 ) {
     let mut shutdown = state.shutdown.clone();
+    let mut live_events = state.event_sender.subscribe();
     let mut protocol = ProtocolConnection::current(
         state.session_id.to_string(),
-        ["ack".into(), "readOnlyCodex".into()],
+        ["ack".into(), "eventReplay".into(), "readOnlyCodex".into()],
     );
     let hello = match state.journal.lock() {
         Ok(journal) => protocol.server_hello(&journal),
@@ -506,6 +589,10 @@ async fn socket_loop_inner(
             }
         }
     }
+    let mut last_event_sequence = protocol
+        .acknowledgements()
+        .expect("negotiated Remote connection has an ACK tracker")
+        .highest_sent();
 
     let (outbound_tx, mut outbound_rx) = mpsc::channel(OUTBOUND_QUEUE_MESSAGES);
     let (fatal_tx, mut fatal_rx) = mpsc::channel(1);
@@ -555,6 +642,40 @@ async fn socket_loop_inner(
                     return;
                 }
             }
+            event = live_events.recv() => match event {
+                Ok(event) if event.sequence() <= last_event_sequence => {}
+                Ok(event) => {
+                    let Some(expected) = last_event_sequence.checked_add(1) else {
+                        send_resync_required(&mut socket, state, "event sequence exhausted").await;
+                        return;
+                    };
+                    if event.sequence() != expected
+                        || protocol.record_event_sent(event.sequence()).is_err()
+                    {
+                        send_resync_required(&mut socket, state, "live event sequence gap").await;
+                        return;
+                    }
+                    let Ok(text) = String::from_utf8(event.encoded().to_vec()) else {
+                        send_resync_required(&mut socket, state, "live event encoding failure").await;
+                        return;
+                    };
+                    last_event_sequence = event.sequence();
+                    if !outbound.try_send_text(text) {
+                        close_with(
+                            &mut socket,
+                            close_code::POLICY,
+                            "outbound queue limit exceeded",
+                        )
+                        .await;
+                        return;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    send_resync_required(&mut socket, state, "live event receiver lagged").await;
+                    return;
+                }
+                Err(broadcast::error::RecvError::Closed) => return,
+            },
             message = socket.recv() => match message {
                 Some(Ok(Message::Text(text))) => {
                     if !handle_client_message(
@@ -711,6 +832,24 @@ async fn close_protocol(socket: &mut WebSocket, reason: &str) {
     close_with(socket, close_code::PROTOCOL, "protocol error").await;
 }
 
+async fn send_resync_required(socket: &mut WebSocket, state: &ServerState, reason: &'static str) {
+    let sequence = state
+        .journal
+        .lock()
+        .map(|journal| journal.current_sequence())
+        .unwrap_or_default();
+    let _ = send_message(
+        socket,
+        &ServerMessage::ResyncRequired {
+            session_id: state.session_id.to_string(),
+            sequence,
+            reason: reason.to_owned(),
+        },
+    )
+    .await;
+    close_with(socket, close_code::POLICY, "Remote resync required").await;
+}
+
 async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
     let _ = send_socket(
         socket,
@@ -829,6 +968,208 @@ mod tests {
             result: json!({"value": "x".repeat(WS_MAX_MESSAGE_BYTES)}),
         }));
         assert!(fatal_rx.try_recv().is_ok());
+    }
+
+    #[test]
+    fn notifications_replay_once_and_an_evicted_cursor_requires_resync() {
+        let temp = TempDir::new().unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(
+            temp.path().join("devices.json"),
+        ))));
+        let ticket = admin.lock().unwrap().create_pairing_ticket().unwrap();
+        let issued = {
+            let mut admin = admin.lock().unwrap();
+            let now_ms = admin.now_ms().unwrap();
+            admin
+                .registry()
+                .unwrap()
+                .pair(
+                    &ticket.code,
+                    "Replay phone",
+                    [DeviceScope::Read].into_iter().collect(),
+                    now_ms,
+                )
+                .unwrap()
+        };
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let publisher = server.publisher();
+
+        let mut first = connect_and_negotiate(server.address(), &issued.token, None);
+        let session_id = first.1["sessionId"].as_str().unwrap().to_owned();
+        publisher
+            .publish(test_notification(
+                "thread/status/changed",
+                json!({"threadId": "thread-1", "status": "active"}),
+            ))
+            .unwrap();
+        let event = read_json(&mut first.0);
+        assert_eq!(event["type"], "codex_event");
+        assert_eq!(event["sequence"], 1);
+        assert_eq!(event["method"], "thread/status/changed");
+        first
+            .0
+            .send(ClientWsMessage::Text(
+                json!({"type": "ack", "sequence": 1}).to_string().into(),
+            ))
+            .unwrap();
+        drop(first);
+
+        let mut replayed =
+            connect_and_negotiate(server.address(), &issued.token, Some((&session_id, 0)));
+        assert_eq!(replayed.1["resyncRequired"], false);
+        assert_eq!(replayed.1["sequence"], 1);
+        let replay = read_json(&mut replayed.0);
+        assert_eq!(replay, event);
+        replayed
+            .0
+            .get_mut()
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        assert!(
+            replayed.0.read().is_err(),
+            "event was replayed more than once"
+        );
+        drop(replayed);
+
+        let mut after_abrupt =
+            connect_and_negotiate(server.address(), &issued.token, Some((&session_id, 0)));
+        assert_eq!(after_abrupt.1["resyncRequired"], false);
+        assert_eq!(read_json(&mut after_abrupt.0), event);
+        drop(after_abrupt);
+
+        for index in 0..512 {
+            publisher
+                .publish(test_notification(
+                    "thread/status/changed",
+                    json!({"threadId": "thread-1", "revision": index}),
+                ))
+                .unwrap();
+        }
+        let mut evicted =
+            connect_and_negotiate(server.address(), &issued.token, Some((&session_id, 0)));
+        assert_eq!(evicted.1["resyncRequired"], true);
+        assert_eq!(evicted.1["sequence"], 513);
+        evicted
+            .0
+            .get_mut()
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        assert!(
+            evicted.0.read().is_err(),
+            "a replay-gap handshake must not emit partial history"
+        );
+        drop(evicted);
+        server.stop().unwrap();
+    }
+
+    #[test]
+    fn oversized_or_request_shaped_notifications_fail_closed() {
+        let journal = Arc::new(Mutex::new(EventJournal::new(8, 4096).unwrap()));
+        let (event_sender, _) = broadcast::channel(8);
+        let publisher = RemoteEventPublisher {
+            journal: Arc::clone(&journal),
+            event_sender,
+        };
+        publisher
+            .publish(AppServerRemoteNotification {
+                method: "turn/completed".into(),
+                payload: None,
+                total_bytes: 300_000,
+            })
+            .unwrap();
+        let marker = journal.lock().unwrap().replay_after(0).unwrap().remove(0);
+        let marker: Value = serde_json::from_slice(marker.encoded()).unwrap();
+        assert_eq!(marker["method"], "host/resyncRequired");
+        assert_eq!(marker["params"]["reason"], "eventTooLarge");
+        assert_eq!(marker["params"]["sourceMethod"], "turn/completed");
+        assert_eq!(marker["params"]["bytes"], 300_000);
+
+        let request = serde_json::to_vec(&json!({
+            "id": 1,
+            "method": "turn/completed",
+            "params": {},
+        }))
+        .unwrap();
+        let error = publisher
+            .publish(AppServerRemoteNotification {
+                method: "turn/completed".into(),
+                payload: Some(request),
+                total_bytes: 0,
+            })
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(journal.lock().unwrap().current_sequence(), 1);
+    }
+
+    #[test]
+    fn a_slow_tcp_reader_is_disconnected_under_bounded_event_fanout() {
+        let temp = TempDir::new().unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(
+            temp.path().join("devices.json"),
+        ))));
+        let ticket = admin.lock().unwrap().create_pairing_ticket().unwrap();
+        let issued = {
+            let mut admin = admin.lock().unwrap();
+            let now_ms = admin.now_ms().unwrap();
+            admin
+                .registry()
+                .unwrap()
+                .pair(
+                    &ticket.code,
+                    "Slow phone",
+                    [DeviceScope::Read].into_iter().collect(),
+                    now_ms,
+                )
+                .unwrap()
+        };
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let publisher = server.publisher();
+        let (mut socket, _) = connect_and_negotiate(server.address(), &issued.token, None);
+
+        for index in 0..96 {
+            publisher
+                .publish(test_notification(
+                    "item/completed",
+                    json!({
+                        "index": index,
+                        "padding": "x".repeat(192 * 1024),
+                    }),
+                ))
+                .unwrap();
+        }
+        thread::sleep(SOCKET_WRITE_TIMEOUT + Duration::from_secs(1));
+
+        socket
+            .get_mut()
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut terminal = false;
+        for _ in 0..128 {
+            match socket.read() {
+                Ok(ClientWsMessage::Text(text)) => {
+                    let message: Value = serde_json::from_str(&text).unwrap();
+                    if message["type"] == "resync_required" {
+                        terminal = true;
+                    }
+                }
+                Ok(ClientWsMessage::Ping(payload)) => {
+                    let _ = socket.send(ClientWsMessage::Pong(payload));
+                }
+                Ok(ClientWsMessage::Close(_)) | Err(_) => {
+                    terminal = true;
+                    break;
+                }
+                Ok(_) => {}
+            }
+        }
+        assert!(
+            terminal,
+            "slow reader remained connected after bounded fanout"
+        );
+        drop(socket);
+        server.stop().unwrap();
     }
 
     #[test]
@@ -1171,6 +1512,48 @@ mod tests {
             );
         }
         request
+    }
+
+    fn connect_and_negotiate(
+        address: SocketAddr,
+        token: &str,
+        resume: Option<(&str, u64)>,
+    ) -> (tungstenite::WebSocket<TcpStream>, Value) {
+        let request = websocket_request(address, Some(token));
+        let stream = TcpStream::connect(address).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let (mut socket, _) = client(request, stream).unwrap();
+        let server_hello = read_json(&mut socket);
+        let mut hello = json!({
+            "type": "client_hello",
+            "supportedProtocolVersions": [1],
+        });
+        if let Some((session_id, sequence)) = resume {
+            hello["lastSessionId"] = json!(session_id);
+            hello["lastSequence"] = json!(sequence);
+        }
+        socket
+            .send(ClientWsMessage::Text(hello.to_string().into()))
+            .unwrap();
+        let acknowledgement = read_json(&mut socket);
+        assert_eq!(acknowledgement["type"], "hello_ack");
+        assert_eq!(acknowledgement["sessionId"], server_hello["sessionId"]);
+        (socket, acknowledgement)
+    }
+
+    fn test_notification(method: &str, params: Value) -> AppServerRemoteNotification {
+        let payload = serde_json::to_vec(&json!({
+            "method": method,
+            "params": params,
+        }))
+        .unwrap();
+        AppServerRemoteNotification {
+            method: method.to_owned(),
+            total_bytes: payload.len() as u64,
+            payload: Some(payload),
+        }
     }
 
     fn read_json(socket: &mut tungstenite::WebSocket<TcpStream>) -> Value {

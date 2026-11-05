@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated loopback transport, and a bounded read-only Codex RPC path are implemented; Codex event replay, writes/approvals, TLS/non-loopback, and Android credential flow do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated loopback transport, bounded read-only Codex RPC, and sanitized event replay are implemented; writes/approvals, TLS/non-loopback, and Android credential flow do not exist yet**
 
 ## Current repository state
 
@@ -76,8 +76,8 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Android Remote now has a pure Rust Host core for typed negotiation,
   session/sequence/ACK resume, count-and-byte-bounded replay, multi-connection
   request correlation, bounded same-session write idempotency, single-use
-  pairing, and hash-only scoped device credentials. The researched listener is
-  still not connected to a network socket or Android credential flow.
+  pairing, and hash-only scoped device credentials. The loopback WebSocket uses
+  these primitives; no Android credential flow exists yet.
 - The desktop Host exposes trusted local `host/remote/pairing/create`,
   `host/remote/devices/list`, and `host/remote/devices/revoke` administration.
   Its credential registry is loaded lazily from a configurable user config file,
@@ -88,13 +88,45 @@ This file is the repository's durable project memory. Update it whenever a task 
   implement version negotiation, heartbeat, live revocation, and coordinated
   shutdown. The socket exposes `host/remote/status`, `model/list`, bounded
   `thread/list`, and metadata-only `thread/read` through the same sanitized stock
-  app-server process. It still has no Codex event stream, writes, Android client,
-  or non-loopback transport.
+  app-server process. Six bounded lifecycle/state notification methods now feed
+  sequenced live delivery and same-session replay. It still has no writes,
+  approvals, Android client, or non-loopback transport.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 bounded Codex event replay
+
+- Reviewed the official generated notification envelope and current app-server
+  definitions. The first Remote event allowlist is deliberately limited to
+  `turn/started`, `turn/completed`, `item/started`, `item/completed`,
+  `thread/status/changed`, and `error`. Token/output/reasoning deltas, full diff
+  updates, unknown notifications, and every request-shaped object with a
+  top-level `id` remain on the desktop path only.
+- Extended the incremental output sanitizer to identify top-level method/ID
+  shape without materializing app-server messages. Allowlisted notifications are
+  still published to desktop first, then captured only after
+  `aggregatedOutput` removal, with a 256 KiB Remote cap. A larger event becomes a
+  small sequenced `host/resyncRequired` marker rather than a hidden drop or a
+  large allocation.
+- Connected the existing 512-event/8 MiB journal to a capacity-64 live broadcast
+  and the per-connection count-and-byte queue. Sockets subscribe before
+  negotiation, skip events represented by the handshake baseline, accept only
+  the exact next sequence, and record it as sent for ACK validation. Receiver
+  lag or a sequence gap emits `resync_required` and policy-closes; queue or
+  socket-write exhaustion also disconnects the slow peer.
+- TCP tests prove live delivery, ACK, exact retained replay, abrupt unacknowledged
+  reconnect, eviction-to-resync without partial history, and slow-reader
+  disconnection under an 18 MiB fanout. Transform/publisher tests cover
+  sanitization, server-request and delta exclusion, oversized event markers, and
+  non-advancing rejection of request-shaped captures.
+- The Rust suite now passes 25 Remote-library tests, 43 Host-binary tests, and
+  two executable failure-path tests (70 total), plus format and strict Clippy.
+  The release Host build and the real stock app-server read-only smoke also pass;
+  the smoke did not start a real turn and therefore does not establish live
+  stock turn-event publication.
 
 ### 2026-11-05 — Phase 4 bounded read-only Codex bridge
 
@@ -449,9 +481,10 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 25 Remote-library tests, 38 Host-binary tests,
-  and 2 executable failure-path tests (65 total), including real loopback TCP,
-  live-revocation, protocol-close shutdown, deterministic storage-failure, and
+- `cargo test --workspace`: PASS, 25 Remote-library tests, 43 Host-binary tests,
+  and 2 executable failure-path tests (70 total), including real loopback TCP,
+  exact event replay/gap recovery, abrupt reconnect, slow-reader disconnection,
+  live revocation, protocol-close shutdown, deterministic storage-failure, and
   cache-startup gates.
 - `cargo build --release --workspace`: PASS.
 - Release `codex-native-host` real-runtime smoke: PASS; one process carried a
@@ -465,7 +498,7 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   EOF without leaving a device credential file. The first harness attempt was
   invalid because its absent `jq` consumer caused stdout `Broken pipe`; it was
   not counted as a product pass or failure.
-- `dart run tool/remote_smoke.dart`: PASS in 10.546 seconds against release Host
+- `dart run tool/remote_smoke.dart`: PASS in 10.673 seconds against release Host
   and stock app-server. It paired without plaintext token persistence, negotiated
   `codex-native-v1`, read 8 models, listed and metadata-read a real thread,
   observed no internal ID on local stdout, live-revoked the device, removed its
@@ -578,8 +611,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - The app-server protocol evolves; version differences must stay inside typed protocol adapters.
 - The loopback Remote Codex path currently depends on the local desktop client
   completing the one stock app-server initialize/initialized handshake. It does
-  not yet define a headless Host lifecycle, publish Codex notifications into the
-  replay journal, or make resume useful beyond explicit resync negotiation.
+  not yet define a headless Host lifecycle. Sanitized synthetic/TCP gates prove
+  event publication and replay, but the current real stock-app-server smoke does
+  not start a turn and therefore does not prove a live stock turn notification.
 - Long-running sessions must not cause Flutter to hydrate unbounded history.
   Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
   evidence now exist, but real app-server RSS and cross-platform installed-build
@@ -587,23 +621,24 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Extend the read-only bridge with bounded authoritative event recovery, without
-changing desktop stdio behavior:
+Research and implement the secure non-loopback transport boundary before an
+Android device can use the now-working read/replay surface:
 
-1. classify only safe stock notifications for Remote publication, sanitize them
-   through the same output path, and append their bounded wire form to the
-   existing count-and-byte journal;
-2. fan out each event through the per-connection queue while recording the exact
-   sequence as sent, preserving heartbeat priority and disconnecting slow peers;
-3. add executable same-session reconnect/replay, evicted-gap resync,
-   abrupt-disconnect, and slow-reader gates with no duplicate/missing sequence;
-4. keep server requests/approvals and writes rejected until pending interaction
-   state and the idempotency ledger are wired end to end.
+1. compare current rustls/axum-server certificate loading and Android trust/pin
+   behavior with maintained Remote clients, and record the bootstrap/rotation
+   decision in `docs/RESEARCH.md` and an ADR if it is durable;
+2. add an explicit WSS configuration whose certificate/key validation fails
+   before bind and which can never downgrade a requested non-loopback listener
+   to plaintext;
+3. preserve the same body/frame/message/connection/queue/replay bounds under TLS
+   and add real handshake, bad-certificate, reload/rotation, shutdown, and secret
+   leakage gates;
+4. then build the bounded Android `RemoteTransport` and platform-backed device
+   secret flow against this envelope. Keep server requests/approvals and writes
+   rejected until pending interaction state and idempotency are wired end to end.
 
-TLS-required non-loopback exposure, Android secure credential storage, writes,
-approvals, and chunked attachments follow only after that loopback slice passes.
-Preserve the unavailable Phase 3 Human, Windows/macOS, and installed-volume gates
-as RC requirements.
+Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
+installed-volume gates as RC requirements.
 
 ## Milestone outline
 
