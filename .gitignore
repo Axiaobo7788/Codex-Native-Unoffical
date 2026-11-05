@@ -7,7 +7,6 @@ build/
 coverage/
 .flutter-plugins
 .flutter-plugins-dependencies
-.metadata
 
 # IDEs
 .idea/

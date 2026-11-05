@@ -39,7 +39,38 @@ The UI is a projection of Codex state, never the source of truth.
 
 ## Status
 
-Pre-alpha. The repository is being bootstrapped.
+Pre-alpha. Phase 1 is implemented: the Flutter desktop app locates a stock
+`codex` executable, starts `codex app-server --listen stdio://`, completes the
+initialization handshake, displays typed runtime state, and owns the child
+process lifecycle. Linux, Windows, macOS, and Android project shells are in the
+repository; Android remote control is a later phase.
+
+## Run locally
+
+Prerequisites:
+
+- Flutter 3.47.1 or a compatible newer version;
+- Codex available on `PATH`, or `CODEX_EXECUTABLE` set to the executable path.
+
+```sh
+flutter pub get
+flutter run -d linux
+```
+
+The transport-only stock runtime check is also available:
+
+```sh
+dart run tool/runtime_smoke.dart
+```
+
+## Verify
+
+```sh
+dart format --output=none --set-exit-if-changed lib test tool
+flutter analyze
+flutter test
+flutter build linux --debug
+```
 
 ## License
 
