@@ -7,24 +7,35 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Linux build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libsecret-1-dev ninja-build
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
+          architecture: x64
+          cache: false
 
       - run: flutter pub get
+      - name: Select the declared Rust MSRV
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.89.0
       - name: Install pinned native-license generator
         run: cargo install --locked --version 0.9.3 --features cli cargo-about
       - run: ./tool/generate_native_licenses.sh --check
@@ -39,3 +50,68 @@ jobs:
       - run: flutter build linux --debug
       - name: Verify native licenses ship beside the Host
         run: cmp licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt build/linux/x64/debug/bundle/NATIVE_HOST_THIRD_PARTY_LICENSES.txt
+      - run: flutter build apk --debug
+      - name: Verify the Android debug artifact
+        run: test -s build/app/outputs/flutter-apk/app-debug.apk
+
+  desktop-build:
+    name: Desktop build (${{ matrix.platform }}-${{ matrix.architecture }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            architecture: x64
+            os: windows-2022
+          - platform: macos
+            architecture: arm64
+            os: macos-15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          architecture: ${{ matrix.architecture }}
+          cache: false
+
+      - name: Select the declared Rust MSRV
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup default 1.89.0
+      - run: flutter pub get
+      - run: flutter build ${{ matrix.platform }} --debug
+
+      - name: Verify the Windows Host and license bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bundle = 'build\windows\x64\runner\Debug'
+          $hostPath = Join-Path $bundle 'codex-native-host.exe'
+          $noticePath = Join-Path $bundle 'NATIVE_HOST_THIRD_PARTY_LICENSES.txt'
+          if (!(Test-Path $hostPath -PathType Leaf)) { throw 'Packaged Host is missing.' }
+          if (!(Test-Path $noticePath -PathType Leaf)) { throw 'Packaged native license notice is missing.' }
+          if ((Get-Item $hostPath).Length -le 0) { throw 'Packaged Host is empty.' }
+          if ((Get-FileHash $noticePath).Hash -ne (Get-FileHash 'licenses\NATIVE_HOST_THIRD_PARTY_LICENSES.txt').Hash) {
+            throw 'Packaged native license notice drifted.'
+          }
+          & $hostPath --help
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Host help smoke failed.' }
+
+      - name: Verify the macOS Host and license bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          bundle='build/macos/Build/Products/Debug/codex_native_unofficial.app'
+          host_path="$bundle/Contents/MacOS/codex-native-host"
+          notice_path="$bundle/Contents/Resources/NATIVE_HOST_THIRD_PARTY_LICENSES.txt"
+          test -x "$host_path"
+          test -s "$host_path"
+          cmp licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt "$notice_path"
+          "$host_path" --help

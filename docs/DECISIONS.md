@@ -539,3 +539,51 @@ than silently disappear from the notice.
   by any supported desktop binary.
 - Native Windows/macOS packaging remains unverified until those platforms build
   and inspect installed artifacts; Linux byte identity is locally verified.
+
+---
+
+## ADR-016 — Verify the real Rust floor and packaged desktop artifacts in CI
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Declare Rust 1.89 as the native Host's minimum supported version and exercise
+that exact toolchain in CI. Treat a clean locked build, not a developer's newer
+compiler or individual dependency metadata, as the authority for the floor.
+
+Use explicit hosted images for Ubuntu 22.04 x64, Windows Server 2022 x64, and
+macOS 15 arm64. Pin top-level third-party actions to full commit SHAs, disable
+unused action caching, do not persist checkout credentials, and keep CI
+permissions read-only. In addition to source tests, build Linux, Android,
+Windows, and macOS; for both non-Linux desktop jobs, execute the packaged Host's
+`--help` and compare the packaged native-license notice with the committed
+artifact.
+
+### Why
+
+- The prior 1.87 declaration was not true for `Cargo.lock`: official Rust 1.87
+  rejects `uuid` 1.29.0, while a clean official Rust 1.89 build passes all tests.
+- `latest` runner aliases drift, and the previously implicit macOS image was
+  retired. Explicit supported images make architecture and lifecycle changes
+  reviewable.
+- Source review of CMake/Xcode rules cannot prove that a native build actually
+  contains an executable Host and the required license material.
+- Immutable action references and non-persisted credentials narrow the
+  third-party workflow supply-chain boundary without giving PR validation write
+  authority.
+
+### Consequence
+
+- A dependency update that raises the locked graph's real compiler floor must
+  either be rejected or accompanied by an explicit MSRV decision and a clean
+  exact-toolchain gate; it must not silently rely on the runner's newest Rust.
+- Monthly GitHub Actions updates arrive as reviewable Dependabot changes rather
+  than floating automatically at execution time.
+- Ordinary CI produces unsigned debug artifacts only. Developer ID signing,
+  notarization, Windows installation/ACL checks, release signing, and Human
+  interaction remain independent release gates.
+- The workflow is configuration until a commit is pushed and its hosted run is
+  inspected. Local Linux validation does not establish Windows/macOS success.

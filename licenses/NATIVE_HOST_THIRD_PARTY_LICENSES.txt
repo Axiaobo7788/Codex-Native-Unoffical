@@ -2392,7 +2392,7 @@ Used by:
   Source repository: https://github.com/RustCrypto/hybrid-array
 - sha1 0.10.7 - https://crates.io/crates/sha1/0.10.7
   Source repository: https://github.com/RustCrypto/hashes
-- sha2 0.11.0 - https://crates.io/crates/sha2/0.11.0
+- sha2 0.11.1 - https://crates.io/crates/sha2/0.11.1
   Source repository: https://github.com/RustCrypto/hashes
 
                               Apache License

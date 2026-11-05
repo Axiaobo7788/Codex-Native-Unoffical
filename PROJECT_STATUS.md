@@ -1,6 +1,6 @@
 # Project Status
 
-_Last updated: 2026-11-05_
+_Last updated: 2026-11-06_
 
 This file is the repository's durable project memory. Update it whenever a task materially changes implementation status, milestones, known blockers, or the next recommended step.
 
@@ -120,11 +120,52 @@ This file is the repository's durable project memory. Update it whenever a task 
   only after readback, and explicitly clear an unreadable/revoked profile. There
   is still no Remote write/approval path, full conversation surface, QR scanner,
   or physical-device evidence.
-- Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
-  Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
-  local commits.
+- GitHub Actions CI now fixes Ubuntu 22.04 x64, Windows Server 2022 x64, and
+  macOS 15 arm64 runners; uses exact Flutter 3.47.1 and Rust 1.89.0 toolchains;
+  builds Linux, Android, Windows, and macOS; and validates the packaged desktop
+  Host/license pair. Top-level actions are immutable-SHA pinned, checkout
+  credentials are not persisted, and permissions remain read-only. The newest
+  remote green run predates this local workflow and current commits, so no
+  hosted-current or native Windows/macOS pass is claimed.
 
 ## Completed
+
+### 2026-11-06 — Hosted CI hardening and cross-platform build gates
+
+- Reviewed GitHub's immutable-action guidance and current hosted-image catalog,
+  Flutter's supported-platform and continuous-delivery guidance, the Linux
+  secure-storage compiler requirements, and Cargo's `rust-version` semantics.
+  Replaced drifting runner/action references with explicit supported images and
+  reviewed full action SHAs; checkout no longer persists credentials and the
+  Flutter action's optional floating cache steps are explicitly disabled.
+- Proved that the former Rust 1.87 floor was false rather than assuming the
+  developer's Rust 1.99 build represented compatibility. An isolated official
+  Rust 1.87.0 toolchain rejected the locked `uuid` 1.29.0 before compilation
+  because it requires rustc 1.89.0. From empty Cargo/target state, official Rust
+  1.89.0 compiled the same locked workspace and passed all 84 tests. The
+  temporary toolchain/cache tree was validated and removed afterward.
+- Raised the truthful Host floor to 1.89 and advanced the obsolete compatibility
+  pins from `sha2` 0.11.0/`rcgen` 0.14.5 to 0.11.1/0.14.10, which both declare
+  Rust 1.88. The locked native notice was regenerated for the shipping `sha2`
+  change and still passes deterministic drift and packaging validation.
+- The first final strict-Clippy run under the developer's Rust 1.99 exposed a
+  newly enforced collapsible nested `if` in the Remote shutdown error path. A
+  minimal let-chain preserves the required `stop()` call and first-error
+  ownership. Strict Clippy/current-toolchain tests and a second clean exact-1.89
+  build of the final source all pass; the failure is not hidden by the older CI
+  compiler.
+- The Ubuntu 22.04 job now installs `libsecret-1-dev`, selects exact Rust 1.89,
+  runs the full source/license/test gates, then builds Linux and Android. A
+  fail-independent Windows Server 2022 x64/macOS 15 arm64 matrix builds each
+  desktop app, runs the packaged Host's `--help`, and compares the bundled
+  native-license notice at the real platform location. Superseded workflow runs
+  are cancelled; monthly Dependabot review covers GitHub Actions only.
+- Pinned `actionlint` 1.7.12 and independent YAML parsing pass locally. The
+  latest remote CI run `42034034310` passed at `2c7f8b9`, but it predates all
+  newer local-only history and this workflow. Windows/macOS jobs, hosted
+  execution of the current tree, signing/notarization, native installation/ACL
+  inspection, and Human acceptance remain unrun rather than inferred from
+  configuration.
 
 ### 2026-11-05 — Lockfile-derived native license packaging
 
@@ -509,11 +550,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   models, metadata-only thread read, live revocation, no internal-ID leak, and
   zero Host exit. The client connected through loopback on the same Linux host,
   so this is not real LAN, firewall, system-CA, service-install, or Android proof.
-- Dependency review caught Cargo initially selecting `rcgen` 0.14.10 and `time`
-  0.3.55, both of which require Rust 1.88 despite the Host's declared Rust 1.87
-  floor. The committed lock now uses `rcgen` 0.14.5 (declared MSRV 1.71) and
-  `time` 0.3.45 (declared MSRV 1.83). This environment has Rust 1.99, so an
-  actual Rust 1.87 build remains a separate CI/toolchain gate.
+- The original dependency review held `rcgen` and `sha2` below their current
+  patches to preserve an asserted Rust 1.87 floor. A later isolated 1.87 build
+  disproved that floor because locked `uuid` 1.29.0 requires Rust 1.89. The
+  manifest now truthfully requires 1.89, the obsolete pins have advanced, and an
+  isolated official 1.89 build passes all 84 Rust tests.
 
 ### 2026-11-05 — Phase 4 bounded Codex event replay
 
@@ -883,7 +924,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Validation evidence
 
-All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.1 and Codex `0.166.0-alpha.5.1`.
+Results below span 2026-11-05 and 2026-11-06 on Manjaro Linux x86_64 with
+Flutter 3.47.1 and Codex `0.166.0-alpha.5.1`; individual entries preserve their
+specific evidence boundaries.
 
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
@@ -912,6 +955,13 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   live revocation, certificate trust/rotation/rollback, protocol-close shutdown,
   deterministic storage failure, and cache/TLS startup gates.
 - `cargo build --release --workspace`: PASS.
+- Isolated official Rust 1.87.0 `cargo test --locked --workspace`: EXPECTED
+  COMPATIBILITY FAILURE before compilation because `uuid` 1.29.0 requires rustc
+  1.89.0. This disproves the former manifest floor. Isolated official Rust
+  1.89.0 from empty Cargo/target state: PASS, all 84 Rust tests; the validated
+  temporary tree was removed afterward.
+- Pinned `actionlint` 1.7.12 over `.github/workflows/ci.yml`: PASS. Independent
+  PyYAML parsing of CI and Dependabot configuration: PASS.
 - Release `codex-native-host` real-runtime smoke: PASS; one process carried a
   Host status request plus stock app-server initialize/initialized and reported
   Codex Desktop/app-server `0.166.0-alpha.5.1`. This isolated smoke established
@@ -982,7 +1032,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   PIDs, and zero new cache sessions.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
-- Hosted GitHub Actions CI: NOT RUN for the local changes.
+- Hosted GitHub Actions CI: latest observed run `42034034310` is PASS at remote
+  commit `2c7f8b9`; it does not contain the newer local-only history or the new
+  matrix. Current-tree hosted CI is NOT RUN.
 - Windows/macOS builds and physical-device validation: NOT RUN in this Linux environment.
 
 ## Known risks / watch items
@@ -1094,8 +1146,9 @@ its now-versioned trust boundary:
    idempotency, and attachment bounds explicit rather than reusing the desktop
    surface optimistically;
 4. while a physical Android device is unavailable, continue independent
-   machine-actionable RC work such as Windows/macOS build-path review and
-   hosted-CI readiness without claiming unavailable platform passes.
+   machine-actionable RC work such as unsigned release-artifact assembly,
+   integrity/provenance manifests, installed-layout checks, and release
+   documentation without claiming unavailable hosted or native-platform passes.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

@@ -298,10 +298,10 @@ _Reviewed: 2026-11-05_
   bounded diff/preview presentation. License: GPL-3.0; implementation code is
   research-only for this Apache-2.0 project.
 - Rust `getrandom` 0.4.3 for direct operating-system randomness, RustCrypto
-  `sha2` 0.11.0 for token/parameter digests, and `subtle` 2.6.1 for constant-time
-  digest comparison. All are permissively licensed. `sha2` is pinned to 0.11.0
-  because 0.11.1 requires Rust 1.88 while this Host declares Rust 1.87; 0.11.0
-  supports Rust 1.85.
+  `sha2` 0.11.1 for token/parameter digests, and `subtle` 2.6.1 for constant-time
+  digest comparison. All are permissively licensed. `sha2` was initially held
+  at 0.11.0 for an asserted Rust 1.87 floor; the later clean-toolchain gate
+  disproved that floor and the now-verified Rust 1.89 floor supports 0.11.1.
 
 ### Upstream and failure evidence
 
@@ -1296,3 +1296,65 @@ _Reviewed: 2026-11-05_
   environment. Installed Windows/macOS artifacts and signing/notarization still
   require their native machines; this work does not claim those platform passes
   or legal advice.
+
+## Hosted CI hardening and cross-platform build gates
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- GitHub's official [secure-use guidance for third-party actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-third-party-actions),
+  which identifies a full commit SHA as the only immutable third-party action
+  reference, and the official [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+- The maintained `actions/runner-images` [available-image table](https://github.com/actions/runner-images#available-images):
+  Ubuntu 22.04 x64, Windows Server 2022 x64, and macOS 15 arm64 are supported
+  standard images; macOS 14 was retired on 2026-11-02.
+- Flutter's official [supported-platform matrix](https://docs.flutter.dev/reference/supported-platforms)
+  and [continuous-delivery guidance](https://docs.flutter.dev/deployment/cd).
+  Flutter 3.47 supports the selected desktop OS/architectures and tests Linux on
+  Ubuntu 22.04 and macOS on macOS 15.
+- `flutter_secure_storage_linux` 3.0.3's published [Linux requirements](https://pub.dev/packages/flutter_secure_storage_linux/versions/3.0.3),
+  which require `libsecret-1-dev`, and Cargo's official
+  [`rust-version` manifest semantics](https://doc.rust-lang.org/cargo/reference/manifest.html#the-rust-version-field).
+
+### Findings that changed the implementation
+
+- The prior `ubuntu-latest` job neither fixed the runner image nor built Android,
+  Windows, or macOS. Adding Linux secure storage also made `libsecret-1-dev` a
+  required compiler dependency that the old job did not install.
+- The latest three hosted runs visible before this change passed, but the newest
+  run (`42034034310`) tested only remote commit `2c7f8b9`, not the newer
+  local-only history. A green old run cannot be used as evidence for this
+  workflow or current tree.
+- A clean official Rust 1.87.0 toolchain rejected the locked graph before
+  compilation: `uuid` 1.29.0 requires rustc 1.89.0. An isolated official Rust
+  1.89.0 toolchain then compiled from empty Cargo/target state and passed all 84
+  Rust tests. The former `rust-version = "1.87"` was therefore a false release
+  claim, not a compatibility feature worth preserving.
+- `subosito/flutter-action` at the reviewed commit contains optional floating
+  `actions/cache@v5` steps. This workflow explicitly disables that cache, so
+  those conditional steps do not execute; both top-level actions are pinned to
+  reviewed full SHAs and checkout persistence is disabled.
+
+### Adopted here and validation boundary
+
+- The primary Ubuntu 22.04 x64 job installs the actual Linux compiler
+  dependencies, selects Flutter 3.47.1 and exact Rust 1.89.0, runs formatting,
+  license drift, strict Clippy, all Dart/Rust tests and analysis, then builds
+  both the Linux debug bundle and Android debug APK.
+- A fail-independent matrix builds Windows Server 2022 x64 and macOS 15 arm64.
+  Each job checks that the Host is non-empty, executes its packaged `--help`, and
+  verifies the native-license notice at the platform's real bundle location.
+  PR CI remains read-only and unsigned; signing, notarization, installation,
+  native ACL inspection, and Human use are separate release gates.
+- `actions/checkout` is pinned to
+  `11d5960a326750d5838078e36cf38b85af677262` with no persisted credentials;
+  `subosito/flutter-action` is pinned to
+  `1a449444c387b1966244ae4d4f8c696479add0b2` with cache disabled. Concurrency
+  cancels superseded runs, and monthly Dependabot review is limited to the
+  GitHub Actions ecosystem.
+- Pinned `actionlint` 1.7.12 and independent YAML parsing pass locally. Linux,
+  Android, and exact-MSRV product gates also pass locally, but the new workflow
+  and both native non-Linux jobs remain unexecuted until this commit is
+  deliberately pushed. No hosted-current, Windows, macOS, signing, or
+  notarization pass is claimed.

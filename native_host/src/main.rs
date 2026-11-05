@@ -235,12 +235,11 @@ fn run() -> io::Result<()> {
     }
 
     drop(child_stdin);
-    if let Some(remote_server) = remote_server {
-        if let Err(error) = remote_server.stop()
-            && primary_error.is_none()
-        {
-            primary_error = Some(error);
-        }
+    if let Some(remote_server) = remote_server
+        && let Err(error) = remote_server.stop()
+        && primary_error.is_none()
+    {
+        primary_error = Some(error);
     }
     let status = match stop_child(&mut child) {
         Ok(status) => Some(status),
