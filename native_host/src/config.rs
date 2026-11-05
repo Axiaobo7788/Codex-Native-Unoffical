@@ -14,6 +14,7 @@ const DEFAULT_STALE_AGE_SECS: u64 = 24 * 60 * 60;
 pub(crate) struct Config {
     pub(crate) codex_executable: PathBuf,
     pub(crate) cache_dir: PathBuf,
+    pub(crate) remote_device_file: Option<PathBuf>,
     pub(crate) max_output_bytes: u64,
     pub(crate) max_session_bytes: u64,
     pub(crate) max_forward_message_bytes: u64,
@@ -30,15 +31,23 @@ impl Config {
         let mut cache_dir = env::var_os("CODEX_NATIVE_CACHE_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(default_cache_dir);
+        let mut remote_device_file = env::var_os("CODEX_NATIVE_REMOTE_DEVICE_FILE")
+            .map(PathBuf::from)
+            .map(Some)
+            .unwrap_or_else(default_remote_device_file);
 
         let mut arguments = env::args_os().skip(1);
         while let Some(argument) = arguments.next() {
             match argument.to_string_lossy().as_ref() {
                 "--codex" => codex_executable = required_path(&mut arguments, "--codex")?,
                 "--cache-dir" => cache_dir = required_path(&mut arguments, "--cache-dir")?,
+                "--remote-device-file" => {
+                    remote_device_file =
+                        Some(required_path(&mut arguments, "--remote-device-file")?)
+                }
                 "-h" | "--help" => {
                     println!(
-                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH]",
+                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH]",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -59,6 +68,7 @@ impl Config {
         Ok(Some(Self {
             codex_executable,
             cache_dir,
+            remote_device_file,
             max_output_bytes: positive_u64(
                 "CODEX_NATIVE_MAX_OUTPUT_BYTES",
                 DEFAULT_MAX_OUTPUT_BYTES,
@@ -101,6 +111,15 @@ fn default_cache_dir() -> PathBuf {
         .unwrap_or_else(std::env::temp_dir)
         .join("codex-native-unofficial")
         .join("host-output")
+}
+
+fn default_remote_device_file() -> Option<PathBuf> {
+    dirs::config_dir().map(|directory| {
+        directory
+            .join("codex-native-unofficial")
+            .join("remote")
+            .join("devices.json")
+    })
 }
 
 fn positive_u64(name: &str, default: u64) -> io::Result<u64> {

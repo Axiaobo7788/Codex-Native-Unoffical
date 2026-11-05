@@ -16,7 +16,7 @@ Codex Native is a presentation and remote-control client around the official Cod
             v                                v
 +---------------------------------------------------------+
 | codex-native-host                                       |
-| lifecycle / bounded output spool / future auth + resume |
+| lifecycle / bounded spool / Remote auth + resume core   |
 +----------------------------+----------------------------+
                              |
                        stdio / JSONL
@@ -79,16 +79,23 @@ It can:
 
 It should not need the user's OpenAI credentials. Credentials remain on the host running Codex.
 
-A robust remote protocol should eventually provide:
+A local trusted `host/remote/*` administration surface owns pairing-ticket
+creation, paired-device metadata, and revocation. Device records are loaded only
+when Remote administration or networking is used, so a broken Remote store does
+not take down the local Codex runtime. Pairing completion and bearer
+authentication belong to the Host listener; tokens never enter Flutter desktop
+state after issuance.
 
-- pairing and device identity;
+The implemented pure Host protocol foundation provides version negotiation,
+process-scoped session identity, sequenced replay with count and byte budgets,
+ACK validation, correlation namespaces, same-session write idempotency, and
+hash-only device credentials. The network and Android layers must still provide:
+
 - encrypted authenticated transport;
-- monotonically increasing event sequence numbers;
-- ACK + resume from last acknowledged event;
-- idempotent requests where practical;
 - heartbeat and liveness detection;
 - chunked/resumable file transfer;
-- explicit protocol version negotiation.
+- bounded outbound queues and handshake/message deadlines;
+- platform-backed Android credential storage and lifecycle recovery.
 
 ## Fidelity mode
 

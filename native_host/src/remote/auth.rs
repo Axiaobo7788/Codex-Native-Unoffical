@@ -24,7 +24,8 @@ pub enum DeviceScope {
     DeviceRotate,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Device {
     pub id: String,
     pub name: String,

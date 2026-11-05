@@ -78,11 +78,40 @@ This file is the repository's durable project memory. Update it whenever a task 
   request correlation, bounded same-session write idempotency, single-use
   pairing, and hash-only scoped device credentials. The researched listener is
   still not connected to a network socket or Android credential flow.
+- The desktop Host exposes trusted local `host/remote/pairing/create`,
+  `host/remote/devices/list`, and `host/remote/devices/revoke` administration.
+  Its credential registry is loaded lazily from a configurable user config file,
+  so Remote-store corruption cannot block ordinary local Host status or Codex
+  startup.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 local Remote administration boundary
+
+- Added a separate user-config credential-store location with an explicit
+  `CODEX_NATIVE_REMOTE_DEVICE_FILE`/`--remote-device-file` override. If no secure
+  config directory is available, local Codex still starts and Remote
+  administration fails closed instead of falling back to a shared temporary
+  directory.
+- Integrated bounded local Host RPCs to create the one active five-minute
+  pairing ticket, list public device metadata, and revoke an exact device ID.
+  These methods never return a stored token digest or filesystem path; unknown
+  parameters and missing IDs are rejected as invalid requests.
+- Kept registry initialization lazy. A deterministic corrupt-store gate proves
+  `host/status` remains available while the first Remote device call returns a
+  generic internal error without leaking its path.
+- A production release Host with stock app-server passed process-level
+  `host/status`, ticket creation, and empty device-list JSONL calls, then exited
+  cleanly on EOF. Stock app-server logged a shutdown-before-client-name warning
+  because this management-only smoke deliberately did not initialize Codex; no
+  process survived.
+- The Rust suite now passes 25 Remote-library tests, 25 Host-binary tests, and
+  two executable failure-path tests (52 total), plus format, strict Clippy, and
+  the release build. A real network pairing exchange and live revocation remain
+  unimplemented.
 
 ### 2026-11-05 — Phase 4 Remote protocol and device-auth core
 

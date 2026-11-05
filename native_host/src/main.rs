@@ -5,7 +5,7 @@ mod spool;
 mod transform;
 
 use config::Config;
-use rpc::{ClientMessage, route_client_message};
+use rpc::{ClientMessage, RemoteAdmin, route_client_message};
 use spool::SpoolStore;
 use std::io::{self, BufWriter, Read, Write};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
@@ -28,6 +28,7 @@ fn run() -> io::Result<()> {
         return Ok(());
     };
     let cache_dir = config.cache_dir.clone();
+    let remote_admin = Mutex::new(RemoteAdmin::new(config.remote_device_file.clone()));
     let store = Arc::new(
         SpoolStore::open(
             config.cache_dir,
@@ -110,7 +111,7 @@ fn run() -> io::Result<()> {
     let mut shutdown_requested = false;
     for event in events_rx {
         match event {
-            Event::ClientLine(line) => match route_client_message(line, &store) {
+            Event::ClientLine(line) => match route_client_message(line, &store, &remote_admin) {
                 ClientMessage::Forward(line) => {
                     if let Err(error) = write_line(&mut child_stdin, &line) {
                         primary_error = Some(error);
