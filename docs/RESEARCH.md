@@ -2197,3 +2197,58 @@ _Reviewed: 2026-11-06_
   Assemble` declares no output dependency. This closes the implemented
   leaf-object ACL gate, not the remaining service, directory, installer,
   signing/notarization, or Human gates.
+
+## macOS universal nested-Host packaging
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Apple's official [Building a universal macOS binary](https://developer.apple.com/documentation/apple-silicon/building-a-universal-macos-binary)
+  guidance requires every executable component shipped in an application to
+  contain the supported slices. For a custom build system it prescribes building
+  once per architecture and combining the results with `lipo`. Apple's build-
+  setting reference identifies `ARCHS` as the architectures Xcode builds.
+- Rust's official [platform support](https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html)
+  lists `aarch64-apple-darwin` and `x86_64-apple-darwin` and documents Xcode SDK
+  cross-compilation on macOS. The rustc book also documents that
+  `MACOSX_DEPLOYMENT_TARGET` controls the minimum target version.
+- The repository-pinned Flutter 3.47.1 source at revision `6655482ec0` was
+  inspected directly. Its macOS build command uses the active host architecture
+  for Debug, while a normal non-Debug build requests the standard universal
+  product unless the separate arm64-only feature is enabled. Its support page
+  still lists macOS x64 and arm64, while warning that Intel support is being
+  deprecated; this is a current-toolchain contract, not a permanent promise.
+- Tauri at `2e23492ab9bcec06bab041e0e47447aaa0da298c` (Apache-2.0)
+  builds the two Apple Rust targets separately and uses `lipo -create`, requiring
+  both targets to be installed. Isar at
+  `713001bf1615ea15460d9bc8d3fb9c8cb4150a2e` (Apache-2.0) and OpenWallet
+  Askar at `b9bf50222af8a2d78369afd2ddac7a49a2a93cd0` (Apache-2.0) independently
+  use the same per-target-build plus `lipo` pattern. No source code was copied.
+
+### Adopted boundary
+
+- Follow Xcode `ARCHS` rather than guessing from `uname`. Build the Host with an
+  explicit Rust target for every requested supported slice, merge only when more
+  than one exists, and run the existing nested-code signing step after the merge.
+  Debug therefore stays thin when Xcode requests one active architecture, while
+  release/profile remain architecture-complete with the outer app.
+- Provision both Rust targets in hosted macOS workflows rather than mutating the
+  toolchain inside an Xcode build phase. Reject an empty/unknown request and let a
+  missing target fail in Cargo.
+- Name release review provenance `macos-universal`. On a real macOS verifier,
+  require exactly `arm64` and `x86_64` in the runner, nested Host, App framework,
+  and Flutter engine before Host execution. Structural verification remains
+  cross-platform, but only matching-host verification can inspect Mach-O slices.
+
+### Deliberate non-adoptions and remaining gates
+
+- Do not replace Flutter's architecture decision with an always-universal local
+  build, and do not make Debug iteration pay for two Rust compilations.
+- Do not preserve an arm64-only artifact label merely because the current hosted
+  runner is Apple Silicon. The artifact describes the payload, not the machine
+  that assembled it.
+- Universal Mach-O construction does not establish physical Intel execution,
+  Developer ID signing, hardened runtime, notarization, stapling, Gatekeeper,
+  installed workspace/toolchain access, or Human acceptance. Hosted build and
+  review-artifact evidence is still pending for this implementation.

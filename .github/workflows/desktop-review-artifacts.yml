@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    name: Review artifact (${{ matrix.platform }}-${{ matrix.architecture }})
+    name: Review artifact (${{ matrix.platform }}-${{ matrix.artifact_architecture }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -21,14 +21,17 @@ jobs:
         include:
           - platform: linux
             architecture: x64
+            artifact_architecture: x64
             os: ubuntu-22.04
             bundle: build/linux/x64/release/bundle
           - platform: windows
             architecture: x64
+            artifact_architecture: x64
             os: windows-2022
             bundle: build/windows/x64/runner/Release
           - platform: macos
             architecture: arm64
+            artifact_architecture: universal
             os: macos-15
             bundle: build/macos/Build/Products/Release/codex_native_unofficial.app
 
@@ -53,6 +56,10 @@ jobs:
           rustup toolchain install 1.89.0 --profile minimal
           rustup default 1.89.0
 
+      - name: Install macOS universal Host targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - run: flutter pub get
       - run: dart run tool/verify_native_license_packaging.dart
       - run: flutter build ${{ matrix.platform }} --release
@@ -63,7 +70,7 @@ jobs:
           --bundle "${{ matrix.bundle }}"
           --output build/review-artifacts
           --platform "${{ matrix.platform }}"
-          --architecture "${{ matrix.architecture }}"
+          --architecture "${{ matrix.artifact_architecture }}"
           --source-revision "${{ github.sha }}"
           --source-tree-state clean
           --flutter-version 3.47.1
@@ -78,7 +85,7 @@ jobs:
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: codex-native-unofficial-${{ matrix.platform }}-${{ matrix.architecture }}-review-only
+          name: codex-native-unofficial-${{ matrix.platform }}-${{ matrix.artifact_architecture }}-review-only
           path: |
             build/review-artifacts/*.tar.gz
             build/review-artifacts/*.tar.gz.sha256

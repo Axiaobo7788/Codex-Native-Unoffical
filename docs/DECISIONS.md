@@ -1000,3 +1000,51 @@ native macOS filesystem fixture exercise both a plain owner-only key and a
   signing/notarization, and Human installed-machine review remain separate
   release gates. This decision supersedes only ADR-022's macOS extended-ACL
   deferral.
+
+---
+
+## ADR-024 — Keep the nested macOS Host architecture-complete with the app
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Treat Xcode's `ARCHS` as the source of truth for the architecture set of the
+nested `codex-native-host`. Map `arm64` to `aarch64-apple-darwin` and `x86_64`
+to `x86_64-apple-darwin`, invoke locked Cargo once per requested target, merge
+multiple results with the system `lipo`, then sign the final embedded Host once.
+Reject an unknown or empty architecture request. Do not install Rust targets or
+fall back to the build machine architecture when Xcode made an explicit request.
+
+Keep Debug builds on Xcode's active architecture. For the pinned Flutter 3.47.1
+release path, provision both Rust targets and require the app runner, Host, App
+framework, and Flutter engine to contain exactly arm64 and x86_64. Identify that
+review artifact as `macos-universal`; do not label an arm64-only artifact as the
+macOS release candidate.
+
+### Why
+
+- A universal outer app with a thin nested executable can launch on the build
+  machine yet fail only when the other architecture attempts to start the Host.
+- Xcode already decides the product architecture set. Mirroring `ARCHS` avoids a
+  second hard-coded release mode while preserving fast active-architecture Debug
+  builds.
+- Building explicit Rust targets and merging their complete executables follows
+  the supported custom-build-system pattern; post-merge signing avoids
+  invalidating a signature by changing Mach-O bytes later.
+- A native artifact check makes the target label an enforced property rather
+  than provenance prose.
+
+### Consequence
+
+- macOS release builders must install both Rust Apple targets before invoking
+  the universal build. Missing targets fail visibly; the build phase does not
+  mutate a developer toolchain.
+- CI uses an Apple Silicon runner but validates both slices. That proves build
+  and package completeness, not runtime behavior on physical Intel hardware.
+- Developer ID signing, entitlements, notarization, stapling, Gatekeeper,
+  installed-workspace access, and Human review remain separate release gates.
+- Flutter's announced Intel deprecation is not guessed around here. A later
+  Flutter/toolchain upgrade must deliberately retain or revise this decision.

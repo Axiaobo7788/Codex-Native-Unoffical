@@ -52,6 +52,26 @@ Possible future implementation:
 
 - `EmbeddedTransport`: Rust in-process app-server reached through flutter_rust_bridge. Experimental only; it must preserve app-server semantics and is not a v1 requirement.
 
+## macOS bundle architecture boundary
+
+The Flutter runner, Dart AOT framework, Flutter engine, and nested native Host
+must describe the same distributable architecture set. With the pinned Flutter
+3.47.1 toolchain, non-Debug macOS builds request the standard arm64 and x86_64
+architectures. The Host build phase maps each Xcode `ARCHS` value to an explicit
+Rust target, compiles each slice independently, merges multiple slices with the
+system `lipo`, and signs the final merged Host once. Debug builds retain Xcode's
+active-architecture behavior for iteration speed.
+
+The build phase rejects unknown architectures and never installs Rust targets
+or silently drops a requested slice. CI and the manual review-artifact workflow
+provision both supported Rust targets explicitly. A macOS review artifact is
+therefore identified as `universal`, and native assembly/verification requires
+the app runner, Host, App framework, and Flutter engine to contain exactly
+arm64 and x86_64. This architecture check is not evidence for execution on real
+Intel hardware, Developer ID signing, hardened-runtime entitlements,
+notarization, Gatekeeper, or installed-workspace behavior. A future Flutter
+upgrade that changes Intel support requires an explicit compatibility decision.
+
 ## Memory model
 
 The app-server/thread store is authoritative. Flutter retains only the current working set.

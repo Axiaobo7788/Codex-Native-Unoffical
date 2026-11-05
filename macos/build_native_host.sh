@@ -19,14 +19,51 @@ if [[ -z "${cargo_executable}" ]]; then
   exit 1
 fi
 
-"${cargo_executable}" "${cargo_arguments[@]}" \
-  --manifest-path "${repository_root}/Cargo.toml" \
-  --target-dir "${target_dir}"
+if [[ -n "${ARCHS+x}" ]]; then
+  requested_archs="${ARCHS}"
+  if [[ -z "${requested_archs//[[:space:]]/}" ]]; then
+    echo "error: Xcode did not request a macOS Host architecture" >&2
+    exit 1
+  fi
+else
+  requested_archs="$(uname -m)"
+fi
+IFS=' ' read -r -a xcode_archs <<< "${requested_archs}"
+if [[ "${#xcode_archs[@]}" -eq 0 ]]; then
+  echo "error: Xcode did not request a macOS Host architecture" >&2
+  exit 1
+fi
+host_inputs=()
+for architecture in "${xcode_archs[@]}"; do
+  case "${architecture}" in
+    arm64)
+      rust_target="aarch64-apple-darwin"
+      ;;
+    x86_64)
+      rust_target="x86_64-apple-darwin"
+      ;;
+    *)
+      echo "error: unsupported macOS Host architecture: ${architecture}" >&2
+      exit 1
+      ;;
+  esac
+
+  "${cargo_executable}" "${cargo_arguments[@]}" \
+    --target "${rust_target}" \
+    --manifest-path "${repository_root}/Cargo.toml" \
+    --target-dir "${target_dir}"
+  host_inputs+=("${target_dir}/${rust_target}/${profile}/codex-native-host")
+done
 
 destination_dir="${TARGET_BUILD_DIR}/${EXECUTABLE_FOLDER_PATH}"
 destination="${destination_dir}/codex-native-host"
 mkdir -p "${destination_dir}"
-install -m 755 "${target_dir}/${profile}/codex-native-host" "${destination}"
+if [[ "${#host_inputs[@]}" -eq 1 ]]; then
+  install -m 755 "${host_inputs[0]}" "${destination}"
+else
+  /usr/bin/lipo -create "${host_inputs[@]}" -output "${destination}"
+  chmod 755 "${destination}"
+fi
 
 license_source="${repository_root}/licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt"
 resources_dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"

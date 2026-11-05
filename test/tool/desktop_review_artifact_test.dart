@@ -81,6 +81,9 @@ void main() {
       final result = await assembleDesktopReviewArtifact(fixture.config);
       await verifyDesktopReviewArtifact(result.provenance);
 
+      final provenance = jsonDecode(await result.provenance.readAsString());
+      expect(provenance['target']['architecture'], 'universal');
+
       final launcher = File(
         '${fixture.bundle.path}/Contents/MacOS/codex_native_unofficial',
       );
@@ -105,6 +108,25 @@ void main() {
       );
     },
   );
+
+  test('macOS review artifacts reject a thin architecture label', () async {
+    final fixture = await _createMacOsFixture();
+    addTearDown(() => fixture.root.delete(recursive: true));
+
+    await expectLater(
+      assembleDesktopReviewArtifact(
+        fixture.config.copyWithArchitecture('arm64'),
+      ),
+      throwsA(
+        isA<DesktopReviewArtifactException>().having(
+          (error) => error.message,
+          'message',
+          contains('unsupported review-artifact target: macos-arm64'),
+        ),
+      ),
+    );
+    expect(await fixture.output.list().toList(), isEmpty);
+  });
 
   test(
     'native verification exercises the extracted Linux runtime closure',
@@ -386,7 +408,7 @@ Future<_MacOsFixture> _createMacOsFixture() async {
     bundleDirectory: bundle,
     outputDirectory: output,
     platform: DesktopArtifactPlatform.macos,
-    architecture: 'arm64',
+    architecture: 'universal',
     sourceRevision: 'b' * 40,
     sourceTreeState: 'clean',
     flutterVersion: '3.47.1',
@@ -404,6 +426,22 @@ Future<_MacOsFixture> _createMacOsFixture() async {
 
 extension on DesktopReviewArtifactConfig {
   DesktopReviewArtifactConfig copyWithOutput(Directory outputDirectory) {
+    return DesktopReviewArtifactConfig(
+      repositoryRoot: repositoryRoot,
+      bundleDirectory: bundleDirectory,
+      outputDirectory: outputDirectory,
+      platform: platform,
+      architecture: architecture,
+      sourceRevision: sourceRevision,
+      sourceTreeState: sourceTreeState,
+      flutterVersion: flutterVersion,
+      rustVersion: rustVersion,
+      buildOrigin: buildOrigin,
+      verifyRepositoryIdentity: verifyRepositoryIdentity,
+    );
+  }
+
+  DesktopReviewArtifactConfig copyWithArchitecture(String architecture) {
     return DesktopReviewArtifactConfig(
       repositoryRoot: repositoryRoot,
       bundleDirectory: bundleDirectory,

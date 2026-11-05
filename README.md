@@ -249,6 +249,11 @@ flutter build apk --debug
 Linux and Windows native builds compile and place `codex-native-host` beside the
 Flutter executable. The macOS build embeds it in `Contents/MacOS`; macOS is a
 direct, signed/notarized distribution rather than a Mac App Store sandboxed app.
+Debug macOS builds compile the Host for Xcode's active architecture. Non-Debug
+builds follow Xcode's requested `ARCHS`, compile the Host once per Rust target,
+merge multiple slices with `lipo`, and sign only the final embedded binary. The
+current release workflow installs both `aarch64-apple-darwin` and
+`x86_64-apple-darwin` so the Host remains universal with the Flutter app.
 The same builds package `NATIVE_HOST_THIRD_PARTY_LICENSES.txt` beside the Host on
 Linux/Windows and under `Contents/Resources` on macOS. Regenerate it with pinned
 `cargo-about` 0.9.3 via `./tool/generate_native_licenses.sh --write` after any
@@ -258,17 +263,21 @@ built Host. There is intentionally no direct app-server fallback.
 
 GitHub Actions is configured with explicit Flutter 3.47.1 and Rust 1.89.0
 toolchains for Linux/Android on Ubuntu 22.04 x64, Windows on Windows Server 2022
-x64, and macOS on macOS 15 arm64. Both desktop jobs run the native Host tests,
-build the app bundle, run the packaged Host's `--help` smoke, and compare the
-packaged native-license notice with the committed source. Top-level actions are
-pinned to immutable commit SHAs and checkout does not persist credentials. A
-configured workflow is not evidence for an unpublished local commit: inspect
-the corresponding hosted run after that commit is deliberately pushed.
+x64, and macOS on macOS 15 arm64. Both desktop jobs run the native Host tests.
+Windows builds a debug x64 bundle; macOS builds a release bundle and requires
+the app runner, Host, App framework, and Flutter engine to each contain exactly
+the arm64 and x86_64 slices. Both run the packaged Host's `--help` smoke and
+compare the packaged native-license notice with the committed source. Top-level
+actions are pinned to immutable commit SHAs and checkout does not persist
+credentials. A configured workflow is not evidence for an unpublished local
+commit: inspect the corresponding hosted run after that commit is deliberately
+pushed.
 
 ## Desktop review artifacts
 
 The manual `Desktop review artifacts` workflow builds Linux x64, Windows x64,
-and macOS arm64 in release mode and uploads complete review bundles for 14 days.
+and macOS universal in release mode and uploads complete review bundles for 14
+days.
 It has read-only repository permission and does not create a tag or GitHub
 Release. Every output is deliberately named `review-only` and records
 `distributionReady=false`: no Developer ID/notarization, Authenticode/installer,
@@ -283,7 +292,9 @@ manifest, `SHA256SUMS`, and a review-only warning. Assembly checks Git `HEAD`
 and clean/dirty state, release AOT layout, both notice files, absence of a debug
 kernel, and the packaged Host's `--help`; verification extracts and reinventories
 the result before upload. The hosted verifier also runs the extracted Host on
-the matching operating system. On Linux it checks the ELF64 x86-64 identities,
+the matching operating system. On macOS it also requires the extracted app
+runner, Host, App framework, and Flutter engine to contain exactly arm64 and
+x86_64. On Linux it checks the ELF64 x86-64 identities,
 the runner's `$ORIGIN/lib` lookup, every runtime-reachable bundled library's
 relocatable RUNPATH, and the runner/Host dependency closures with build-time
 `LD_LIBRARY_PATH` and `LD_PRELOAD` removed. A dependent job downloads the Linux
@@ -318,6 +329,9 @@ claim. Omit `--native-runtime` when inspecting an artifact for a different host
 operating system; structural and checksum verification remains cross-platform.
 Linux native verification requires `readelf` and `ldd` (the hosted workflow
 installs `binutils` explicitly and uses the runner's libc tooling).
+For a macOS release bundle use `--platform macos --architecture universal`;
+`arm64` is intentionally not an accepted review-artifact target because it
+would mislabel a distribution-incomplete Host.
 These checksums and manifests establish internal consistency, not a
 cryptographic publisher identity. GitHub artifact attestations and production
 release permissions remain a separate, explicitly reviewed future step.

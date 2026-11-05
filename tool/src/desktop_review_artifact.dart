@@ -83,6 +83,7 @@ Future<DesktopReviewArtifactResult> assembleDesktopReviewArtifact(
   final metadata = await _validateConfig(config);
   await _validateBundleLayout(
     platform: config.platform,
+    architecture: config.architecture,
     bundleDirectory: config.bundleDirectory,
     repositoryRoot: config.repositoryRoot,
     runHostSmoke: true,
@@ -356,6 +357,13 @@ Future<void> verifyDesktopReviewArtifact(
     final platform = DesktopArtifactPlatform.parse(
       _requiredString(target, 'platform'),
     );
+    final architecture = _requiredString(target, 'architecture');
+    if (!_isSupportedTarget(platform, architecture)) {
+      throw DesktopReviewArtifactException(
+        'unsupported review-artifact target: '
+        '${platform.slug}-$architecture',
+      );
+    }
     if (verifyNativeRuntime && !_isCurrentPlatform(platform)) {
       throw DesktopReviewArtifactException(
         'native runtime verification for ${platform.slug} requires a '
@@ -384,6 +392,7 @@ Future<void> verifyDesktopReviewArtifact(
     }
     await _validatePayloadLayout(
       platform: platform,
+      architecture: architecture,
       payloadDirectory: payload,
       repositoryRoot: null,
       runHostSmoke: verifyNativeRuntime,
@@ -418,12 +427,7 @@ Future<_ApplicationMetadata> _validateConfig(
       'repository root or desktop bundle directory does not exist',
     );
   }
-  final supportedTarget = switch (config.platform) {
-    DesktopArtifactPlatform.linux => config.architecture == 'x64',
-    DesktopArtifactPlatform.windows => config.architecture == 'x64',
-    DesktopArtifactPlatform.macos => config.architecture == 'arm64',
-  };
-  if (!supportedTarget) {
+  if (!_isSupportedTarget(config.platform, config.architecture)) {
     throw DesktopReviewArtifactException(
       'unsupported review-artifact target: '
       '${config.platform.slug}-${config.architecture}',
@@ -486,6 +490,14 @@ Future<_ApplicationMetadata> _validateConfig(
   );
 }
 
+bool _isSupportedTarget(DesktopArtifactPlatform platform, String architecture) {
+  return switch (platform) {
+    DesktopArtifactPlatform.linux => architecture == 'x64',
+    DesktopArtifactPlatform.windows => architecture == 'x64',
+    DesktopArtifactPlatform.macos => architecture == 'universal',
+  };
+}
+
 Future<void> _verifyRepositoryIdentity(
   DesktopReviewArtifactConfig config,
 ) async {
@@ -525,6 +537,7 @@ Future<void> _verifyRepositoryIdentity(
 
 Future<void> _validateBundleLayout({
   required DesktopArtifactPlatform platform,
+  required String architecture,
   required Directory bundleDirectory,
   required Directory repositoryRoot,
   required bool runHostSmoke,
@@ -537,6 +550,7 @@ Future<void> _validateBundleLayout({
   }
   await _validatePayloadLayout(
     platform: platform,
+    architecture: architecture,
     payloadDirectory: bundleDirectory,
     macAppDirectory: platform == DesktopArtifactPlatform.macos
         ? bundleDirectory
@@ -548,6 +562,7 @@ Future<void> _validateBundleLayout({
 
 Future<void> _validatePayloadLayout({
   required DesktopArtifactPlatform platform,
+  required String architecture,
   required Directory payloadDirectory,
   Directory? macAppDirectory,
   required Directory? repositoryRoot,
@@ -692,10 +707,50 @@ Future<void> _validatePayloadLayout({
       'packaged application third-party notice',
     );
   }
+  if (runHostSmoke &&
+      platform == DesktopArtifactPlatform.macos &&
+      architecture == 'universal' &&
+      Platform.isMacOS) {
+    await _verifyMacOsUniversalBinaries(layoutRoot);
+  }
   if (runHostSmoke) {
     await _runHostHelpSmoke(
       File(_resolveRelative(layoutRoot, hostRelativePath)),
     );
+  }
+}
+
+Future<void> _verifyMacOsUniversalBinaries(Directory appBundle) async {
+  for (final relativePath in const [
+    'Contents/MacOS/codex_native_unofficial',
+    'Contents/MacOS/codex-native-host',
+    'Contents/Frameworks/App.framework/App',
+    'Contents/Frameworks/FlutterMacOS.framework/FlutterMacOS',
+  ]) {
+    final binary = File(_resolveRelative(appBundle, relativePath));
+    final result = await Process.run('/usr/bin/lipo', [
+      '-archs',
+      binary.absolute.path,
+    ]);
+    if (result.exitCode != 0) {
+      throw DesktopReviewArtifactException(
+        'could not inspect macOS architectures for $relativePath: '
+        '${_boundedDiagnostic(result.stderr)}',
+      );
+    }
+    final architectures = '${result.stdout}'
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    if (architectures.length != 2 ||
+        !architectures.contains('arm64') ||
+        !architectures.contains('x86_64')) {
+      throw DesktopReviewArtifactException(
+        'macOS universal binary $relativePath must contain exactly arm64 and '
+        'x86_64; found ${architectures.toList()..sort()}',
+      );
+    }
   }
 }
 

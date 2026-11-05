@@ -73,9 +73,11 @@ jobs:
         include:
           - platform: windows
             architecture: x64
+            build_mode: debug
             os: windows-2022
           - platform: macos
             architecture: arm64
+            build_mode: release
             os: macos-15
 
     steps:
@@ -94,10 +96,13 @@ jobs:
         run: |
           rustup toolchain install 1.89.0 --profile minimal
           rustup default 1.89.0
+      - name: Install macOS universal Host targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - run: flutter pub get
       - name: Run native Host tests
         run: cargo test --workspace
-      - run: flutter build ${{ matrix.platform }} --debug
+      - run: flutter build ${{ matrix.platform }} --${{ matrix.build_mode }}
 
       - name: Verify the Windows Host and license bundle
         if: runner.os == 'Windows'
@@ -119,10 +124,18 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          bundle='build/macos/Build/Products/Debug/codex_native_unofficial.app'
+          bundle='build/macos/Build/Products/Release/codex_native_unofficial.app'
           host_path="$bundle/Contents/MacOS/codex-native-host"
           notice_path="$bundle/Contents/Resources/NATIVE_HOST_THIRD_PARTY_LICENSES.txt"
           test -x "$host_path"
           test -s "$host_path"
+          for binary in \
+            "$bundle/Contents/MacOS/codex_native_unofficial" \
+            "$host_path" \
+            "$bundle/Contents/Frameworks/App.framework/App" \
+            "$bundle/Contents/Frameworks/FlutterMacOS.framework/FlutterMacOS"; do
+            /usr/bin/lipo -verify_arch arm64 x86_64 "$binary"
+            test "$(/usr/bin/lipo -archs "$binary" | wc -w | tr -d ' ')" -eq 2
+          done
           cmp licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt "$notice_path"
           "$host_path" --help

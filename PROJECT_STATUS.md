@@ -71,10 +71,13 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Linux and Windows native builds compile/package the Host beside the app.
   macOS embeds and signs it in `Contents/MacOS`; v1 macOS is a direct notarized
   distribution because App Sandbox cannot preserve the required normal Codex
-  developer-workspace/toolchain model. Hosted Windows Server 2022 now verifies
-  the debug bundle, packaged Host/license pair, and Host `--help`. The first
-  hosted macOS 15 arm64 build exposed a Bash 3.2 empty-array failure; the
-  corrected native build/package/Host execution now passes on macOS 15 arm64.
+  developer-workspace/toolchain model. Debug builds use Xcode's active
+  architecture; non-Debug builds compile each requested Rust target, merge the
+  Host with `lipo`, and sign the merged binary. Hosted Windows Server 2022 now
+  verifies the debug bundle, packaged Host/license pair, and Host `--help`. The
+  first hosted macOS 15 arm64 build exposed a Bash 3.2 empty-array failure; the
+  corrected prior native build/package/Host execution passes on macOS 15 arm64.
+  The new universal release path still awaits its first hosted run.
 - The native Host's complete lockfile-derived runtime license notice is committed
   and drift-checked with pinned `cargo-about` 0.9.3. Linux/Windows package it
   beside the Host and macOS declares it under `Contents/Resources`; Linux and
@@ -138,17 +141,19 @@ This file is the repository's durable project memory. Update it whenever a task 
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
   credentials are not persisted, and permissions remain read-only. Run
   `42087567359` at `879c26d` passed all three jobs: exact-Rust/Dart/Flutter
-  verification, Linux and Android debug builds, and native Windows x64/macOS
-  arm64 bundle/Host/license gates.
+  verification, Linux and Android debug builds, and the then-current native
+  Windows x64/macOS arm64 bundle/Host/license gates. The current workflow
+  advances macOS to a universal release/Host/license gate; that new path is
+  locally source-validated but still awaits its first hosted run.
 - Replacement run `42091764792` at `76bf94c` also passed all three jobs after
   the native-notice EOL contract landed, including Ubuntu verification/Linux
   and Android debug builds plus native Windows x64/macOS arm64 bundle gates.
 - A separate manual, read-only desktop review-artifact workflow now builds
-  release-mode Linux x64, Windows x64, and macOS arm64 bundles without creating
-  tags or Releases. Its assembler requires platform AOT/runtime layout, exact
-  notices, no debug kernel, Host execution, source identity, per-file SHA-256,
-  archive provenance, and extraction/reinventory verification. Every artifact
-  is explicitly `review-only` and `distributionReady=false`. Hosted run
+  release-mode Linux x64, Windows x64, and macOS universal bundles without
+  creating tags or Releases. Its assembler requires platform AOT/runtime layout,
+  exact notices, no debug kernel, Host execution, source identity, per-file
+  SHA-256, archive provenance, and extraction/reinventory verification. Every
+  artifact is explicitly `review-only` and `distributionReady=false`. Hosted run
   `42095949000` at `e71e5ac` passed all three targets; the downloaded Linux,
   Windows, and macOS outputs each passed a fresh independent verifier run and
   exact sidecar checksum comparison. A later native-runtime audit preserved a
@@ -165,6 +170,31 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — macOS universal nested Host boundary
+
+- Reviewed Apple's universal-binary/build-setting guidance, Rust's official
+  Apple target support, the pinned Flutter 3.47.1 macOS build behavior, and
+  independent Apache-2.0 implementations in Tauri, Isar, and OpenWallet Askar.
+  ADR-024 makes Xcode `ARCHS` authoritative and preserves active-architecture
+  Debug iteration.
+- The macOS Xcode phase now builds `codex-native-host` once per explicit Rust
+  target, merges multiple slices with the system `lipo`, and signs only the
+  final embedded binary. Empty or unknown architecture requests fail; the script
+  never installs a toolchain target or silently drops a slice.
+- CI now uses a release macOS build and requires the runner, nested Host, App
+  framework, and Flutter engine to contain exactly arm64 and x86_64. Manual
+  review provenance is `macos-universal`, and matching-host assembly plus
+  extracted native verification enforce the same four-binary property.
+- Local Bash syntax/diff checks, native-license packaging, `dart analyze`, and
+  all 176 Flutter tests pass. Two `flutter analyze` attempts exited 255 before
+  diagnostics because the analysis server received a truncated LSP
+  initialization JSON at character 400; that local tool failure remains
+  negative evidence rather than a green Flutter-analysis claim. Linux cannot
+  compile or inspect Apple Mach-O binaries, so hosted macOS build/lipo and
+  Flutter-analysis evidence remain pending. Physical Intel execution, Developer
+  ID signing, notarization/Gatekeeper, installed workspace access, and Human
+  review remain separate gates.
 
 ### 2026-11-06 — Bounded operator TLS-key permission gate
 
@@ -1624,9 +1654,8 @@ specific evidence boundaries.
   are hosted Windows Server 2022 verified. Operator TLS keys now have a bounded
   no-follow/owner/mode gate plus a hosted-Windows-verified protected-owner/DACL
   gate and a hosted-macOS-verified no-extended-ACL gate; installed-service,
-  parent-directory custody, and installer validation remain separate. The
-  current macOS Cargo phase also produces only the active build architecture,
-  not a universal Host binary.
+  parent-directory custody, and installer validation remain separate. The new
+  universal Host build and native verifier still require hosted macOS evidence.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
   not automatically reread a loaded item, but deduplication or explicit release
