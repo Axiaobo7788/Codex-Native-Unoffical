@@ -165,6 +165,32 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Completed
 
+### 2026-11-06 — Bounded operator TLS-key permission gate
+
+- Reviewed Win32 handle/security-descriptor APIs, PowerShell/OpenSSH portable at
+  `0172cc6adb99d8b4324b8f0391b5b1fd6f39b2c6`, Vercel agent-desktop at
+  `b43ac4f6e892ef608f8851428613c4009f0e84c7`, and `axum-server` 0.8's in-memory
+  rustls load/reload path. ADR-022 separates read-only external-key validation
+  from ADR-021's Host-owned ACL migration.
+- TLS startup/reload now opens certificate and key leaves without following a
+  symlink/reparse point, requires regular files, and reads from those same
+  handles with 1 MiB/256 KiB caps before calling rustls in memory. Unix also
+  requires the effective Host user as key owner plus no group/other bits.
+  Windows requires a protected valid DACL, owner current user/SYSTEM/
+  Administrators, and no allow ACE outside that set; it never rewrites the
+  operator file. Failed reload still preserves the last valid identity.
+- Added cross-platform oversize/non-disclosure tests, a Unix symlink gate, and
+  Windows native cases for both Everyone access and an otherwise-current-user
+  DACL that remains inheritable. Local format, warning-free Clippy, and all 87
+  Linux Rust test instances pass. Native Windows compilation and ACL behavior
+  remain pending a fresh hosted run, so this entry does not yet claim the Win32
+  gate verified.
+- Windows ACL evidence follow-up CI `42117298358` at `5ce6b6b`, Windows job
+  `127560231894`, passed the prior 85 native test instances with no `warning:`
+  line, then passed the Windows Flutter build and Host/license smoke. Its
+  Linux/Android verify and macOS jobs also passed. This closes only the warning
+  follow-up for ADR-021; it predates ADR-022.
+
 ### 2026-11-06 — Windows current-user Host state ACLs
 
 - Reviewed Microsoft Win32 security-descriptor/DACL APIs plus current OpenAI
@@ -1558,8 +1584,10 @@ specific evidence boundaries.
   notarization, workspace access, and cleanup require a real macOS release gate.
 - Unix spool directories/files are explicitly restricted to `0700`/`0600`.
   Windows current-user-only DACL creation/migration and native regression tests
-  are hosted Windows Server 2022 verified. Operator TLS key, installed-service,
-  and installer ACLs remain separate. The current macOS Cargo phase also
+  are hosted Windows Server 2022 verified. Operator TLS keys now have a local
+  bounded no-follow/owner/mode gate and a Windows protected-owner/DACL gate whose
+  fresh hosted evidence is pending; installed-service, installer, and macOS
+  extended-ACL validation remain separate. The current macOS Cargo phase also
   produces only the active build architecture, not a universal Host binary.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
@@ -1583,9 +1611,9 @@ specific evidence boundaries.
 - Operator-provided WSS is implemented and same-host release-tested, but the test
   connected through loopback to a wildcard listener. Real LAN routing, host
   firewall discovery, CA chain/renewal under installed service accounts, Windows
-  private-key ACLs, Android platform trust, background reconnect, and pairing-
-  bound self-signed identity remain unverified. No Android code accepts arbitrary
-  bad certificates.
+  installed-service key custody, macOS extended ACLs, Android platform trust,
+  background reconnect, and pairing-bound self-signed identity remain
+  unverified. No Android code accepts arbitrary bad certificates.
 - Long-running sessions must not cause Flutter to hydrate unbounded history.
   Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
   evidence now exist, but real app-server RSS and cross-platform installed-build

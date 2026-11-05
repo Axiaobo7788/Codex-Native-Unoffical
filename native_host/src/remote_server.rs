@@ -997,6 +997,40 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn tls_private_key_with_everyone_acl_is_rejected_without_rewriting_it() {
+        let temp = TempDir::new().unwrap();
+        let (files, _cert) = write_test_tls_identity(temp.path());
+        crate::windows_acl::apply_file_sddl_for_test(&files.key, "D:P(A;;FA;;;WD)").unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(None)));
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+
+        let error = RemoteServer::start("127.0.0.1:0".parse().unwrap(), Some(files), admin, events)
+            .err()
+            .unwrap();
+
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(error.to_string().contains("untrusted principal"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn tls_private_key_with_inheritable_acl_is_rejected_without_rewriting_it() {
+        let temp = TempDir::new().unwrap();
+        let (files, _cert) = write_test_tls_identity(temp.path());
+        crate::windows_acl::apply_unprotected_current_user_acl_for_test(&files.key).unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(None)));
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+
+        let error = RemoteServer::start("127.0.0.1:0".parse().unwrap(), Some(files), admin, events)
+            .err()
+            .unwrap();
+
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(error.to_string().contains("protected DACL"));
+    }
+
     #[test]
     fn bearer_parser_is_exact() {
         let mut headers = HeaderMap::new();
@@ -1843,6 +1877,8 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(_path, fs::Permissions::from_mode(0o600)).unwrap();
         }
+        #[cfg(windows)]
+        crate::windows_acl::protect_file(_path).unwrap();
     }
 
     fn tls_client_config(cert: Vec<u8>) -> Arc<ClientConfig> {

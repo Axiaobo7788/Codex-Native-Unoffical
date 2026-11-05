@@ -19,6 +19,8 @@ use windows_sys::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     SE_FILE_OBJECT, SetSecurityInfo,
 };
+#[cfg(test)]
+use windows_sys::Win32::Security::UNPROTECTED_DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::{
     ACL, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, GetTokenInformation,
     PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY,
@@ -68,6 +70,21 @@ pub(crate) fn create_private_dir(path: &Path) -> io::Result<()> {
 
 pub(crate) fn protect_file(path: &Path) -> io::Result<()> {
     SecurityDescriptor::current_user(false)?.apply_to_file(path)
+}
+
+#[cfg(test)]
+pub(crate) fn apply_file_sddl_for_test(path: &Path, value: &str) -> io::Result<()> {
+    SecurityDescriptor::from_sddl_for_test(value)?.apply_to_file(path)
+}
+
+#[cfg(test)]
+pub(crate) fn apply_unprotected_current_user_acl_for_test(path: &Path) -> io::Result<()> {
+    let descriptor = SecurityDescriptor::current_user(false)?;
+    let handle = open_for_security(path, false)?;
+    descriptor.apply_to_handle_with_protection(
+        handle.as_raw_handle(),
+        UNPROTECTED_DACL_SECURITY_INFORMATION,
+    )
 }
 
 pub(crate) fn protect_tree(root: &Path) -> io::Result<()> {
@@ -180,6 +197,10 @@ impl SecurityDescriptor {
     }
 
     fn apply_to_handle(&self, handle: HANDLE) -> io::Result<()> {
+        self.apply_to_handle_with_protection(handle, PROTECTED_DACL_SECURITY_INFORMATION)
+    }
+
+    fn apply_to_handle_with_protection(&self, handle: HANDLE, protection: u32) -> io::Result<()> {
         let dacl = self.dacl()?;
         // SAFETY: the handle identifies the checked file/directory and the DACL
         // is borrowed from the live descriptor. Windows retains neither pointer.
@@ -187,7 +208,7 @@ impl SecurityDescriptor {
             SetSecurityInfo(
                 handle,
                 SE_FILE_OBJECT,
-                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                DACL_SECURITY_INFORMATION | protection,
                 ptr::null_mut(),
                 ptr::null_mut(),
                 dacl,

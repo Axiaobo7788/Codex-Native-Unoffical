@@ -145,17 +145,24 @@ Remote is disabled unless the Host receives `--remote-listen` (or
 `CODEX_NATIVE_REMOTE_LISTEN`). Plaintext accepts only a literal loopback
 address. A network listener additionally requires both `--remote-tls-cert` and
 `--remote-tls-key` (or the matching `CODEX_NATIVE_REMOTE_TLS_CERT` and
-`CODEX_NATIVE_REMOTE_TLS_KEY` variables); on Unix the private key must be
-owner-only. Replace certificate/key files completely, then invoke trusted local
+`CODEX_NATIVE_REMOTE_TLS_KEY` variables). The Host opens both files without
+following a leaf symlink/reparse point and reads at most a 1 MiB certificate
+chain and 256 KiB private key. On Unix the key must be owned by the Host process
+user with no group/other mode bits. On Windows it must already have a protected
+DACL, be owned by the process user, LocalSystem, or Administrators, and grant no
+other principal access. The Host validates but never rewrites this operator-owned
+file. Replace certificate/key files completely, then invoke trusted local
 `host/remote/tls/reload` to rotate new handshakes. A failed reload keeps the last
 valid certificate.
 
 The Host also protects the state it owns: Unix output spools and device-store
 files use `0700`/`0600`; Windows creates or tightens their directories and files
 with a protected DACL granting only the current process user, instead of trusting
-cache/config inheritance. Reparse paths fail closed. This does not validate the
-ACL of an operator-supplied Windows TLS private key. Hard-linked Host state is
-also rejected; external-key and installed-platform ACLs remain separate gates.
+cache/config inheritance. Reparse paths fail closed. That migration is distinct
+from the read-only operator TLS-key validation above. Hard-linked Host state is
+also rejected, while an external key hard link is accepted only when that shared
+file object's owner and protected DACL pass the gate; installed-service and
+installer ACLs remain separate gates.
 
 To make the desktop setup surface produce a shareable invitation, also set
 `--remote-advertise-endpoint wss://host.example/v1/ws` (or

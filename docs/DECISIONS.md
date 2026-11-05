@@ -900,3 +900,57 @@ rules.
 - This decision covers only files the Host creates and owns. The ACL, custody,
   and service-account readability of an operator-provided Windows TLS private key
   remain an installed-platform validation gate.
+
+---
+
+## ADR-022 — Validate external TLS material through one bounded checked handle
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Treat the configured Remote TLS certificate chain and private key as
+operator-owned, read-only inputs. Open each leaf without following a Unix
+symbolic link or Windows reparse point, require a regular file, and read at most
+1 MiB of certificate bytes and 256 KiB of key bytes. Validate the private key
+through its already-open handle and pass those exact bytes to
+`RustlsConfig::from_pem`/`reload_from_pem`; do not validate one path lookup and
+then ask another layer to reopen it.
+
+On Unix, require the key to be owned by the process's effective user with no
+group/other permission bits. On Windows, require a protected, valid, non-null
+DACL and an owner equal to the current process user, LocalSystem, or built-in
+Administrators. Permit only standard allow ACEs for those same three principals
+and standard deny ACEs; reject any other granting principal or unsupported ACE
+shape. Never repair or replace the external file. A validation, bounded-read, or
+parse failure fails Host startup/reload, and reload keeps the last valid rustls
+configuration.
+
+### Why
+
+- A metadata check followed by a path-based parser leaves a substitution window
+  and delegates allocation size to a dependency. One no-follow handle plus an
+  extra-byte read cap binds validation and content while keeping memory bounded.
+- A Windows owner is security-relevant because an owner can change its DACL.
+  Exact SIDs avoid localized account names; the process user, SYSTEM, and
+  Administrators cover desktop, elevated, and service-owned keys without
+  admitting ordinary cross-user access.
+- A currently safe but inheritable DACL can later acquire a parent ACE. Requiring
+  `SE_DACL_PROTECTED` makes the checked principal set durable without the Host
+  changing an operator-owned object.
+- TLS reload is a security boundary: partial certificate/key rotation or an
+  invalid replacement must not discard the working identity.
+
+### Consequence
+
+- Windows operators must prepare a protected key DACL before enabling Remote.
+  The Host reports the failed condition but does not invoke `icacls` or silently
+  change access. Local administrators remain trusted by platform design.
+- Windows hard links are not rejected here: every name refers to the same file
+  object and DACL, and this code never mutates the external key. Host-owned
+  atomic state retains ADR-021's stricter alternate-link rule.
+- Installed-service identity/provisioning, installer ACLs, parent-directory
+  custody, macOS extended ACLs, signing, and Human installed-machine review
+  remain separate release gates.

@@ -2022,6 +2022,87 @@ _Reviewed: 2026-11-06_
   `0.1.0` help and native-license hash smoke. The same run's Linux/Android verify
   and macOS bundle jobs passed. The successful Windows log retained one unrelated
   test-helper parameter warning caused by a Unix-only body; the evidence
-  follow-up removes it. This establishes the Host-owned state boundary on that
-  hosted image, not operator TLS-key, installed-service, installer, or Human
-  acceptance behavior.
+  follow-up removes it. CI `42117298358` at `5ce6b6b`, Windows job
+  `127560231894`, subsequently passed all 85 native test instances, the Flutter
+  build, and Host/license smoke with no `warning:` line; its Linux/Android and
+  macOS jobs also passed. This establishes the Host-owned state boundary on
+  those hosted images, not operator TLS-key, installed-service, installer, or
+  Human acceptance behavior.
+
+## Operator-supplied TLS private-key validation
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Microsoft's official documentation for handle-based
+  [`GetSecurityInfo`](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo),
+  [security-descriptor operations](https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-operations),
+  [`CreateFileW`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew),
+  [`IsValidAcl`](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-isvalidacl),
+  [well-known SIDs](https://learn.microsoft.com/en-us/windows/win32/secauthz/well-known-sids),
+  and [`SE_DACL_PROTECTED`](https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/security-descriptor-control).
+  `GetSecurityInfo` requires `READ_CONTROL`, keeps owner/DACL pointers inside one
+  returned descriptor, and explicitly does not solve concurrent DACL changes;
+  the protected bit prevents later parent inheritance from changing the DACL.
+- PowerShell/OpenSSH portable at
+  `0172cc6adb99d8b4324b8f0391b5b1fd6f39b2c6` (component BSD licenses),
+  especially its
+  [Windows secure-file permission check](https://github.com/PowerShell/openssh-portable/blob/0172cc6adb99d8b4324b8f0391b5b1fd6f39b2c6/contrib/win32/win32compat/w32-sshfileperm.c)
+  and private-key loader. It requires the owner to be the current user, SYSTEM,
+  Administrators, or TrustedInstaller, rejects an allow ACE for any other
+  principal, and reads the key from an already-open descriptor after checking.
+- Vercel agent-desktop at
+  `b43ac4f6e892ef608f8851428613c4009f0e84c7` (Apache-2.0), especially its
+  [handle-based DACL validator](https://github.com/vercel-labs/agent-desktop/blob/b43ac4f6e892ef608f8851428613c4009f0e84c7/crates/windows/src/system/private_file/dacl.rs)
+  and owner-eligible SID analysis. It validates every granting principal,
+  retains the security descriptor until ACE traversal finishes, bounds file
+  reads, and distinguishes user identity from the owner Windows selects under
+  elevation.
+- `axum-server` 0.8.0's
+  [`RustlsConfig::from_pem`](https://docs.rs/axum-server/0.8.0/axum_server/tls_rustls/struct.RustlsConfig.html#method.from_pem)
+  and `reload_from_pem` accept already-read bytes. That avoids reopening a path
+  after permission validation and preserves the existing atomic config swap.
+  No third-party source code is copied.
+
+### Adopted boundary
+
+- Treat certificate and key paths as operator-owned, read-only inputs. Open the
+  leaf once without following a Unix symlink or Windows reparse point, require a
+  regular file, validate the key on that handle, then read bounded bytes from the
+  same handle. Pass those bytes to rustls rather than asking `axum-server` to
+  reopen both paths. This removes the validation-to-read path substitution and
+  makes startup/reload allocation explicit: 1 MiB certificate chain, 256 KiB
+  private key, with an extra-byte read guard in case the file grows after its
+  metadata query.
+- On Unix require the key owner to equal the effective Host user and reject all
+  group/other mode bits. On Windows require the owner to be the exact current
+  process user, LocalSystem, or built-in Administrators. Require a valid,
+  non-null, protected DACL. Every standard allow ACE must name one of the same
+  three principals; standard deny ACEs do not grant access, while all other ACE
+  forms fail closed rather than relying on an unimplemented SID layout.
+- Require the protected Windows DACL even when its present ACE set is safe. The
+  Host will not mutate an external key, and an inheritable DACL could otherwise
+  gain a new principal later through a parent change while the process keeps
+  running. A trusted operator must prepare the file before startup.
+- Keep reload all-or-nothing. Permission, size, I/O, or rustls parsing failure
+  returns a coarse error without key bytes and leaves the last valid config
+  serving existing and new connections.
+
+### Deliberate non-adoptions and remaining gates
+
+- Do not reuse ADR-021's current-user-only rewrite for an external key. SYSTEM
+  and Administrators are accepted because elevated creation and installed
+  service custody legitimately use those principals; local administrators can
+  take ownership in any case. A concrete service account remains accepted as
+  the current process user rather than by a pre-authorized broad service group.
+- Do not reject a Windows hard link merely because it has another name. NTFS
+  hard links identify the same file object and share its security descriptor;
+  this path never modifies the key and reads from its checked handle. That is
+  different from Host-owned atomic state, where alternate mutation paths are
+  refused.
+- The leaf-object gate does not claim installer/service provisioning, parent
+  directory custody, local-administrator isolation, macOS extended-ACL
+  inspection, or installed-machine acceptance. Hosted Windows Server 2022 must
+  compile and run the protected/untrusted DACL tests before the Win32 behavior
+  is marked verified; Linux tests cannot establish it.

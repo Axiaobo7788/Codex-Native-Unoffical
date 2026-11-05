@@ -5,6 +5,8 @@ mod remote_bridge;
 mod remote_pairing_invitation;
 mod remote_server;
 mod remote_tls;
+#[cfg(windows)]
+mod remote_tls_windows;
 mod rpc;
 mod spool;
 mod transform;
