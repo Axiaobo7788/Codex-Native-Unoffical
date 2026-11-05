@@ -306,8 +306,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   `8c62800837c8d50692453bdf6f53e13a764efcc357335a0744215f4c685245e2`.
   Companion CI `42100804703` passed all three jobs, including the ordinary Linux
   debug runtime gate, Linux/Android builds, and native Windows/macOS builds.
-  Linux distribution compatibility and GUI launch from a clean runtime image,
-  installers/ACLs, signing/notarization, and Human use remain distinct.
+  Broader Linux distribution compatibility, installers/ACLs,
+  signing/notarization, and Human use remain distinct.
 - The review workflow now has a dependent Linux clean-runtime job using a pinned
   Ubuntu 22.04 image and only declared runtime/headless-display packages. It
   downloads the just-built Linux artifact, rechecks its checksum, extracts it,
@@ -319,8 +319,14 @@ This file is the repository's durable project memory. Update it whenever a task 
   `libGLESv2.so.2` was absent. The accompanying AT-SPI/Atk diagnostics preceded
   the fatal loader error and are not treated as the cause. Ubuntu's Jammy package
   index identifies `libgles2` as the GLESv2 runtime provider, so that package is
-  now declared; a fresh hosted run must still prove the corrected GUI path. The
-  failure remains evidence, and this does not broaden the review-only boundary.
+  now declared. Corrected hosted review run `42107031642` at `3ab0997` passed all
+  three platform artifact jobs and clean-runtime job `127528095435`; its log
+  records the exact archive checksum pass, Host `0.1.0` execution, the full
+  eight-second GUI window, clean process teardown, and
+  `LINUX_CLEAN_RUNTIME=PASS`. Companion CI `42107012629` passed the full verify,
+  Windows x64, and macOS arm64 jobs. The first failure remains evidence, and the
+  result proves only the pinned Ubuntu 22.04 runtime image without broadening the
+  review-only boundary.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
@@ -1574,7 +1580,7 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: latest completed code-bearing run `42100804703` at `c1803d4`
+- Hosted CI: latest completed code-bearing run `42107012629` at `3ab0997`
   passed exact-Rust, Dart/Flutter, Linux, Android debug, Windows x64, and macOS
   arm64 gates, including the new Linux debug runtime-closure check.
 

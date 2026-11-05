@@ -1925,6 +1925,13 @@ _Reviewed: 2026-11-06_
   extraction, `ldd`, and Host execution before the GUI aborted with status 134:
   `libGLESv2.so.2` could not be opened. AT-SPI/Atk warnings were also emitted,
   but the missing GLES loader error was the fatal condition. The declared
-  runtime set now includes the official `libgles2` provider; because local Docker
-  is unavailable, a fresh hosted run remains required and the failed run is
-  preserved as negative evidence.
+  runtime set now includes the official `libgles2` provider. Corrected hosted
+  run `42107031642` at `3ab09971c762b3406ba36f52e9853c08e22c3f65`
+  installed Jammy's `libgles2` 1.4.0-1, passed all three artifact builds, then
+  passed clean-runtime job `127528095435`: the exact archive checksum, extracted
+  runner/Host dependency checks, Host 0.1.0 help smoke, eight-second GUI window,
+  and no-surviving-product-process check all completed before
+  `LINUX_CLEAN_RUNTIME=PASS`. Companion ordinary CI `42107012629` passed its
+  verify, Windows x64, and macOS arm64 jobs. The first failed run remains negative
+  evidence; the correction establishes only the pinned Ubuntu 22.04 runtime, not
+  general Linux ABI/package compatibility or installed-user acceptance.
