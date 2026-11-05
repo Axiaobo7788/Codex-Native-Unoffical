@@ -196,3 +196,72 @@ _Reviewed: 2026-11-05_
   located beside the Flutter executable. Real macOS signing, notarization, child
   launch, workspace access, and cleanup remain platform gates because this Linux
   environment cannot execute them.
+
+## Bounded assistant Markdown rendering
+
+_Reviewed: 2026-11-05_
+
+### Sources reviewed
+
+- OpenAI Codex's current
+  [TUI Markdown renderer](https://github.com/openai/codex/blob/main/codex-rs/tui/src/markdown_render.rs)
+  and the `0.166.0` release notes covering consistent transcript Markdown.
+- The maintained
+  [`flutter_markdown_plus` 1.0.12](https://pub.dev/packages/flutter_markdown_plus)
+  renderer, its source, changelog, layout modes, and link/image hooks. License:
+  BSD-3-Clause.
+- The Dart team's
+  [`markdown` 7.3.1](https://pub.dev/packages/markdown) parser and extension-set
+  documentation. License: BSD-3-Clause.
+- Flutter's official lazy
+  [`ListView.builder`](https://api.flutter.dev/flutter/widgets/ListView/ListView.builder.html)
+  behavior and the official
+  [`url_launcher` 6.3.3](https://pub.dev/packages/url_launcher) URI API. License:
+  BSD-3-Clause.
+- `gpt_markdown`, `flutter_md`, and `markdown_widget` were compared as alternative
+  renderers. The first brings unrelated network/SVG/LaTeX dependencies, the
+  second is only days old, and the third has a broader navigation/visibility
+  dependency surface than this first native transcript slice needs.
+
+### Findings and decision
+
+- Current official Codex renders transcript Markdown with fenced code, tables,
+  lists, task lists, links, and width-aware layout. It does not render Markdown
+  images in the TUI and treats raw HTML as text rather than executing it.
+- Dart `markdown` explicitly provides no HTML sanitization. Its predefined
+  CommonMark and GitHub extension sets include `InlineHtmlSyntax`, so selecting
+  a named preset is not a sufficient security policy even though
+  `flutter_markdown_plus` itself is not an HTML engine.
+- Use `flutter_markdown_plus` only with a project-owned extension allowlist:
+  fenced code, tables, task lists, strikethrough, and autolinks. Do not enable
+  `InlineHtmlSyntax`, emoji shortcodes, LaTeX, syntax-highlight grammar bundles,
+  or custom web UI in this slice. Wrap the parser's built-in block-HTML syntax
+  so its source is rendered literally as paragraph text rather than discarded;
+  no HTML is interpreted or executed.
+- Render every image reference as a bounded textual placeholder. Never let
+  assistant Markdown initiate network, asset, or local-file reads.
+- Link activation is user-initiated and allowlisted to `http`/`https`; launch it
+  in an external application. Reject `file`, `data`, `javascript`, custom, and
+  relative schemes. Local workspace links need a later explicit path/cwd policy.
+- Completed assistant messages render Markdown. In-progress streaming messages
+  remain selectable plain text so coalesced token updates do not repeatedly
+  parse an incomplete document. The outer lazy timeline determines which
+  messages are built; there is no global AST cache. Source size remains bounded
+  by the existing 64 KiB live-entry and 8 KiB history limits. The rich renderer
+  has a stricter 16 KiB fail-safe; larger completed messages show a bounded
+  selectable plain-text tail with an explicit omission marker.
+
+### Deliberate non-adoptions and validation
+
+- Do not render through HTML or WebView, fetch remote images, open arbitrary URI
+  schemes, retain ASTs for inactive/off-screen threads, or add a second nested
+  vertical scroller.
+- Do not adopt a streaming-specific renderer until profiling demonstrates that
+  completed-only rendering is an unacceptable UX tradeoff.
+- The first widget gate showed that a 64 KiB unbroken token could keep the test
+  renderer busy for more than 30 seconds. That negative result is the reason for
+  the separate 16 KiB rich-rendering cap and plain-text fallback; normal
+  formatted content and the capped pathological case must both remain tested.
+- Widget tests must cover formatting, raw HTML as inert text, blocked images and
+  URI schemes, external `http`/`https` activation, streaming fallback, source
+  caps, and the existing 1,000-item lazy-build boundary.

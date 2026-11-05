@@ -11,6 +11,7 @@ import '../domain/output_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
 import '../features/approvals/approval_controller.dart';
+import '../features/conversation/assistant_markdown.dart';
 import '../features/conversation/conversation_controller.dart';
 import '../features/conversation/history_controller.dart';
 import '../features/conversation/output_viewer_controller.dart';
@@ -1300,12 +1301,15 @@ class _ConversationEntryView extends StatelessWidget {
               Text(status, style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: ThemeTokens.space1),
             ],
-            SelectableText(
-              entry.text,
-              style: isActivity
-                  ? Theme.of(context).textTheme.bodySmall
-                  : Theme.of(context).textTheme.bodyMedium,
-            ),
+            if (entry.kind == ConversationEntryKind.assistant)
+              AssistantMarkdown(data: entry.text, completed: entry.completed)
+            else
+              SelectableText(
+                entry.text,
+                style: isActivity
+                    ? Theme.of(context).textTheme.bodySmall
+                    : Theme.of(context).textTheme.bodyMedium,
+              ),
             if (!entry.completed) ...[
               const SizedBox(height: ThemeTokens.space2),
               const SizedBox(

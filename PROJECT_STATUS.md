@@ -10,7 +10,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 2 — Local usable Codex client: IMPLEMENTED AND LOCALLY MACHINE-VERIFIED — Human approval interaction and hosted CI remain separate gates**
 
-**Phase 3 — Bounded-memory long-session UX: IN PROGRESS — paginated history and bounded native command-output viewing are integrated and Linux-measured; lazy Markdown and cross-platform gates remain**
+**Phase 3 — Bounded-memory long-session UX: IN PROGRESS — paginated history, bounded native command-output viewing, and safe lazy assistant Markdown are integrated and Linux-measured; cross-platform and Human gates remain**
 
 ## Current repository state
 
@@ -56,13 +56,47 @@ This file is the repository's durable project memory. Update it whenever a task 
   distribution because App Sandbox cannot preserve the required normal Codex
   developer-workspace/toolchain model. Windows/macOS builds are not verified in
   this Linux environment.
-- Lazy Markdown policy and cross-platform RSS/runtime evidence are not
-  implemented yet. Android remote control remains Phase 4 work.
+- Completed assistant messages use a project-owned safe Markdown allowlist only
+  while in-progress streaming remains selectable plain text. Raw HTML is inert,
+  images never load, links require an explicit click and absolute `http`/`https`
+  URI, and rich parsing falls back to a bounded plain-text tail above 16 KiB.
+  The outer virtualized timeline controls widget construction and no global AST
+  cache retains inactive messages.
+- Cross-platform RSS/runtime evidence and Human interaction acceptance are not
+  complete yet. Android remote control remains Phase 4 work.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 3 bounded assistant Markdown
+
+- Researched the current Codex TUI renderer, `flutter_markdown_plus`, Dart
+  `markdown`, Flutter lazy-list behavior, and `url_launcher`; compared three
+  broader/younger renderer alternatives and recorded exact adoption and
+  non-adoption decisions in `docs/RESEARCH.md`.
+- Added completed-only assistant Markdown with a project-owned extension
+  allowlist for fenced code, tables, task lists, strikethrough, and autolinks.
+  Block HTML is rendered literally, inline HTML is not enabled, remote/local
+  images become bounded placeholders, and only user-clicked absolute
+  `http`/`https` links can leave the app through the external launcher.
+- Kept streaming messages as selectable plain text, relied on the existing
+  lazy timeline rather than retaining parsed documents, and added a separate
+  16 KiB rich-rendering cap with an explicit bounded plain-text tail fallback.
+- Added direct third-party provenance, widget gates for formatting/HTML/image
+  safety, URI allowlisting, streaming fallback, and pathological source caps,
+  and retained the existing 1,000-row production-App lazy-build test.
+- The first pathological widget gate sent a completed 64 KiB unbroken token to
+  the renderer and kept `flutter_tester` busy for more than 30 seconds. That is
+  preserved as a real negative performance result; the 16 KiB rich cap and
+  plain-text fallback were introduced from it, and the capped rerun completed.
+- Linux release packaging passed with the desktop launcher plugin. A normal
+  Android build from the repository's Unicode path failed because Flutter's
+  Gradle settings decoded the SDK path incorrectly. Repeating the native
+  `assembleDebug` gate with a temporary ASCII SDK alias passed all 87 actionable
+  tasks and produced the 145 MiB debug APK for arm64-v8a, armeabi-v7a, and
+  x86_64; the ignored local SDK path was restored afterward.
 
 ### 2026-11-05 — Phase 3 Host integration and bounded output viewer
 
@@ -185,7 +219,7 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 64 tests.
+- `flutter test --reporter expanded`: PASS, 68 tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -210,7 +244,16 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   36,864/765,952/4,431,872, and 49,152/630,784/2,211,840 bytes. First/tail reads
   matched the complete spooled payload in every case.
 - `flutter build linux --debug` and `flutter build linux --release`: PASS with
-  an executable packaged `codex-native-host` beside the Flutter binary.
+  an executable packaged `codex-native-host` beside the Flutter binary and the
+  native URL-launcher plugin.
+- `flutter build apk --debug` from the real Unicode repository/SDK path: FAILED
+  before compilation because `android/settings.gradle.kts` observed the SDK as
+  `/home/axiaobo/ææ¡£/flutter`. With only the ignored
+  `android/local.properties` temporarily pointed at an exact ASCII symlink,
+  `./gradlew assembleDebug` passed 87 actionable tasks and produced a 145 MiB
+  debug APK with arm64-v8a, armeabi-v7a, and x86_64 native outputs. The file and
+  symlink were restored/removed afterward. This proves the Android product and
+  plugin build under the path workaround, not a clean ordinary-path build.
 - Packaged Linux GUI runtime launch: PASS; direct process inspection showed
   Flutter -> adjacent bundled Host -> separately located stock Codex. SIGINT
   removed all three processes. Existing ATK/cursor-theme warnings remained.
@@ -227,11 +270,24 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
-- Windows/macOS/Android builds and physical-device validation: NOT RUN in this Linux environment.
+- Windows/macOS builds and physical-device validation: NOT RUN in this Linux environment.
 
 ## Known risks / watch items
 
 - Direct `flutter analyze` from this repository's Unicode filesystem path currently crashes Flutter 3.47.1's LSP byte-stream parser with a truncated initialization JSON message. The same source passes `dart analyze --fatal-infos` at the real path and `flutter analyze` through an ASCII symlink. This is preserved as a toolchain/path issue, not recorded as a clean direct-path run.
+- The same Unicode-path toolchain defect affects Android settings evaluation:
+  ordinary `flutter build apk --debug` corrupts the Flutter SDK path before
+  compilation. A temporary ASCII SDK alias proves `assembleDebug` itself passes,
+  but the normal developer command is still blocked on this filesystem layout.
+  The passing build also reported Gradle-10/AGP-9 migration warnings, an ignored
+  legacy manifest `package` attribute in `url_launcher_android`, and an Android
+  SDK XML version skew; none was promoted to a clean warning-free gate.
+- Safe assistant Markdown intentionally differs by lifecycle and size:
+  in-progress messages are plain text, and completed messages above 16 KiB show
+  only a labeled bounded tail rather than rich formatting. Actual external
+  browser activation, selection behavior, and visual fidelity still require
+  Human validation; local workspace/file links are deliberately blocked until
+  an explicit cwd/path authorization policy exists.
 - A successful `turn/start` response does not prove the server has installed the turn as interruptible. Real validation observed `turn/interrupt` fail with `-32600` when sent before `turn/started`; the UI now waits for the notification before exposing Stop.
 - Approval approve-once serialization and controller behavior are covered by tests, but no real command or file mutation was approved during automated validation. The real smoke deliberately validated rejection only; Human approval UX remains a separate gate.
 - The dangerous execution-setting confirmation dialogs and populated diff view have not received Human visual/interaction acceptance. Their protocol/controller/parser behavior is machine-tested, and the main GUI surface was directly inspected, but those are distinct claims.
@@ -268,23 +324,25 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
 - After loading thread state, the tested stock app-server did not exit within the 3-second stdin-EOF window or the following 3-second SIGTERM window. The SIGKILL fallback completed at about 6.1 seconds and no child survived GUI exit. Shutdown is bounded and correct, but the latency/source should be investigated before release polish.
 - The app-server protocol evolves; version differences must stay inside typed protocol adapters.
-- Long-running sessions must not cause Flutter to hydrate unbounded history. Turn/item caps now exist, but heavy-item retrieval and actual process-memory profiling remain required Phase 3 evidence.
+- Long-running sessions must not cause Flutter to hydrate unbounded history.
+  Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
+  evidence now exist, but real app-server RSS and cross-platform installed-build
+  profiling remain required Phase 3 evidence.
 
 ## Next action
 
 Continue Phase 3 with the remaining presentation and platform gates:
 
-1. research and define a safe Markdown policy, parse only visible assistant
-   blocks, and keep caches inside the active bounded window;
-2. add widget/Human coverage for populated range-backed logs, truncation,
+1. add widget/Human coverage for populated range-backed logs, truncation,
    navigation, deferred fetch, large diffs, and dangerous settings;
-3. run Windows and macOS native builds plus packaged process/output/lifecycle RSS
+2. run Windows and macOS native builds plus packaged process/output/lifecycle RSS
    gates; on macOS also validate nested signing, notarization, ordinary workspace
    access, and no surviving child;
-4. exercise disk-full/unwritable-cache behavior end to end and investigate the
+3. exercise disk-full/unwritable-cache behavior end to end and investigate the
    stock app-server's observed six-second shutdown fallback before RC.
 
-Do not begin Android remote transport or ecosystem management until bounded stored-history behavior is implemented and measured.
+Do not begin Android remote transport or ecosystem management until the remaining
+Phase 3 RC gates are exhausted or require unavailable platform/Human evidence.
 
 ## Milestone outline
 

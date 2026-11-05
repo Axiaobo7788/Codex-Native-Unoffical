@@ -63,7 +63,11 @@ Phase 3 is in progress. Stored history uses bounded `thread/turns/list` summary
 pages and loads full items for only one selected turn. The Host incrementally
 spools large command output behind opaque IDs before Dart sees the JSON, and the
 UI reads only a 64 KiB virtualized range at a time. Inactive-thread history is
-evicted immediately. Cross-platform and Human UI validation remain.
+evicted immediately. Completed assistant responses render through a strict,
+bounded Markdown allowlist: raw HTML is inert, images never load, only explicit
+`http`/`https` clicks may open externally, streaming stays plain text, and rich
+parsing falls back to a bounded tail above 16 KiB. Cross-platform and Human UI
+validation remain.
 
 ## Run locally
 
@@ -111,4 +115,5 @@ built Host. There is intentionally no direct app-server fallback.
 
 ## License
 
-Apache License 2.0.
+Apache License 2.0. Direct dependency provenance is recorded in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
