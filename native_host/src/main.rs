@@ -8,6 +8,8 @@ mod remote_tls;
 mod rpc;
 mod spool;
 mod transform;
+#[cfg(windows)]
+mod windows_acl;
 
 use config::Config;
 use events::{AppServerRemoteObservation, HOST_EVENT_CAPACITY, HostEvent};

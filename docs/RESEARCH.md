@@ -1935,3 +1935,72 @@ _Reviewed: 2026-11-06_
   verify, Windows x64, and macOS arm64 jobs. The first failed run remains negative
   evidence; the correction establishes only the pinned Ubuntu 22.04 runtime, not
   general Linux ABI/package compatibility or installed-user acceptance.
+
+## Windows current-user Host state ACLs
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- Microsoft's official documentation for
+  [`SECURITY_ATTRIBUTES`](https://learn.microsoft.com/en-us/windows/win32/api/wtypesbase/ns-wtypesbase-security_attributes),
+  [`SetSecurityInfo`](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setsecurityinfo),
+  [SDDL security descriptors](https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format),
+  [ACE strings](https://learn.microsoft.com/en-us/windows/win32/secauthz/ace-strings),
+  and [SID strings](https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings).
+- OpenAI Codex at `c8a1109fa78b46df24b055250b67d5daf745e566`
+  (Apache-2.0), especially its Windows auth-file replacement and native DACL
+  regression test. It creates a replacement with the destination's protected
+  DACL before writing credentials and rejects hard-linked replacement targets.
+- mise at `e6cac975789e7dc335f76a8a5e170938c0d8bad0` (MIT), whose
+  secret-bearing history store supplies a protected inheritable descriptor to
+  `CreateDirectoryW` and also tightens an existing directory.
+- turborepo at `f6ae32bd38e386f93d8bdbbddfd36bd39401d4f2` (MIT), whose
+  Windows daemon endpoint resolves the current token user SID, verifies path
+  ownership, and replaces inherited access with a protected current-user DACL.
+- Vercel agent-desktop at `b43ac4f6e892ef608f8851428613c4009f0e84c7`
+  (Apache-2.0), whose Windows private-state layer builds protected inheritable
+  ACLs and separately validates that no untrusted principal receives an allow
+  ACE.
+
+### Adopted boundary
+
+- Ambient `%LOCALAPPDATA%`/config inheritance is not a sufficient product
+  contract because both Host state roots can be overridden. Resolve the current
+  process token's SID, build one protected full-access ACE for that SID, use
+  object/container inheritance only on directories, and apply the rule to both
+  new and existing Host-owned state.
+- Supply the descriptor at directory and atomic device-store temporary-file
+  creation so no secret-bearing object is first published under a permissive
+  parent. `SetNamedSecurityInfoW` then tightens existing objects and propagates
+  the directory rule to existing inheriting children. Recursively replace DACLs
+  under the Host-owned spool root to remove old explicit permissive ACEs, but do
+  not touch unrelated siblings beside an overridden device-store file. Reject
+  reparse objects, use checked object handles for the DACL mutation, reject
+  hard-linked files, and fail closed if descriptor construction or application
+  fails.
+- Keep the Win32 unsafe boundary in one Windows-only module with RAII wrappers
+  for token handles and `LocalFree` allocations. Do not invoke `icacls`: command
+  discovery, localization, quoting, and subprocess behavior add failure modes
+  without improving the security identity.
+- Add native Windows tests under a deliberately Everyone-readable parent. They
+  must prove that new and migrated directory/file DACLs are protected, include
+  the exact current-user SID, retain inheritable directory flags, and remove the
+  Everyone ACE. The normal Windows CI job now runs the Rust suite before the
+  Flutter build; Linux-only tests cannot establish Win32 ACL behavior.
+
+### Deliberate non-adoptions and remaining gates
+
+- Do not copy another project's code or broad principal set. This desktop Host
+  chooses the exact current process user rather than pre-authorizing SYSTEM,
+  Administrators, a service group, or account names. A future multi-user service
+  requires its own identity/ACL ADR.
+- Do not claim protection from local administrators, who can take ownership by
+  platform design. The boundary prevents accidental or inherited cross-user
+  access to command output and stored credential hashes.
+- Operator-supplied TLS keys are not Host-owned state. Their Windows ACL,
+  installed service identity, installer ACLs, and post-install inspection remain
+  separate gates; this change must not silently rewrite an external key's ACL.
+- Local Linux compilation and tests do not validate the Windows-only FFI. A
+  fresh hosted Windows Server 2022 Rust test plus bundle/Host smoke is required
+  before this implementation is marked machine-verified.

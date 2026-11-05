@@ -83,6 +83,8 @@ impl SpoolStore {
             ));
         }
         create_private_dir(&root)?;
+        #[cfg(windows)]
+        crate::windows_acl::protect_tree(&root)?;
         cleanup_inactive_sessions(&root, stale_age, max_session_bytes)?;
 
         let timestamp = SystemTime::now()
@@ -600,28 +602,50 @@ fn directory_size(path: &Path) -> io::Result<u64> {
 }
 
 fn create_private_dir(path: &Path) -> io::Result<()> {
-    fs::create_dir_all(path)?;
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        crate::windows_acl::create_private_dir(path)
     }
-    Ok(())
+    #[cfg(not(windows))]
+    {
+        fs::create_dir_all(path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        }
+        Ok(())
+    }
 }
 
 fn open_private_file(path: &Path, truncate: bool) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(truncate);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+        let mut options = OpenOptions::new();
+        let file = options
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(truncate)
+            .open(path)?;
+        crate::windows_acl::protect_file(path)?;
+        Ok(file)
     }
-    options.open(path)
+    #[cfg(not(windows))]
+    {
+        let mut options = OpenOptions::new();
+        options
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(truncate);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        options.open(path)
+    }
 }
 
 #[cfg(test)]

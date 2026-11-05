@@ -112,6 +112,18 @@ sequence. Same-session retained suffixes replay; an evicted cursor, receiver
 lag, or live sequence gap requires authoritative resync. Token deltas, diffs,
 server requests, approvals, and all writes remain deliberately unrouted.
 
+Host-owned Windows state does not rely on ambient cache/config inheritance. The
+output-spool root and sessions receive a protected, inheritable DACL whose only
+allow ACE is the current process user's SID, an existing Host-owned spool tree
+is recursively migrated, and every new spool file is tightened before use. The
+Remote device-store directory receives the same rule; its atomic replacement
+file is created with a protected current-user DACL before any credential hash is
+written, and an existing store is tightened before it is read. DACL changes use
+checked object handles; reparse objects and hard-linked files are rejected.
+Unix retains explicit `0700`/`0600` modes. Operator-provided TLS private-key ACL
+validation remains a separate platform gate because that file is not Host-owned
+state.
+
 The Host separately accepts an optional exact client-facing WSS `/v1/ws`
 endpoint through `--remote-advertise-endpoint` or
 `CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`. It is never inferred from the bind

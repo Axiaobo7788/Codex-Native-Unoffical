@@ -165,6 +165,27 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Completed
 
+### 2026-11-06 — Windows current-user Host state ACLs (hosted validation pending)
+
+- Reviewed Microsoft Win32 security-descriptor/DACL APIs plus current OpenAI
+  Codex, mise, turborepo, and Vercel agent-desktop implementations at pinned
+  commits. ADR-021 chooses a protected full-access ACE for the current process
+  user's SID rather than ambient cache/config inheritance, account names,
+  localized `icacls`, or a broad service/admin principal set.
+- Added one Windows-only ACL boundary with owned token/descriptor lifetimes.
+  Output-spool and Remote device-store directories receive the descriptor at
+  creation and are tightened when already present; an existing Host-owned spool
+  tree is recursively migrated, new spool files are protected before use,
+  device-store replacements are created protected before any hash is written,
+  existing device stores are tightened before read, and reparse or hard-linked
+  file objects fail closed. Unix `0700`/`0600` behavior is unchanged.
+- Added native Windows regression tests that begin under an Everyone-readable
+  parent and require new/migrated directories and files to retain only the exact
+  current-user SID, with protected/inheritable directory rules. The Windows CI
+  job now runs the Rust suite before building Flutter. Local format, Cargo check,
+  and all 84 Linux Rust tests pass; Windows-only FFI/tests and the packaged Host
+  remain `VALIDATION PENDING` until a fresh Windows Server 2022 run.
+
 ### 2026-11-06 — Fail-closed desktop review-artifact assembly
 
 - Reviewed Flutter's complete desktop-bundle deployment requirements, GitHub
@@ -327,6 +348,12 @@ This file is the repository's durable project memory. Update it whenever a task 
   Windows x64, and macOS arm64 jobs. The first failure remains evidence, and the
   result proves only the pinned Ubuntu 22.04 runtime image without broadening the
   review-only boundary.
+- Documentation-evidence commit CI `42108470797` preserved an external failure:
+  attempt 1 reached Android NDK r28c download, then `sdkmanager` rejected the
+  fetched archive as non-ZIP. The same failed verify job reran without source
+  changes and attempt 2 passed the complete verify path including the Android
+  debug APK; both native desktop jobs had already passed. This is hosted download
+  instability, not evidence that the first failed attempt was green.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
@@ -1512,10 +1539,10 @@ specific evidence boundaries.
   access. Developer ID signing, hardened-runtime nested Host signing,
   notarization, workspace access, and cleanup require a real macOS release gate.
 - Unix spool directories/files are explicitly restricted to `0700`/`0600`.
-  Windows currently relies on the user cache directory's inherited ACL; a real
-  Windows gate must inspect it and add an explicit owner-only ACL if inheritance
-  is not sufficiently restrictive. The current macOS Cargo phase also produces
-  only the active build architecture, not a universal Host binary.
+  Windows current-user-only DACL creation/migration and native regression tests
+  are implemented, but hosted Windows execution is still pending. Operator TLS
+  key and installed-service ACLs remain separate. The current macOS Cargo phase
+  also produces only the active build architecture, not a universal Host binary.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
   not automatically reread a loaded item, but deduplication or explicit release

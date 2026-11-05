@@ -843,3 +843,60 @@ a real external upload identity for release variants.
   only after each platform's signing/installer decisions and the exact GitHub
   permission increase receive explicit review. It must not relabel historical
   review-only artifacts as releases.
+
+---
+
+## ADR-021 — Protect Host-owned Windows state with a current-user DACL
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+On Windows, give every Host-owned output-spool and Remote device-store directory
+a protected DACL with one full-access allow ACE for the current process user's
+SID. Directory ACEs inherit to child objects. Supply that descriptor through
+`SECURITY_ATTRIBUTES` when creating a directory or atomic device-store
+replacement, then apply the same protected DACL to an existing directory/file
+before the Host uses it. Recursively migrate the Host-owned spool root so an old
+explicit permissive file ACE is removed as well; do not recursively rewrite
+siblings of a custom device-store path. Reject reparse directories and files.
+Open existing objects without following reparse points, verify their type and
+file link count, and update the DACL by handle. Any failure to construct or
+apply the DACL fails the affected Host startup or Remote storage operation
+rather than falling back to ambient inheritance.
+
+Use Win32 security APIs through `windows-sys`; do not shell out to the localized
+`icacls` utility. Keep the Windows-only unsafe code in one module with owned
+handle/`LocalFree` wrappers. Run its permissive-parent migration tests on the
+native Windows CI job. Unix keeps its existing `0700` directory and `0600` file
+rules.
+
+### Why
+
+- The default LocalAppData/config ACL is usually user-scoped, but explicit
+  `--cache-dir` and `--remote-device-file` paths can inherit broader ACEs. Large
+  command output and hash-only device credentials should not depend on an
+  operator noticing that inheritance.
+- A creation-time descriptor avoids a window in which a new secret-bearing
+  object exists with its parent's broad DACL. Protecting existing objects also
+  migrates state created by older Host versions.
+- A current-user SID is precise across local, domain, CI, and renamed accounts;
+  account names and localized command output are not stable security identities.
+- A protected DACL prevents later parent inheritance from silently reintroducing
+  unrelated principals. Rejecting reparse points prevents an override path from
+  redirecting the hardening operation to another object; rejecting hard-linked
+  files prevents one sensitive object from retaining an alternate path.
+
+### Consequence
+
+- Windows Host state becomes fail-closed and independent of cache/config parent
+  ACLs. Local administrators can still take ownership by platform design; this
+  is an inter-user disclosure boundary, not protection from an administrator.
+- Tightening an existing custom state path may remove deliberately added service
+  or group access. A future installed multi-user service needs a separate service
+  identity and ACL decision rather than weakening this desktop default.
+- This decision covers only files the Host creates and owns. The ACL, custody,
+  and service-account readability of an operator-provided Windows TLS private key
+  remain an installed-platform validation gate.

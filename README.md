@@ -150,6 +150,13 @@ owner-only. Replace certificate/key files completely, then invoke trusted local
 `host/remote/tls/reload` to rotate new handshakes. A failed reload keeps the last
 valid certificate.
 
+The Host also protects the state it owns: Unix output spools and device-store
+files use `0700`/`0600`; Windows creates or tightens their directories and files
+with a protected DACL granting only the current process user, instead of trusting
+cache/config inheritance. Reparse paths fail closed. This does not validate the
+ACL of an operator-supplied Windows TLS private key. Hard-linked Host state is
+also rejected; external-key and installed-platform ACLs remain separate gates.
+
 To make the desktop setup surface produce a shareable invitation, also set
 `--remote-advertise-endpoint wss://host.example/v1/ws` (or
 `CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT`). This is the exact client-facing

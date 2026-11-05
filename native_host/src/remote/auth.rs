@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use subtle::ConstantTimeEq;
@@ -386,6 +388,8 @@ fn validate_store_file(path: &Path) -> Result<(), AuthError> {
             "device store must be a regular non-symlink file".into(),
         ));
     }
+    #[cfg(windows)]
+    crate::windows_acl::protect_file(path)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -545,34 +549,48 @@ fn bounded_device_name(value: &str) -> String {
 }
 
 fn create_private_file(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+        crate::windows_acl::create_private_new_file(path)
     }
-    options.open(path)
+    #[cfg(not(windows))]
+    {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        options.open(path)
+    }
 }
 
 fn create_private_dir(path: &Path) -> io::Result<()> {
-    if path.exists() {
-        if !path.is_dir() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotADirectory,
-                "device store parent is not a directory",
-            ));
-        }
-        return Ok(());
-    }
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        crate::windows_acl::create_private_dir(path)
     }
-    builder.create(path)
+    #[cfg(not(windows))]
+    {
+        if path.exists() {
+            if !path.is_dir() {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotADirectory,
+                    "device store parent is not a directory",
+                ));
+            }
+            return Ok(());
+        }
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path)
+    }
 }
 
 fn sync_parent(parent: &Path) -> io::Result<()> {
