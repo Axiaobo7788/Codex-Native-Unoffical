@@ -555,6 +555,10 @@ Declare Rust 1.89 as the native Host's minimum supported version and exercise
 that exact toolchain in CI. Treat a clean locked build, not a developer's newer
 compiler or individual dependency metadata, as the authority for the floor.
 
+Run the Android Gradle 9 build with explicit Temurin 17 rather than a hosted
+runner's default JVM. Pin the official Java setup action to an immutable commit
+and leave dependency caching disabled.
+
 Use explicit hosted images for Ubuntu 22.04 x64, Windows Server 2022 x64, and
 macOS 15 arm64. Pin top-level third-party actions to full commit SHAs, disable
 unused action caching, do not persist checkout credentials, and keep CI
@@ -588,8 +592,8 @@ artifact.
   interaction remain independent release gates.
 - Hosted results remain authoritative for native paths. The first inspected
   current-tree run passed Windows x64 and exposed exact-Rust Clippy plus macOS
-  Bash 3.2 defects; local corrections do not establish the corrected macOS path
-  until the next hosted run completes.
+  Bash 3.2 defects. The second verified both corrections and exposed JVM 11 at
+  Android assembly; explicit Temurin 17 still requires its own hosted rerun.
 
 ---
 

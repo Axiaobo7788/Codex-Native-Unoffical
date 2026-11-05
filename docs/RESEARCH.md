@@ -1349,13 +1349,27 @@ _Reviewed: 2026-11-06_
   release commit `3d3c42e5aac5ba805825da76410c181273ba90b1`
   declares `runs.using: node24`, eliminating that compatibility shim without
   restoring persisted checkout credentials.
+- Follow-up run `42066453043` passed corrected macOS arm64, Windows x64,
+  exact-Rust Clippy/tests, Dart/Flutter analysis/tests, and Linux packaging. The
+  Android debug build alone failed before compilation: Flutter reported Java
+  11.0.32 driving Gradle 9.3.1. Gradle's official compatibility matrix requires
+  JVM 17 or later for Gradle 9; runner defaults therefore cannot define the
+  Android build toolchain.
+- Official `actions/setup-java` v6.2.0 commit
+  `77dd5b2ce225ea11469928ac317850245a74ae78` declares Node 24. Selecting the
+  minimum compatible Temurin 17 makes the CI contract match the Android source
+  and Kotlin JVM 17 targets without opportunistically advancing to a newer JDK.
+- Local OpenJDK 17.0.20.1 then ran the real Gradle 9.3.1 wrapper through all 185
+  `assembleDebug` tasks and emitted a non-empty 191,469,644-byte APK. This used
+  only the already documented temporary ASCII Flutter-SDK alias needed for the
+  repository's Unicode host path; it does not substitute for the hosted rerun.
 
 ### Adopted here and validation boundary
 
 - The primary Ubuntu 22.04 x64 job installs the actual Linux compiler
-  dependencies, selects Flutter 3.47.1 and exact Rust 1.89.0, runs formatting,
-  license drift, strict Clippy, all Dart/Rust tests and analysis, then builds
-  both the Linux debug bundle and Android debug APK.
+  dependencies, selects Flutter 3.47.1, exact Rust 1.89.0, and Temurin 17, runs
+  formatting, license drift, strict Clippy, all Dart/Rust tests and analysis,
+  then builds both the Linux debug bundle and Android debug APK.
 - A fail-independent matrix builds Windows Server 2022 x64 and macOS 15 arm64.
   Each job checks that the Host is non-empty, executes its packaged `--help`, and
   verifies the native-license notice at the platform's real bundle location.
@@ -1365,15 +1379,17 @@ _Reviewed: 2026-11-06_
   `3d3c42e5aac5ba805825da76410c181273ba90b1` with no persisted credentials;
   `subosito/flutter-action` is pinned to
   `1a449444c387b1966244ae4d4f8c696479add0b2` with cache disabled. Concurrency
-  cancels superseded runs, and monthly Dependabot review is limited to the
-  GitHub Actions ecosystem.
+  cancels superseded runs. `actions/setup-java` v6.2.0 is pinned to
+  `77dd5b2ce225ea11469928ac317850245a74ae78`, with no dependency cache enabled;
+  monthly Dependabot review remains limited to the GitHub Actions ecosystem.
 - Pinned `actionlint` 1.7.12 and independent YAML parsing pass locally. After
   the first hosted failures, lexical borrow scoping passes strict Clippy plus 84
   tests on a fresh official Rust 1.89.0 toolchain, and non-empty macOS command
   arrays pass shell parsing plus local Debug/Release packaging simulation.
-  Hosted Windows x64 is now a real pass. The corrected workflow/macOS path,
-  signing, notarization, installation, ACL inspection, and Human use remain
-  separate evidence until their respective gates run.
+  Hosted Windows x64 and corrected macOS arm64 are now real passes. Linux also
+  passed before the Android JVM-default failure. Explicit Temurin 17, Android
+  debug assembly, signing, notarization, installation, ACL inspection, and
+  Human use remain separate evidence until their respective gates run.
 
 ## Fail-closed Android release signing
 

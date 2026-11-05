@@ -126,11 +126,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   macOS 15 arm64 runners; uses exact Flutter 3.47.1 and Rust 1.89.0 toolchains;
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
-  credentials are not persisted, and permissions remain read-only. The first
-  current-tree run (`42063855051`) passed Windows x64 but failed exact-Rust
-  Clippy and macOS Bash 3.2. Both failures have narrow local corrections and
-  exact/local validation; a new hosted run is required before the workflow can
-  be called green.
+  credentials are not persisted, and permissions remain read-only. Follow-up
+  run `42066453043` verified both native desktop paths, exact-Rust Clippy/tests,
+  Dart/Flutter gates, and the Linux bundle, then exposed a drifting JVM 11
+  default at the Android build. CI now selects Temurin 17 explicitly; its rerun
+  is required before the workflow can be called green.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -139,7 +139,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Completed
 
-### 2026-11-06 — First hosted cross-platform run and failure-driven corrections
+### 2026-11-06 — Hosted cross-platform failure-driven corrections
 
 - Published the previously local history and inspected current-tree GitHub
   Actions run `42063855051` at `a77e6ac`. Windows Server 2022 x64 passed the
@@ -162,6 +162,19 @@ This file is the repository's durable project memory. Update it whenever a task 
   `3d3c42e5aac5ba805825da76410c181273ba90b1` while preserving
   `persist-credentials: false`. Pinned actionlint 1.7.12 and independent YAML
   parsing pass after the update.
+- Follow-up run `42066453043` proved the first two corrections: macOS 15 arm64
+  and Windows Server 2022 x64 both built their Flutter bundles, executed the
+  packaged Host, and verified its license. Ubuntu also passed exact Rust 1.89
+  Clippy/tests, Dart/Flutter analysis/tests, and the Linux bundle/license gate.
+  Its Android step then failed before compilation because the hosted default was
+  JVM 11 while Gradle 9.3.1 requires JVM 17 or later. CI now pins official
+  `actions/setup-java` v6.2.0 at immutable commit
+  `77dd5b2ce225ea11469928ac317850245a74ae78`, selects Temurin 17, and does not
+  enable dependency caching. With an exact local OpenJDK 17.0.20.1 runtime and
+  only the established temporary ASCII Flutter-SDK alias, `assembleDebug`
+  passed all 185 tasks and produced a 191,469,644-byte APK. Known upstream
+  Kotlin/AGP and SDK XML warnings remain preserved. The hosted correction still
+  requires a rerun.
 
 ### 2026-11-06 — Fail-closed Android release identity
 
@@ -1107,12 +1120,15 @@ specific evidence boundaries.
   PIDs, and zero new cache sessions.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
-- Hosted GitHub Actions CI: first current-tree run `42063855051` at `a77e6ac`
-  FAILED. Windows x64 passed; exact-Rust Clippy and macOS arm64 failed for the
-  preserved causes above. Corrections pass local exact-toolchain and packaging
-  gates, but their hosted rerun is PENDING.
-- Windows debug build/package execution: PASS on hosted Windows Server 2022 x64.
-  Windows install/ACL/Human validation, corrected hosted macOS build, macOS
+- Hosted GitHub Actions CI: follow-up run `42066453043` at `ebd628c` FAILED only
+  at Android debug assembly because the runner exposed JVM 11 to Gradle 9.3.1.
+  Exact-Rust, Flutter analysis/tests, Linux, Windows x64, and macOS arm64 all
+  passed. Explicit Temurin 17 selection is implemented but its rerun is PENDING.
+- Exact local OpenJDK 17.0.20.1 Android `assembleDebug`: PASS, 185 tasks and a
+  non-empty 191,469,644-byte debug APK. The temporary ASCII SDK alias was removed
+  and ignored `local.properties` was restored afterward.
+- Windows and macOS debug build/package execution: PASS on hosted Windows Server
+  2022 x64 and macOS 15 arm64. Native install/ACL/Human validation, macOS
   signing/notarization, and physical-device validation remain unrun.
 
 ## Known risks / watch items
@@ -1247,9 +1263,9 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: first current-tree matrix run completed with Windows x64 passing
-  and exact-Rust/macOS failures; corrections are locally verified and awaiting
-  the next hosted run.
+- Hosted CI: the second current-tree matrix verified Linux/Windows/macOS and all
+  source tests but exposed JVM 11 at Android assembly. Explicit Temurin 17 is
+  implemented and awaits its hosted rerun.
 
 ### Phase 2 — Local Codex workflow
 
