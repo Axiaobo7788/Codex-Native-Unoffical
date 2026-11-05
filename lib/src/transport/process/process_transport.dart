@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../../domain/thread_models.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/protocol_models.dart';
+import '../../protocol/thread_protocol.dart';
 import '../codex_transport.dart';
 import 'child_process.dart';
 
@@ -27,6 +29,7 @@ class ProcessTransport implements CodexTransport {
       input: process.stdout.transform(const JsonlDecoder()),
       writer: process.write,
     );
+    _threadProtocol = ThreadProtocolAdapter(request: _peer.request);
     _stderrSubscription = process.stderr
         .transform(utf8.decoder)
         .listen(_captureStderr);
@@ -40,6 +43,7 @@ class ProcessTransport implements CodexTransport {
   final StreamController<ProcessExit> _exits =
       StreamController<ProcessExit>.broadcast();
   late final JsonRpcPeer _peer;
+  late final ThreadProtocolAdapter _threadProtocol;
   late final StreamSubscription<String> _stderrSubscription;
   late final Future<void> _exitWatcher;
   Future<void>? _closeOperation;
@@ -87,6 +91,26 @@ class ProcessTransport implements CodexTransport {
     await _peer.notify('initialized');
     return result;
   }
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) =>
+      _threadProtocol.listThreads(query);
+
+  @override
+  Future<ThreadSummary> startThread(ThreadStartOptions options) =>
+      _threadProtocol.startThread(options);
+
+  @override
+  Future<ThreadSummary> readThread(String threadId) =>
+      _threadProtocol.readThread(threadId);
+
+  @override
+  Future<ThreadSummary> resumeThread(String threadId) =>
+      _threadProtocol.resumeThread(threadId);
+
+  @override
+  Future<void> deleteThread(String threadId) =>
+      _threadProtocol.deleteThread(threadId);
 
   void _captureStderr(String chunk) {
     _stderrTail += chunk;

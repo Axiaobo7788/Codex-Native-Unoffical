@@ -45,6 +45,11 @@ initialization handshake, displays typed runtime state, and owns the child
 process lifecycle. Linux, Windows, macOS, and Android project shells are in the
 repository; Android remote control is a later phase.
 
+Phase 2 is in progress. The current desktop slice lists bounded pages of thread
+metadata, starts threads, reads stored thread metadata without turns, and
+resumes threads without hydrating their history. The UI retains at most 100
+thread rows; conversation/turn rendering is not implemented yet.
+
 ## Run locally
 
 Prerequisites:
@@ -61,6 +66,7 @@ The transport-only stock runtime check is also available:
 
 ```sh
 dart run tool/runtime_smoke.dart
+dart run tool/thread_smoke.dart
 ```
 
 ## Verify

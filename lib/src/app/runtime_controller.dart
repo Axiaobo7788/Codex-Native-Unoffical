@@ -4,13 +4,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../domain/runtime_snapshot.dart';
+import '../domain/thread_gateway.dart';
+import '../domain/thread_models.dart';
 import '../protocol/protocol_models.dart';
 import '../transport/process/codex_executable_locator.dart';
 import '../transport/process/process_transport.dart';
 
 typedef TransportStarter = Future<ProcessTransport> Function(String executable);
 
-class RuntimeController extends ChangeNotifier {
+class RuntimeController extends ChangeNotifier implements ThreadGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     TransportStarter? transportStarter,
@@ -31,6 +33,32 @@ class RuntimeController extends ChangeNotifier {
   RuntimeSnapshot get snapshot => _snapshot;
 
   Future<void> start() => _startOperation ??= _start();
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) =>
+      _connectedTransport().listThreads(query);
+
+  @override
+  Future<ThreadSummary> startThread(ThreadStartOptions options) =>
+      _connectedTransport().startThread(options);
+
+  @override
+  Future<ThreadSummary> readThread(String threadId) =>
+      _connectedTransport().readThread(threadId);
+
+  @override
+  Future<ThreadSummary> resumeThread(String threadId) =>
+      _connectedTransport().resumeThread(threadId);
+
+  ProcessTransport _connectedTransport() {
+    final transport = _transport;
+    if (transport == null ||
+        _snapshot.state != RuntimeConnectionState.connected ||
+        _stopping) {
+      throw StateError('Codex app-server is not connected.');
+    }
+    return transport;
+  }
 
   Future<void> _start() async {
     if (Platform.isAndroid) {

@@ -1,3 +1,4 @@
+import '../domain/thread_models.dart';
 import '../protocol/protocol_models.dart';
 
 abstract interface class CodexTransport {
@@ -6,5 +7,10 @@ abstract interface class CodexTransport {
   Stream<ProtocolViolation> get protocolErrors;
 
   Future<InitializeResult> initialize(InitializeRequest request);
+  Future<ThreadPage> listThreads(ThreadListQuery query);
+  Future<ThreadSummary> startThread(ThreadStartOptions options);
+  Future<ThreadSummary> readThread(String threadId);
+  Future<ThreadSummary> resumeThread(String threadId);
+  Future<void> deleteThread(String threadId);
   Future<void> close();
 }
