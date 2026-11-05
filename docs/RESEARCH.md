@@ -2106,3 +2106,12 @@ _Reviewed: 2026-11-06_
   inspection, or installed-machine acceptance. Hosted Windows Server 2022 must
   compile and run the protected/untrusted DACL tests before the Win32 behavior
   is marked verified; Linux tests cannot establish it.
+- Initial hosted CI `42120072496` at `e872e36`, Windows job `127569808871`,
+  compiled the Win32 boundary and passed all 28 library and 58 binary tests,
+  including both ACL refusal cases, invalid-material redaction, and WSS
+  rotation. Its later process-level failure fixture kept an inheritable Windows
+  temp-file ACL and therefore failed earlier at the new permission gate instead
+  of producing the old rustls parser text; the test's single-message expectation
+  failed and skipped the Windows build. That failure remains evidence. The
+  correction accepts either pre-child TLS-material failure while retaining the
+  private-marker and child-start prohibitions; it still requires a fresh run.

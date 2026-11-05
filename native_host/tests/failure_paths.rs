@@ -55,7 +55,14 @@ fn invalid_tls_material_fails_before_the_codex_child_is_started() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("failed to load Remote TLS certificate/key"));
+    // Unix gives this fixture owner-only permissions and reaches rustls. The
+    // Windows fixture intentionally retains its inherited temporary-directory
+    // ACL, so the new external-key gate may reject it earlier. Both are TLS
+    // material failures and must happen before the Codex child starts.
+    assert!(
+        stderr.contains("failed to load Remote TLS certificate/key")
+            || stderr.contains("Remote TLS private key permission check failed")
+    );
     assert!(!stderr.contains(private_marker));
     assert!(!stderr.contains("failed to start `codex-child-must-not-start`"));
 }

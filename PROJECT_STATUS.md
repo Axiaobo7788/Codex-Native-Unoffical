@@ -185,6 +185,15 @@ This file is the repository's durable project memory. Update it whenever a task 
   Linux Rust test instances pass. Native Windows compilation and ACL behavior
   remain pending a fresh hosted run, so this entry does not yet claim the Win32
   gate verified.
+- Preserve initial hosted CI `42120072496` at `e872e36`, Windows job
+  `127569808871`, as negative evidence. Windows compiled the new FFI and passed
+  all 28 library plus 58 binary tests, including both ACL refusals, invalid
+  material redaction, and WSS rotation. The later process-level failure-path
+  test then expected only the old rustls parse error even though its unprotected
+  temporary key now correctly fails at the earlier ACL gate; two other
+  integration cases passed and the Windows build was skipped. The correction
+  accepts either bounded pre-child TLS failure without weakening its no-leak or
+  child-not-started assertions; a fresh hosted run remains required.
 - Windows ACL evidence follow-up CI `42117298358` at `5ce6b6b`, Windows job
   `127560231894`, passed the prior 85 native test instances with no `warning:`
   line, then passed the Windows Flutter build and Host/license smoke. Its
