@@ -8,7 +8,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 1 — Flutter + Codex app-server vertical slice: IMPLEMENTED, VERIFIED, COMMITTED (`5089320`)**
 
-**Phase 2 — Local usable Codex client: IMPLEMENTED AND LOCALLY MACHINE-VERIFIED — Human approval interaction and hosted CI remain separate gates**
+**Phase 2 — Local usable Codex client: IMPLEMENTED AND MACHINE-VERIFIED — Human approval interaction remains a separate gate**
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
@@ -69,13 +69,12 @@ This file is the repository's durable project memory. Update it whenever a task 
   distribution because App Sandbox cannot preserve the required normal Codex
   developer-workspace/toolchain model. Hosted Windows Server 2022 now verifies
   the debug bundle, packaged Host/license pair, and Host `--help`. The first
-  hosted macOS 15 arm64 build exposed a Bash 3.2 empty-array failure; its local
-  source correction is verified, while the native rerun remains pending.
+  hosted macOS 15 arm64 build exposed a Bash 3.2 empty-array failure; the
+  corrected native build/package/Host execution now passes on macOS 15 arm64.
 - The native Host's complete lockfile-derived runtime license notice is committed
   and drift-checked with pinned `cargo-about` 0.9.3. Linux/Windows package it
   beside the Host and macOS declares it under `Contents/Resources`; Linux and
-  hosted Windows bundle byte identity are verified, while the corrected macOS
-  artifact path still awaits its hosted rerun.
+  hosted Windows/macOS bundle byte identity are verified.
 - Completed assistant messages use a project-owned safe Markdown allowlist only
   while in-progress streaming remains selectable plain text. Raw HTML is inert,
   images never load, links require an explicit click and absolute `http`/`https`
@@ -126,11 +125,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   macOS 15 arm64 runners; uses exact Flutter 3.47.1 and Rust 1.89.0 toolchains;
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
   Host/license pair. Top-level actions are immutable-SHA pinned, checkout
-  credentials are not persisted, and permissions remain read-only. Follow-up
-  run `42066453043` verified both native desktop paths, exact-Rust Clippy/tests,
-  Dart/Flutter gates, and the Linux bundle, then exposed a drifting JVM 11
-  default at the Android build. CI now selects Temurin 17 explicitly; its rerun
-  is required before the workflow can be called green.
+  credentials are not persisted, and permissions remain read-only. Run
+  `42068745322` at `e11a36c` passed all three jobs: exact-Rust/Dart/Flutter
+  verification, Linux and Android debug builds, and native Windows x64/macOS
+  arm64 bundle/Host/license gates.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -174,7 +172,13 @@ This file is the repository's durable project memory. Update it whenever a task 
   only the established temporary ASCII Flutter-SDK alias, `assembleDebug`
   passed all 185 tasks and produced a 191,469,644-byte APK. Known upstream
   Kotlin/AGP and SDK XML warnings remain preserved. The hosted correction still
-  requires a rerun.
+  required a rerun.
+- Final run `42068745322` at `e11a36c` passed the entire matrix. The Ubuntu job
+  successfully selected Temurin 17, ran all exact-Rust/Dart/Flutter and source
+  contract gates, built/verified the Linux bundle, built the Android debug APK,
+  and asserted the APK was non-empty. Windows x64 and macOS arm64 again built
+  their Flutter bundles, verified the Host/license locations, and executed the
+  packaged Host's `--help`.
 
 ### 2026-11-06 — Fail-closed Android release identity
 
@@ -271,9 +275,9 @@ This file is the repository's durable project memory. Update it whenever a task 
   installed copy byte-for-byte.
 - A real Linux debug bundle contains the mode-0644, byte-identical 257,985-byte
   notice beside the mode-0755 Host. Later hosted Windows evidence verifies the
-  corresponding built bundle; corrected macOS packaging still awaits its hosted
-  rerun. No signing, notarization, native installation, or Human-use claim is
-  inferred from either build.
+  corresponding built bundle, and the corrected hosted macOS build verifies its
+  `Contents/Resources` copy. No signing, notarization, native installation, or
+  Human-use claim is inferred from either build.
 
 ### 2026-11-05 — Phase 4 versioned pairing invitation and local certificate trust
 
@@ -1077,8 +1081,8 @@ specific evidence boundaries.
   native URL-launcher plugin.
 - Fresh `flutter build linux --debug`: PASS with byte-identical
   `NATIVE_HOST_THIRD_PARTY_LICENSES.txt` beside the Host; notice mode is 0644 and
-  Host mode is 0755. A later hosted Windows build verifies its package location;
-  corrected macOS native verification remains pending.
+  Host mode is 0755. Later hosted Windows and macOS builds verify their package
+  locations and execute their packaged Host binaries.
 - Fresh Linux release-bundle Host runtime smoke after transactional storage
   recovery: PASS against stock Codex with a measured 32 ms close phase.
 - `flutter build apk --debug` from the real Unicode repository/SDK path: FAILED
@@ -1120,10 +1124,9 @@ specific evidence boundaries.
   PIDs, and zero new cache sessions.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
-- Hosted GitHub Actions CI: follow-up run `42066453043` at `ebd628c` FAILED only
-  at Android debug assembly because the runner exposed JVM 11 to Gradle 9.3.1.
-  Exact-Rust, Flutter analysis/tests, Linux, Windows x64, and macOS arm64 all
-  passed. Explicit Temurin 17 selection is implemented but its rerun is PENDING.
+- Hosted GitHub Actions CI: run `42068745322` at `e11a36c` PASS. Ubuntu verify,
+  Windows x64, and macOS arm64 all completed successfully; Android debug assembly
+  and its non-empty artifact assertion passed under explicit Temurin 17.
 - Exact local OpenJDK 17.0.20.1 Android `assembleDebug`: PASS, 185 tasks and a
   non-empty 191,469,644-byte debug APK. The temporary ASCII SDK alias was removed
   and ignored `local.properties` was restored afterward.
@@ -1228,11 +1231,8 @@ specific evidence boundaries.
 
 ## Next action
 
-First push the reviewed hosted-CI corrections and inspect every job in the new
-run through completion. Preserve and fix any further machine-verifiable native
-failure before returning to product work. Once that gate is green, close the
-remaining pairing/device gate, then expand Remote without weakening its
-now-versioned trust boundary:
+Close the remaining pairing/device gate, then expand Remote without weakening
+its now-versioned trust boundary:
 
 1. exercise both system-root and pairing-bound certificate invitations against
    an available emulator/physical device and real Host: cold start,
@@ -1263,9 +1263,8 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: the second current-tree matrix verified Linux/Windows/macOS and all
-  source tests but exposed JVM 11 at Android assembly. Explicit Temurin 17 is
-  implemented and awaits its hosted rerun.
+- Hosted CI: current implementation run `42068745322` passed exact-Rust,
+  Dart/Flutter, Linux, Android debug, Windows x64, and macOS arm64 gates.
 
 ### Phase 2 — Local Codex workflow
 

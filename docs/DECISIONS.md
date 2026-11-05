@@ -538,8 +538,9 @@ than silently disappear from the notice.
   crate not present in one particular binary, but it must not omit a crate used
   by any supported desktop binary.
 - Linux byte identity is locally verified and a later hosted Windows build
-  verifies its bundle copy. Corrected macOS native execution and installed
-  Windows/macOS artifact inspection remain outstanding.
+  verifies its bundle copy; corrected hosted macOS execution verifies its
+  `Contents/Resources` copy. Installed Windows/macOS artifact inspection remains
+  outstanding.
 
 ---
 
@@ -593,7 +594,9 @@ artifact.
 - Hosted results remain authoritative for native paths. The first inspected
   current-tree run passed Windows x64 and exposed exact-Rust Clippy plus macOS
   Bash 3.2 defects. The second verified both corrections and exposed JVM 11 at
-  Android assembly; explicit Temurin 17 still requires its own hosted rerun.
+  Android assembly. The third (`42068745322`) passed the entire exact-toolchain,
+  Linux, Android debug, Windows x64, and macOS arm64 matrix with explicit
+  Temurin 17.
 
 ---
 

@@ -1296,8 +1296,9 @@ _Reviewed: 2026-11-05_
   mode-0644 notice beside the mode-0755 Host.
 - This Linux slice initially source-reviewed only the Windows/macOS edits. The
   later hosted matrix verified the built Windows bundle and exposed the macOS
-  Bash 3.2 defect documented below. Corrected macOS native execution,
-  installation, signing/notarization, and legal review remain distinct gates.
+  Bash 3.2 defect documented below. A later run verified corrected macOS native
+  execution; installation, signing/notarization, and legal review remain
+  distinct gates.
 
 ## Hosted CI hardening and cross-platform build gates
 
@@ -1362,7 +1363,13 @@ _Reviewed: 2026-11-06_
 - Local OpenJDK 17.0.20.1 then ran the real Gradle 9.3.1 wrapper through all 185
   `assembleDebug` tasks and emitted a non-empty 191,469,644-byte APK. This used
   only the already documented temporary ASCII Flutter-SDK alias needed for the
-  repository's Unicode host path; it does not substitute for the hosted rerun.
+  repository's Unicode host path; it did not substitute for the hosted rerun.
+- Final run `42068745322` at `e11a36c` passed all jobs. Ubuntu selected Temurin
+  17 and completed source/license/signing-contract checks, exact Rust 1.89
+  Clippy/tests, Dart/Flutter analysis/tests, the Linux bundle/license gate, and
+  Android debug build plus non-empty APK assertion. Windows x64 and macOS arm64
+  both completed their native bundle, packaged Host execution, and license
+  identity checks.
 
 ### Adopted here and validation boundary
 
@@ -1386,10 +1393,10 @@ _Reviewed: 2026-11-06_
   the first hosted failures, lexical borrow scoping passes strict Clippy plus 84
   tests on a fresh official Rust 1.89.0 toolchain, and non-empty macOS command
   arrays pass shell parsing plus local Debug/Release packaging simulation.
-  Hosted Windows x64 and corrected macOS arm64 are now real passes. Linux also
-  passed before the Android JVM-default failure. Explicit Temurin 17, Android
-  debug assembly, signing, notarization, installation, ACL inspection, and
-  Human use remain separate evidence until their respective gates run.
+  Hosted Windows x64, corrected macOS arm64, Linux, explicit Temurin 17, and
+  Android debug assembly are now real passes in one final matrix. Release
+  signing, notarization, installation, ACL inspection, physical-device behavior,
+  and Human use remain separate evidence until their respective gates run.
 
 ## Fail-closed Android release signing
 
