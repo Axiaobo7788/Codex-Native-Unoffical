@@ -10,6 +10,8 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 2 — Local usable Codex client: IMPLEMENTED AND LOCALLY MACHINE-VERIFIED — Human approval interaction and hosted CI remain separate gates**
 
+**Phase 3 — Bounded-memory long-session UX: IN PROGRESS — paginated stored turns/items and inactive-thread eviction locally verified**
+
 ## Current repository state
 
 - Flutter application shells exist for Linux, Windows, macOS, and Android under the Dart package `codex_native_unofficial`.
@@ -31,10 +33,23 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Turn diff notifications are converted immediately into a bounded typed projection: at most 2 MiB processed input, 100 files, 512 KiB retained total, 128 KiB and 4,000 lines per file, and 2,000 characters per retained line. Only the selected file's rows are built by the diff view.
 - The desktop UI now provides a virtualized recent-activity timeline, composer, race-safe stop action, pending-approval banner, execution settings, changed-file summary, and selected-file diff.
 - A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
-- Stored turn/item history pagination and inactive-page eviction are not implemented yet. Android remote control remains Phase 4 work.
+- Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns and can return directly to the newest page.
+- Selecting a stored item loads ascending `thread/items/list` pages for exactly one turn, retaining at most 100 items and replacing that turn's summary projection. Switching threads discards all stored-history state immediately.
+- Stored and live entries are merged by item ID into one virtualized list so a resumed active turn does not render duplicate items.
+- Lazy full command-output retrieval, Markdown parsing policy, log viewer, and measured process-memory evidence are not implemented yet. Android remote control remains Phase 4 work.
 - Lightweight GitHub Actions CI is configured for format, analyze, tests, and a Linux debug build. Hosted CI has not run for the local Phase 1 commit yet.
 
 ## Completed
+
+### 2026-11-05 — Phase 3 bounded stored-history vertical slice
+
+- Added typed `thread/turns/list` and `thread/items/list` adapters with server-owned opaque cursors.
+- Turn pages explicitly request summary items; command history retains only a bounded command label and never `aggregatedOutput`.
+- Added a history controller with 20-turn/25-item pages, 100-turn and 100-selected-item hard caps, cursor-based load-more, ID deduplication, stale-response generation guards, immediate inactive-thread eviction, and a fixed-size older-turn window that evicts its newest edge while browsing backwards.
+- Merged paged history with the bounded live projection by item ID and kept the timeline virtualized. Selecting a summary item loads only that turn's item pages.
+- Added synthetic 1,000-turn/200-item-per-turn coverage proving the controller walks all 50 source pages while retaining only its configured 100-turn/50-selected-item test window. A separate 3 MiB `aggregatedOutput` fixture proves command output is not copied into the typed presentation projection.
+- Added a production-App widget test with 1,000 projected history rows; after real thread selection, fewer than 100 history row widgets exist in the element tree and the last off-screen row is absent, proving `ListView.builder` virtualization rather than eager construction.
+- Extended the real coding smoke to read the completed turn through both pagination APIs before deleting it; the server returned one turn and nine items.
 
 ### 2026-11-05 — Phase 2 execution controls, bounded diff, and coding-task gate
 
@@ -90,14 +105,14 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 46 tests.
+- `flutter test --reporter expanded`: PASS, 51 tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
 - `dart run tool/turn_smoke.dart`: PASS against the installed stock Codex; a fixed-response turn completed with the expected marker, a second turn reached `turn/started`, interruption completed with status `interrupted`, and the smoke-owned thread was deleted.
 - `dart run tool/approval_smoke.dart`: PASS against the installed stock Codex; an untrusted command produced a typed approval, the client rejected it, the turn completed, and the smoke-owned thread was deleted without executing the command.
 - `dart run tool/model_smoke.dart`: PASS; the installed app-server advertised 8 visible models, identified `gpt-6.1-sol` as default, and advertised `low` as its default reasoning effort.
-- `flutter test tool/coding_task_smoke.dart --reporter expanded`: PASS in 46 seconds; production controllers completed the exact temporary-file task, projected one changed file/one addition, observed zero approvals, and cleaned both thread and workspace.
+- `flutter test tool/coding_task_smoke.dart --reporter expanded`: PASS after history integration in 29 seconds; production controllers completed the exact temporary-file task, projected one changed file/one addition, observed zero approvals, paged back one turn/nine items, and cleaned both thread and workspace.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
@@ -109,21 +124,22 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - A successful `turn/start` response does not prove the server has installed the turn as interruptible. Real validation observed `turn/interrupt` fail with `-32600` when sent before `turn/started`; the UI now waits for the notification before exposing Stop.
 - Approval approve-once serialization and controller behavior are covered by tests, but no real command or file mutation was approved during automated validation. The real smoke deliberately validated rejection only; Human approval UX remains a separate gate.
 - The dangerous execution-setting confirmation dialogs and populated diff view have not received Human visual/interaction acceptance. Their protocol/controller/parser behavior is machine-tested, and the main GUI surface was directly inspected, but those are distinct claims.
+- Stock app-server `0.166.0-alpha.5.1` exposes no per-item or byte-range history request for command output. `thread/items/list` returns a command's whole `aggregatedOutput` inside one JSON item. The client drops that field immediately, but cannot implement a genuinely lazy log viewer without transiently decoding the full payload. This is an upstream protocol blocker; do not claim lazy heavy-output loading until a bounded API exists.
 - The real GUI launch logged host GTK/Wayland warnings for ATK socket embedding and a missing cursor-theme asset. They did not prevent the window, handshake, or child cleanup, but should be rechecked during later Linux UI work.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
 - After loading thread state, the tested stock app-server did not exit within the 3-second stdin-EOF window or the following 3-second SIGTERM window. The SIGKILL fallback completed at about 6.1 seconds and no child survived GUI exit. Shutdown is bounded and correct, but the latency/source should be investigated before release polish.
 - The app-server protocol evolves; version differences must stay inside typed protocol adapters.
-- Long-running sessions must not cause Flutter to hydrate unbounded history. Phase 2 must introduce metadata/page boundaries before conversation state grows.
+- Long-running sessions must not cause Flutter to hydrate unbounded history. Turn/item caps now exist, but heavy-item retrieval and actual process-memory profiling remain required Phase 3 evidence.
 
 ## Next action
 
-Begin Phase 3 with the upstream paginated history APIs now advertised by this app-server:
+Continue Phase 3 with measured memory/rendering evidence around the supported protocol surface:
 
-1. add typed, bounded `thread/turns/list` pages using summary item views;
-2. add typed `thread/items/list` pages for one selected turn, retaining opaque cursors rather than full history;
-3. merge live active-turn projection with paged stored history without duplicate items;
-4. evict old pages and inactive-thread state under explicit caps;
-5. add synthetic 1,000-turn / multi-megabyte-output stress evidence before broadening UI polish.
+1. add a reproducible process-memory benchmark for 1,000 synthetic turns, the 100-turn sliding window, and repeated 3 MiB discarded command outputs;
+2. add widget-count evidence that the virtualized timeline builds only visible rows;
+3. define lazy Markdown parsing for only visible assistant blocks and cache only the active window;
+4. keep historical command output summarized/disabled with an explicit upstream-limitation message rather than invoking full-payload `thread/items/list` as a log viewer;
+5. re-check newer stock app-server schemas periodically for an item/offset/byte-range output API.
 
 Do not begin Android remote transport or ecosystem management until bounded stored-history behavior is implemented and measured.
 

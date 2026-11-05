@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/approval_models.dart';
+import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../protocol/approval_protocol.dart';
+import '../../protocol/history_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/model_protocol.dart';
@@ -36,6 +38,7 @@ class ProcessTransport implements CodexTransport {
       writer: process.write,
     );
     _threadProtocol = ThreadProtocolAdapter(request: _peer.request);
+    _historyProtocol = HistoryProtocolAdapter(request: _peer.request);
     _modelProtocol = ModelProtocolAdapter(request: _peer.request);
     _turnProtocol = TurnProtocolAdapter(
       request: _peer.request,
@@ -61,6 +64,7 @@ class ProcessTransport implements CodexTransport {
       StreamController<ProcessExit>.broadcast();
   late final JsonRpcPeer _peer;
   late final ThreadProtocolAdapter _threadProtocol;
+  late final HistoryProtocolAdapter _historyProtocol;
   late final ModelProtocolAdapter _modelProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ApprovalProtocolAdapter _approvalProtocol;
@@ -125,6 +129,14 @@ class ProcessTransport implements CodexTransport {
   @override
   Future<ModelPage> listModels(ModelListQuery query) =>
       _modelProtocol.listModels(query);
+
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
+      _historyProtocol.listTurns(query);
+
+  @override
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
+      _historyProtocol.listItems(query);
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>

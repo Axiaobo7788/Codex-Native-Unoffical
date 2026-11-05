@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
+import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/features/conversation/conversation_controller.dart';
 import 'package:codex_native_unofficial/src/features/diff/diff_controller.dart';
@@ -112,12 +113,33 @@ Future<void> _runSmoke() async {
     )) {
       throw StateError('Assistant completion marker was not projected.');
     }
+    final history = await runtime.listHistoryTurns(
+      HistoryTurnQuery(threadId: thread.id, limit: 5),
+    );
+    final persistedTurn = history.turns
+        .where((turn) => turn.id == completed.turnId)
+        .firstOrNull;
+    if (persistedTurn == null) {
+      throw StateError('Completed turn was absent from paged history.');
+    }
+    final persistedItems = await runtime.listHistoryItems(
+      HistoryItemQuery(
+        threadId: thread.id,
+        turnId: persistedTurn.id,
+        limit: 25,
+      ),
+    );
+    if (persistedItems.items.isEmpty) {
+      throw StateError('Completed turn returned no paged history items.');
+    }
 
     stdout.writeln('CODING_TASK_SMOKE=PASS');
     stdout.writeln('TURN_STATUS=${completed.status.name}');
     stdout.writeln('CHANGED_FILES=${snapshot.files.length}');
     stdout.writeln('ADDITIONS=${snapshot.additions}');
     stdout.writeln('UNEXPECTED_APPROVALS=$unexpectedApprovals');
+    stdout.writeln('HISTORY_TURNS=${history.turns.length}');
+    stdout.writeln('HISTORY_ITEMS=${persistedItems.items.length}');
   } catch (error, stackTrace) {
     stderr.writeln('CODING_TASK_SMOKE=FAIL');
     stderr.writeln(error);

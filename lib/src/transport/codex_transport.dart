@@ -1,4 +1,5 @@
 import '../domain/approval_models.dart';
+import '../domain/history_models.dart';
 import '../domain/model_models.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
@@ -13,6 +14,8 @@ abstract interface class CodexTransport {
 
   Future<InitializeResult> initialize(InitializeRequest request);
   Future<ModelPage> listModels(ModelListQuery query);
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query);
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query);
   Future<ThreadPage> listThreads(ThreadListQuery query);
   Future<ThreadSummary> startThread(ThreadStartOptions options);
   Future<ThreadSummary> readThread(String threadId);

@@ -45,16 +45,20 @@ initialization handshake, displays typed runtime state, and owns the child
 process lifecycle. Linux, Windows, macOS, and Android project shells are in the
 repository; Android remote control is a later phase.
 
-Phase 2 is locally implemented. The current desktop slice lists bounded pages of thread
-metadata, starts threads, reads stored thread metadata without turns, and
-resumes threads without hydrating their history. It can also start and stop
+Phase 2 is locally implemented. The current desktop slice lists bounded pages
+of thread metadata, starts threads, reads stored thread metadata without turns,
+and resumes threads without hydrating their history. It can also start and stop
 turns, coalesce assistant streaming into a bounded recent timeline, summarize
 tool activity, and surface explicit approve-once/reject prompts. The UI retains
 at most 100 thread rows and 200 recent conversation entries. Model and reasoning
 choices come from live app-server discovery; approval and sandbox overrides are
 explicit, and dangerous choices require confirmation. Turn diffs are projected
-into bounded file summaries with a virtualized selected-file view. Stored
-turn-history pagination is the next performance slice.
+into bounded file summaries with a virtualized selected-file view.
+
+Phase 3 is in progress. Stored history uses bounded `thread/turns/list` summary
+pages and loads full items for only one selected turn through
+`thread/items/list`; inactive-thread history is evicted immediately. Lazy
+command-output retrieval and measured long-session memory profiling remain.
 
 ## Run locally
 

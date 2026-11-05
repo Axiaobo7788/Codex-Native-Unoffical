@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../domain/diff_models.dart';
 import '../domain/execution_settings.dart';
+import '../domain/history_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
 import '../features/approvals/approval_controller.dart';
 import '../features/conversation/conversation_controller.dart';
+import '../features/conversation/history_controller.dart';
 import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/threads/thread_list_controller.dart';
@@ -34,6 +36,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   late final ThreadListController _threadController;
   late final ExecutionSettingsController _settingsController;
   late final ConversationController _conversationController;
+  late final HistoryController _historyController;
   late final DiffController _diffController;
   late final ApprovalController _approvalController;
   late final bool _ownsController;
@@ -51,6 +54,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
       gateway: _controller,
       settings: _settingsController,
     );
+    _historyController = HistoryController(gateway: _controller);
     _diffController = DiffController(gateway: _controller);
     _approvalController = ApprovalController(gateway: _controller);
     _controller.addListener(_handleRuntimeState);
@@ -69,6 +73,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _threadController.removeListener(_handleThreadSelection);
     _approvalController.dispose();
     _conversationController.dispose();
+    _historyController.dispose();
     _diffController.dispose();
     _settingsController.dispose();
     _threadController.dispose();
@@ -88,6 +93,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
         controller: _controller,
         threadController: _threadController,
         conversationController: _conversationController,
+        historyController: _historyController,
         approvalController: _approvalController,
         settingsController: _settingsController,
         diffController: _diffController,
@@ -109,6 +115,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   void _handleThreadSelection() {
     _conversationController.bindThread(_threadController.selectedThread);
     _diffController.bindThread(_threadController.selectedThread);
+    unawaited(_historyController.bindThread(_threadController.selectedThread));
   }
 }
 
@@ -118,6 +125,7 @@ class RuntimeStatusScreen extends StatelessWidget {
     required this.controller,
     required this.threadController,
     required this.conversationController,
+    required this.historyController,
     required this.approvalController,
     required this.settingsController,
     required this.diffController,
@@ -127,6 +135,7 @@ class RuntimeStatusScreen extends StatelessWidget {
   final RuntimeController controller;
   final ThreadListController threadController;
   final ConversationController conversationController;
+  final HistoryController historyController;
   final ApprovalController approvalController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
@@ -167,6 +176,7 @@ class RuntimeStatusScreen extends StatelessWidget {
                             Expanded(
                               child: _ConversationPanel(
                                 controller: conversationController,
+                                historyController: historyController,
                                 approvalController: approvalController,
                                 settingsController: settingsController,
                                 diffController: diffController,
@@ -190,12 +200,14 @@ class RuntimeStatusScreen extends StatelessWidget {
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
     required this.controller,
+    required this.historyController,
     required this.approvalController,
     required this.settingsController,
     required this.diffController,
   });
 
   final ConversationController controller;
+  final HistoryController historyController;
   final ApprovalController approvalController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
@@ -234,7 +246,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
       ),
       child: AnimatedBuilder(
-        animation: Listenable.merge([widget.controller, widget.diffController]),
+        animation: Listenable.merge([
+          widget.controller,
+          widget.diffController,
+          widget.historyController,
+        ]),
         builder: (context, _) {
           final controller = widget.controller;
           final thread = controller.thread;
@@ -340,24 +356,54 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         ),
       );
     }
-    if (controller.entries.isEmpty) {
+    final liveIds = controller.entries.map((entry) => entry.id).toSet();
+    final historyItems = widget.historyController.timelineItems
+        .where((item) => !liveIds.contains(item.id))
+        .toList(growable: false);
+    if (controller.entries.isEmpty && historyItems.isEmpty) {
+      if (widget.historyController.loadingTurns) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return Center(
         child: Text(
-          'Only new activity is shown in this bootstrap conversation view.',
+          widget.historyController.errorMessage ?? 'No conversation history.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       );
     }
 
+    final footerCount =
+        widget.historyController.canLoadOlderTurns ||
+            widget.historyController.canReturnToNewest ||
+            widget.historyController.canLoadMoreItems ||
+            widget.historyController.loadingTurns ||
+            widget.historyController.loadingItems
+        ? 1
+        : 0;
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.all(ThemeTokens.space4),
-      itemCount: controller.entries.length,
-      itemBuilder: (context, index) => _ConversationEntryView(
-        key: ValueKey(controller.entries[index].id),
-        entry: controller.entries[index],
-      ),
+      itemCount: historyItems.length + controller.entries.length + footerCount,
+      itemBuilder: (context, index) {
+        if (index < historyItems.length) {
+          final item = historyItems[index];
+          return _HistoryEntryView(
+            key: ValueKey('history-${item.id}'),
+            item: item,
+            onLoadTurn: () =>
+                widget.historyController.loadTurnItems(item.turnId),
+          );
+        }
+        final liveIndex = index - historyItems.length;
+        if (liveIndex < controller.entries.length) {
+          return _ConversationEntryView(
+            key: ValueKey(controller.entries[liveIndex].id),
+            entry: controller.entries[liveIndex],
+          );
+        }
+        return _HistoryFooter(controller: widget.historyController);
+      },
     );
   }
 
@@ -876,6 +922,86 @@ class _ApprovalBanner extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _HistoryEntryView extends StatelessWidget {
+  const _HistoryEntryView({
+    super.key,
+    required this.item,
+    required this.onLoadTurn,
+  });
+
+  final HistoryItem item;
+  final VoidCallback onLoadTurn;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = switch (item.kind) {
+      HistoryItemKind.user => ConversationEntryKind.user,
+      HistoryItemKind.assistant => ConversationEntryKind.assistant,
+      HistoryItemKind.activity ||
+      HistoryItemKind.reasoning ||
+      HistoryItemKind.unknown => ConversationEntryKind.activity,
+    };
+    return Tooltip(
+      message: 'Load the full bounded item page for this turn',
+      child: InkWell(
+        onTap: onLoadTurn,
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+        child: _ConversationEntryView(
+          entry: ConversationEntry(
+            id: item.id,
+            kind: kind,
+            text: item.text,
+            completed: true,
+            status: item.status,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryFooter extends StatelessWidget {
+  const _HistoryFooter({required this.controller});
+
+  final HistoryController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.loadingTurns || controller.loadingItems) {
+      return const Padding(
+        padding: EdgeInsets.all(ThemeTokens.space3),
+        child: Center(
+          child: SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: ThemeTokens.space2,
+      children: [
+        if (controller.canLoadOlderTurns)
+          TextButton(
+            onPressed: controller.loadOlderTurns,
+            child: const Text('Load older turns'),
+          ),
+        if (controller.canReturnToNewest)
+          TextButton(
+            onPressed: controller.refresh,
+            child: const Text('Return to newest'),
+          ),
+        if (controller.canLoadMoreItems)
+          TextButton(
+            onPressed: controller.loadMoreItems,
+            child: const Text('Load more items in turn'),
+          ),
+      ],
     );
   }
 }

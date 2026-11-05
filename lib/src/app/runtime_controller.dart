@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/approval_gateway.dart';
 import '../domain/approval_models.dart';
+import '../domain/history_gateway.dart';
+import '../domain/history_models.dart';
 import '../domain/model_gateway.dart';
 import '../domain/model_models.dart';
 import '../domain/runtime_snapshot.dart';
@@ -19,7 +21,12 @@ import '../transport/process/process_transport.dart';
 typedef TransportStarter = Future<ProcessTransport> Function(String executable);
 
 class RuntimeController extends ChangeNotifier
-    implements ThreadGateway, TurnGateway, ApprovalGateway, ModelGateway {
+    implements
+        ThreadGateway,
+        TurnGateway,
+        ApprovalGateway,
+        ModelGateway,
+        HistoryGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     TransportStarter? transportStarter,
@@ -60,6 +67,14 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<ModelPage> listModels(ModelListQuery query) =>
       _connectedTransport().listModels(query);
+
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
+      _connectedTransport().listHistoryTurns(query);
+
+  @override
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
+      _connectedTransport().listHistoryItems(query);
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>
