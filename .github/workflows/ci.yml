@@ -134,8 +134,8 @@ jobs:
             "$host_path" \
             "$bundle/Contents/Frameworks/App.framework/App" \
             "$bundle/Contents/Frameworks/FlutterMacOS.framework/FlutterMacOS"; do
-            /usr/bin/lipo -verify_arch arm64 x86_64 "$binary"
-            test "$(/usr/bin/lipo -archs "$binary" | wc -w | tr -d ' ')" -eq 2
+            /usr/bin/lipo "$binary" -verify_arch arm64 x86_64
+            test "$(/usr/bin/lipo "$binary" -archs | wc -w | tr -d ' ')" -eq 2
           done
           cmp licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt "$notice_path"
           "$host_path" --help

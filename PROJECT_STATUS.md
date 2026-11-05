@@ -195,6 +195,14 @@ This file is the repository's durable project memory. Update it whenever a task 
   Flutter-analysis evidence remain pending. Physical Intel execution, Developer
   ID signing, notarization/Gatekeeper, installed workspace access, and Human
   review remain separate gates.
+- First hosted CI `42128455985` at `a877c9e` compiled both Rust Apple targets,
+  passed all 87 native macOS test instances, and completed the 61.4 MB release
+  app build. Its direct verification then failed before inspecting any binary:
+  the `lipo` command placed `-verify_arch` before the input, so Xcode 16.4 parsed
+  the app path as another architecture name. The same argument-order defect was
+  present in the Dart matching-host verifier. The correction puts the input
+  first for both `-verify_arch` and `-archs`; the failed run remains negative
+  evidence and a fresh hosted run is required.
 
 ### 2026-11-06 — Bounded operator TLS-key permission gate
 

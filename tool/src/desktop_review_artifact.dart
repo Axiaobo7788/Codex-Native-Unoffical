@@ -729,8 +729,8 @@ Future<void> _verifyMacOsUniversalBinaries(Directory appBundle) async {
   ]) {
     final binary = File(_resolveRelative(appBundle, relativePath));
     final result = await Process.run('/usr/bin/lipo', [
-      '-archs',
       binary.absolute.path,
+      '-archs',
     ]);
     if (result.exitCode != 0) {
       throw DesktopReviewArtifactException(

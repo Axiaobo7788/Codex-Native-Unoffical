@@ -2252,3 +2252,11 @@ _Reviewed: 2026-11-06_
   Developer ID signing, hardened runtime, notarization, stapling, Gatekeeper,
   installed workspace/toolchain access, or Human acceptance. Hosted build and
   review-artifact evidence is still pending for this implementation.
+- Initial hosted CI `42128455985` at `a877c9e` compiled both Rust targets,
+  passed 26 library, 57 binary, and 4 integration tests on macOS, and built the
+  61.4 MB release app. Verification did not reach an architecture assertion:
+  Xcode 16.4's `lipo` requires the input file before the `-verify_arch` command,
+  while the workflow supplied it last and therefore interpreted the path as an
+  architecture token. The Dart verifier had the same `-archs` ordering error.
+  Both calls now follow the tool's emitted `lipo <input_file> <command>` usage;
+  a fresh hosted run remains required, and the first failure is preserved.
