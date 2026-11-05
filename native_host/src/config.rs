@@ -1,5 +1,6 @@
 use std::env;
 use std::io;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -15,6 +16,7 @@ pub(crate) struct Config {
     pub(crate) codex_executable: PathBuf,
     pub(crate) cache_dir: PathBuf,
     pub(crate) remote_device_file: Option<PathBuf>,
+    pub(crate) remote_listen: Option<SocketAddr>,
     pub(crate) max_output_bytes: u64,
     pub(crate) max_session_bytes: u64,
     pub(crate) max_forward_message_bytes: u64,
@@ -35,6 +37,7 @@ impl Config {
             .map(PathBuf::from)
             .map(Some)
             .unwrap_or_else(default_remote_device_file);
+        let mut remote_listen = optional_socket_addr("CODEX_NATIVE_REMOTE_LISTEN")?;
 
         let mut arguments = env::args_os().skip(1);
         while let Some(argument) = arguments.next() {
@@ -45,9 +48,12 @@ impl Config {
                     remote_device_file =
                         Some(required_path(&mut arguments, "--remote-device-file")?)
                 }
+                "--remote-listen" => {
+                    remote_listen = Some(required_socket_addr(&mut arguments, "--remote-listen")?)
+                }
                 "-h" | "--help" => {
                     println!(
-                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH]",
+                        "codex-native-host {}\n\nUsage: codex-native-host [--codex PATH] [--cache-dir PATH] [--remote-device-file PATH] [--remote-listen 127.0.0.1:PORT]",
                         env!("CARGO_PKG_VERSION")
                     );
                     return Ok(None);
@@ -69,6 +75,7 @@ impl Config {
             codex_executable,
             cache_dir,
             remote_device_file,
+            remote_listen,
             max_output_bytes: positive_u64(
                 "CODEX_NATIVE_MAX_OUTPUT_BYTES",
                 DEFAULT_MAX_OUTPUT_BYTES,
@@ -104,6 +111,46 @@ fn required_path(
             format!("{flag} requires a path"),
         )
     })
+}
+
+fn required_socket_addr(
+    arguments: &mut impl Iterator<Item = std::ffi::OsString>,
+    flag: &str,
+) -> io::Result<SocketAddr> {
+    let value = arguments.next().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{flag} requires a socket address"),
+        )
+    })?;
+    parse_loopback_socket_addr(&value.to_string_lossy(), flag)
+}
+
+fn optional_socket_addr(name: &str) -> io::Result<Option<SocketAddr>> {
+    match env::var(name) {
+        Ok(value) => parse_loopback_socket_addr(&value, name).map(Some),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(env::VarError::NotUnicode(_)) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{name} must be a UTF-8 loopback socket address"),
+        )),
+    }
+}
+
+fn parse_loopback_socket_addr(value: &str, source: &str) -> io::Result<SocketAddr> {
+    let address = value.parse::<SocketAddr>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{source} must be a loopback IP socket address"),
+        )
+    })?;
+    if !address.ip().is_loopback() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{source} cannot expose plaintext Remote beyond loopback"),
+        ));
+    }
+    Ok(address)
 }
 
 fn default_cache_dir() -> PathBuf {
@@ -144,4 +191,29 @@ fn invalid_environment(name: &str) -> io::Error {
         io::ErrorKind::InvalidInput,
         format!("{name} must be a positive integer"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plaintext_remote_address_is_loopback_only() {
+        assert_eq!(
+            parse_loopback_socket_addr("127.0.0.1:0", "test").unwrap(),
+            "127.0.0.1:0".parse().unwrap()
+        );
+        assert_eq!(
+            parse_loopback_socket_addr("[::1]:4317", "test").unwrap(),
+            "[::1]:4317".parse().unwrap()
+        );
+        for invalid in ["0.0.0.0:4317", "192.168.1.10:4317", "localhost:4317"] {
+            assert_eq!(
+                parse_loopback_socket_addr(invalid, "test")
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidInput
+            );
+        }
+    }
 }

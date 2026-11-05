@@ -1,8 +1,9 @@
 use crate::spool::{OutputChunk, OutputStat, SpoolStore};
 use base64::Engine;
-use codex_native_host::remote::{AuthError, DeviceRegistry};
+use codex_native_host::remote::{AuthError, Device, DeviceRegistry, PairingTicket};
 use serde_json::Value;
 use std::io;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,6 +23,7 @@ pub(crate) struct RemoteAdmin {
     file_path: Option<PathBuf>,
     registry: Option<DeviceRegistry>,
     now_ms: fn() -> io::Result<u64>,
+    listener_address: Option<SocketAddr>,
 }
 
 impl RemoteAdmin {
@@ -30,6 +32,7 @@ impl RemoteAdmin {
             file_path,
             registry: None,
             now_ms: system_now_ms,
+            listener_address: None,
         }
     }
 
@@ -39,10 +42,11 @@ impl RemoteAdmin {
             file_path: Some(file_path),
             registry: None,
             now_ms,
+            listener_address: None,
         }
     }
 
-    fn registry(&mut self) -> io::Result<&mut DeviceRegistry> {
+    pub(crate) fn registry(&mut self) -> io::Result<&mut DeviceRegistry> {
         if self.registry.is_none() {
             let file_path = self.file_path.clone().ok_or_else(|| {
                 io::Error::new(
@@ -58,8 +62,43 @@ impl RemoteAdmin {
         Ok(self.registry.as_mut().expect("registry was initialized"))
     }
 
-    fn now_ms(&self) -> io::Result<u64> {
+    pub(crate) fn now_ms(&self) -> io::Result<u64> {
         (self.now_ms)()
+    }
+
+    pub(crate) fn create_pairing_ticket(&mut self) -> io::Result<PairingTicket> {
+        let now_ms = self.now_ms()?;
+        self.registry()?
+            .create_pairing_ticket(now_ms, PAIRING_TTL_MS)
+            .map_err(remote_auth_error)
+    }
+
+    pub(crate) fn authenticate(&mut self, token: &str) -> io::Result<Option<Device>> {
+        let now_ms = self.now_ms()?;
+        self.registry()?
+            .authenticate(token, now_ms)
+            .map_err(remote_auth_error)
+    }
+
+    pub(crate) fn is_active(&mut self, device_id: &str) -> io::Result<bool> {
+        let now_ms = self.now_ms()?;
+        Ok(self.registry()?.is_active(device_id, now_ms))
+    }
+
+    pub(crate) fn set_listener_address(&mut self, address: SocketAddr) {
+        self.listener_address = Some(address);
+    }
+
+    fn listener_status(&self) -> Value {
+        match self.listener_address {
+            Some(address) => serde_json::json!({
+                "enabled": true,
+                "address": address.to_string(),
+                "tls": false,
+                "scope": "loopback",
+            }),
+            None => serde_json::json!({"enabled": false}),
+        }
     }
 }
 
@@ -82,12 +121,19 @@ pub(crate) fn route_client_message(
     let id = value.get("id").cloned();
     let params = value.get("params").unwrap_or(&Value::Null);
     let result: io::Result<Value> = (|| match method {
-        "host/status" => Ok(serde_json::json!({
-            "version": env!("CARGO_PKG_VERSION"),
-            "maxOutputBytes": store.max_output_bytes(),
-            "maxSessionBytes": store.max_session_bytes(),
-            "maxReadBytes": store.max_read_bytes(),
-        })),
+        "host/status" => {
+            let remote = remote_admin
+                .lock()
+                .map_err(|_| io::Error::other("Remote administration lock poisoned"))?
+                .listener_status();
+            Ok(serde_json::json!({
+                "version": env!("CARGO_PKG_VERSION"),
+                "maxOutputBytes": store.max_output_bytes(),
+                "maxSessionBytes": store.max_session_bytes(),
+                "maxReadBytes": store.max_read_bytes(),
+                "remote": remote,
+            }))
+        }
         "host/output/stat" => {
             let output_ref = output_ref(params)?;
             Ok(stat_value(store.stat(output_ref)?))
@@ -108,11 +154,7 @@ pub(crate) fn route_client_message(
             let mut admin = remote_admin
                 .lock()
                 .map_err(|_| io::Error::other("Remote administration lock poisoned"))?;
-            let now_ms = admin.now_ms()?;
-            let ticket = admin
-                .registry()?
-                .create_pairing_ticket(now_ms, PAIRING_TTL_MS)
-                .map_err(remote_auth_error)?;
+            let ticket = admin.create_pairing_ticket()?;
             Ok(serde_json::json!({
                 "code": ticket.code,
                 "expiresAt": ticket.expires_at_ms,

@@ -32,6 +32,7 @@ distributions keep their provenance visible.
 The native Host's exact resolved versions and checksums are recorded in
 `Cargo.lock`. Its direct third-party crates are:
 
+- `axum` 0.8.9 — <https://github.com/tokio-rs/axum> — MIT.
 - `base64` 0.22.1 — <https://github.com/marshallpierce/rust-base64> — MIT OR
   Apache-2.0.
 - `dirs` 6.0.0 — <https://github.com/dirs-dev/dirs-rs> — MIT OR Apache-2.0.
@@ -39,12 +40,19 @@ The native Host's exact resolved versions and checksums are recorded in
 - `getrandom` 0.4.3 — <https://github.com/rust-random/getrandom> — MIT OR
   Apache-2.0.
 - `json-skimmer` 1.0.0 — <https://github.com/joeledwards/json-skimmer> — MIT.
+- `libc` 0.2.191 (Unix targets) — <https://github.com/rust-lang/libc> — MIT OR
+  Apache-2.0.
 - `serde` 1.0.229 and `serde_json` 1.0.154 —
   <https://github.com/serde-rs/serde> and
   <https://github.com/serde-rs/json> — MIT OR Apache-2.0.
 - `sha2` 0.11.0 — <https://github.com/RustCrypto/hashes> — MIT OR Apache-2.0.
 - `subtle` 2.6.1 — <https://github.com/dalek-cryptography/subtle> — BSD-3-Clause.
+- `tokio` 1.54.1 — <https://github.com/tokio-rs/tokio> — MIT.
 - `uuid` 1.29.0 — <https://github.com/uuid-rs/uuid> — MIT OR Apache-2.0.
+
+Direct test-only crates are `tempfile` 3.27.0
+(<https://github.com/Stebalien/tempfile>, MIT OR Apache-2.0) and `tungstenite`
+0.29.0 (<https://github.com/snapview/tungstenite-rs>, MIT OR Apache-2.0).
 
 Complete license texts for these crates and their transitive dependencies are
 available in their source distributions. Release packaging must generate and

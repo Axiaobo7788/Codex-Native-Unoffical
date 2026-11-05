@@ -416,3 +416,30 @@ accident.
 - Real Android physical-device gates must include background/foreground, Wi-Fi
   changes, Doze, process death, credential revocation, Host restart, large
   threads, active turns, approval races, and phone/tablet presentation.
+
+### Initial Rust network stack selection
+
+_Reviewed: 2026-11-05_
+
+- `axum` 0.8.9 is MIT-licensed, supports Rust 1.80, and provides HTTP routing
+  plus WebSocket upgrade on the Tokio/Hyper stack. Its WebSocket configuration
+  exposes read/write buffer, maximum write-buffer, frame, and complete-message
+  limits. The defaults are not acceptable here: 64 MiB messages, 16 MiB frames,
+  and an unlimited maximum write buffer must all be overridden.
+- `tokio` 1.54.1 is MIT-licensed and supports Rust 1.85. Its bounded MPSC channel
+  has an explicit item capacity and supports sync/async boundaries. Unbounded
+  channels are a deliberate non-adoption because an item count alone also does
+  not constrain payload bytes.
+- `axum-server` 0.8.0 provides a maintained rustls acceptor and certificate
+  reload path while supporting Rust 1.82. It is reserved for the non-loopback
+  TLS slice; adding it before certificate/configuration behavior exists would
+  expand the release dependency surface without adding a safe reachable mode.
+- Adopt `axum` plus a dedicated Tokio runtime thread for the first explicitly
+  enabled loopback-only pairing/auth/handshake slice. Keep the existing sync
+  stdio/app-server owner unchanged. Set HTTP body, WebSocket message/frame/write
+  buffer, handshake deadline, connection count, item count, and application
+  queued-byte limits explicitly; axum's socket write-buffer limit is not a
+  substitute for an application outbound-queue byte budget.
+- Plaintext non-loopback configuration must fail before binding. Later WSS uses
+  rustls with an explicit certificate/key policy; it must not silently downgrade
+  to `ws://` when TLS configuration fails.

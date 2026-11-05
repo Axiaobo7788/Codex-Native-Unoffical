@@ -308,6 +308,12 @@ impl DeviceRegistry {
         Ok(true)
     }
 
+    pub fn is_active(&self, device_id: &str, now_ms: u64) -> bool {
+        self.devices
+            .get(device_id)
+            .is_some_and(|record| record.is_active(now_ms))
+    }
+
     pub fn list(&self) -> Vec<Device> {
         self.devices
             .values()

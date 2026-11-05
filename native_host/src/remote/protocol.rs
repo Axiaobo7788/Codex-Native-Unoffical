@@ -55,6 +55,17 @@ pub enum ServerMessage {
         resync_required: bool,
         capabilities: BTreeSet<String>,
     },
+    RpcResult {
+        id: Value,
+        result: Value,
+    },
+    RpcError {
+        id: Value,
+        error: String,
+    },
+    ProtocolError {
+        error: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -1,10 +1,12 @@
 mod config;
 mod json_string;
+mod remote_server;
 mod rpc;
 mod spool;
 mod transform;
 
 use config::Config;
+use remote_server::RemoteServer;
 use rpc::{ClientMessage, RemoteAdmin, route_client_message};
 use spool::SpoolStore;
 use std::io::{self, BufWriter, Read, Write};
@@ -28,7 +30,20 @@ fn run() -> io::Result<()> {
         return Ok(());
     };
     let cache_dir = config.cache_dir.clone();
-    let remote_admin = Mutex::new(RemoteAdmin::new(config.remote_device_file.clone()));
+    let remote_admin = Arc::new(Mutex::new(RemoteAdmin::new(
+        config.remote_device_file.clone(),
+    )));
+    let remote_server = match config.remote_listen {
+        Some(address) => {
+            let server = RemoteServer::start(address, Arc::clone(&remote_admin))?;
+            remote_admin
+                .lock()
+                .map_err(|_| io::Error::other("Remote administration lock poisoned"))?
+                .set_listener_address(server.address());
+            Some(server)
+        }
+        None => None,
+    };
     let store = Arc::new(
         SpoolStore::open(
             config.cache_dir,
@@ -144,9 +159,30 @@ fn run() -> io::Result<()> {
     }
 
     drop(child_stdin);
-    let status = stop_child(&mut child)?;
-    if !shutdown_requested && !status.success() && primary_error.is_none() {
-        primary_error = Some(io::Error::other(format!("app-server exited with {status}")));
+    if let Some(remote_server) = remote_server {
+        if let Err(error) = remote_server.stop()
+            && primary_error.is_none()
+        {
+            primary_error = Some(error);
+        }
+    }
+    let status = match stop_child(&mut child) {
+        Ok(status) => Some(status),
+        Err(error) => {
+            if primary_error.is_none() {
+                primary_error = Some(error);
+            }
+            None
+        }
+    };
+    if !shutdown_requested
+        && status.as_ref().is_some_and(|status| !status.success())
+        && primary_error.is_none()
+    {
+        primary_error = Some(io::Error::other(format!(
+            "app-server exited with {}",
+            status.expect("checked above")
+        )));
     }
 
     let _ = output_thread.join();

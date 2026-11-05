@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research plus the pure Host protocol, replay, correlation, idempotency, and device-auth core are implemented; no network listener or Android credential flow exists yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the pure Host protocol/auth core, and an authenticated opt-in loopback network foundation are implemented; ordinary Codex RPC/event routing, TLS/non-loopback, and Android credential flow do not exist yet**
 
 ## Current repository state
 
@@ -83,11 +83,50 @@ This file is the repository's durable project memory. Update it whenever a task 
   Its credential registry is loaded lazily from a configurable user config file,
   so Remote-store corruption cannot block ordinary local Host status or Codex
   startup.
+- The Host can explicitly enable a plaintext listener only on a literal loopback
+  address. Its bounded HTTP pairing and authenticated WebSocket endpoints
+  implement version negotiation, heartbeat, live revocation, and coordinated
+  shutdown. The socket currently exposes only `host/remote/status`; it is a
+  foundation, not an Android-capable Codex transport.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 authenticated loopback Remote foundation
+
+- Added an opt-in `CODEX_NATIVE_REMOTE_LISTEN`/`--remote-listen` address. The
+  parser and listener independently require a literal IPv4/IPv6 loopback
+  address; wildcard, LAN, and hostname forms fail before bind, and the listener
+  remains disabled by default.
+- Added bounded `axum` 0.8.9/Tokio 1.54.1 HTTP and WebSocket endpoints on a
+  dedicated runtime thread. HTTP bodies are capped at 8 KiB; WebSocket frames at
+  256 KiB, messages at 1 MiB, the socket write buffer at 2 MiB, connections at
+  eight, and the initial client hello at five seconds. Pairing is globally
+  limited to ten attempts per minute for this loopback slice.
+- Wired local one-use tickets to `/v1/pair`, returning the 256-bit device bearer
+  once while persisting only its digest. `/v1/ws` requires the exact bearer and
+  `codex-native-v1` subprotocol, performs the three-message negotiation, emits
+  heartbeat pings, and rechecks expiry/revocation while connected. The
+  unauthenticated health response intentionally omits the process session ID.
+- Kept the reachable RPC surface deliberately read-only and narrow:
+  `host/remote/status` proves authenticated request/response framing; every
+  other method is rejected. Stock app-server IDs/events and write methods are
+  not yet connected, so replay, correlation, and idempotency remain tested core
+  primitives rather than an end-to-end network claim.
+- A real TCP test covers health headers, ticket pairing and non-reuse, absence of
+  the token from disk, unauthenticated rejection, subprotocol negotiation,
+  read-only RPC, pre-handshake RPC rejection, live revocation, and rejected
+  reconnect after revocation. A second active-socket shutdown test initially
+  observed `ResetWithoutClosingHandshake`; connection-task draining and a
+  shutdown broadcast now deliver an `Away` close frame within the bounded
+  one-second drain window. Host cleanup stops Remote intake before stock Codex
+  and no Remote error can skip child-process cleanup.
+- The Rust suite passes 25 Remote-library tests, 31 Host-binary tests, and two
+  executable failure-path tests (58 total), plus format and strict Clippy. A
+  release build and real stock-Codex process smoke are recorded separately in
+  the current verification section.
 
 ### 2026-11-05 — Phase 4 local Remote administration boundary
 
@@ -373,13 +412,22 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 23 unit tests and 2 executable integration
-  tests, including deterministic storage-failure and cache-startup gates.
+- `cargo test --workspace`: PASS, 25 Remote-library tests, 31 Host-binary tests,
+  and 2 executable failure-path tests (58 total), including real loopback TCP,
+  live-revocation, protocol-close shutdown, deterministic storage-failure, and
+  cache-startup gates.
 - `cargo build --release --workspace`: PASS.
 - Release `codex-native-host` real-runtime smoke: PASS; one process carried a
   Host status request plus stock app-server initialize/initialized and reported
   Codex Desktop/app-server `0.166.0-alpha.5.1`. This isolated smoke established
   the handshake and clean EOF shutdown before Flutter integration.
+- Release Host Remote-foundation smoke: PASS in 333 ms against the same stock
+  app-server. The process bound an ephemeral loopback port, reported
+  `enabled=true`, `scope=loopback`, and `tls=false`, created a redacted local
+  one-use pairing ticket, completed initialize/initialized, and exited zero on
+  EOF without leaving a device credential file. The first harness attempt was
+  invalid because its absent `jq` consumer caused stdout `Broken pipe`; it was
+  not counted as a product pass or failure.
 - `dart run tool/host_memory_benchmark.dart`: PASS three times for 3/30/300 MiB.
   Fixture deltas were 6,303,744/62,926,848/629,157,888,
   6,303,744/62,926,848/629,157,888, and
@@ -493,20 +541,18 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Research/select the smallest maintained Rust WebSocket/TLS stack, then connect a
-first opt-in loopback Remote vertical slice without changing the existing desktop
-stdio path:
+Extend the opt-in loopback foundation into a bounded read-only Codex transport
+without changing the existing desktop stdio behavior:
 
-1. expose local trusted pairing/device administration through bounded `host/*`
-   methods and keep the registry single-owner;
-2. add a loopback-only-by-default listener with bounded HTTP/WebSocket messages,
-   handshake deadline, bearer authentication, per-connection outbound budget,
-   ping/pong progress, and live revocation;
-3. route protocol-native read-only Codex RPCs through remapped IDs and the
-   existing output sanitizer, while rejecting writes until the idempotency path
-   is wired end to end;
-4. add executable reconnect/replay/gap/slow-reader tests before exposing Android
-   UI or non-loopback configuration.
+1. route a minimal protocol-native read-only Codex RPC set through per-connection
+   remapped IDs and the existing output sanitizer;
+2. add explicit application outbound queues bounded by both item count and bytes
+   so large responses/events cannot starve heartbeat or grow behind a slow peer;
+3. publish only sanitized replayable events into the existing bounded journal,
+   then add executable reconnect/replay/gap/slow-reader and abrupt-disconnect
+   tests;
+4. keep writes rejected until correlation cleanup and the idempotency ledger are
+   wired end to end, including the post-dispatch unknown-outcome path.
 
 TLS-required non-loopback exposure, Android secure credential storage, writes,
 approvals, and chunked attachments follow only after that loopback slice passes.

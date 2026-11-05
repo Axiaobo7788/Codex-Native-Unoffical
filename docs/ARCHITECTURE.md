@@ -89,12 +89,22 @@ state after issuance.
 The implemented pure Host protocol foundation provides version negotiation,
 process-scoped session identity, sequenced replay with count and byte budgets,
 ACK validation, correlation namespaces, same-session write idempotency, and
-hash-only device credentials. The network and Android layers must still provide:
+hash-only device credentials. An opt-in loopback-only HTTP/WebSocket listener is
+also implemented behind `--remote-listen`/`CODEX_NATIVE_REMOTE_LISTEN`. It pairs
+one-use local tickets, requires a scoped bearer token and protocol subprotocol,
+enforces explicit body/frame/message/write-buffer/connection limits, negotiates
+before RPC, sends heartbeat pings, checks live revocation, and broadcasts a
+bounded protocol close before Host shutdown. It currently exposes only the
+read-only `host/remote/status` foundation method; ordinary Codex RPC and event
+traffic are deliberately not routed through it yet.
 
-- encrypted authenticated transport;
-- heartbeat and liveness detection;
+The remaining network and Android layers must still provide:
+
+- TLS-required non-loopback transport and certificate policy;
+- sanitized protocol-native Codex RPC/event routing with remapped IDs;
+- explicit count-and-byte-bounded application outbound queues;
 - chunked/resumable file transfer;
-- bounded outbound queues and handshake/message deadlines;
+- executable replay/gap/slow-reader and large-payload recovery gates;
 - platform-backed Android credential storage and lifecycle recovery.
 
 ## Fidelity mode
