@@ -1724,3 +1724,10 @@ _Reviewed: 2026-11-06_
   downloaded-artifact verification, native installation, Linux dependency
   compatibility, Windows ACL/installer/SmartScreen behavior, macOS Developer ID
   signing/notarization/Gatekeeper behavior, and Human use remain separate gates.
+- The first hosted run (`42091064595`) exposed one Windows-only pre-build defect
+  before artifact assembly: without a repository EOL attribute, Windows checkout
+  materialized the generated native notice with CRLF and the canonical-LF source
+  validator failed. Weakening that validator would let platform checkout policy
+  mutate a committed generated legal artifact. The repository instead pins only
+  `licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt` to `text eol=lf`; the failed run
+  was cancelled after diagnosis, and a replacement three-platform run is needed.

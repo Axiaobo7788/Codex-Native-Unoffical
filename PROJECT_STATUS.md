@@ -191,6 +191,13 @@ This file is the repository's durable project memory. Update it whenever a task 
   3.47.1's Unicode-path LSP reader with truncated JSON; an independent ASCII
   repository copy passed Flutter analysis with no issues. Hosted three-platform
   workflow execution is pending push.
+- The first manual hosted run `42091064595` reached release builds on Linux and
+  macOS but exposed a pre-build Windows source-contract failure: checkout had
+  converted the committed generated native notice to CRLF because the repository
+  declared no EOL attribute. The strict validator correctly rejected that
+  noncanonical release input. The notice is now explicitly `text eol=lf` in
+  `.gitattributes`; the failed run was cancelled after diagnosis and does not
+  count as Windows artifact evidence. A full replacement run remains required.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
