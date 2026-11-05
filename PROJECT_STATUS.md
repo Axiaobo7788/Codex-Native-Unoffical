@@ -313,8 +313,14 @@ This file is the repository's durable project memory. Update it whenever a task 
   downloads the just-built Linux artifact, rechecks its checksum, extracts it,
   rejects missing runner/Host dependencies, runs the Host, and requires the GUI
   to remain alive for an eight-second Xvfb/DBus smoke with no surviving product
-  process. Local Docker is unavailable, so this new job remains unverified until
-  a fresh hosted workflow run; it does not broaden the review-only boundary.
+  process. First hosted review run `42105201413` at `b9cce27` passed all three
+  artifact jobs plus the clean image's download, checksum, extraction, dynamic-
+  dependency, and Host checks, but the GUI aborted with status 134 because
+  `libGLESv2.so.2` was absent. The accompanying AT-SPI/Atk diagnostics preceded
+  the fatal loader error and are not treated as the cause. Ubuntu's Jammy package
+  index identifies `libgles2` as the GLESv2 runtime provider, so that package is
+  now declared; a fresh hosted run must still prove the corrected GUI path. The
+  failure remains evidence, and this does not broaden the review-only boundary.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 

@@ -1910,11 +1910,21 @@ _Reviewed: 2026-11-06_
   Its installed packages start with Flutter's documented `libgtk-3-0`,
   `libblkid1`, and `liblzma5`, add this product's `libsecret-1-0` plugin
   dependency, and add only the Xvfb/DBus/Mesa tools needed for headless launch.
-  This is a bounded Ubuntu 22.04 runtime claim, not a multi-distribution package
-  or dependency-policy decision.
+  Ubuntu's official Jammy
+  [`libgles2` package index](https://packages.ubuntu.com/jammy/libgles2)
+  identifies 1.4.0-1 as the vendor-neutral GLESv2 runtime; unlike the
+  `libgles2-mesa` transitional package, it directly provides the runtime library
+  required by Flutter's headless GL startup. This is a bounded Ubuntu 22.04
+  runtime claim, not a multi-distribution package or dependency-policy decision.
 - The job downloads the Linux artifact produced by the matrix instead of
   reusing its build directory, verifies the sidecar checksum, extracts the tar,
   checks runner/Host dependency closure, executes the Host, and treats an
   eight-second live GUI under software-rendered Xvfb as success. Early exit or a
-  surviving product process fails closed. Local Docker is unavailable, so this
-  exact clean-container path remains pending hosted execution.
+  surviving product process fails closed. In first hosted run `42105201413`, all
+  three artifact jobs passed and the clean image passed download, checksum,
+  extraction, `ldd`, and Host execution before the GUI aborted with status 134:
+  `libGLESv2.so.2` could not be opened. AT-SPI/Atk warnings were also emitted,
+  but the missing GLES loader error was the fatal condition. The declared
+  runtime set now includes the official `libgles2` provider; because local Docker
+  is unavailable, a fresh hosted run remains required and the failed run is
+  preserved as negative evidence.

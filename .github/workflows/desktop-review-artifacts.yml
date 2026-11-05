@@ -104,7 +104,8 @@ jobs:
         run: >-
           apt-get update && apt-get install -y --no-install-recommends
           ca-certificates dbus-x11 libblkid1 libegl1 libgl1 libgl1-mesa-dri
-          libglx-mesa0 libgtk-3-0 liblzma5 libsecret-1-0 procps tar xauth xvfb
+          libgles2 libglx-mesa0 libgtk-3-0 liblzma5 libsecret-1-0 procps tar
+          xauth xvfb
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
