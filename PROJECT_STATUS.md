@@ -182,9 +182,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Added cross-platform oversize/non-disclosure tests, a Unix symlink gate, and
   Windows native cases for both Everyone access and an otherwise-current-user
   DACL that remains inheritable. Local format, warning-free Clippy, and all 87
-  Linux Rust test instances pass. Native Windows compilation and ACL behavior
-  remain pending a fresh hosted run, so this entry does not yet claim the Win32
-  gate verified.
+  Linux Rust test instances pass.
 - Preserve initial hosted CI `42120072496` at `e872e36`, Windows job
   `127569808871`, as negative evidence. Windows compiled the new FFI and passed
   all 28 library plus 58 binary tests, including both ACL refusals, invalid
@@ -193,7 +191,18 @@ This file is the repository's durable project memory. Update it whenever a task 
   temporary key now correctly fails at the earlier ACL gate; two other
   integration cases passed and the Windows build was skipped. The correction
   accepts either bounded pre-child TLS failure without weakening its no-leak or
-  child-not-started assertions; a fresh hosted run remains required.
+  child-not-started assertions.
+- Final hosted CI `42120995025` at `56c107c`, Windows Server 2022 job
+  `127573718517`, passed all 28 library, 58 binary, and 3 process-integration
+  tests with no `warning:` or `error:` log line. That includes both native ACL
+  refusals, invalid-material non-disclosure, WSS pairing/auth/atomic rotation,
+  and the corrected pre-child failure path. It then built Flutter for Windows
+  and passed packaged Host `0.1.0` help plus native-license hash checks. The
+  same run's Linux/Android verify job `127573718014` passed the full repository
+  gate and debug APK verification, while macOS job `127573718461` built and
+  verified its Host/license bundle. This establishes the ADR-022 behavior on
+  the hosted Windows image; it does not establish installed-service custody,
+  installer behavior, macOS extended ACL handling, or Human acceptance.
 - Windows ACL evidence follow-up CI `42117298358` at `5ce6b6b`, Windows job
   `127560231894`, passed the prior 85 native test instances with no `warning:`
   line, then passed the Windows Flutter build and Host/license smoke. Its
@@ -223,7 +232,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   evidence: the first Windows compilation stopped before the ACL tests because
   `auth.rs` is part of the library crate while the Windows ACL module had only
   been declared by the binary crate. The follow-up declares the same private
-  module in `lib.rs`; its fresh hosted result remains pending.
+  module in `lib.rs`; the later hosted results below close that compilation
+  gap while preserving this first failure as evidence.
 - Preserve follow-up CI `42113511534`, Windows job `127547477153`, separately:
   all Remote auth tests and the hard-link rejection passed, while the two DACL
   shape tests rejected the valid canonical SDDL `D:PAI(A;OICI;FA;;;LA)` because
@@ -1593,11 +1603,11 @@ specific evidence boundaries.
   notarization, workspace access, and cleanup require a real macOS release gate.
 - Unix spool directories/files are explicitly restricted to `0700`/`0600`.
   Windows current-user-only DACL creation/migration and native regression tests
-  are hosted Windows Server 2022 verified. Operator TLS keys now have a local
-  bounded no-follow/owner/mode gate and a Windows protected-owner/DACL gate whose
-  fresh hosted evidence is pending; installed-service, installer, and macOS
-  extended-ACL validation remain separate. The current macOS Cargo phase also
-  produces only the active build architecture, not a universal Host binary.
+  are hosted Windows Server 2022 verified. Operator TLS keys now have a bounded
+  no-follow/owner/mode gate plus a hosted-Windows-verified protected-owner/DACL
+  gate; installed-service, installer, and macOS extended-ACL validation remain
+  separate. The current macOS Cargo phase also produces only the active build
+  architecture, not a universal Host binary.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
   not automatically reread a loaded item, but deduplication or explicit release

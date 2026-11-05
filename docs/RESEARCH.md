@@ -2003,12 +2003,14 @@ _Reviewed: 2026-11-06_
   separate gates; this change must not silently rewrite an external key's ACL.
 - Local Linux compilation and tests do not validate the Windows-only FFI. A
   fresh hosted Windows Server 2022 Rust test plus bundle/Host smoke is required
-  before this implementation is marked machine-verified.
+  before this implementation is marked machine-verified; the final hosted runs
+  recorded below satisfy that requirement for ADR-021.
 - Hosted CI `42112667012`, Windows job `127543995980`, first failed during
   compilation before any ACL behavior ran: `auth.rs` belongs to the library
   crate, but the Windows ACL module had only been declared in the binary crate.
-  The corrective library-module declaration still requires a fresh hosted run;
-  a later pass must not relabel this first attempt as green.
+  The corrective library-module declaration required a fresh hosted run; the
+  later passes below close that gap but must not relabel this first attempt as
+  green.
 - Follow-up CI `42113511534`, Windows job `127547477153`, compiled the Win32
   boundary and passed Remote auth plus hard-link rejection, then exposed a test
   oracle defect: Windows represented the runner's exact current-user SID as the
@@ -2103,9 +2105,9 @@ _Reviewed: 2026-11-06_
   refused.
 - The leaf-object gate does not claim installer/service provisioning, parent
   directory custody, local-administrator isolation, macOS extended-ACL
-  inspection, or installed-machine acceptance. Hosted Windows Server 2022 must
-  compile and run the protected/untrusted DACL tests before the Win32 behavior
-  is marked verified; Linux tests cannot establish it.
+  inspection, or installed-machine acceptance. Linux tests cannot establish the
+  Win32 behavior; the hosted Windows evidence below is therefore the applicable
+  gate.
 - Initial hosted CI `42120072496` at `e872e36`, Windows job `127569808871`,
   compiled the Win32 boundary and passed all 28 library and 58 binary tests,
   including both ACL refusal cases, invalid-material redaction, and WSS
@@ -2114,4 +2116,15 @@ _Reviewed: 2026-11-06_
   of producing the old rustls parser text; the test's single-message expectation
   failed and skipped the Windows build. That failure remains evidence. The
   correction accepts either pre-child TLS-material failure while retaining the
-  private-marker and child-start prohibitions; it still requires a fresh run.
+  private-marker and child-start prohibitions.
+- Final hosted CI `42120995025` at `56c107c` passed all three jobs. Windows
+  Server 2022 job `127573718517` ran 28 library, 58 binary, and 3
+  process-integration tests without a `warning:` or `error:` log line, including
+  the protected/untrusted DACL cases, invalid-material non-disclosure, WSS
+  rotation, and corrected pre-child failure. It then built the Flutter Windows
+  bundle and passed packaged Host help plus native-license hash checks. Linux/
+  Android job `127573718014` passed the full repository gate and debug APK
+  verification; macOS job `127573718461` built and verified its Host/license
+  bundle. This closes the hosted compilation/behavior requirement only for the
+  implemented leaf-object gate, not the remaining installed-service, installer,
+  directory-custody, extended-ACL, or Human gates.
