@@ -317,6 +317,7 @@
 			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/codex-native-host",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/NATIVE_HOST_THIRD_PARTY_LICENSES.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;

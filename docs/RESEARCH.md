@@ -1228,3 +1228,71 @@ _Reviewed: 2026-11-05_
   metadata history, live revocation, temporary cleanup, and Host exit all pass.
   This remains same-Linux-host evidence, not Android Secure Storage, camera/QR,
   LAN/firewall, Android TLS-provider, lifecycle, or Human acceptance evidence.
+
+### Lockfile-derived native dependency notices
+
+_Reviewed: 2026-11-05_
+
+#### Sources reviewed
+
+- `cargo-about` 0.9.3's maintained
+  [quickstart](https://embarkstudios.github.io/cargo-about/),
+  [configuration](https://embarkstudios.github.io/cargo-about/cli/generate/config.html),
+  and [output-template](https://embarkstudios.github.io/cargo-about/cli/generate/output.html)
+  documentation. It evaluates license expressions against an explicit accepted
+  set, can fail on unreadable/unresolved license material, filters a union of
+  target triples, and renders complete texts through a repository-owned
+  template. License: MIT OR Apache-2.0.
+- Cargo's official [`cargo metadata`](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html)
+  and [`cargo install`](https://doc.rust-lang.org/cargo/commands/cargo-install.html)
+  documentation. `--locked` rejects dependency-resolution drift; installing a
+  tool with its published lockfile also requires `--locked` explicitly.
+- Mozilla's official [MPL 2.0 text](https://www.mozilla.org/en-US/MPL/2.0/)
+  and [FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/). Section 3.2 and FAQ Q8
+  require a distributor of a compiled, unchanged MPL library to tell recipients
+  how to obtain its source; MPL-covered files can remain part of a larger work
+  under another license when those obligations are preserved.
+
+#### Findings that changed the implementation
+
+- The hand-maintained native summary was not a complete release artifact. The
+  first fail-closed generation found the unlisted MPL-2.0 `option-ext` 0.2.0
+  runtime crate through `dirs`, and review also exposed that direct dependency
+  `axum-server` was absent from the hand list. A successful compile is not
+  evidence that transitive license texts have been packaged.
+- Test-only dependencies must not inflate or confuse the distributed runtime
+  notice, but target-specific and build dependencies that contribute to Linux,
+  Windows, or macOS binaries must be included. One union over supported desktop
+  target triples produces a conservative shared notice for every desktop.
+- The generated artifact must be committed as reviewable source-distribution
+  evidence and regenerated in CI. Generating only during a release would make
+  legal drift invisible to ordinary code review; committing without a drift
+  check would allow it to become stale.
+- Upstream crate license files contain mixed LF/CRLF endings and, in a few cases,
+  trailing horizontal whitespace. The first staged aggregate therefore failed
+  the repository whitespace gate. Deterministic generation must normalize only
+  those representation details and the final newline, not rewrite license prose.
+- MPL-2.0 is accepted only for the unchanged `option-ext` crate. The generated
+  entry includes its upstream source URL and full license text so recipients of
+  the binary have both the notice and a reasonable source-acquisition path.
+
+#### Adopted here and validation boundary
+
+- Pinned `cargo-about` 0.9.3 runs with `--locked --workspace --fail`, explicit
+  accepted licenses, maintained rustls clarification, runtime/build dependencies,
+  and Linux/Windows/macOS target unions. The repository-owned plain-text template
+  emits exact crates.io source archives, repositories, SPDX choice, and complete
+  texts without absolute local paths, then canonicalizes line endings and
+  trailing whitespace.
+- `./tool/generate_native_licenses.sh --check` compares a fresh temporary result
+  byte-for-byte with `licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt`; `--write`
+  is the only regeneration path. CI installs the exact generator version and
+  checks drift before application validation.
+- Linux and Windows CMake installs place the notice beside the Host. The macOS
+  Host build phase installs it in `Contents/Resources` and declares that output
+  to Xcode. A real Linux debug bundle contains a byte-identical 257,985-byte,
+  mode-0644 notice beside the mode-0755 Host.
+- Windows and macOS packaging edits are source-reviewed only in this Linux
+  environment. Installed Windows/macOS artifacts and signing/notarization still
+  require their native machines; this work does not claim those platform passes
+  or legal advice.

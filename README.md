@@ -188,6 +188,7 @@ dart format --output=none --set-exit-if-changed lib test tool
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+./tool/generate_native_licenses.sh --check
 flutter analyze
 flutter test
 flutter build linux --debug
@@ -196,10 +197,15 @@ flutter build linux --debug
 Linux and Windows native builds compile and place `codex-native-host` beside the
 Flutter executable. The macOS build embeds it in `Contents/MacOS`; macOS is a
 direct, signed/notarized distribution rather than a Mac App Store sandboxed app.
+The same builds package `NATIVE_HOST_THIRD_PARTY_LICENSES.txt` beside the Host on
+Linux/Windows and under `Contents/Resources` on macOS. Regenerate it with pinned
+`cargo-about` 0.9.3 via `./tool/generate_native_licenses.sh --write` after any
+native dependency change.
 Set `CODEX_NATIVE_HOST` only for development diagnostics when using a separately
 built Host. There is intentionally no direct app-server fallback.
 
 ## License
 
-Apache License 2.0. Direct dependency provenance is recorded in
+Apache License 2.0. Dependency provenance and complete native license texts are
+recorded in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

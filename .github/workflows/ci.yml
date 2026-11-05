@@ -25,6 +25,10 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - name: Install pinned native-license generator
+        run: cargo install --locked --version 0.9.3 --features cli cargo-about
+      - run: ./tool/generate_native_licenses.sh --check
+      - run: dart run tool/verify_native_license_packaging.dart
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: cargo fmt --all -- --check
       - run: rustfmt --edition 2024 --check tool/fixtures/large_output_app_server.rs
@@ -33,3 +37,5 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build linux --debug
+      - name: Verify native licenses ship beside the Host
+        run: cmp licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt build/linux/x64/debug/bundle/NATIVE_HOST_THIRD_PARTY_LICENSES.txt

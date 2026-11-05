@@ -37,33 +37,21 @@ distributions keep their provenance visible.
 ## Native Host Rust dependencies
 
 The native Host's exact resolved versions and checksums are recorded in
-`Cargo.lock`. Its direct third-party crates are:
+`Cargo.lock`. `licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt` is generated from
+that locked runtime graph with pinned `cargo-about` 0.9.3. It lists every direct,
+transitive, build, and platform-specific runtime crate, the selected SPDX
+license, upstream source location, and complete license text. Pure development
+dependencies are intentionally excluded because they are not shipped.
 
-- `axum` 0.8.9 — <https://github.com/tokio-rs/axum> — MIT.
-- `base64` 0.22.1 — <https://github.com/marshallpierce/rust-base64> — MIT OR
-  Apache-2.0.
-- `dirs` 6.0.0 — <https://github.com/dirs-dev/dirs-rs> — MIT OR Apache-2.0.
-- `fs2` 0.4.3 — <https://github.com/danburkert/fs2-rs> — MIT OR Apache-2.0.
-- `getrandom` 0.4.3 — <https://github.com/rust-random/getrandom> — MIT OR
-  Apache-2.0.
-- `json-skimmer` 1.0.0 — <https://github.com/joeledwards/json-skimmer> — MIT.
-- `libc` 0.2.191 (Unix targets) — <https://github.com/rust-lang/libc> — MIT OR
-  Apache-2.0.
-- `pem` 3.0.6 — <https://github.com/jcreekmore/pem-rs> — MIT.
-- `rustls` 0.23.46 — <https://github.com/rustls/rustls> — Apache-2.0 OR ISC OR
-  MIT.
-- `serde` 1.0.229 and `serde_json` 1.0.154 —
-  <https://github.com/serde-rs/serde> and
-  <https://github.com/serde-rs/json> — MIT OR Apache-2.0.
-- `sha2` 0.11.0 — <https://github.com/RustCrypto/hashes> — MIT OR Apache-2.0.
-- `subtle` 2.6.1 — <https://github.com/dalek-cryptography/subtle> — BSD-3-Clause.
-- `tokio` 1.54.1 — <https://github.com/tokio-rs/tokio> — MIT.
-- `uuid` 1.29.0 — <https://github.com/uuid-rs/uuid> — MIT OR Apache-2.0.
+The graph includes unmodified `option-ext` 0.2.0 under MPL-2.0. Its exact
+published source is available at <https://crates.io/crates/option-ext/0.2.0> and
+its repository is <https://github.com/soc/option-ext.git>; the generated notice
+tells binary recipients where to obtain that source and includes the complete
+MPL-2.0 text. The rest of this application's source does not become MPL-covered
+merely because it is part of the same larger work.
 
-Direct test-only crates are `tempfile` 3.27.0
-(<https://github.com/Stebalien/tempfile>, MIT OR Apache-2.0) and `tungstenite`
-0.29.0 (<https://github.com/snapview/tungstenite-rs>, MIT OR Apache-2.0).
-
-Complete license texts for these crates and their transitive dependencies are
-available in their source distributions. Release packaging must generate and
-ship a lockfile-derived native dependency license bundle before RC.
+Linux and Windows builds place the generated notice beside
+`codex-native-host`; macOS places it in the application `Resources` directory.
+CI regenerates it with `--locked --fail` and rejects any byte-level drift before
+building. Run `./tool/generate_native_licenses.sh --write` after changing the
+native dependency graph, then commit the reviewed result.

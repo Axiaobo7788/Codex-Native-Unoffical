@@ -69,6 +69,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   distribution because App Sandbox cannot preserve the required normal Codex
   developer-workspace/toolchain model. Windows/macOS builds are not verified in
   this Linux environment.
+- The native Host's complete lockfile-derived runtime license notice is committed
+  and drift-checked with pinned `cargo-about` 0.9.3. Linux/Windows package it
+  beside the Host and macOS declares it under `Contents/Resources`; Linux bundle
+  byte identity is verified, while Windows/macOS artifact verification remains
+  native-platform work.
 - Completed assistant messages use a project-owned safe Markdown allowlist only
   while in-progress streaming remains selectable plain text. Raw HTML is inert,
   images never load, links require an explicit click and absolute `http`/`https`
@@ -120,6 +125,41 @@ This file is the repository's durable project memory. Update it whenever a task 
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Lockfile-derived native license packaging
+
+- Reviewed current `cargo-about` 0.9.3/Cargo locked-metadata behavior and
+  Mozilla's official MPL-2.0 executable-distribution guidance before selecting a
+  generation policy. The first fail-closed run exposed a real omission: the
+  runtime graph contains MPL-2.0 `option-ext` 0.2.0 through `dirs`. Review also
+  found the prior direct list omitted `axum-server`; neither result was hidden by
+  an ignore rule.
+- Added an explicit accepted-license/desktop-target policy, maintained rustls
+  clarification, repository-owned plain-text template, and pinned generator
+  wrapper. It evaluates normal, transitive, build, and unioned Linux/Windows/
+  macOS platform dependencies with `--locked --workspace --fail`, excludes only
+  unshipped development dependencies, and checks the committed 257,985-byte
+  result byte-for-byte. The output contains crate versions, upstream source
+  locations, SPDX choices, and complete license texts without local paths or
+  HTML-escaped prose.
+- Preserved a second generation failure from final staging: several upstream
+  license files carried CRLF or trailing horizontal whitespace, so the initial
+  aggregate failed `git diff --check`. The wrapper now deterministically
+  normalizes only line endings, line-end whitespace, and final newlines; the
+  validator rejects non-canonical output and the complete prose remains intact.
+- Replaced the drifting hand-maintained Rust list with the generated artifact as
+  release authority. The `option-ext` entry includes its source URL and complete
+  MPL-2.0 text; source and release documentation preserve that specific
+  executable-form notice obligation without mislabeling the whole larger work.
+- Linux and Windows CMake now install the notice beside `codex-native-host`;
+  macOS's Host build phase installs it under `Contents/Resources` and declares
+  the Xcode output. A static release-contract validator covers all three sources,
+  CI installs the exact generator/checks drift, and CI compares the Linux
+  installed copy byte-for-byte.
+- A real Linux debug bundle contains the mode-0644, byte-identical 257,985-byte
+  notice beside the mode-0755 Host. Windows and macOS packaging remain
+  source-reviewed only here; no native build, signing, notarization, or installed
+  artifact claim is made for those unavailable platforms.
 
 ### 2026-11-05 — Phase 4 versioned pairing invitation and local certificate trust
 
@@ -860,6 +900,11 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/coding_task_smoke.dart --reporter expanded`: PASS after history integration in 29 seconds; production controllers completed the exact temporary-file task, projected one changed file/one addition, observed zero approvals, paged back one turn/nine items, and cleaned both thread and workspace.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
+- `./tool/generate_native_licenses.sh --check`: PASS with pinned cargo-about
+  0.9.3; the committed runtime notice is byte-identical to fresh locked output.
+- `dart run tool/verify_native_license_packaging.dart`: PASS,
+  `NATIVE_LICENSE_PACKAGING=SOURCE_PASS`, 257,985 notice bytes, with Linux,
+  Windows, and macOS source packaging contracts present.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
 - `cargo test --workspace`: PASS, 26 Remote-library tests, 54 Host-binary tests,
   and 4 executable failure-path tests (84 total), including real TCP/WSS,
@@ -900,6 +945,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter build linux --debug` and `flutter build linux --release`: PASS with
   an executable packaged `codex-native-host` beside the Flutter binary and the
   native URL-launcher plugin.
+- Fresh `flutter build linux --debug`: PASS with byte-identical
+  `NATIVE_HOST_THIRD_PARTY_LICENSES.txt` beside the Host; notice mode is 0644 and
+  Host mode is 0755. Windows/macOS package locations are not runtime-verified.
 - Fresh Linux release-bundle Host runtime smoke after transactional storage
   recovery: PASS against stock Codex with a measured 32 ms close phase.
 - `flutter build apk --debug` from the real Unicode repository/SDK path: FAILED
@@ -1046,9 +1094,8 @@ its now-versioned trust boundary:
    idempotency, and attachment bounds explicit rather than reusing the desktop
    surface optimistically;
 4. while a physical Android device is unavailable, continue independent
-   machine-actionable RC work such as lockfile-derived native license packaging,
-   Windows/macOS build-path review, and hosted-CI readiness without claiming
-   unavailable platform passes.
+   machine-actionable RC work such as Windows/macOS build-path review and
+   hosted-CI readiness without claiming unavailable platform passes.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

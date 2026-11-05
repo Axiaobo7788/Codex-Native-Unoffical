@@ -1,0 +1,35 @@
+# cargo-about evaluates every accepted license expression fail-closed. Keep this
+# list limited to licenses that have been reviewed for the lockfile-derived
+# native Host runtime graph. MPL-2.0 is needed by the unmodified option-ext
+# transitive crate; the generated bundle includes its source location and the
+# full license text required for executable distribution notice.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+# The desktop Host ships on all supported desktop architectures. cargo-about
+# evaluates this target set as one union so platform-specific runtime crates are
+# included in the one notice file packaged on every desktop.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-pc-windows-msvc",
+    "x86_64-pc-windows-msvc",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+]
+
+ignore-build-dependencies = false
+ignore-dev-dependencies = true
+ignore-transitive-dependencies = false
+private = { ignore = true }
+
+# rustls publishes a multi-license layout that cargo-about handles through its
+# maintained, checksum-verified built-in clarification.
+workarounds = ["rustls"]

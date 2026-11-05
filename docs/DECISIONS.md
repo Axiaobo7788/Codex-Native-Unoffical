@@ -492,3 +492,50 @@ arbitrary-certificate callback exists.
 - Real Android TLS-provider, Keystore, backup/restore, LAN, lifecycle, and Human
   interaction validation remain release gates. Same-host Linux WSS evidence does
   not satisfy them.
+
+---
+
+## ADR-015 — Generate and package native dependency licenses from Cargo.lock
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+Use pinned `cargo-about` 0.9.3 with `--locked --workspace --fail`, an explicit
+accepted-license policy, and a repository-owned plain-text template to generate
+`licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt`. Evaluate normal, transitive,
+build, and platform-specific dependencies across the supported Linux, Windows,
+and macOS target union; exclude only development dependencies that do not ship.
+
+Commit the generated notice for ordinary review and make CI regenerate it into a
+temporary file and compare it byte-for-byte. Linux and Windows package it beside
+`codex-native-host`; macOS packages it in `Contents/Resources`. A dependency
+change whose license cannot be read, clarified, or satisfied must fail rather
+than silently disappear from the notice.
+
+### Why
+
+- `Cargo.lock` is the authoritative resolved native graph, while a manually
+  curated direct-dependency list omits transitive/platform crates and drifts.
+- Complete license texts and source locations must travel with distributed
+  native binaries, not exist only in registry caches or release notes.
+- A committed artifact makes license changes reviewable; deterministic CI drift
+  checking keeps it coupled to the lockfile.
+- The real graph includes unchanged MPL-2.0 `option-ext`. Its executable-form
+  obligations require telling recipients where to obtain source, which the
+  generated entry does alongside the complete license text.
+
+### Consequence
+
+- Native dependency changes require running
+  `./tool/generate_native_licenses.sh --write` with the pinned generator and
+  reviewing both policy and output changes.
+- Accepting a new license is an explicit policy review, not an automatic update.
+  Ignore rules must not be used to hide a runtime crate.
+- The shared desktop notice is conservative: it can list a platform-specific
+  crate not present in one particular binary, but it must not omit a crate used
+  by any supported desktop binary.
+- Native Windows/macOS packaging remains unverified until those platforms build
+  and inspect installed artifacts; Linux byte identity is locally verified.

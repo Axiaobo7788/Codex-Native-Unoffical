@@ -28,6 +28,12 @@ destination="${destination_dir}/codex-native-host"
 mkdir -p "${destination_dir}"
 install -m 755 "${target_dir}/${profile}/codex-native-host" "${destination}"
 
+license_source="${repository_root}/licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt"
+resources_dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+mkdir -p "${resources_dir}"
+install -m 644 "${license_source}" \
+  "${resources_dir}/NATIVE_HOST_THIRD_PARTY_LICENSES.txt"
+
 if [[ "${CODE_SIGNING_ALLOWED:-NO}" == "YES" ]]; then
   signing_identity="${EXPANDED_CODE_SIGN_IDENTITY:-}"
   signing_options=()
