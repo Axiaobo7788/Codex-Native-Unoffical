@@ -93,6 +93,7 @@ dart run tool/model_smoke.dart
 flutter test tool/coding_task_smoke.dart --reporter expanded
 flutter test tool/history_memory_benchmark.dart --reporter expanded
 dart run tool/host_memory_benchmark.dart
+dart run tool/host_lifecycle_soak.dart
 ```
 
 ## Verify

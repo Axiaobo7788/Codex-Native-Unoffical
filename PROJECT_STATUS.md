@@ -96,6 +96,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   32 ms. The earlier approximately 6.1-second GUI fallback remains historical
   negative evidence but did not reproduce in these current stock-app-server
   paths, so shutdown budgets were not speculatively shortened.
+- Added a Linux lifecycle soak that records each Host's direct Codex child from
+  `/proc`, loads a bounded thread page, closes through production transport, and
+  checks both PIDs and cache-session names. A 50-iteration release run observed
+  50 distinct Codex children, 51 ms maximum/26 ms mean shutdown, zero surviving
+  Host or Codex PIDs, and zero new session directories.
 
 ### 2026-11-05 — Phase 3 product interaction gates
 
@@ -323,6 +328,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - Real coding-task rerun after transactional storage recovery: PASS in 23
   seconds with 9 history items, a readable 6-byte output spool, exact thread and
   workspace cleanup, and a measured 63 ms Host shutdown.
+- `CODEX_NATIVE_SOAK_ITERATIONS=50 dart run tool/host_lifecycle_soak.dart`: PASS;
+  50 Host/Codex process pairs, 51 ms maximum and 26 ms mean close, zero surviving
+  PIDs, and zero new cache sessions.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
