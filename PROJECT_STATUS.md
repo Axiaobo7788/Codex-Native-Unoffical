@@ -308,6 +308,13 @@ This file is the repository's durable project memory. Update it whenever a task 
   debug runtime gate, Linux/Android builds, and native Windows/macOS builds.
   Linux distribution compatibility and GUI launch from a clean runtime image,
   installers/ACLs, signing/notarization, and Human use remain distinct.
+- The review workflow now has a dependent Linux clean-runtime job using a pinned
+  Ubuntu 22.04 image and only declared runtime/headless-display packages. It
+  downloads the just-built Linux artifact, rechecks its checksum, extracts it,
+  rejects missing runner/Host dependencies, runs the Host, and requires the GUI
+  to remain alive for an eight-second Xvfb/DBus smoke with no surviving product
+  process. Local Docker is unavailable, so this new job remains unverified until
+  a fresh hosted workflow run; it does not broaden the review-only boundary.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 

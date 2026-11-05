@@ -271,7 +271,11 @@ the result before upload. The hosted verifier also runs the extracted Host on
 the matching operating system. On Linux it checks the ELF64 x86-64 identities,
 the runner's `$ORIGIN/lib` lookup, every runtime-reachable bundled library's
 relocatable RUNPATH, and the runner/Host dependency closures with build-time
-`LD_LIBRARY_PATH` and `LD_PRELOAD` removed.
+`LD_LIBRARY_PATH` and `LD_PRELOAD` removed. A dependent job downloads the Linux
+artifact into a pinned Ubuntu 22.04 runtime-only container, rechecks the archive,
+runs the Host, and requires the GUI to survive a bounded software-rendered Xvfb
+smoke. That remains one distribution/runtime image, not general Linux package
+compatibility.
 
 To exercise the same gate locally after a platform release build, pass the
 bundle path and the matching target. The command refuses to overwrite an

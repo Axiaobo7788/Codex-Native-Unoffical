@@ -788,7 +788,10 @@ extract the completed archive and run the extracted Host smoke again. The Linux
 gate must additionally prove ELF64 x86-64 runner/Host identity, the runner's
 `$ORIGIN/lib` lookup, no unresolved runner/Host dependencies with build-time
 loader overrides removed, and relocatable runtime paths for the bundled
-libraries reachable from the runner.
+libraries reachable from the runner. After upload, download the Linux artifact
+into a pinned clean Ubuntu 22.04 container containing runtime rather than build
+dependencies, recheck its checksum and dependency closure, run the extracted
+Host, and require the GUI to remain alive for a bounded Xvfb smoke window.
 
 Wrap each bundle in a tar archive before uploading it so Unix executable modes,
 case, and macOS framework symlinks survive GitHub artifact transport. Include a

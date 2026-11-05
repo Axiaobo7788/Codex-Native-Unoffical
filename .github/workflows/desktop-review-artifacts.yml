@@ -85,3 +85,95 @@ jobs:
             build/review-artifacts/*.provenance.json
           if-no-files-found: error
           retention-days: 14
+
+  linux-clean-runtime:
+    name: Linux clean runtime (ubuntu-22.04)
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    container:
+      image: ubuntu:22.04@sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Install declared Linux runtime dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: >-
+          apt-get update && apt-get install -y --no-install-recommends
+          ca-certificates dbus-x11 libblkid1 libegl1 libgl1 libgl1-mesa-dri
+          libglx-mesa0 libgtk-3-0 liblzma5 libsecret-1-0 procps tar xauth xvfb
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: codex-native-unofficial-linux-x64-review-only
+          path: /review-artifact
+
+      - name: Verify the extracted app in the clean runtime image
+        run: |
+          set -euo pipefail
+          mapfile -t archives < <(find /review-artifact -maxdepth 1 -type f -name '*.tar.gz')
+          if [[ ${#archives[@]} -ne 1 ]]; then
+            echo 'Expected exactly one Linux review archive.' >&2
+            exit 1
+          fi
+          archive=${archives[0]}
+          (
+            cd /review-artifact
+            sha256sum -c -- "$(basename "$archive").sha256"
+          )
+          mkdir -p /opt/codex-native-review
+          tar -xzf "$archive" -C /opt/codex-native-review
+          mapfile -t payloads < <(
+            find /opt/codex-native-review -mindepth 2 -maxdepth 2 \
+              -type d -name payload
+          )
+          if [[ ${#payloads[@]} -ne 1 ]]; then
+            echo 'Expected exactly one extracted payload directory.' >&2
+            exit 1
+          fi
+          payload=${payloads[0]}
+          for executable in codex_native_unofficial codex-native-host; do
+            dependency_report=$(ldd "$payload/$executable" 2>&1)
+            if grep -Eq '=>[[:space:]]+not found([[:space:]]|$)' \
+              <<<"$dependency_report"; then
+              printf '%s\n' "$dependency_report" >&2
+              exit 1
+            fi
+          done
+          "$payload/codex-native-host" --help
+          mkdir -p /tmp/runtime-home /tmp/runtime-cache /tmp/runtime-config
+          set +e
+          HOME=/tmp/runtime-home \
+          XDG_CACHE_HOME=/tmp/runtime-cache \
+          XDG_CONFIG_HOME=/tmp/runtime-config \
+          LIBGL_ALWAYS_SOFTWARE=1 \
+            timeout --kill-after=3s 8s \
+            dbus-run-session -- \
+            xvfb-run -a -s '-screen 0 1280x720x24' \
+            "$payload/codex_native_unofficial" \
+            >/tmp/codex-native-gui.log 2>&1
+          gui_status=$?
+          set -e
+          if [[ $gui_status -ne 124 ]]; then
+            echo "GUI exited before the bounded smoke window: $gui_status" >&2
+            tail -n 80 /tmp/codex-native-gui.log >&2
+            exit 1
+          fi
+          for _ in {1..20}; do
+            if ! pgrep -f '/codex_native_unofficial([[:space:]]|$)' \
+                 >/dev/null && \
+               ! pgrep -f '/codex-native-host([[:space:]]|$)' >/dev/null; then
+              break
+            fi
+            sleep 0.1
+          done
+          if pgrep -f '/codex_native_unofficial([[:space:]]|$)' >/dev/null || \
+             pgrep -f '/codex-native-host([[:space:]]|$)' >/dev/null; then
+            echo 'GUI smoke left a product process alive.' >&2
+            ps -ef >&2
+            exit 1
+          fi
+          echo 'LINUX_CLEAN_RUNTIME=PASS'

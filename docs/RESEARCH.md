@@ -1897,3 +1897,24 @@ _Reviewed: 2026-11-06_
   dynamic path in any bundled `.so`. This closes the identified relocation
   defect; it still does not establish a package-manager format, clean minimal-
   runtime GUI launch, another distribution's ABI compatibility, or signing.
+
+### Clean-runtime follow-up
+
+- GitHub's official workflow syntax permits container jobs only on Linux and
+  requires an Ubuntu GitHub-hosted runner for hosted container execution. The
+  workflow therefore adds a dependent Ubuntu 22.04 container job rather than
+  assuming the release builder's installed development packages represent an
+  end-user runtime.
+- The image is pinned to manifest digest
+  `sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11`.
+  Its installed packages start with Flutter's documented `libgtk-3-0`,
+  `libblkid1`, and `liblzma5`, add this product's `libsecret-1-0` plugin
+  dependency, and add only the Xvfb/DBus/Mesa tools needed for headless launch.
+  This is a bounded Ubuntu 22.04 runtime claim, not a multi-distribution package
+  or dependency-policy decision.
+- The job downloads the Linux artifact produced by the matrix instead of
+  reusing its build directory, verifies the sidecar checksum, extracts the tar,
+  checks runner/Host dependency closure, executes the Host, and treats an
+  eight-second live GUI under software-rendered Xvfb as success. Early exit or a
+  surviving product process fails closed. Local Docker is unavailable, so this
+  exact clean-container path remains pending hosted execution.
