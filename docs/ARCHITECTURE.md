@@ -179,6 +179,17 @@ protocol, device, scope, timestamp, and bearer bounds are fail-closed. There is
 no arbitrary bad-certificate callback, global trust mutation, TOFU after ticket
 disclosure, or silent trust migration.
 
+On Android, the same form can receive that exact invitation from an optional
+foreground QR scanner. Camera access begins only after an explicit Scan QR
+action. The scanner recognizes QR only, returns no frame to Dart, validates the
+first decoded string through the authoritative invitation adapter and expiry,
+then fills the obscured field without starting network pairing. Manual paste is
+always retained. Camera lifecycle calls are serialized and stop after the app
+leaves the foreground; camera, back-camera, and autofocus hardware remain
+optional manifest features. The bundled ML Kit model avoids a first-use model
+download, but its documented performance/utilization metrics are a dependency
+privacy property, not application pairing traffic.
+
 The returned record is written and read back through secure storage before a new
 Remote lifecycle generation starts. An older credential load is stopped first,
 so a late absent result cannot overwrite a successful pairing. If the app is
@@ -201,9 +212,9 @@ The remaining network and Android layers must still provide:
   including Android TLS-provider and Keystore behavior;
 - chunked/resumable file transfer;
 - broader notification/diff delivery only after method-specific payload bounds;
-- QR presentation for the existing versioned invitation only after payload and
-  error-correction limits are measured; manual selectable/copyable transfer is
-  implemented;
+- physical-device evidence for the exact desktop QR to Android scanner path,
+  including permission denial/settings recovery, camera lifecycle, rotation,
+  dense symbols, and both trust modes; manual transfer remains complete;
 - paged/selectable Remote metadata and later conversation features only after
   their Host semantics are bounded end to end.
 

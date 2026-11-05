@@ -699,3 +699,70 @@ generated application notices.
 - Future invitation versions may reuse this projection only after their exact
   payload and capacity behavior are reviewed. This ADR does not authorize a
   QR-only wire format or automatic clipboard access.
+
+---
+
+## ADR-019 — Keep Android pairing scans explicit, bounded, and offline-ready
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Android exposes a Scan QR action only from the unpaired onboarding surface. It
+opens a foreground camera route, decodes QR symbols only, rejects missing,
+oversized, noncanonical, malformed, or expired content through the existing
+`codex-native-pairing-v1` adapter, and returns the first valid invitation to the
+obscured form field. A scan never starts the pairing exchange automatically;
+the user still reviews the device name and selects Pair and connect. Manual
+paste remains available before, during, and after permission or camera failure.
+
+Use `mobile_scanner` 7.5.0 with its bundled Android ML Kit model rather than the
+first-use Play Services download. Configure a 1280x720 request, QR-only format,
+duplicate suppression, no returned image, and no auto-zoom. The camera starts
+only after the user's Scan QR action, releases across background lifecycle
+states, and is disposed when the route closes. Declare camera, back-camera, and
+autofocus features as optional so devices without those capabilities retain the
+complete manual pairing path.
+
+### Why
+
+- The invitation already defines strict size, endpoint, ticket, expiry, and TLS
+  trust semantics. A scanner is an untrusted intake surface and must not create
+  a second parser, accept a QR-only schema, or bypass the explicit pairing act.
+- A bundled model is immediately usable on trusted local networks and on
+  Android builds without a first-use model download. Restricting recognition to
+  QR and omitting frame return keeps the Dart boundary to small decoded text.
+- `mobile_scanner` has substantially broader adoption and lifecycle repair
+  history than the newly reviewed lightweight alternatives. The maintained
+  `qr_code_scanner_plus` alternative explicitly describes its Android native
+  ZXing integration as outdated and unmaintained. The ML-free
+  `lightweight_barcode_scanner` 0.4.1 has a promising bounded native design but
+  was only 27 days old, with one pub.dev like and 194 downloads at review time;
+  adopting it before real-device evidence would exchange a measured size and
+  privacy cost for a much younger lifecycle surface.
+
+### Consequence
+
+- The Android runtime resolves bundled `com.google.mlkit:barcode-scanning`
+  17.3.0, AndroidX Camera 1.6.1, and their graph. The model works offline, but
+  ML Kit is governed by Google's terms and may send performance/utilization
+  metrics or contact Google for runtime maintenance. Camera frames, decoded
+  text, and results remain on-device according to Google's documentation. This
+  distinction must appear in dependency notices and future store/privacy
+  disclosures; the app must not claim the library is network-silent.
+- Auto-zoom remains disabled, avoiding its additional session/zoom/bounding-box
+  metrics. Any future enablement requires a separate UX, privacy, and device
+  review.
+- The measured universal debug APK grew from 191,469,644 to 214,274,417 bytes
+  in this environment. That is not per-device release size evidence and remains
+  a reason to re-evaluate the decoder after physical-device gates.
+- The package also declares a macOS plugin, so Flutter registers its native
+  code in macOS builds even though the product exposes no desktop scan action.
+  Hosted macOS compilation and later release-size review must preserve that
+  boundary.
+- Unit/widget tests and Android compilation cannot establish camera focus,
+  permission-settings recovery, rotation, dense Version 40 recognition, or
+  cross-device interoperability. Both system-root and pairing-bound invitations
+  remain physical-device and Human release gates.

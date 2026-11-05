@@ -34,6 +34,7 @@ dependencies:
   flutter_markdown_plus: ^1.0.12
   flutter_secure_storage: ^11.2.0
   markdown: ^7.3.1
+  mobile_scanner: ^7.5.0
   qr: ^4.0.1
   url_launcher: ^6.3.3
 
@@ -58,6 +59,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - THIRD_PARTY_NOTICES.md
 
   # To add assets to your application, add an assets section, like this:
   # assets:

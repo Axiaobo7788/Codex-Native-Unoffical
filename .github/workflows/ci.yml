@@ -46,6 +46,7 @@ jobs:
       - run: ./tool/generate_native_licenses.sh --check
       - run: dart run tool/verify_native_license_packaging.dart
       - run: dart run tool/verify_android_release_signing.dart
+      - run: dart run tool/verify_android_pairing_scanner.dart
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: cargo fmt --all -- --check
       - run: rustfmt --edition 2024 --check tool/fixtures/large_output_app_server.rs

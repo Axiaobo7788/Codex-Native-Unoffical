@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, trusted desktop setup/device management, and bounded desktop QR presentation are implemented; real-device validation, Android QR scanning, writes/approvals, and full conversation integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, trusted desktop setup/device management, bounded desktop QR presentation, and explicit bounded Android QR intake are implemented; real-device validation, writes/approvals, and full conversation integration do not exist yet**
 
 ## Current repository state
 
@@ -118,12 +118,15 @@ This file is the repository's durable project memory. Update it whenever a task 
   Android can now decode one bounded versioned invitation, exchange its one-use
   ticket over system-root or invitation-scoped certificate HTTPS, verify and
   save the issued bearer/trust atomically, reuse the same trust for WSS, connect
-  only after readback, and explicitly clear an unreadable/revoked profile. There
+  only after readback, and explicitly clear an unreadable/revoked profile.
   Desktop can project the exact invitation into one medium-correction QR symbol
   when it fits, without splitting or rewriting the protocol; manual copy remains
   complete for oversized payloads. The transient ticket and QR now disappear at
-  expiry. There is still no Remote write/approval path, full conversation
-  surface, Android QR scanner, or physical-device evidence.
+  expiry. Android can scan QR only after an explicit action, validate the first
+  exact current invitation, and fill the obscured form without automatically
+  pairing. Manual paste remains complete after invalid input, unavailable camera,
+  or denied permission. There is still no Remote write/approval path, full
+  conversation surface, or physical-device evidence.
 - GitHub Actions CI now fixes Ubuntu 22.04 x64, Windows Server 2022 x64, and
   macOS 15 arm64 runners; uses exact Flutter 3.47.1 and Rust 1.89.0 toolchains;
   builds Linux, Android, Windows, and macOS; and validates the packaged desktop
@@ -139,6 +142,53 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Bounded Android Remote pairing QR intake
+
+- Reviewed Android's camera permission/optional-feature guidance, Flutter
+  lifecycle behavior, `mobile_scanner` 7.5.0 source and lifecycle fixes, ML Kit
+  bundled/unbundled behavior, terms/privacy disclosures, and two offline
+  alternatives. Selected the mature scanner with the bundled model while
+  recording its size/metrics tradeoff and the much younger ML-free alternative
+  rather than treating “offline model” as “network-silent runtime.” ADR-019
+  captures the durable boundary.
+- Added an injectable Android-only Scan QR action and full-screen scanner. It
+  requests 1280x720 QR-only input, returns no image to Dart, suppresses duplicate
+  detections, disables auto-zoom, and serializes start/stop lifecycle ownership.
+  Missing, whitespace-modified, oversized, malformed, and expired results remain
+  on the scanner with redacted guidance; the first valid canonical invitation
+  fills the obscured field exactly once and never starts pairing automatically.
+- Camera permission is requested only after the affirmative Scan QR action.
+  Denial, unsupported hardware, scanner failure, and cancellation retain the
+  complete manual-paste route. Android declares `CAMERA` while camera-any, back
+  camera, and autofocus remain optional so Play filtering does not exclude
+  devices that can use manual pairing.
+- Added dependency provenance and Google ML Kit terms/privacy behavior to
+  `THIRD_PARTY_NOTICES.md`, packaged that file as an application asset, and added
+  `verify_android_pairing_scanner.dart` plus a CI source gate. The resolved model
+  is bundled and immediately available, but its graph includes Google data
+  transport and documented performance/utilization metrics. Auto-zoom remains
+  off to avoid its extra session/zoom/candidate-box metrics.
+- Six new unit/widget tests cover exact current invitation bounds,
+  invalid-then-valid and duplicate intake, lifecycle ordering, delayed-start
+  disposal, permission-denied fallback, and scan-without-auto-submit. The full
+  Flutter suite passes 167/167, fatal-info Dart analysis passes, and Flutter
+  analysis passes from an independent ASCII repository copy. Direct-path Flutter
+  analysis again fails in the SDK LSP reader on this Unicode path and is
+  preserved as the known toolchain defect rather than a project analysis pass.
+- Linux debug build and exact packaged notice comparison pass. Direct Gradle
+  Android `assembleDebug` passes 215 tasks through a temporary ASCII Flutter SDK
+  alias; the merged manifest contains the permission plus three optional
+  features, and the APK contains the exact third-party notice asset. The
+  universal debug APK is 214,274,417 bytes, 22,804,773 bytes above the prior
+  measurement. Existing AGP/Kotlin and SDK XML warnings remain, with an added
+  `mobile_scanner` legacy-DSL deprecation. The alias was removed and ignored
+  `local.properties` restored.
+- Physical permission prompts, Settings recovery, camera focus/rotation,
+  camera-less/front-only devices, dense Version 40 recognition, system-root and
+  pairing-bound end-to-end scans, process death, and Human acceptance remain
+  unrun device gates. Hosted CI for this code-bearing change is pending its
+  deliberate push.
 
 ### 2026-11-06 — Bounded desktop Remote pairing QR presentation
 
@@ -1292,12 +1342,13 @@ its now-versioned trust boundary:
    an available emulator/physical device and real Host: cold start,
    foreground/background, process death, network loss/recovery, Host restart,
    credential rejection/revocation, wrong/expired/rotated certificate,
-   unreadable Keystore state, pairing-save failure, and backup/restore behavior;
-2. implement Android QR scanning only after reviewing bounded decoder intake,
-   camera selection/permission and foreground/background lifecycle behavior,
-   plus dependency licensing. Desktop generation now preserves the existing
-   invitation version, medium correction, and manual fallback; do not invent a
-   QR-only security schema;
+   unreadable Keystore state, pairing-save failure, backup/restore behavior,
+   camera permission denial/settings recovery, rotation, dense QR intake, and
+   exact desktop-to-phone interoperability;
+2. while a device remains unavailable, fix the already reproduced compact
+   desktop-window overflows in the runtime header, split workspace, and Remote
+   setup summary without weakening the full desktop layout or calling a narrow
+   widget test Human visual acceptance;
 3. only after pairing/setup is device-verified, extend the Remote product beyond
    bounded read-only metadata. Keep pagination, output, writes, approvals,
    idempotency, and attachment bounds explicit rather than reusing the desktop

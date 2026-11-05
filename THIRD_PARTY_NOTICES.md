@@ -1,9 +1,9 @@
 # Third-party notices
 
 Flutter release builds include the license texts collected from every bundled
-Dart/Flutter package in the generated application notices. The direct packages
-introduced for native Markdown presentation are also identified here so source
-distributions keep their provenance visible.
+Dart/Flutter package in the generated application notices. Direct packages and
+native runtime components with product-specific provenance or terms are also
+identified here so source distributions keep their origin visible.
 
 ## flutter_markdown_plus 1.0.12
 
@@ -41,6 +41,37 @@ distributions keep their provenance visible.
 - License: BSD 3-Clause. The package is pure Dart, performs QR generation
   offline, and its complete license is distributed in the generated Flutter
   application notices.
+
+## mobile_scanner 7.5.0
+
+- Source: <https://github.com/juliansteenbakker/mobile_scanner>
+- Copyright 2022 Julian Steenbakker.
+- License: BSD 3-Clause. The complete license is distributed with the package
+  and in the generated Flutter application notices.
+- The product enables this scanner only on Android. The package also declares a
+  macOS plugin, so Flutter registers that native code in macOS builds even
+  though this product never opens the scanner there.
+
+## Android pairing-scanner native runtime
+
+The default Android path of `mobile_scanner` resolves the bundled
+`com.google.mlkit:barcode-scanning:17.3.0` artifact and its
+`com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1` runtime.
+Those artifacts are governed by the
+[ML Kit Terms of Service](https://developers.google.com/ml-kit/terms), not by
+this project's Apache-2.0 license. The barcode models are packaged in the app,
+so scanning does not wait for a first-use model download. Google documents that
+images, decoded text, and results are processed on-device and are not sent to
+Google, while ML Kit can contact Google for fixes, model or accelerator updates,
+and sends performance and utilization metrics. Store/privacy disclosures must
+reflect that behavior. This project disables ML Kit auto-zoom, which avoids the
+additional auto-zoom session and bounding-box metrics documented by Google.
+
+Android camera capture is supplied by AndroidX Camera 1.6.1. Its POM declares
+Apache License 2.0 and BSD 3-Clause because Camera Core includes libyuv. Kotlin
+coroutines Android 1.11.0 is Apache-2.0. Their complete licenses remain in their
+upstream artifacts and source repositories. The resolved Android graph is also
+recorded by Gradle and must be re-audited when the scanner version changes.
 
 ## Native Host Rust dependencies
 

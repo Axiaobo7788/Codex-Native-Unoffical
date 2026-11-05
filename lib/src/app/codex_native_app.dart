@@ -22,6 +22,7 @@ import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/settings/remote_admin_controller.dart';
 import '../features/settings/remote_pairing_qr.dart';
+import '../features/settings/remote_pairing_scanner.dart';
 import '../features/threads/thread_list_controller.dart';
 import '../transport/remote/remote_onboarding.dart';
 import 'runtime_controller.dart';
@@ -32,10 +33,12 @@ class CodexNativeApp extends StatefulWidget {
     super.key,
     this.runtimeController,
     this.shutdownHandler,
+    this.remotePairingScannerLauncher,
   });
 
   final RuntimeController? runtimeController;
   final Future<void> Function()? shutdownHandler;
+  final RemotePairingScannerLauncher? remotePairingScannerLauncher;
 
   @override
   State<CodexNativeApp> createState() => _CodexNativeAppState();
@@ -110,6 +113,9 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
         settingsController: _settingsController,
         diffController: _diffController,
         defaultWorkingDirectory: Directory.current.path,
+        remotePairingScannerLauncher:
+            widget.remotePairingScannerLauncher ??
+            (Platform.isAndroid ? showRemotePairingScanner : null),
       ),
     );
   }
@@ -142,6 +148,7 @@ class RuntimeStatusScreen extends StatelessWidget {
     required this.settingsController,
     required this.diffController,
     required this.defaultWorkingDirectory,
+    this.remotePairingScannerLauncher,
   });
 
   final RuntimeController controller;
@@ -152,6 +159,7 @@ class RuntimeStatusScreen extends StatelessWidget {
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final String defaultWorkingDirectory;
+  final RemotePairingScannerLauncher? remotePairingScannerLauncher;
 
   @override
   Widget build(BuildContext context) {
@@ -208,7 +216,10 @@ class RuntimeStatusScreen extends StatelessWidget {
                         RuntimeConnectionState.remoteUnpaired) ...[
                       const SizedBox(height: ThemeTokens.space4),
                       Expanded(
-                        child: _RemotePairingPanel(controller: controller),
+                        child: _RemotePairingPanel(
+                          controller: controller,
+                          scannerLauncher: remotePairingScannerLauncher,
+                        ),
                       ),
                     ] else if (controller.snapshot.state ==
                             RuntimeConnectionState
@@ -232,9 +243,13 @@ class RuntimeStatusScreen extends StatelessWidget {
 }
 
 class _RemotePairingPanel extends StatefulWidget {
-  const _RemotePairingPanel({required this.controller});
+  const _RemotePairingPanel({
+    required this.controller,
+    required this.scannerLauncher,
+  });
 
   final RuntimeController controller;
+  final RemotePairingScannerLauncher? scannerLauncher;
 
   @override
   State<_RemotePairingPanel> createState() => _RemotePairingPanelState();
@@ -245,6 +260,7 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
   final TextEditingController _deviceNameController = TextEditingController(
     text: 'Android device',
   );
+  String? _scanMessage;
 
   @override
   void dispose() {
@@ -296,6 +312,25 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
                 border: OutlineInputBorder(),
               ),
             ),
+            if (widget.scannerLauncher case final scannerLauncher?) ...[
+              const SizedBox(height: ThemeTokens.space2),
+              OutlinedButton.icon(
+                key: const ValueKey('remote-pairing-scan-button'),
+                onPressed: state.isBusy
+                    ? null
+                    : () => unawaited(_scanInvitation(scannerLauncher)),
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan QR'),
+              ),
+            ],
+            if (_scanMessage case final scanMessage?) ...[
+              const SizedBox(height: ThemeTokens.space2),
+              Text(
+                scanMessage,
+                key: const ValueKey('remote-pairing-scan-message'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: ThemeTokens.space3),
             TextField(
               key: const ValueKey('remote-device-name-field'),
@@ -342,6 +377,21 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
         ),
       ),
     );
+  }
+
+  Future<void> _scanInvitation(
+    RemotePairingScannerLauncher scannerLauncher,
+  ) async {
+    final scanned = await scannerLauncher(context);
+    if (!mounted || scanned == null) {
+      return;
+    }
+    _invitationController
+      ..text = scanned
+      ..selection = TextSelection.collapsed(offset: scanned.length);
+    setState(() {
+      _scanMessage = 'QR invitation loaded. Review the device name, then tap Pair and connect.';
+    });
   }
 }
 

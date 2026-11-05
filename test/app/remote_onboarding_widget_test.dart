@@ -37,6 +37,10 @@ void main() {
     expect(find.textContaining('bearer'), findsOneWidget);
     expect(find.text('New thread'), findsNothing);
     expect(find.text('Send'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('remote-pairing-scan-button')),
+      findsNothing,
+    );
 
     await tester.enterText(
       find.byKey(const ValueKey('remote-pairing-invitation-field')),
@@ -53,6 +57,53 @@ void main() {
     expect(onboarding.invitation, 'codex-native-pairing-v1.fixture');
     expect(onboarding.deviceName, 'Test phone');
     expect(find.textContaining('Paste a complete, current'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('scanned invitation is reviewable and never auto-submitted', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final lifecycle = _FakeLifecycle(RemoteLifecyclePhase.unpaired);
+    final onboarding = _FakeOnboarding();
+    final controller = RuntimeController(
+      remoteLifecycle: lifecycle,
+      remoteOnboarding: onboarding,
+    );
+    addTearDown(controller.shutdown);
+    const scanned = 'codex-native-pairing-v1.scanned-fixture';
+
+    await tester.pumpWidget(
+      CodexNativeApp(
+        runtimeController: controller,
+        shutdownHandler: () async {},
+        remotePairingScannerLauncher: (context) async => scanned,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('remote-pairing-scan-button')));
+    await tester.pumpAndSettle();
+
+    final invitationField = tester.widget<TextField>(
+      find.byKey(const ValueKey('remote-pairing-invitation-field')),
+    );
+    expect(invitationField.controller?.text, scanned);
+    expect(onboarding.pairCalls, 0);
+    expect(find.textContaining('QR invitation loaded'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('remote-pair-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('remote-pair-button')));
+    await tester.pump();
+
+    expect(onboarding.pairCalls, 1);
+    expect(onboarding.invitation, scanned);
+    expect(onboarding.deviceName, 'Android device');
     expect(tester.takeException(), isNull);
   });
 

@@ -106,7 +106,9 @@ clipboard action, renders the exact invitation as one bounded medium-correction
 QR code when it fits, and confirms device revocation without exposing stored
 bearers. Oversized invitations retain their complete manual-copy fallback, and
 expired tickets plus their QR projections are removed automatically. Android
-camera scanning, full conversation features, and real-device validation remain.
+now offers explicit QR-only camera intake that validates and fills the existing
+obscured invitation field without auto-pairing; manual paste remains available.
+Full conversation features and real-device validation remain.
 
 ## Run locally
 
@@ -183,7 +185,14 @@ transferring the invitation through a trusted local channel. QR rendering is
 available only when the exact invitation fits one standard medium-correction
 symbol at an integer module scale. It never splits, compresses, or rewrites the
 protocol envelope; the desktop always retains selectable text and an explicit
-copy action. Android camera scanning is not implemented yet.
+copy action. On Android, Scan QR requests camera access only after the button is
+selected, accepts the first exact current versioned invitation, and returns it
+to the obscured form for separate Pair and connect confirmation. Missing camera
+hardware, denied permission, invalid codes, and unusual oversized invitations
+retain manual paste. The barcode model is bundled for immediate use, but ML Kit
+may send documented performance/utilization metrics; camera frames and decoded
+invitation content remain on-device. Real camera and cross-device behavior are
+not yet physically validated.
 
 ## Android release signing
 
@@ -213,6 +222,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ./tool/generate_native_licenses.sh --check
 dart run tool/verify_android_release_signing.dart
+dart run tool/verify_android_pairing_scanner.dart
 flutter analyze
 flutter test
 flutter build linux --debug

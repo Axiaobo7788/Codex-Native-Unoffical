@@ -1527,3 +1527,98 @@ _Reviewed: 2026-11-06_
   selection, lifecycle, bounded decode input, accessibility/manual fallback,
   and dependency licensing receive a separate review. Desktop generation does
   not grant permission to loosen the invitation parser or trust boundary.
+
+## Android pairing QR scanner
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- [`mobile_scanner` 7.5.0](https://pub.dev/packages/mobile_scanner), its
+  controller/widget source, changelog, BSD 3-Clause license, and Android Gradle
+  graph. The package uses CameraX and ML Kit on Android, supports QR-only format
+  selection, exposes explicit start/stop lifecycle ownership, and defaults to a
+  bundled barcode model unless an unbundled Gradle property is enabled.
+- Flutter's official
+  [`AppLifecycleState`](https://api.flutter.dev/flutter/dart-ui/AppLifecycleState.html)
+  and `WidgetsBindingObserver` contracts. Android's official
+  [permission declaration](https://developer.android.com/training/permissions/declaring),
+  [runtime permission](https://developer.android.com/training/permissions/requesting),
+  and [`uses-feature`](https://developer.android.com/guide/topics/manifest/uses-feature-element)
+  guidance establish that camera access should follow an affirmative feature
+  action, denial must degrade gracefully, and camera/autofocus features must be
+  explicitly optional when the app remains functional without them.
+- Google's official [Android barcode-scanning](https://developers.google.com/ml-kit/vision/barcode-scanning/android),
+  [ML Kit terms/privacy](https://developers.google.com/ml-kit/terms), and
+  [Play data-disclosure](https://developers.google.com/ml-kit/android-data-disclosure)
+  pages. Barcode pixels and results are processed on-device. The bundled model
+  is immediately available, but ML Kit may contact Google for maintenance and
+  sends performance/utilization metrics. Auto-zoom adds session, zoom, and
+  candidate-box metrics, so it remains disabled.
+- `qr_code_scanner_plus` 2.3.2 and `lightweight_barcode_scanner` 0.4.1 were
+  reviewed as Android/iOS-only offline alternatives. The former's own README
+  calls its Android native ZXing integration outdated and unmaintained. The
+  latter has a notably clean QR-only native pipeline and Apache-2.0 vendored
+  ZXing-C++ provenance, but at review time it was 27 days old with one like and
+  194 downloads, so its camera/permission lifecycle has too little independent
+  use to replace the mature option before physical-device validation.
+
+### Findings that changed the implementation
+
+- “Bundled” means that the model is immediately present, not that the runtime
+  is network-silent. The resolved `com.google.mlkit:barcode-scanning` 17.3.0
+  graph includes `play-services-mlkit-barcode-scanning` 18.3.1 and Google data
+  transport. Notices and future store disclosures must preserve the documented
+  metrics behavior; the product text says only that camera frames and decoded
+  invitation content stay on-device.
+- A standard Version 40 QR has 177 modules before its quiet zone. The scanner
+  requests 1280x720 rather than the package's 640x480 Android default, while
+  still requiring the code to occupy a useful part of the frame. Physical focus
+  and dense-symbol recognition are not inferable from a successful build.
+- Permission is requested only when the user selects Scan QR. A denied,
+  permanently denied, unavailable, or interrupted camera never removes or
+  disables manual paste. The manifest declares camera-any, back camera, and
+  autofocus as optional to avoid filtering camera-less/front-only devices.
+- Scanner intake is not trusted. It keeps only decoded text, accepts the first
+  exact current canonical `codex-native-pairing-v1` value, and rejects null,
+  whitespace-modified, oversized, malformed, and expired candidates without
+  logging them. It closes back to the obscured form and does not call pairing;
+  Pair and connect remains a separate user action.
+- Camera operations are serialized. The initial permission prompt's inactive
+  transition is ignored before permission exists so an early resume cannot
+  strand the scanner stopped. Hidden/paused/detached always queue stop behind a
+  pending start, so a camera acquired after real backgrounding is immediately
+  released. After permission, inactive also stops and resumed queues start.
+  Route disposal waits behind the same operation chain before disposing the
+  driver, while also retaining the package's repaired session-release behavior.
+
+### Adopted result and evidence boundary
+
+- Added an injectable scanner driver and full-screen route. Production uses
+  `mobile_scanner` 7.5.0 with manual start, `DetectionSpeed.noDuplicates`, QR
+  only, no returned frame, no auto-zoom, and 1280x720 capture. Tests use a fake
+  driver, so Linux test execution never opens a platform camera.
+- Five scanner tests cover canonical/current bounds, invalid-then-valid intake,
+  duplicate valid detection, lifecycle ordering, delayed-start disposal, and
+  permission-denied manual fallback. The onboarding widget proves a scanned
+  value only fills the field and remains unsubmitted until Pair and connect is
+  selected.
+- Android source declares `CAMERA` plus optional camera-any, back-camera, and
+  autofocus features. A source validator pins the reviewed dependency/settings,
+  rejects an unbundled first-use-download flag, and requires dependency terms to
+  ship as a Flutter asset.
+- Direct Gradle `assembleDebug` passed with 215 tasks after using the established
+  temporary ASCII Flutter-SDK alias. The merged manifest contains the expected
+  permission and optional features. The universal debug APK is 214,274,417
+  bytes, 22,804,773 bytes larger than the prior 191,469,644-byte evidence. This
+  is debug/universal packaging evidence, not per-device release download or
+  installed-size evidence.
+- The build retains existing AGP 9 built-in-Kotlin and SDK XML skew warnings and
+  adds a `mobile_scanner` legacy Android DSL deprecation. A successful assembly
+  does not erase those warnings. The package also registers a native macOS
+  plugin even though this product exposes scanning only on Android; hosted
+  macOS compilation remains required after publication.
+- No physical Android camera, runtime permission dialog, Settings recovery,
+  process death, rotation, front-only/camera-less device, dense Version 40
+  recognition, or desktop-to-phone interoperability was exercised. These remain
+  explicit device/Human gates rather than inferred passes.
