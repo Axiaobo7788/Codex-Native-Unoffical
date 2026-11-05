@@ -45,6 +45,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   descriptors, and implements capped `host/status`, `stat`, `readRange`, and
   `tail` RPCs. Flutter locates Codex and the bundled Host independently and has
   no silent direct-app-server fallback.
+- Unpublished output spools are transactional: write, parse-abandonment, flush,
+  rename, or metadata failures remove partial artifacts and return their bytes
+  to the session budget. Linux disk-full simulation degrades the selected output
+  to an unavailable descriptor without reinjecting it; invalid or unwritable
+  cache roots fail with context before Codex is spawned.
 - Historical command rows load full items for only one selected turn. List
   requests prefer upstream output deferral; a deferred selected item uses the
   gated `thread/items/read` API, whose response is still sanitized by the Host.
@@ -69,6 +74,28 @@ This file is the repository's durable project memory. Update it whenever a task 
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 3 Host storage-failure and shutdown gates
+
+- Found and fixed a concrete session-budget leak: an output that had stored
+  earlier chunks and was then abandoned or failed retained those byte counts
+  after its partial file was removed, causing long sessions to hit the 2 GiB cap
+  prematurely.
+- Made output publication transactional across data flush/rename and metadata
+  write/rename. Any unpublished path now closes the handle, removes data,
+  metadata, and `.part` artifacts, releases its exact accounted bytes, and emits
+  an unavailable descriptor instead of a broken reference or original output.
+- Added deterministic Linux `/dev/full` coverage, abandoned-output reuse,
+  post-data/pre-metadata failure cleanup, invalid-cache-root handling, and an
+  executable-level unwritable-cache gate proving Host exits with bounded context
+  before starting the configured Codex child.
+- Added close-phase timing to runtime, thread, and real coding-task smokes. The
+  current release Host closed in 108 ms after initialization, 58 ms after
+  list/read/resume/start/delete, and 63 ms after a completed coding turn plus
+  bounded output read; a fresh Linux release bundle closed its packaged Host in
+  32 ms. The earlier approximately 6.1-second GUI fallback remains historical
+  negative evidence but did not reproduce in these current stock-app-server
+  paths, so shutdown budgets were not speculatively shortened.
 
 ### 2026-11-05 — Phase 3 product interaction gates
 
@@ -251,7 +278,8 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter test tool/history_memory_benchmark.dart --reporter expanded`: PASS twice; 1,000 source turns retained 100. RSS deltas were 1,482,752/1,564,672 bytes for turn paging and 29,085,696/31,879,168 bytes for ten sequential 3 MiB discarded outputs. These are Linux debug-test measurements, not cross-platform guarantees.
 - `cargo fmt --all -- --check`: PASS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 19 tests.
+- `cargo test --workspace`: PASS, 23 unit tests and 2 executable integration
+  tests, including deterministic storage-failure and cache-startup gates.
 - `cargo build --release --workspace`: PASS.
 - Release `codex-native-host` real-runtime smoke: PASS; one process carried a
   Host status request plus stock app-server initialize/initialized and reported
@@ -267,6 +295,8 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `flutter build linux --debug` and `flutter build linux --release`: PASS with
   an executable packaged `codex-native-host` beside the Flutter binary and the
   native URL-launcher plugin.
+- Fresh Linux release-bundle Host runtime smoke after transactional storage
+  recovery: PASS against stock Codex with a measured 32 ms close phase.
 - `flutter build apk --debug` from the real Unicode repository/SDK path: FAILED
   before compilation because `android/settings.gradle.kts` observed the SDK as
   `/home/axiaobo/ææ¡£/flutter`. With only the ignored
@@ -280,7 +310,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   removed all three processes. Existing ATK/cursor-theme warnings remained.
 - Host-routed `runtime_smoke`, `thread_smoke`, `model_smoke`, `turn_smoke`, and
   `approval_smoke`: PASS. The approval smoke rejected rather than approved its
-  command as designed.
+  command as designed. Current close-phase measurements were 108 ms for the
+  initialization-only runtime smoke and 58 ms after the thread smoke's
+  list/read/resume/start/delete lifecycle.
 - Enhanced `coding_task_smoke`: first run FAILED at the newly exercised
   `thread/items/read` capability gate; after declaring `experimentalApi`, rerun
   PASS in 27 seconds with 11 history items and a verified 7,443-byte Host output
@@ -288,6 +320,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - Final packaged-release reruns after strict output reference/range/EOF
   validation: PASS in 21/27 seconds with 9/10 history items, readable 6-byte
   selected command outputs, and exact test thread/workspace cleanup.
+- Real coding-task rerun after transactional storage recovery: PASS in 23
+  seconds with 9 history items, a readable 6-byte output spool, exact thread and
+  workspace cleanup, and a measured 63 ms Host shutdown.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
@@ -323,8 +358,10 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - The 3/30/300 MiB memory gate uses a purpose-built serializer-shaped fixture,
   not a real Codex thread containing a 300 MiB command result. Its strong
   sublinear Host/Dart evidence does not establish real app-server RSS, Windows or
-  macOS allocator behavior, disk-full recovery in an installed bundle, or Human
-  log-viewer acceptance.
+  macOS allocator behavior, real installed-filesystem exhaustion/recovery, or
+  Human log-viewer acceptance. Linux `/dev/full` output failure and invalid or
+  unwritable cache startup are now deterministic gates, but are not equivalent
+  to filling each supported platform's installed cache volume.
 - `thread/items/read` requires the negotiated experimental API capability in the
   installed server. Protocol adapters and tests cover this version, but future
   schema changes remain a compatibility risk.
@@ -343,7 +380,13 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   remains unresolved for very long sessions.
 - The real GUI launch logged host GTK/Wayland warnings for ATK socket embedding and a missing cursor-theme asset. They did not prevent the window, handshake, or child cleanup, but should be rechecked during later Linux UI work.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
-- After loading thread state, the tested stock app-server did not exit within the 3-second stdin-EOF window or the following 3-second SIGTERM window. The SIGKILL fallback completed at about 6.1 seconds and no child survived GUI exit. Shutdown is bounded and correct, but the latency/source should be investigated before release polish.
+- A prior GUI run after loading thread state did not exit within the 3-second
+  stdin-EOF window or the following 3-second SIGTERM window; SIGKILL completed at
+  about 6.1 seconds and no child survived. Current release runtime/thread/coding
+  smokes closed in 108/58/63 ms and a freshly packaged runtime smoke closed in
+  32 ms; none reproduced the fallback. Preserve the earlier negative result and
+  recheck during installed-build/platform soak, but do not present it as current
+  deterministic latency.
 - The app-server protocol evolves; version differences must stay inside typed protocol adapters.
 - Long-running sessions must not cause Flutter to hydrate unbounded history.
   Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
@@ -360,8 +403,10 @@ Continue Phase 3 with the remaining presentation and platform gates:
 2. run Windows and macOS native builds plus packaged process/output/lifecycle RSS
    gates; on macOS also validate nested signing, notarization, ordinary workspace
    access, and no surviving child;
-3. exercise disk-full/unwritable-cache behavior end to end and investigate the
-   stock app-server's observed six-second shutdown fallback before RC.
+3. exercise real installed-volume exhaustion and lifecycle soak on supported
+   platforms; deterministic Linux storage faults and current shutdown smokes now
+   pass, while the historical six-second fallback remains a non-reproduced watch
+   item.
 
 Do not begin Android remote transport or ecosystem management until the remaining
 Phase 3 RC gates are exhausted or require unavailable platform/Human evidence.

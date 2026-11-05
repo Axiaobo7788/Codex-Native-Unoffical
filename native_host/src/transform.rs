@@ -453,6 +453,7 @@ mod tests {
             b"{\"aggregatedOutput\":\"\\ud83d\"}\n",
         ] {
             assert!(fixture.transform(invalid, 2).is_err());
+            assert_eq!(fixture.store.stored_bytes(), 0);
         }
     }
 

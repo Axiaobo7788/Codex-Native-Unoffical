@@ -196,7 +196,10 @@ Future<void> _runSmoke() async {
     conversation.dispose();
     diff.dispose();
     settings.dispose();
+    final shutdown = Stopwatch()..start();
     await runtime.shutdown();
+    shutdown.stop();
+    stdout.writeln('HOST_SHUTDOWN_MS=${shutdown.elapsedMilliseconds}');
     runtime.dispose();
     await workspace.delete(recursive: true);
     stdout.writeln('TEMP_WORKSPACE_CLEANED=true');

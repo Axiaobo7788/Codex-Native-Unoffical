@@ -27,14 +27,26 @@ fn run() -> io::Result<()> {
     let Some(config) = Config::parse()? else {
         return Ok(());
     };
-    let store = Arc::new(SpoolStore::open(
-        config.cache_dir,
-        config.max_output_bytes,
-        config.max_session_bytes,
-        config.max_forward_message_bytes,
-        config.max_read_bytes,
-        config.stale_age,
-    )?);
+    let cache_dir = config.cache_dir.clone();
+    let store = Arc::new(
+        SpoolStore::open(
+            config.cache_dir,
+            config.max_output_bytes,
+            config.max_session_bytes,
+            config.max_forward_message_bytes,
+            config.max_read_bytes,
+            config.stale_age,
+        )
+        .map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!(
+                    "failed to initialize Host output cache at `{}`: {error}",
+                    cache_dir.display()
+                ),
+            )
+        })?,
+    );
 
     let mut command = Command::new(&config.codex_executable);
     command

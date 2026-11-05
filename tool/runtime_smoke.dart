@@ -39,6 +39,11 @@ Future<void> main() async {
     }
     exitCode = 1;
   } finally {
-    await transport?.close();
+    if (transport != null) {
+      final shutdown = Stopwatch()..start();
+      await transport.close();
+      shutdown.stop();
+      stdout.writeln('HOST_SHUTDOWN_MS=${shutdown.elapsedMilliseconds}');
+    }
   }
 }

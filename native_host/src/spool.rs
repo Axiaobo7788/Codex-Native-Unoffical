@@ -229,6 +229,11 @@ impl SpoolStore {
         &self.session
     }
 
+    #[cfg(test)]
+    pub(crate) fn stored_bytes(&self) -> u64 {
+        self.stored_bytes.load(Ordering::Relaxed)
+    }
+
     fn data_path(&self, output_ref: &str) -> PathBuf {
         self.session.join(format!("{output_ref}{DATA_SUFFIX}"))
     }
@@ -275,10 +280,7 @@ impl OutputSpool<'_> {
                 .ok_or_else(|| io::Error::other("output spool is unavailable"))
                 .and_then(|file| file.write_all(&bytes[..allowed]));
             if result.is_err() {
-                self.failed = true;
-                self.truncated = true;
-                self.file.take();
-                let _ = fs::remove_file(&self.part_path);
+                self.fail_storage();
                 return Ok(());
             }
             self.stored_bytes += allowed as u64;
@@ -293,18 +295,36 @@ impl OutputSpool<'_> {
     }
 
     pub(crate) fn finish(mut self) -> io::Result<OutputDescriptor> {
-        self.finalized = true;
         if self.failed || self.file.is_none() {
-            return Ok(OutputDescriptor {
-                output_ref: None,
-                bytes: self.bytes,
-                stored_bytes: 0,
-                truncated: true,
-                available: false,
-            });
+            self.fail_storage();
+            self.finalized = true;
+            return Ok(self.unavailable_descriptor());
         }
 
-        let mut file = self.file.take().expect("checked above");
+        if self.publish().is_err() {
+            self.fail_storage();
+            self.finalized = true;
+            return Ok(self.unavailable_descriptor());
+        }
+
+        self.finalized = true;
+        Ok(OutputDescriptor {
+            output_ref: Some(self.output_ref.clone()),
+            bytes: self.bytes,
+            stored_bytes: self.stored_bytes,
+            truncated: self.truncated,
+            available: true,
+        })
+    }
+
+    fn max_output_remaining(&self) -> u64 {
+        self.store
+            .max_output_bytes
+            .saturating_sub(self.stored_bytes)
+    }
+
+    fn publish(&mut self) -> io::Result<()> {
+        let mut file = self.file.take().expect("checked before publish");
         file.flush()?;
         drop(file);
         let data_path = self.store.data_path(&self.output_ref);
@@ -323,28 +343,53 @@ impl OutputSpool<'_> {
         )?;
         metadata.flush()?;
         drop(metadata);
-        fs::rename(metadata_part, metadata_path)?;
-
-        Ok(OutputDescriptor {
-            output_ref: Some(self.output_ref.clone()),
-            bytes: self.bytes,
-            stored_bytes: self.stored_bytes,
-            truncated: self.truncated,
-            available: true,
-        })
+        fs::rename(metadata_part, metadata_path)
     }
 
-    fn max_output_remaining(&self) -> u64 {
-        self.store
-            .max_output_bytes
-            .saturating_sub(self.stored_bytes)
+    fn fail_storage(&mut self) {
+        self.failed = true;
+        self.truncated = true;
+        self.file.take();
+        self.cleanup_unpublished_files();
+        self.release_unpublished_bytes();
+    }
+
+    fn cleanup_unpublished_files(&self) {
+        let metadata_path = self.store.metadata_path(&self.output_ref);
+        for path in [
+            self.part_path.clone(),
+            self.store.data_path(&self.output_ref),
+            metadata_path.with_extension("json.part"),
+            metadata_path,
+        ] {
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    fn release_unpublished_bytes(&mut self) {
+        if self.stored_bytes > 0 {
+            self.store
+                .stored_bytes
+                .fetch_sub(self.stored_bytes, Ordering::Relaxed);
+            self.stored_bytes = 0;
+        }
+    }
+
+    fn unavailable_descriptor(&self) -> OutputDescriptor {
+        OutputDescriptor {
+            output_ref: None,
+            bytes: self.bytes,
+            stored_bytes: 0,
+            truncated: true,
+            available: false,
+        }
     }
 }
 
 impl Drop for OutputSpool<'_> {
     fn drop(&mut self) {
         if !self.finalized {
-            let _ = fs::remove_file(&self.part_path);
+            self.fail_storage();
         }
     }
 }
@@ -600,6 +645,86 @@ mod tests {
         assert!(descriptor.truncated);
         assert!(!descriptor.available);
         assert!(descriptor.output_ref.is_none());
+    }
+
+    #[test]
+    fn abandoned_output_releases_its_session_budget_and_partial_file() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 7, 7);
+        let part_path = {
+            let mut abandoned = store.start_output();
+            let path = abandoned.part_path.clone();
+            abandoned.write_decoded(b"12345").unwrap();
+            assert_eq!(store.stored_bytes(), 5);
+            path
+        };
+        assert_eq!(store.stored_bytes(), 0);
+        assert!(!part_path.exists());
+
+        let mut replacement = store.start_output();
+        replacement.write_decoded(b"123456").unwrap();
+        let descriptor = replacement.finish().unwrap();
+        assert_eq!(descriptor.stored_bytes, 6);
+        assert!(!descriptor.truncated);
+    }
+
+    #[test]
+    fn finalization_failure_removes_published_data_and_releases_budget() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 1024, 2048);
+        let mut output = store.start_output();
+        let output_ref = output.output_ref.clone();
+        output.write_decoded(b"temporary").unwrap();
+        let metadata_part = store.metadata_path(&output_ref).with_extension("json.part");
+        fs::create_dir(&metadata_part).unwrap();
+
+        let descriptor = output.finish().unwrap();
+        assert!(!descriptor.available);
+        assert!(descriptor.output_ref.is_none());
+        assert_eq!(descriptor.stored_bytes, 0);
+        assert_eq!(store.stored_bytes(), 0);
+        assert!(!store.data_path(&output_ref).exists());
+        assert!(
+            !store
+                .session_path()
+                .join(format!("{output_ref}{DATA_SUFFIX}{PART_SUFFIX}"))
+                .exists()
+        );
+        fs::remove_dir(metadata_part).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn disk_full_write_becomes_unavailable_without_leaking_budget() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 1024, 2048);
+        let mut output = store.start_output();
+        let part_path = output.part_path.clone();
+        output.file = Some(OpenOptions::new().write(true).open("/dev/full").unwrap());
+
+        output.write_decoded(b"cannot be persisted").unwrap();
+        let descriptor = output.finish().unwrap();
+        assert_eq!(descriptor.bytes, 19);
+        assert_eq!(descriptor.stored_bytes, 0);
+        assert!(descriptor.truncated);
+        assert!(!descriptor.available);
+        assert!(descriptor.output_ref.is_none());
+        assert_eq!(store.stored_bytes(), 0);
+        assert!(!part_path.exists());
+    }
+
+    #[test]
+    fn rejects_a_cache_root_that_is_not_a_directory() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("cache-root");
+        fs::write(&root, b"not a directory").unwrap();
+
+        let error = SpoolStore::open(root, 1024, 2048, 1024 * 1024, 64, Duration::from_secs(60))
+            .expect_err("a file cannot be used as the cache root");
+        assert!(matches!(
+            error.kind(),
+            io::ErrorKind::AlreadyExists | io::ErrorKind::NotADirectory
+        ));
     }
 
     #[test]
