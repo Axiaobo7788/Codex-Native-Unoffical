@@ -1873,3 +1873,27 @@ _Reviewed: 2026-11-06_
   and the product exposes scanning only on Android. The current gate therefore
   does not misreport it as a Linux startup dependency; removal or platform-
   selective packaging remains a separate size/hygiene investigation.
+- Clean hosted review run `42100825202` at
+  `c1803d422325060f0859c2cc7e78846f24d0c675` passed the complete Linux x64,
+  Windows x64, and macOS arm64 release paths. Every platform assembled and
+  self-verified its archive, then extracted it and successfully executed the
+  packaged Host before upload; Linux additionally passed the ELF/RUNPATH/`ldd`
+  gate on its extracted payload. Companion ordinary CI `42100804703` passed all
+  three jobs, including the same gate on the Linux debug bundle plus Linux,
+  Android, Windows, and macOS builds.
+- All three new workflow artifacts were downloaded and independently verified
+  again. Structural verification and sidecar SHA-256 comparison passed for
+  Linux, Windows, and macOS, while Linux also passed `--native-runtime` after
+  download. The archives are Linux 13,388,731 bytes /
+  `18e215546c46bf2fa6ea7ae03e8337d7ec986aacb7192e33257ac31de28e6835`,
+  Windows 14,675,440 bytes /
+  `aff93b6e1f9e93aeded91c55f1c0ad42a51a08929fdfb229365435f17fc1b639`,
+  and macOS 21,630,993 bytes /
+  `8c62800837c8d50692453bdf6f53e13a764efcc357335a0744215f4c685245e2`.
+  Their provenance binds the exact clean revision, Flutter 3.47.1, Rust 1.89.0,
+  workflow origin `42100825202:1`, and the unchanged review-only/signing gaps.
+  Direct inspection of the downloaded Linux payload shows `$ORIGIN` on both
+  linked plugin RUNPATHs and no `/home/runner` or `linux/flutter/ephemeral`
+  dynamic path in any bundled `.so`. This closes the identified relocation
+  defect; it still does not establish a package-manager format, clean minimal-
+  runtime GUI launch, another distribution's ABI compatibility, or signing.

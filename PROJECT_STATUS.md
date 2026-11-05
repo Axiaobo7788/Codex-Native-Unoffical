@@ -153,7 +153,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   exact sidecar checksum comparison. A later native-runtime audit preserved a
   narrower Linux defect that those structural checks could not see: both linked
   plugin libraries retained a build-tree RUNPATH. The CMake/runtime-gate fix is
-  locally verified; a fresh hosted run is required for clean-commit evidence.
+  now locally and on clean hosted runners verified by run `42100825202` at
+  `c1803d4`, including extracted native-runtime checks on all three platforms.
   None of these artifacts proves signing, native installation, publisher
   identity, or Human acceptance.
 - Android release variants no longer inherit the public debug certificate or
@@ -290,9 +291,23 @@ This file is the repository's durable project memory. Update it whenever a task 
   actionlint 1.7.12 accepts both workflows. Direct-path `flutter analyze` still
   reproduces Flutter 3.47.1's known Unicode-path LSP truncated-JSON failure; the
   later ASCII pass does not erase that toolchain result.
-  Windows/macOS extracted Host execution will receive native hosted evidence
-  after push; Linux distribution compatibility, GUI launch from a clean runtime
-  image, installers/ACLs, signing/notarization, and Human use remain distinct.
+  Hosted review run `42100825202` at clean revision `c1803d4` then passed Linux
+  x64, Windows x64, and macOS arm64 release build, assembly/self-verification,
+  extracted native-runtime verification, and upload. Downloaded copies all pass
+  independent structural verification and exact sidecar checksum comparison;
+  Linux also passes the native runtime gate after download. Its two linked
+  plugin RUNPATHs are exactly `$ORIGIN`, and no `.so` dynamic section retains
+  `/home/runner` or `linux/flutter/ephemeral`. The inner archives are Linux
+  13,388,731 bytes at
+  `18e215546c46bf2fa6ea7ae03e8337d7ec986aacb7192e33257ac31de28e6835`,
+  Windows 14,675,440 bytes at
+  `aff93b6e1f9e93aeded91c55f1c0ad42a51a08929fdfb229365435f17fc1b639`,
+  and macOS 21,630,993 bytes at
+  `8c62800837c8d50692453bdf6f53e13a764efcc357335a0744215f4c685245e2`.
+  Companion CI `42100804703` passed all three jobs, including the ordinary Linux
+  debug runtime gate, Linux/Android builds, and native Windows/macOS builds.
+  Linux distribution compatibility and GUI launch from a clean runtime image,
+  installers/ACLs, signing/notarization, and Human use remain distinct.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 
@@ -1528,10 +1543,10 @@ its now-versioned trust boundary:
    bounded read-only metadata. Keep pagination, output, writes, approvals,
    idempotency, and attachment bounds explicit rather than reusing the desktop
    surface optimistically;
-3. while a physical Android device is unavailable, prove the corrected Linux
-   relocation and all three extracted Host smokes on a fresh clean-commit
-   review-artifact run, then continue independent clean-runtime/dependency/ACL
-   and release-documentation work.
+3. while a physical Android device is unavailable, continue independent clean-
+   runtime/dependency/ACL and release-documentation work now that the corrected
+   Linux relocation and all three extracted Host smokes have clean hosted
+   evidence.
    Keep signing, notarization, installer/store identity, GitHub permission
    increases, publication, and Human acceptance behind their explicit gates.
 
@@ -1546,10 +1561,9 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: latest completed code-bearing run `42095935941` at `e71e5ac`
+- Hosted CI: latest completed code-bearing run `42100804703` at `c1803d4`
   passed exact-Rust, Dart/Flutter, Linux, Android debug, Windows x64, and macOS
-  arm64 gates; the newer local Linux relocation/runtime-gate slice still needs
-  hosted evidence.
+  arm64 gates, including the new Linux debug runtime-closure check.
 
 ### Phase 2 — Local Codex workflow
 
