@@ -1,0 +1,284 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
+import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
+import 'package:codex_native_unofficial/src/domain/approval_models.dart';
+import 'package:codex_native_unofficial/src/domain/history_models.dart';
+import 'package:codex_native_unofficial/src/domain/model_models.dart';
+import 'package:codex_native_unofficial/src/domain/output_models.dart';
+import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
+import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:codex_native_unofficial/src/domain/turn_models.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('defers command output and navigates only bounded byte windows', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final runtime = _OutputRuntimeController();
+    addTearDown(runtime.closeStreams);
+
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Output thread'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Load turn details'), findsOneWidget);
+    expect(runtime.itemListCalls, 0);
+    expect(runtime.itemReadCalls, 0);
+    expect(runtime.tailLengths, isEmpty);
+
+    await tester.tap(find.text('Load turn details'));
+    await tester.pumpAndSettle();
+    expect(runtime.itemListCalls, 1);
+    expect(find.text('Fetch output safely'), findsOneWidget);
+    expect(runtime.itemReadCalls, 0);
+
+    await tester.tap(find.text('Fetch output safely'));
+    await tester.pumpAndSettle();
+    expect(runtime.itemReadCalls, 1);
+    expect(find.text('View stored output (truncated)'), findsOneWidget);
+    expect(runtime.tailLengths, isEmpty);
+
+    await tester.tap(find.text('View stored output (truncated)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Command output'), findsOneWidget);
+    expect(
+      find.text(
+        'Only 150000 of 200000 bytes were retained by the configured Host limit.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
+    expect(find.textContaining('TAIL'), findsOneWidget);
+    expect(runtime.tailLengths, [64 * 1024]);
+    expect(runtime.rangeReads, isEmpty);
+
+    await tester.tap(find.widgetWithText(TextButton, 'First'));
+    await tester.pumpAndSettle();
+    expect(find.text('Window at byte 0 of 150000'), findsOneWidget);
+    expect(find.textContaining('START'), findsOneWidget);
+    expect(runtime.rangeReads.single, (offset: 0, length: 64 * 1024 + 3));
+
+    await tester.tap(find.widgetWithText(TextButton, 'Next'));
+    await tester.pumpAndSettle();
+    expect(find.text('Window at byte 65536 of 150000'), findsOneWidget);
+    expect(runtime.rangeReads.last.offset, 64 * 1024);
+    expect(runtime.rangeReads.last.length, 64 * 1024 + 3);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Previous'));
+    await tester.pumpAndSettle();
+    expect(find.text('Window at byte 0 of 150000'), findsOneWidget);
+    expect(runtime.rangeReads.last.offset, 0);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Tail'));
+    await tester.pumpAndSettle();
+    expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
+    expect(runtime.tailLengths, [64 * 1024, 64 * 1024]);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _OutputRuntimeController extends RuntimeController {
+  _OutputRuntimeController() : outputBytes = _makeOutput();
+
+  static const descriptor = OutputDescriptor(
+    reference: 'bounded-output-ref',
+    bytes: 200000,
+    storedBytes: 150000,
+    truncated: true,
+    available: true,
+  );
+
+  final Uint8List outputBytes;
+  final StreamController<TurnEvent> _turns =
+      StreamController<TurnEvent>.broadcast();
+  final StreamController<ApprovalEvent> _approvals =
+      StreamController<ApprovalEvent>.broadcast();
+  final ThreadSummary thread = ThreadSummary(
+    id: 'output-thread',
+    sessionId: 'output-session',
+    preview: 'Output thread',
+    cwd: '/workspace',
+    createdAt: DateTime.utc(2026),
+    updatedAt: DateTime.utc(2026),
+    status: ThreadRuntimeStatus.idle,
+    ephemeral: false,
+  );
+  final List<int> tailLengths = [];
+  final List<({int offset, int length})> rangeReads = [];
+  var itemListCalls = 0;
+  var itemReadCalls = 0;
+
+  @override
+  RuntimeSnapshot get snapshot => const RuntimeSnapshot(
+    state: RuntimeConnectionState.connected,
+    executablePath: '/usr/bin/codex',
+    userAgent: 'output-app-server',
+    processId: 43,
+  );
+
+  @override
+  Stream<TurnEvent> get turnEvents => _turns.stream;
+
+  @override
+  Stream<ApprovalEvent> get approvalEvents => _approvals.stream;
+
+  @override
+  Future<void> start() async {
+    notifyListeners();
+  }
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) async =>
+      ThreadPage(threads: [thread], nextCursor: null);
+
+  @override
+  Future<ThreadSummary> readThread(String threadId) async => thread;
+
+  @override
+  Future<ThreadSummary> resumeThread(String threadId) async => thread;
+
+  @override
+  Future<ThreadSummary> startThread(ThreadStartOptions options) async => thread;
+
+  @override
+  Future<void> deleteThread(String threadId) async {}
+
+  @override
+  Future<ModelPage> listModels(ModelListQuery query) async =>
+      const ModelPage(models: [], nextCursor: null);
+
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) async =>
+      HistoryTurnPage(
+        turns: [
+          HistoryTurn(
+            id: 'output-turn',
+            status: TurnRuntimeStatus.completed,
+            items: const [
+              HistoryItem(
+                id: 'output-command',
+                turnId: 'output-turn',
+                kind: HistoryItemKind.activity,
+                text: 'Generated bounded output',
+                isCommand: true,
+              ),
+            ],
+          ),
+        ],
+        nextCursor: null,
+      );
+
+  @override
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async {
+    itemListCalls += 1;
+    return const HistoryItemPage(
+      items: [
+        HistoryItem(
+          id: 'output-command',
+          turnId: 'output-turn',
+          kind: HistoryItemKind.activity,
+          text: 'Generated bounded output',
+          outputDeferred: true,
+          isCommand: true,
+        ),
+      ],
+      nextCursor: null,
+    );
+  }
+
+  @override
+  Future<List<HistoryItem>> readHistoryItems({
+    required String threadId,
+    required String turnId,
+    required List<String> itemIds,
+  }) async {
+    itemReadCalls += 1;
+    return const [
+      HistoryItem(
+        id: 'output-command',
+        turnId: 'output-turn',
+        kind: HistoryItemKind.activity,
+        text: 'Generated bounded output',
+        output: descriptor,
+        isCommand: true,
+      ),
+    ];
+  }
+
+  @override
+  Future<OutputChunk> readOutputRange({
+    required String reference,
+    required int offset,
+    required int length,
+  }) async {
+    rangeReads.add((offset: offset, length: length));
+    return _chunk(reference, offset, length);
+  }
+
+  @override
+  Future<OutputChunk> readOutputTail({
+    required String reference,
+    required int length,
+  }) async {
+    tailLengths.add(length);
+    return _chunk(reference, outputBytes.length - length, length);
+  }
+
+  OutputChunk _chunk(String reference, int offset, int length) {
+    final end = (offset + length).clamp(0, outputBytes.length);
+    return OutputChunk(
+      reference: reference,
+      offset: offset,
+      data: Uint8List.fromList(outputBytes.sublist(offset, end)),
+      bytes: descriptor.bytes,
+      storedBytes: descriptor.storedBytes,
+      truncated: descriptor.truncated,
+      eof: end == outputBytes.length,
+    );
+  }
+
+  @override
+  Future<TurnHandle> startTurn(TurnStartOptions options) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> interruptTurn({
+    required String threadId,
+    required String turnId,
+  }) async {}
+
+  @override
+  Future<void> decideApproval({
+    required Object requestId,
+    required ApprovalDecision decision,
+  }) async {}
+
+  @override
+  Future<void> shutdown() async {}
+
+  Future<void> closeStreams() async {
+    await _turns.close();
+    await _approvals.close();
+    dispose();
+  }
+
+  static Uint8List _makeOutput() {
+    final bytes = Uint8List(descriptor.storedBytes);
+    for (var index = 0; index < bytes.length; index += 1) {
+      bytes[index] = 97 + index % 26;
+    }
+    bytes.setRange(0, 5, ascii.encode('START'));
+    bytes.setRange(bytes.length - 4, bytes.length, ascii.encode('TAIL'));
+    return bytes;
+  }
+}

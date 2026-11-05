@@ -64,12 +64,42 @@ void main() {
       expect(controller.text, isNot(contains('�')));
     },
   );
+
+  test(
+    'surfaces a bounded read failure and permits an explicit retry',
+    () async {
+      final bytes = Uint8List.fromList(utf8.encode('retryable output'));
+      final gateway = _OutputGateway(bytes, tailFailures: 1);
+      final controller = OutputViewerController(
+        gateway: gateway,
+        descriptor: OutputDescriptor(
+          reference: 'retry-output',
+          bytes: bytes.length,
+          storedBytes: bytes.length,
+          truncated: false,
+          available: true,
+        ),
+        pageBytes: 8,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadInitial();
+      expect(controller.chunk, isNull);
+      expect(controller.loading, isFalse);
+      expect(controller.errorMessage, contains('temporary read failure'));
+
+      await controller.loadTail();
+      expect(controller.errorMessage, isNull);
+      expect(controller.text, 'e output');
+    },
+  );
 }
 
 class _OutputGateway implements OutputGateway {
-  _OutputGateway(this.bytes);
+  _OutputGateway(this.bytes, {this.tailFailures = 0});
 
   final Uint8List bytes;
+  int tailFailures;
   var largestRead = 0;
 
   @override
@@ -96,7 +126,13 @@ class _OutputGateway implements OutputGateway {
   Future<OutputChunk> readOutputTail({
     required String reference,
     required int length,
-  }) async => _chunk(reference, bytes.length - length, length);
+  }) async {
+    if (tailFailures > 0) {
+      tailFailures -= 1;
+      throw StateError('temporary read failure');
+    }
+    return _chunk(reference, bytes.length - length, length);
+  }
 
   OutputChunk _chunk(String reference, int offset, int length) {
     final end = (offset + length).clamp(0, bytes.length);

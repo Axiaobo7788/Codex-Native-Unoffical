@@ -622,6 +622,7 @@ class _ExecutionSettingsDialog extends StatelessWidget {
     ),
     child: DropdownButtonHideUnderline(
       child: DropdownButton<String>(
+        key: ValueKey('execution-$label'),
         value: value,
         isDense: true,
         isExpanded: true,
@@ -747,6 +748,7 @@ class _DiffView extends StatelessWidget {
             children: [
               DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
+                  key: const ValueKey('diff-file-picker'),
                   value: selected.path,
                   isExpanded: true,
                   items: [

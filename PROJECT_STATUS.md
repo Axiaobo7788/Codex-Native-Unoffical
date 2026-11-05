@@ -70,6 +70,27 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Completed
 
+### 2026-11-05 — Phase 3 product interaction gates
+
+- Added a production-App widget gate for the complete stored-command path:
+  summary rows defer full turn items, the selected turn exposes one deferred
+  command, explicit fetch reads only that item, and opening the viewer then
+  reads only a 64 KiB tail window.
+- Exercised truncated-output messaging and First/Previous/Next/Tail navigation
+  against a 150,000-byte retained fixture. Assertions cover exact byte offsets,
+  the three-byte UTF-8 look-ahead ceiling, and the absence of output-range calls
+  before the corresponding user actions.
+- Added a failed-tail-read gate proving the controller exposes the error, leaves
+  no false chunk, and recovers only after an explicit retry.
+- Added production-App gates for both dangerous execution overrides. Canceling
+  `never` approval and `danger-full-access` preserves inherited Codex defaults;
+  confirming each choice is required before those exact overrides reach the
+  next real `TurnStartOptions`.
+- Added a 4,000-line/2-file diff widget gate. The UI displays the bounded
+  truncation warning and aggregate counts, builds the first visible line but not
+  the off-screen last line, and switches to the second file without retaining a
+  parallel rendered list.
+
 ### 2026-11-05 — Phase 3 bounded assistant Markdown
 
 - Researched the current Codex TUI renderer, `flutter_markdown_plus`, Dart
@@ -219,7 +240,7 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 68 tests.
+- `flutter test --reporter expanded`: PASS, 72 tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -333,8 +354,9 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 Continue Phase 3 with the remaining presentation and platform gates:
 
-1. add widget/Human coverage for populated range-backed logs, truncation,
-   navigation, deferred fetch, large diffs, and dangerous settings;
+1. obtain Human visual/interaction acceptance for populated range-backed logs,
+   truncated output, large diffs, dangerous settings, and Markdown selection/link
+   behavior; their production-App machine gates now pass;
 2. run Windows and macOS native builds plus packaged process/output/lifecycle RSS
    gates; on macOS also validate nested signing, notarization, ordinary workspace
    access, and no surviving child;
