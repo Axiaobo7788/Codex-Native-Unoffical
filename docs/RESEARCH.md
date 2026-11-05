@@ -1706,9 +1706,11 @@ _Reviewed: 2026-11-06_
   boundary. Independent verification checks the outer digest and byte count,
   safe archive root, extraction, inner/outer metadata identity, exact payload
   inventory, sums, preserved layout, and release-only AOT markers.
-- Three focused tests prove successful Linux assembly/reverification, rejection
+- Four focused tests prove successful Linux assembly/reverification, rejection
   after one post-provenance archive byte is appended, and fail-closed behavior
-  when `lib/libapp.so` is absent. A real local Flutter 3.47.1/Rust 1.89.0 Linux
+  when `lib/libapp.so` is absent. The fourth models the hosted macOS bundle:
+  framework binaries may be non-executable, while a non-executable app launcher
+  still fails closed. A real local Flutter 3.47.1/Rust 1.89.0 Linux
   release bundle produced a 13,250,342-byte archive with digest
   `2ce56b20e1ae712c8c2fb05ce2f747c0ea76c7f4f705e75e47b44296fde7b8d4`;
   it self-verified, preserved executable modes, carried both exact notices, and
@@ -1730,4 +1732,19 @@ _Reviewed: 2026-11-06_
   validator failed. Weakening that validator would let platform checkout policy
   mutate a committed generated legal artifact. The repository instead pins only
   `licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt` to `text eol=lf`; the failed run
-  was cancelled after diagnosis, and a replacement three-platform run is needed.
+  was cancelled after diagnosis. Replacement run `42091784712` at `76bf94c`
+  proved that source notice and its packaged Windows copy now pass the exact-LF
+  gate, and Linux assembled, independently verified, and uploaded successfully.
+  It also preserved two new negative results. Windows reached assembly but the
+  post-build repository state was dirty; the then-current exception did not
+  expose the path. The clean-provenance rule remains fail-closed, and its error
+  now carries bounded porcelain status for a diagnostic rerun. macOS reached
+  assembly but rejected `Contents/Frameworks/App.framework/App` for lacking an
+  execute bit. That file is the AOT framework payload rather than a process
+  launch target, so execute permission is now required only for the app runner
+  and bundled Host; framework files remain mandatory, non-empty, inventoried,
+  digested, and mode-preserved. Run `42091784712` remains failed and is not
+  three-platform artifact evidence. Normal CI run `42091764792` at the same
+  commit passed Ubuntu verification and Linux/Android debug builds plus native
+  Windows x64 and macOS arm64 bundle gates. A corrected review-artifact rerun is
+  still required.

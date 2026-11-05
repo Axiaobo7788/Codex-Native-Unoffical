@@ -70,6 +70,40 @@ void main() {
       expect(await fixture.output.list().toList(), isEmpty);
     },
   );
+
+  test(
+    'macOS framework binaries may be non-executable while launchers may not',
+    () async {
+      final fixture = await _createMacOsFixture();
+      addTearDown(() => fixture.root.delete(recursive: true));
+
+      final result = await assembleDesktopReviewArtifact(fixture.config);
+      await verifyDesktopReviewArtifact(result.provenance);
+
+      final launcher = File(
+        '${fixture.bundle.path}/Contents/MacOS/codex_native_unofficial',
+      );
+      final chmod = await Process.run('chmod', ['644', launcher.path]);
+      if (chmod.exitCode != 0) {
+        throw StateError('could not remove executable fixture permission');
+      }
+
+      await expectLater(
+        assembleDesktopReviewArtifact(
+          fixture.config.copyWithOutput(
+            Directory('${fixture.root.path}/invalid-output')..createSync(),
+          ),
+        ),
+        throwsA(
+          isA<DesktopReviewArtifactException>().having(
+            (error) => error.message,
+            'message',
+            contains('Contents/MacOS/codex_native_unofficial'),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 Future<_LinuxFixture> _createLinuxFixture() async {
@@ -138,6 +172,111 @@ Future<_LinuxFixture> _createLinuxFixture() async {
 
 final class _LinuxFixture {
   _LinuxFixture({
+    required this.root,
+    required this.bundle,
+    required this.output,
+    required this.config,
+  });
+
+  final Directory root;
+  final Directory bundle;
+  final Directory output;
+  final DesktopReviewArtifactConfig config;
+}
+
+Future<_MacOsFixture> _createMacOsFixture() async {
+  final root = await Directory.systemTemp.createTemp('desktop-review-macos-');
+  final repository = Directory('${root.path}/repository')..createSync();
+  final bundle = Directory('${root.path}/codex_native_unofficial.app')
+    ..createSync();
+  final output = Directory('${root.path}/output')..createSync();
+  File('${repository.path}/pubspec.yaml')
+      .writeAsStringSync('name: fixture\nversion: 0.1.0+1\n');
+  final nativeNotice = File(
+    '${repository.path}/licenses/NATIVE_HOST_THIRD_PARTY_LICENSES.txt',
+  );
+  nativeNotice.parent.createSync(recursive: true);
+  nativeNotice.writeAsStringSync('native notice\n');
+  File('${repository.path}/THIRD_PARTY_NOTICES.md')
+      .writeAsStringSync('application notice\n');
+
+  final files = <String, String>{
+    'Contents/Info.plist': '<plist/>',
+    'Contents/MacOS/codex_native_unofficial': '#!/bin/sh\nexit 0\n',
+    'Contents/MacOS/codex-native-host': '#!/bin/sh\nexit 0\n',
+    'Contents/Resources/NATIVE_HOST_THIRD_PARTY_LICENSES.txt':
+        'native notice\n',
+    'Contents/Frameworks/App.framework/App': 'aot framework',
+    'Contents/Frameworks/App.framework/Resources/flutter_assets/'
+            'AssetManifest.bin':
+        'assets',
+    'Contents/Frameworks/App.framework/Resources/flutter_assets/NOTICES.Z':
+        'notices',
+    'Contents/Frameworks/App.framework/Resources/flutter_assets/'
+            'THIRD_PARTY_NOTICES.md':
+        'application notice\n',
+    'Contents/Frameworks/FlutterMacOS.framework/FlutterMacOS':
+        'flutter framework',
+  };
+  for (final entry in files.entries) {
+    final file = File('${bundle.path}/${entry.key}');
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(entry.value);
+  }
+  for (final executable in const [
+    'Contents/MacOS/codex_native_unofficial',
+    'Contents/MacOS/codex-native-host',
+  ]) {
+    final chmod = await Process.run('chmod', [
+      '755',
+      '${bundle.path}/$executable',
+    ]);
+    if (chmod.exitCode != 0) {
+      throw StateError('could not prepare executable fixture');
+    }
+  }
+
+  final config = DesktopReviewArtifactConfig(
+    repositoryRoot: repository,
+    bundleDirectory: bundle,
+    outputDirectory: output,
+    platform: DesktopArtifactPlatform.macos,
+    architecture: 'arm64',
+    sourceRevision: 'b' * 40,
+    sourceTreeState: 'clean',
+    flutterVersion: '3.47.1',
+    rustVersion: '1.89.0',
+    buildOrigin: 'test',
+    verifyRepositoryIdentity: false,
+  );
+  return _MacOsFixture(
+    root: root,
+    bundle: bundle,
+    output: output,
+    config: config,
+  );
+}
+
+extension on DesktopReviewArtifactConfig {
+  DesktopReviewArtifactConfig copyWithOutput(Directory outputDirectory) {
+    return DesktopReviewArtifactConfig(
+      repositoryRoot: repositoryRoot,
+      bundleDirectory: bundleDirectory,
+      outputDirectory: outputDirectory,
+      platform: platform,
+      architecture: architecture,
+      sourceRevision: sourceRevision,
+      sourceTreeState: sourceTreeState,
+      flutterVersion: flutterVersion,
+      rustVersion: rustVersion,
+      buildOrigin: buildOrigin,
+      verifyRepositoryIdentity: verifyRepositoryIdentity,
+    );
+  }
+}
+
+final class _MacOsFixture {
+  _MacOsFixture({
     required this.root,
     required this.bundle,
     required this.output,

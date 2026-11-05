@@ -139,13 +139,18 @@ This file is the repository's durable project memory. Update it whenever a task 
   `42087567359` at `879c26d` passed all three jobs: exact-Rust/Dart/Flutter
   verification, Linux and Android debug builds, and native Windows x64/macOS
   arm64 bundle/Host/license gates.
+- Replacement run `42091764792` at `76bf94c` also passed all three jobs after
+  the native-notice EOL contract landed, including Ubuntu verification/Linux
+  and Android debug builds plus native Windows x64/macOS arm64 bundle gates.
 - A separate manual, read-only desktop review-artifact workflow now builds
   release-mode Linux x64, Windows x64, and macOS arm64 bundles without creating
   tags or Releases. Its assembler requires platform AOT/runtime layout, exact
   notices, no debug kernel, Host execution, source identity, per-file SHA-256,
   archive provenance, and extraction/reinventory verification. Every artifact
-  is explicitly `review-only` and `distributionReady=false`; hosted execution
-  for the new workflow is pending its deliberate push.
+  is explicitly `review-only` and `distributionReady=false`. Its first two
+  hosted executions exposed and preserved Windows checkout/source-drift and
+  macOS framework-mode defects; a corrected third run remains required before
+  any hosted artifact claim.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -198,6 +203,19 @@ This file is the repository's durable project memory. Update it whenever a task 
   noncanonical release input. The notice is now explicitly `text eol=lf` in
   `.gitattributes`; the failed run was cancelled after diagnosis and does not
   count as Windows artifact evidence. A full replacement run remains required.
+- Replacement run `42091784712` at `76bf94c` proved the EOL fix on Windows and
+  produced a complete Linux artifact, but correctly failed overall. Windows
+  reached assembly and reported that the post-build worktree was dirty; the
+  original diagnostic omitted the changed paths. macOS reached assembly and
+  showed that the hosted Flutter release bundle gives
+  `Contents/Frameworks/App.framework/App` no execute bit. The latter is an AOT
+  framework binary, not a launch target, so the validator now requires execute
+  permission only on the app runner and bundled Host while retaining existence,
+  non-empty, digest, inventory, and archive-mode checks for both frameworks.
+  Repository-state mismatch errors now include a bounded porcelain status so a
+  corrective hosted run can identify the exact Windows drift without weakening
+  the clean-source provenance gate. A fourth focused test covers both accepted
+  non-executable framework files and rejected non-executable app launchers.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 

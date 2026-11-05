@@ -490,7 +490,9 @@ Future<void> _verifyRepositoryIdentity(
   final actualState = '${status.stdout}'.trim().isEmpty ? 'clean' : 'dirty';
   if (actualState != config.sourceTreeState) {
     throw DesktopReviewArtifactException(
-      'declared source-tree state does not match the repository',
+      'declared source-tree state ${config.sourceTreeState} does not match '
+      'the repository state $actualState: '
+      '${_boundedDiagnostic(status.stdout)}',
     );
   }
 }
@@ -615,8 +617,6 @@ Future<void> _validatePayloadLayout({
       executableFiles.addAll(const [
         'Contents/MacOS/codex_native_unofficial',
         'Contents/MacOS/codex-native-host',
-        'Contents/Frameworks/App.framework/App',
-        'Contents/Frameworks/FlutterMacOS.framework/FlutterMacOS',
       ]);
   }
 
