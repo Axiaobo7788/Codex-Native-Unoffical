@@ -2250,8 +2250,9 @@ _Reviewed: 2026-11-06_
   that assembled it.
 - Universal Mach-O construction does not establish physical Intel execution,
   Developer ID signing, hardened runtime, notarization, stapling, Gatekeeper,
-  installed workspace/toolchain access, or Human acceptance. Hosted build and
-  review-artifact evidence is still pending for this implementation.
+  installed workspace/toolchain access, or Human acceptance. The hosted build
+  and review-artifact evidence below establishes only architecture-complete
+  construction and matching-host verification.
 - Initial hosted CI `42128455985` at `a877c9e` compiled both Rust targets,
   passed 26 library, 57 binary, and 4 integration tests on macOS, and built the
   61.4 MB release app. Verification did not reach an architecture assertion:
@@ -2259,4 +2260,23 @@ _Reviewed: 2026-11-06_
   while the workflow supplied it last and therefore interpreted the path as an
   architecture token. The Dart verifier had the same `-archs` ordering error.
   Both calls now follow the tool's emitted `lipo <input_file> <command>` usage;
-  a fresh hosted run remains required, and the first failure is preserved.
+  the first failure remains preserved.
+- Corrective CI `42129434391` at `0b34ae6` passed all three jobs. macOS 15 arm64
+  job `127602082306` passed 26 library, 57 binary, and 4 integration tests,
+  including the real extended-ACL fixture, then built a 61.4 MB release app.
+  Its direct gate required exactly arm64 and x86_64 in the app runner, nested
+  Host, App framework, and Flutter engine before checking license byte identity
+  and executing Host `0.1.0`. Windows job `127602082839` and the full Linux/
+  Android job `127602082633` also passed; the latter includes hosted
+  `flutter analyze`, all Flutter tests, Linux runtime closure, and debug APK
+  verification. The known Flutter-template Xcode output-dependency warning
+  remains present and unrelated to architecture correctness.
+- Manual read-only workflow `42131127906` at the same revision passed Linux x64
+  job `127607720970`, Windows x64 job `127607721434`, macOS universal job
+  `127607721455`, and clean Ubuntu 22.04 runtime job `127610652373`. The macOS
+  job built release, assembled and self-verified the `macos-universal` payload,
+  independently extracted it with native runtime verification, and uploaded
+  `codex-native-unofficial-macos-universal-review-only`. The archive SHA-256 is
+  `7e98452d0e0be660497c4ee564902daf026d0f75ce10a50216d787fa7ef955d0`;
+  GitHub reports 24,774,088 bytes for the uploaded artifact container. These are
+  review-only outputs with `distributionReady=false`, not signed releases.

@@ -77,7 +77,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   verifies the debug bundle, packaged Host/license pair, and Host `--help`. The
   first hosted macOS 15 arm64 build exposed a Bash 3.2 empty-array failure; the
   corrected prior native build/package/Host execution passes on macOS 15 arm64.
-  The new universal release path still awaits its first hosted run.
+  CI `42129434391` now also verifies the release runner, nested Host, App
+  framework, and Flutter engine as exact arm64+x86_64 binaries.
 - The native Host's complete lockfile-derived runtime license notice is committed
   and drift-checked with pinned `cargo-about` 0.9.3. Linux/Windows package it
   beside the Host and macOS declares it under `Contents/Resources`; Linux and
@@ -143,8 +144,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   `42087567359` at `879c26d` passed all three jobs: exact-Rust/Dart/Flutter
   verification, Linux and Android debug builds, and the then-current native
   Windows x64/macOS arm64 bundle/Host/license gates. The current workflow
-  advances macOS to a universal release/Host/license gate; that new path is
-  locally source-validated but still awaits its first hosted run.
+  advances macOS to a universal release/Host/license gate; run `42129434391` at
+  `0b34ae6` passed that new path plus the Windows and Linux/Android jobs.
 - Replacement run `42091764792` at `76bf94c` also passed all three jobs after
   the native-notice EOL contract landed, including Ubuntu verification/Linux
   and Android debug builds plus native Windows x64/macOS arm64 bundle gates.
@@ -161,6 +162,9 @@ This file is the repository's durable project memory. Update it whenever a task 
   plugin libraries retained a build-tree RUNPATH. The CMake/runtime-gate fix is
   now locally and on clean hosted runners verified by run `42100825202` at
   `c1803d4`, including extracted native-runtime checks on all three platforms.
+  Universal follow-up run `42131127906` at `0b34ae6` passed Linux x64, Windows
+  x64, and macOS universal release build/assembly/self-verification/independent
+  native verification, then passed the Linux clean-runtime container job.
   None of these artifacts proves signing, native installation, publisher
   identity, or Human acceptance.
 - Android release variants no longer inherit the public debug certificate or
@@ -190,11 +194,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   all 176 Flutter tests pass. Two `flutter analyze` attempts exited 255 before
   diagnostics because the analysis server received a truncated LSP
   initialization JSON at character 400; that local tool failure remains
-  negative evidence rather than a green Flutter-analysis claim. Linux cannot
-  compile or inspect Apple Mach-O binaries, so hosted macOS build/lipo and
-  Flutter-analysis evidence remain pending. Physical Intel execution, Developer
-  ID signing, notarization/Gatekeeper, installed workspace access, and Human
-  review remain separate gates.
+  negative evidence rather than a green local Flutter-analysis claim. Linux
+  cannot compile or inspect Apple Mach-O binaries; the hosted evidence below
+  supplies those separate macOS and Flutter-analysis gates. Physical Intel
+  execution, Developer ID signing, notarization/Gatekeeper, installed workspace
+  access, and Human review remain separate gates.
 - First hosted CI `42128455985` at `a877c9e` compiled both Rust Apple targets,
   passed all 87 native macOS test instances, and completed the 61.4 MB release
   app build. Its direct verification then failed before inspecting any binary:
@@ -202,7 +206,26 @@ This file is the repository's durable project memory. Update it whenever a task 
   the app path as another architecture name. The same argument-order defect was
   present in the Dart matching-host verifier. The correction puts the input
   first for both `-verify_arch` and `-archs`; the failed run remains negative
-  evidence and a fresh hosted run is required.
+  evidence.
+- Corrective CI `42129434391` at `0b34ae6` passed all three jobs. macOS 15 job
+  `127602082306` passed 26 library, 57 binary, and 4 integration tests, built the
+  61.4 MB release app, required exactly arm64+x86_64 in the app runner, nested
+  Host, App framework, and Flutter engine, then passed Host `0.1.0` execution
+  and native-license identity. Windows job `127602082839` passed native tests,
+  debug build, Host, and license checks. Linux/Android job `127602082633` passed
+  the complete repository gate, including hosted `flutter analyze`, Linux
+  runtime closure, and debug APK verification. The macOS build retains the
+  known Flutter-template warning that `Flutter Assemble` declares no output.
+- Manual read-only review run `42131127906` at the same revision passed Linux
+  x64 job `127607720970`, Windows x64 job `127607721434`, macOS universal job
+  `127607721455`, and Linux clean-runtime job `127610652373`. The macOS job
+  passed source-bundle assembly checks plus independent extracted native
+  verification and uploaded the 24,774,088-byte GitHub artifact named
+  `codex-native-unofficial-macos-universal-review-only`; its archive SHA-256 is
+  `7e98452d0e0be660497c4ee564902daf026d0f75ce10a50216d787fa7ef955d0`.
+  This closes build/package architecture completeness, not physical Intel
+  execution or any signing, notarization, installation, Gatekeeper, or Human
+  gate.
 
 ### 2026-11-06 — Bounded operator TLS-key permission gate
 
@@ -1662,8 +1685,9 @@ specific evidence boundaries.
   are hosted Windows Server 2022 verified. Operator TLS keys now have a bounded
   no-follow/owner/mode gate plus a hosted-Windows-verified protected-owner/DACL
   gate and a hosted-macOS-verified no-extended-ACL gate; installed-service,
-  parent-directory custody, and installer validation remain separate. The new
-  universal Host build and native verifier still require hosted macOS evidence.
+  parent-directory custody, and installer validation remain separate. Universal
+  Host construction and extracted verification are now hosted-macOS verified;
+  physical Intel execution remains a separate cross-platform gate.
 - Re-reading the same upstream command item creates another session-scoped spool
   object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
   not automatically reread a loaded item, but deduplication or explicit release
