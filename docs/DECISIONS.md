@@ -178,3 +178,35 @@ will later connect to this same boundary rather than introduce a second harness.
   the reviewed upstream stdio writer creates a complete serialized `String`
   before writing. App-server, Host, and Flutter memory must be measured and
   reported separately.
+
+---
+
+## ADR-009 — Distribute the macOS developer client outside the Mac App Store
+
+**Status:** Accepted
+
+**Date:** 2026-11-05
+
+### Decision
+
+The macOS build is an unsandboxed, Developer ID-signed and notarized direct
+distribution. It is not a Mac App Store target. The bundled native Host is copied
+into `Contents/MacOS` and signed as nested code during the Xcode build.
+
+### Why
+
+Codex is a developer tool that must run the user's separately installed runtime,
+read and write explicitly selected workspaces, and launch normal toolchains and
+commands. Apple's App Sandbox is mandatory for Mac App Store distribution, and
+child processes inherit the parent's static sandbox. Security-scoped access
+granted after launch is not automatically inherited by a child. Constraining
+stock Codex to that sandbox would break the product's core local-runtime model,
+while broad sandbox exceptions would not recreate normal developer-shell access.
+
+### Consequence
+
+- Mac App Store submission is out of scope for v1.
+- Release engineering must sign all nested code, enable the hardened runtime,
+  notarize the completed app, and validate on a real macOS machine.
+- Removing App Sandbox does not weaken the client's own approval, sandbox-policy,
+  opaque-path, or bounded-transport rules. Those remain application requirements.

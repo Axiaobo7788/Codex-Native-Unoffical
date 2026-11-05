@@ -1,5 +1,6 @@
 import 'thread_models.dart';
 import 'turn_models.dart';
+import 'output_models.dart';
 
 enum HistoryItemKind { user, assistant, activity, reasoning, unknown }
 
@@ -10,6 +11,9 @@ class HistoryItem {
     required this.kind,
     required this.text,
     this.status,
+    this.output,
+    this.outputDeferred = false,
+    this.isCommand = false,
   });
 
   final String id;
@@ -17,6 +21,9 @@ class HistoryItem {
   final HistoryItemKind kind;
   final String text;
   final String? status;
+  final OutputDescriptor? output;
+  final bool outputDeferred;
+  final bool isCommand;
 }
 
 class HistoryTurn {

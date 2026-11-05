@@ -10,7 +10,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 2 — Local usable Codex client: IMPLEMENTED AND LOCALLY MACHINE-VERIFIED — Human approval interaction and hosted CI remain separate gates**
 
-**Phase 3 — Bounded-memory long-session UX: IN PROGRESS — paginated history is integrated; the native Host output boundary is implemented and awaiting Flutter-default integration**
+**Phase 3 — Bounded-memory long-session UX: IN PROGRESS — paginated history and bounded native command-output viewing are integrated and Linux-measured; lazy Markdown and cross-platform gates remain**
 
 ## Current repository state
 
@@ -34,20 +34,69 @@ This file is the repository's durable project memory. Update it whenever a task 
 - The desktop UI now provides a virtualized recent-activity timeline, composer, race-safe stop action, pending-approval banner, execution settings, changed-file summary, and selected-file diff.
 - A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
 - Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns and can return directly to the newest page.
-- The typed history layer can load ascending `thread/items/list` pages for exactly one turn with a 100-item cap, and the real smoke verifies it. The production UI intentionally does not expose that full-item action yet because one command item can contain unbounded `aggregatedOutput`. Switching threads discards all stored-history state immediately.
+- The typed history layer loads ascending `thread/items/list` pages for exactly
+  one user-selected turn with a 100-item cap. Large `aggregatedOutput` fields are
+  removed by the Host before Dart decoding, and switching threads discards all
+  stored-history state immediately.
 - Stored and live entries are merged by item ID into one virtualized list so a resumed active turn does not render duplicate items.
-- The first `codex-native-host` slice now supervises stock app-server, validates
+- `codex-native-host` now supervises stock app-server by default, validates
   stdout incrementally without line buffering, spools decoded
   `aggregatedOutput` values behind opaque references, replaces them with bounded
   descriptors, and implements capped `host/status`, `stat`, `readRange`, and
-  `tail` RPCs. Flutter still starts app-server directly, so this protection is
-  not yet the production default.
-- Lazy command-output UI, Markdown parsing policy, cross-process RSS benchmarks,
-  and Host packaging/integration are not implemented yet. Android remote control
-  remains Phase 4 work.
-- Lightweight GitHub Actions CI is configured for format, analyze, tests, and a Linux debug build. Hosted CI has not run for the local Phase 1 commit yet.
+  `tail` RPCs. Flutter locates Codex and the bundled Host independently and has
+  no silent direct-app-server fallback.
+- Historical command rows load full items for only one selected turn. List
+  requests prefer upstream output deferral; a deferred selected item uses the
+  gated `thread/items/read` API, whose response is still sanitized by the Host.
+  The log dialog retains one approximately 64 KiB byte window, uses bounded
+  first/previous/next/tail reads, preserves UTF-8 page edges, and virtualizes
+  display rows.
+- Linux and Windows native builds compile/package the Host beside the app.
+  macOS embeds and signs it in `Contents/MacOS`; v1 macOS is a direct notarized
+  distribution because App Sandbox cannot preserve the required normal Codex
+  developer-workspace/toolchain model. Windows/macOS builds are not verified in
+  this Linux environment.
+- Lazy Markdown policy and cross-platform RSS/runtime evidence are not
+  implemented yet. Android remote control remains Phase 4 work.
+- Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
+  Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
+  local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 3 Host integration and bounded output viewer
+
+- Made the native Host the only production desktop process entry, with separate
+  `CODEX_EXECUTABLE` and `CODEX_NATIVE_HOST` discovery and an explicit typed
+  Host-not-found state instead of an unsafe direct fallback.
+- Added Linux/Windows Cargo build-and-package rules, a macOS Xcode build/sign
+  phase, and CI gates for Rust format, Clippy, tests, and the synthetic fixture.
+- Added typed output descriptors, `stat`/range/tail adapters, strict response
+  validation, deferred-item reads, stale-result guards, and a range-backed log
+  viewer that keeps at most a 64 KiB page plus three UTF-8 look-ahead bytes.
+- Item-list requests now send the forward-compatible
+  `deferOutput.commandExecution` preference. Initialization explicitly opts into
+  `experimentalApi`, which is required by the installed server for
+  `thread/items/read`.
+- Added a release synthetic app-server fixture that deliberately holds both its
+  3/30/300 MiB source output and serialized response. Three Linux runs verified
+  every descriptor and the first/tail 1 KiB. At 300 MiB, fixture RSS grew
+  629,157,888/629,157,888/629,153,792 bytes, Host RSS had no observable growth
+  at 2 ms sampling, and Dart RSS grew 2,281,472/4,431,872/2,211,840 bytes. These
+  are synthetic Linux observations, not absolute or cross-platform guarantees.
+- Real Host-routed runtime, thread, model, turn, interruption, approval-reject,
+  history, coding-task, `thread/items/read`, and bounded output-tail paths passed.
+  The coding task retained 7,443 output bytes behind an opaque Host reference and
+  cleaned its exact test thread/workspace.
+- The first enhanced coding smoke failed with `-32600: thread/items/read requires
+  experimentalApi capability`. This was a real protocol-negotiation defect, not
+  a flaky run; explicit capability negotiation fixed it and the rerun passed.
+- Final range-view review found that the three UTF-8 look-ahead bytes were also
+  rendered for ordinary ASCII pages, duplicating them on the next page. The
+  decoder now consumes look-ahead only to finish a split scalar, and regression
+  tests cover both ASCII non-duplication and split four-byte UTF-8.
+- Added ADR-009 after official Flutter/Apple research: macOS v1 uses direct
+  signed/notarized distribution rather than a Mac App Store sandbox.
 
 ### 2026-11-05 — Phase 3 native Host bounded-output core
 
@@ -136,7 +185,7 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test --reporter expanded`: PASS, 51 tests.
+- `flutter test --reporter expanded`: PASS, 64 tests.
 - `flutter build linux --debug`: PASS.
 - `dart run tool/runtime_smoke.dart`: PASS against the installed stock Codex; the initialize response identified Codex Desktop/app-server `0.166.0-alpha.5.1`.
 - `dart run tool/thread_smoke.dart`: PASS against the installed stock Codex; listed 10 oldest threads, read and resumed an existing inactive thread without turns, started a smoke-owned persistent thread, and deleted that exact test thread.
@@ -151,8 +200,30 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 - `cargo build --release --workspace`: PASS.
 - Release `codex-native-host` real-runtime smoke: PASS; one process carried a
   Host status request plus stock app-server initialize/initialized and reported
-  Codex Desktop/app-server `0.166.0-alpha.5.1`. This proves the handshake and
-  clean EOF shutdown, not yet normal Flutter routing or large-output RSS bounds.
+  Codex Desktop/app-server `0.166.0-alpha.5.1`. This isolated smoke established
+  the handshake and clean EOF shutdown before Flutter integration.
+- `dart run tool/host_memory_benchmark.dart`: PASS three times for 3/30/300 MiB.
+  Fixture deltas were 6,303,744/62,926,848/629,157,888,
+  6,303,744/62,926,848/629,157,888, and
+  6,299,648/62,922,752/629,153,792 bytes; Host deltas were 0/0/0 bytes at 2 ms
+  sampling; Dart deltas were 57,344/774,144/2,281,472,
+  36,864/765,952/4,431,872, and 49,152/630,784/2,211,840 bytes. First/tail reads
+  matched the complete spooled payload in every case.
+- `flutter build linux --debug` and `flutter build linux --release`: PASS with
+  an executable packaged `codex-native-host` beside the Flutter binary.
+- Packaged Linux GUI runtime launch: PASS; direct process inspection showed
+  Flutter -> adjacent bundled Host -> separately located stock Codex. SIGINT
+  removed all three processes. Existing ATK/cursor-theme warnings remained.
+- Host-routed `runtime_smoke`, `thread_smoke`, `model_smoke`, `turn_smoke`, and
+  `approval_smoke`: PASS. The approval smoke rejected rather than approved its
+  command as designed.
+- Enhanced `coding_task_smoke`: first run FAILED at the newly exercised
+  `thread/items/read` capability gate; after declaring `experimentalApi`, rerun
+  PASS in 27 seconds with 11 history items and a verified 7,443-byte Host output
+  spool/tail.
+- Final packaged-release reruns after strict output reference/range/EOF
+  validation: PASS in 21/27 seconds with 9/10 history items, readable 6-byte
+  selected command outputs, and exact test thread/workspace cleanup.
 - Real Linux GUI launch after the model/diff slice: PASS; the connected runtime, thread list, empty conversation state, and loaded `Defaults` execution-control entry rendered correctly in direct inspection. SIGINT produced a coordinated exit, and neither the Flutter process nor its app-server child survived.
 - Secret/credential scan: PASS; no token, private-key, bearer, or assigned credential patterns found in the repository scope.
 - Hosted GitHub Actions CI: NOT RUN for the local changes.
@@ -172,6 +243,27 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
   `thread/items/list`, but the follow-up read is still whole-item. The Host can
   bound its own and Flutter's handling; it cannot remove app-server's preceding
   full-string serialization allocation.
+- The 3/30/300 MiB memory gate uses a purpose-built serializer-shaped fixture,
+  not a real Codex thread containing a 300 MiB command result. Its strong
+  sublinear Host/Dart evidence does not establish real app-server RSS, Windows or
+  macOS allocator behavior, disk-full recovery in an installed bundle, or Human
+  log-viewer acceptance.
+- `thread/items/read` requires the negotiated experimental API capability in the
+  installed server. Protocol adapters and tests cover this version, but future
+  schema changes remain a compatibility risk.
+- macOS App Sandbox was deliberately removed because all Codex child processes
+  inherit the parent sandbox and cannot reproduce ordinary workspace/toolchain
+  access. Developer ID signing, hardened-runtime nested Host signing,
+  notarization, workspace access, and cleanup require a real macOS release gate.
+- Unix spool directories/files are explicitly restricted to `0700`/`0600`.
+  Windows currently relies on the user cache directory's inherited ACL; a real
+  Windows gate must inspect it and add an explicit owner-only ACL if inheritance
+  is not sufficiently restrictive. The current macOS Cargo phase also produces
+  only the active build architecture, not a universal Host binary.
+- Re-reading the same upstream command item creates another session-scoped spool
+  object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
+  not automatically reread a loaded item, but deduplication or explicit release
+  remains unresolved for very long sessions.
 - The real GUI launch logged host GTK/Wayland warnings for ATK socket embedding and a missing cursor-theme asset. They did not prevent the window, handshake, or child cleanup, but should be rechecked during later Linux UI work.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
 - After loading thread state, the tested stock app-server did not exit within the 3-second stdin-EOF window or the following 3-second SIGTERM window. The SIGKILL fallback completed at about 6.1 seconds and no child survived GUI exit. Shutdown is bounded and correct, but the latency/source should be investigated before release polish.
@@ -180,18 +272,17 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Continue Phase 3 by integrating and measuring the native Host:
+Continue Phase 3 with the remaining presentation and platform gates:
 
-1. make Flutter locate and start the bundled Host by default while passing the
-   separately located stock Codex executable; add build/package rules and no
-   silent direct-app-server fallback;
-2. add typed output descriptors/gateway methods and send the forward-compatible
-   `deferOutput` preference on item-list requests;
-3. measure 3 MiB, 30 MiB, and 300 MiB release-mode fixtures for app-server,
-   Host, and Flutter RSS, then run the existing real runtime/coding/history
-   smokes through the Host;
-4. build a virtualized range-backed log viewer only after those gates pass, then
-   define lazy Markdown parsing for visible assistant blocks.
+1. research and define a safe Markdown policy, parse only visible assistant
+   blocks, and keep caches inside the active bounded window;
+2. add widget/Human coverage for populated range-backed logs, truncation,
+   navigation, deferred fetch, large diffs, and dangerous settings;
+3. run Windows and macOS native builds plus packaged process/output/lifecycle RSS
+   gates; on macOS also validate nested signing, notarization, ordinary workspace
+   access, and no surviving child;
+4. exercise disk-full/unwritable-cache behavior end to end and investigate the
+   stock app-server's observed six-second shutdown fallback before RC.
 
 Do not begin Android remote transport or ecosystem management until bounded stored-history behavior is implemented and measured.
 

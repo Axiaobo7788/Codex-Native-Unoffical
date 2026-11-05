@@ -2,6 +2,7 @@ import '../domain/history_models.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
 import 'jsonl_decoder.dart';
+import 'output_protocol.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
 
@@ -42,6 +43,7 @@ final class HistoryProtocolAdapter {
       if (query.cursor != null) 'cursor': query.cursor,
       'limit': query.limit,
       'sortDirection': _sortDirection(query.sortDirection),
+      'deferOutput': const {'commandExecution': true},
     });
     final data = response['data'];
     if (data is! List<Object?>) {
@@ -51,6 +53,26 @@ final class HistoryProtocolAdapter {
       items: data.map(_parseItemEntry).toList(growable: false),
       nextCursor: _optionalString(response, 'nextCursor'),
     );
+  }
+
+  Future<List<HistoryItem>> readItems({
+    required String threadId,
+    required String turnId,
+    required List<String> itemIds,
+  }) async {
+    if (itemIds.isEmpty || itemIds.length > 100) {
+      throw RangeError('thread/items/read requires 1-100 item IDs.');
+    }
+    final response = await request('thread/items/read', {
+      'threadId': threadId,
+      'turnId': turnId,
+      'itemIds': itemIds,
+    });
+    final data = response['data'];
+    if (data is! List<Object?>) {
+      throw const ProtocolViolation('thread/items/read data must be an array.');
+    }
+    return data.map(_parseItemEntry).toList(growable: false);
   }
 
   HistoryTurn _parseTurn(Object? value) {
@@ -114,6 +136,13 @@ final class HistoryProtocolAdapter {
           'Command: ${_optionalString(value, 'command') ?? 'command'}',
         ),
         status: _optionalString(value, 'status'),
+        output: value['_codexNativeOutput'] == null
+            ? null
+            : OutputProtocolAdapter.descriptorFromItem(
+                value['_codexNativeOutput'],
+              ),
+        outputDeferred: value['outputDeferred'] == true,
+        isCommand: true,
       ),
       'fileChange' => HistoryItem(
         id: id,

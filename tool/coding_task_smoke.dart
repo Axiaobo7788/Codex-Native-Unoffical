@@ -132,6 +132,31 @@ Future<void> _runSmoke() async {
     if (persistedItems.items.isEmpty) {
       throw StateError('Completed turn returned no paged history items.');
     }
+    final command = persistedItems.items
+        .where((item) => item.isCommand)
+        .firstOrNull;
+    if (command == null) {
+      throw StateError('Completed coding turn returned no command item.');
+    }
+    final reread = await runtime.readHistoryItems(
+      threadId: thread.id,
+      turnId: persistedTurn.id,
+      itemIds: [command.id],
+    );
+    final output = reread.single.output;
+    if (output == null ||
+        output.reference == null ||
+        !output.available ||
+        output.storedBytes == 0) {
+      throw StateError('Host did not provide a readable command output.');
+    }
+    final tail = await runtime.readOutputTail(
+      reference: output.reference!,
+      length: output.storedBytes.clamp(1, 4096),
+    );
+    if (tail.data.isEmpty) {
+      throw StateError('Host command-output tail was empty.');
+    }
 
     stdout.writeln('CODING_TASK_SMOKE=PASS');
     stdout.writeln('TURN_STATUS=${completed.status.name}');
@@ -140,6 +165,7 @@ Future<void> _runSmoke() async {
     stdout.writeln('UNEXPECTED_APPROVALS=$unexpectedApprovals');
     stdout.writeln('HISTORY_TURNS=${history.turns.length}');
     stdout.writeln('HISTORY_ITEMS=${persistedItems.items.length}');
+    stdout.writeln('OUTPUT_STORED_BYTES=${output.storedBytes}');
   } catch (error, stackTrace) {
     stderr.writeln('CODING_TASK_SMOKE=FAIL');
     stderr.writeln(error);

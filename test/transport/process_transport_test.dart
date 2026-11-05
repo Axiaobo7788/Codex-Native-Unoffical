@@ -43,7 +43,7 @@ void main() {
         'title': 'Codex Native (Unofficial)',
         'version': '0.1.0',
       },
-      'capabilities': null,
+      'capabilities': {'experimentalApi': true},
     });
 
     child.addStdout({
@@ -93,6 +93,24 @@ void main() {
     expect(child.closeInputCount, 1);
     expect(child.killSignals, isEmpty);
   });
+
+  test(
+    'starts the native Host with the separately located Codex path',
+    () async {
+      final hostChild = _FakeChildProcess()..exitWhenInputCloses = true;
+      final hostTransport = await ProcessTransport.startHost(
+        hostExecutablePath: '/bundle/codex-native-host',
+        codexExecutablePath: '/user/bin/codex',
+        launcher: (executable, arguments) async {
+          expect(executable, '/bundle/codex-native-host');
+          expect(arguments, ['--codex', '/user/bin/codex']);
+          return hostChild;
+        },
+      );
+      await hostTransport.close();
+      await hostChild.dispose();
+    },
+  );
 }
 
 final class _FakeChildProcess implements ChildProcess {

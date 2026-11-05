@@ -242,6 +242,55 @@ class HistoryController extends ChangeNotifier {
     }
   }
 
+  Future<void> loadDeferredOutput(HistoryItem item) async {
+    final thread = _thread;
+    if (thread == null ||
+        _loadingItems ||
+        !item.outputDeferred ||
+        item.turnId != _selectedTurnId) {
+      return;
+    }
+    final generation = _generation;
+    _loadingItems = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final items = await gateway.readHistoryItems(
+        threadId: thread.id,
+        turnId: item.turnId,
+        itemIds: [item.id],
+      );
+      if (!_isCurrent(thread.id, generation) ||
+          _selectedTurnId != item.turnId) {
+        return;
+      }
+      final replacement = items.where((candidate) => candidate.id == item.id);
+      if (replacement.length != 1) {
+        throw StateError(
+          'thread/items/read did not return the requested item.',
+        );
+      }
+      final index = _selectedTurnItems.indexWhere(
+        (candidate) => candidate.id == item.id,
+      );
+      if (index < 0) {
+        throw StateError(
+          'The deferred item is no longer in the active window.',
+        );
+      }
+      _selectedTurnItems[index] = replacement.single;
+    } catch (error) {
+      if (_isCurrent(thread.id, generation)) {
+        _errorMessage = error.toString();
+      }
+    } finally {
+      if (_isCurrent(thread.id, generation) && _selectedTurnId == item.turnId) {
+        _loadingItems = false;
+        _notify();
+      }
+    }
+  }
+
   bool _isCurrent(String threadId, int generation) =>
       !_disposed && _thread?.id == threadId && _generation == generation;
 

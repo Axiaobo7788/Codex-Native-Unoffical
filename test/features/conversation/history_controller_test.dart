@@ -1,5 +1,6 @@
 import 'package:codex_native_unofficial/src/domain/history_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
+import 'package:codex_native_unofficial/src/domain/output_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/features/conversation/history_controller.dart';
@@ -65,14 +66,45 @@ void main() {
     expect(controller.timelineItems, isEmpty);
     expect(controller.selectedTurnId, isNull);
   });
+
+  test('reads one deferred item and replaces only the active item', () async {
+    final gateway = _HistoryGateway(
+      turnCount: 1,
+      itemsPerTurn: 2,
+      deferred: true,
+    );
+    final controller = HistoryController(gateway: gateway);
+    addTearDown(controller.dispose);
+    await controller.bindThread(_thread('thread-1'));
+    await controller.loadTurnItems('turn-0');
+    final deferred = controller.timelineItems.firstWhere(
+      (item) => item.outputDeferred,
+    );
+
+    await controller.loadDeferredOutput(deferred);
+
+    final loaded = controller.timelineItems.firstWhere(
+      (item) => item.id == deferred.id,
+    );
+    expect(loaded.outputDeferred, isFalse);
+    expect(loaded.output?.reference, 'output-ref');
+    expect(gateway.readCalls, 1);
+    expect(controller.timelineItems, hasLength(2));
+  });
 }
 
 class _HistoryGateway implements HistoryGateway {
-  _HistoryGateway({required this.turnCount, required this.itemsPerTurn});
+  _HistoryGateway({
+    required this.turnCount,
+    required this.itemsPerTurn,
+    this.deferred = false,
+  });
 
   final int turnCount;
   final int itemsPerTurn;
+  final bool deferred;
   var turnCalls = 0;
+  var readCalls = 0;
 
   @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) async {
@@ -111,10 +143,36 @@ class _HistoryGateway implements HistoryGateway {
             turnId: query.turnId,
             kind: HistoryItemKind.activity,
             text: 'Item $index',
+            outputDeferred: deferred && index == 0,
           ),
       ],
       nextCursor: end < itemsPerTurn ? '$end' : null,
     );
+  }
+
+  @override
+  Future<List<HistoryItem>> readHistoryItems({
+    required String threadId,
+    required String turnId,
+    required List<String> itemIds,
+  }) async {
+    readCalls += 1;
+    return [
+      for (final itemId in itemIds)
+        HistoryItem(
+          id: itemId,
+          turnId: turnId,
+          kind: HistoryItemKind.activity,
+          text: 'Read $itemId',
+          output: const OutputDescriptor(
+            reference: 'output-ref',
+            bytes: 10,
+            storedBytes: 10,
+            truncated: false,
+            available: true,
+          ),
+        ),
+    ];
   }
 }
 

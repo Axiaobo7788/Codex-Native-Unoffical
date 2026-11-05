@@ -9,6 +9,8 @@ import '../domain/history_gateway.dart';
 import '../domain/history_models.dart';
 import '../domain/model_gateway.dart';
 import '../domain/model_models.dart';
+import '../domain/output_gateway.dart';
+import '../domain/output_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
@@ -16,9 +18,13 @@ import '../domain/turn_gateway.dart';
 import '../domain/turn_models.dart';
 import '../protocol/protocol_models.dart';
 import '../transport/process/codex_executable_locator.dart';
+import '../transport/process/host_executable_locator.dart';
 import '../transport/process/process_transport.dart';
 
-typedef TransportStarter = Future<ProcessTransport> Function(String executable);
+typedef TransportStarter = Future<ProcessTransport> Function(
+  String hostExecutable,
+  String codexExecutable,
+);
 
 class RuntimeController extends ChangeNotifier
     implements
@@ -26,15 +32,21 @@ class RuntimeController extends ChangeNotifier
         TurnGateway,
         ApprovalGateway,
         ModelGateway,
+        OutputGateway,
         HistoryGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
+    this.hostLocator = const HostExecutableLocator(),
     TransportStarter? transportStarter,
   }) : _transportStarter =
            transportStarter ??
-           ((executable) => ProcessTransport.start(executablePath: executable));
+           ((hostExecutable, codexExecutable) => ProcessTransport.startHost(
+             hostExecutablePath: hostExecutable,
+             codexExecutablePath: codexExecutable,
+           ));
 
   final CodexExecutableLocator locator;
+  final HostExecutableLocator hostLocator;
   final TransportStarter _transportStarter;
   RuntimeSnapshot _snapshot = const RuntimeSnapshot.idle();
   ProcessTransport? _transport;
@@ -69,12 +81,47 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().listModels(query);
 
   @override
+  Future<OutputDescriptor> statOutput(String reference) =>
+      _connectedTransport().statOutput(reference);
+
+  @override
+  Future<OutputChunk> readOutputRange({
+    required String reference,
+    required int offset,
+    required int length,
+  }) => _connectedTransport().readOutputRange(
+    reference: reference,
+    offset: offset,
+    length: length,
+  );
+
+  @override
+  Future<OutputChunk> readOutputTail({
+    required String reference,
+    required int length,
+  }) => _connectedTransport().readOutputTail(
+    reference: reference,
+    length: length,
+  );
+
+  @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
       _connectedTransport().listHistoryTurns(query);
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
       _connectedTransport().listHistoryItems(query);
+
+  @override
+  Future<List<HistoryItem>> readHistoryItems({
+    required String threadId,
+    required String turnId,
+    required List<String> itemIds,
+  }) => _connectedTransport().readHistoryItems(
+    threadId: threadId,
+    turnId: turnId,
+    itemIds: itemIds,
+  );
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>
@@ -145,6 +192,20 @@ class RuntimeController extends ChangeNotifier
       return;
     }
 
+    final hostExecutable = await hostLocator.locate();
+    if (hostExecutable == null) {
+      _setSnapshot(
+        const RuntimeSnapshot(
+          state: RuntimeConnectionState.hostNotFound,
+          message:
+              'Build or install codex-native-host, or set CODEX_NATIVE_HOST '
+              'to its path. Direct app-server fallback is disabled so large '
+              'output cannot bypass the bounded transport.',
+        ),
+      );
+      return;
+    }
+
     _setSnapshot(
       RuntimeSnapshot(
         state: RuntimeConnectionState.starting,
@@ -153,7 +214,7 @@ class RuntimeController extends ChangeNotifier
     );
 
     try {
-      final transport = await _transportStarter(executable);
+      final transport = await _transportStarter(hostExecutable, executable);
       if (_stopping || _disposed) {
         await transport.close();
         return;

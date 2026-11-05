@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import '../domain/diff_models.dart';
 import '../domain/execution_settings.dart';
 import '../domain/history_models.dart';
+import '../domain/output_gateway.dart';
+import '../domain/output_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
 import '../features/approvals/approval_controller.dart';
 import '../features/conversation/conversation_controller.dart';
 import '../features/conversation/history_controller.dart';
+import '../features/conversation/output_viewer_controller.dart';
 import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/threads/thread_list_controller.dart';
@@ -180,6 +183,7 @@ class RuntimeStatusScreen extends StatelessWidget {
                                 approvalController: approvalController,
                                 settingsController: settingsController,
                                 diffController: diffController,
+                                outputGateway: controller,
                               ),
                             ),
                           ],
@@ -204,6 +208,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.approvalController,
     required this.settingsController,
     required this.diffController,
+    required this.outputGateway,
   });
 
   final ConversationController controller;
@@ -211,6 +216,7 @@ class _ConversationPanel extends StatefulWidget {
   final ApprovalController approvalController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
+  final OutputGateway outputGateway;
 
   @override
   State<_ConversationPanel> createState() => _ConversationPanelState();
@@ -376,6 +382,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final footerCount =
         widget.historyController.canLoadOlderTurns ||
             widget.historyController.canReturnToNewest ||
+            widget.historyController.canLoadMoreItems ||
             widget.historyController.loadingTurns ||
             widget.historyController.loadingItems
         ? 1
@@ -390,6 +397,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           return _HistoryEntryView(
             key: ValueKey('history-${item.id}'),
             item: item,
+            historyController: widget.historyController,
+            outputGateway: widget.outputGateway,
           );
         }
         final liveIndex = index - historyItems.length;
@@ -924,9 +933,16 @@ class _ApprovalBanner extends StatelessWidget {
 }
 
 class _HistoryEntryView extends StatelessWidget {
-  const _HistoryEntryView({super.key, required this.item});
+  const _HistoryEntryView({
+    super.key,
+    required this.item,
+    required this.historyController,
+    required this.outputGateway,
+  });
 
   final HistoryItem item;
+  final HistoryController historyController;
+  final OutputGateway outputGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -937,17 +953,270 @@ class _HistoryEntryView extends StatelessWidget {
       HistoryItemKind.reasoning ||
       HistoryItemKind.unknown => ConversationEntryKind.activity,
     };
-    return _ConversationEntryView(
-      entry: ConversationEntry(
-        id: item.id,
-        kind: kind,
-        text: item.text,
-        completed: true,
-        status: item.status,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ConversationEntryView(
+          entry: ConversationEntry(
+            id: item.id,
+            kind: kind,
+            text: item.text,
+            completed: true,
+            status: item.status,
+          ),
+        ),
+        if (item.isCommand) _commandOutputAction(context),
+      ],
+    );
+  }
+
+  Widget _commandOutputAction(BuildContext context) {
+    final output = item.output;
+    if (output != null && output.available && output.reference != null) {
+      return Padding(
+        padding: const EdgeInsets.only(
+          left: ThemeTokens.space2,
+          bottom: ThemeTokens.space3,
+        ),
+        child: TextButton.icon(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (context) =>
+                _OutputDialog(gateway: outputGateway, descriptor: output),
+          ),
+          icon: const Icon(Icons.terminal, size: 16),
+          label: Text(
+            output.truncated ? 'View stored output (truncated)' : 'View output',
+          ),
+        ),
+      );
+    }
+    if (output != null && !output.available) {
+      return const Padding(
+        padding: EdgeInsets.only(
+          left: ThemeTokens.space2,
+          bottom: ThemeTokens.space3,
+        ),
+        child: Text('Output unavailable'),
+      );
+    }
+    if (item.outputDeferred) {
+      return Padding(
+        padding: const EdgeInsets.only(
+          left: ThemeTokens.space2,
+          bottom: ThemeTokens.space3,
+        ),
+        child: TextButton(
+          onPressed: historyController.loadingItems
+              ? null
+              : () => historyController.loadDeferredOutput(item),
+          child: const Text('Fetch output safely'),
+        ),
+      );
+    }
+    if (historyController.selectedTurnId != item.turnId) {
+      return Padding(
+        padding: const EdgeInsets.only(
+          left: ThemeTokens.space2,
+          bottom: ThemeTokens.space3,
+        ),
+        child: TextButton(
+          onPressed: historyController.loadingItems
+              ? null
+              : () => historyController.loadTurnItems(item.turnId),
+          child: const Text('Load turn details'),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}
+
+class _OutputDialog extends StatefulWidget {
+  const _OutputDialog({required this.gateway, required this.descriptor});
+
+  final OutputGateway gateway;
+  final OutputDescriptor descriptor;
+
+  @override
+  State<_OutputDialog> createState() => _OutputDialogState();
+}
+
+class _OutputDialogState extends State<_OutputDialog> {
+  late final OutputViewerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = OutputViewerController(
+      gateway: widget.gateway,
+      descriptor: widget.descriptor,
+    );
+    unawaited(_controller.loadInitial());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: SizedBox(
+        width: 820,
+        height: 620,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final chunk = _controller.chunk;
+            final rows = _outputRows(_controller.text);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(ThemeTokens.space3),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Command output',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              chunk == null
+                                  ? '${widget.descriptor.storedBytes} stored byte(s)'
+                                  : 'Window at byte ${chunk.offset} of '
+                                        '${widget.descriptor.storedBytes}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.descriptor.truncated)
+                  Container(
+                    padding: const EdgeInsets.all(ThemeTokens.space2),
+                    color: ThemeTokens.pending.withValues(alpha: 0.12),
+                    child: Text(
+                      'Only ${widget.descriptor.storedBytes} of '
+                      '${widget.descriptor.bytes} bytes were retained by the '
+                      'configured Host limit.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                if (_controller.errorMessage case final error?)
+                  Padding(
+                    padding: const EdgeInsets.all(ThemeTokens.space2),
+                    child: SelectableText(
+                      error,
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: ThemeTokens.error),
+                    ),
+                  ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _controller.loading && chunk == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : SelectionArea(
+                          child: ListView.builder(
+                            itemExtent: 20,
+                            itemCount: rows.length,
+                            itemBuilder: (context, index) => Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: ThemeTokens.space3,
+                              ),
+                              child: Text(
+                                rows[index],
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.clip,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(fontFamily: 'monospace'),
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(ThemeTokens.space2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: _controller.loading
+                            ? null
+                            : _controller.loadStart,
+                        child: const Text('First'),
+                      ),
+                      TextButton(
+                        onPressed: _controller.canLoadPrevious
+                            ? _controller.loadPrevious
+                            : null,
+                        child: const Text('Previous'),
+                      ),
+                      TextButton(
+                        onPressed: _controller.canLoadNext
+                            ? _controller.loadNext
+                            : null,
+                        child: const Text('Next'),
+                      ),
+                      TextButton(
+                        onPressed: _controller.loading
+                            ? null
+                            : _controller.loadTail,
+                        child: const Text('Tail'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
+
+List<String> _outputRows(String text) {
+  const maxCharactersPerRow = 4096;
+  final rows = <String>[];
+  for (final line in text.split('\n')) {
+    if (line.isEmpty) {
+      rows.add('');
+      continue;
+    }
+    var offset = 0;
+    while (offset < line.length) {
+      var end = (offset + maxCharactersPerRow).clamp(0, line.length);
+      if (end < line.length &&
+          _isHighSurrogate(line.codeUnitAt(end - 1)) &&
+          _isLowSurrogate(line.codeUnitAt(end))) {
+        end -= 1;
+      }
+      rows.add(line.substring(offset, end));
+      offset = end;
+    }
+  }
+  return rows;
+}
+
+bool _isHighSurrogate(int codeUnit) => codeUnit >= 0xd800 && codeUnit <= 0xdbff;
+
+bool _isLowSurrogate(int codeUnit) => codeUnit >= 0xdc00 && codeUnit <= 0xdfff;
 
 class _HistoryFooter extends StatelessWidget {
   const _HistoryFooter({required this.controller});
@@ -980,6 +1249,11 @@ class _HistoryFooter extends StatelessWidget {
           TextButton(
             onPressed: controller.refresh,
             child: const Text('Return to newest'),
+          ),
+        if (controller.canLoadMoreItems)
+          TextButton(
+            onPressed: controller.loadMoreItems,
+            child: const Text('Load more items'),
           ),
       ],
     );
@@ -1291,7 +1565,8 @@ class _RuntimePanel extends StatelessWidget {
       RuntimeConnectionState.connected => ThemeTokens.connected,
       RuntimeConnectionState.error ||
       RuntimeConnectionState.processExited ||
-      RuntimeConnectionState.notFound => ThemeTokens.error,
+      RuntimeConnectionState.notFound ||
+      RuntimeConnectionState.hostNotFound => ThemeTokens.error,
       _ => ThemeTokens.pending,
     };
 

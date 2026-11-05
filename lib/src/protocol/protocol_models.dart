@@ -24,11 +24,13 @@ class InitializeRequest {
     this.clientName = 'codex-native-unofficial',
     this.clientTitle = 'Codex Native (Unofficial)',
     this.clientVersion = '0.1.0',
+    this.experimentalApi = true,
   });
 
   final String clientName;
   final String clientTitle;
   final String clientVersion;
+  final bool experimentalApi;
 
   JsonObject toJson() => {
     'clientInfo': {
@@ -36,7 +38,7 @@ class InitializeRequest {
       'title': clientTitle,
       'version': clientVersion,
     },
-    'capabilities': null,
+    'capabilities': {'experimentalApi': experimentalApi},
   };
 }
 

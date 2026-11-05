@@ -26,6 +26,10 @@ jobs:
 
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed lib test tool
+      - run: cargo fmt --all -- --check
+      - run: rustfmt --edition 2024 --check tool/fixtures/large_output_app_server.rs
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
       - run: flutter analyze
       - run: flutter test
       - run: flutter build linux --debug

@@ -5,12 +5,19 @@ import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/transport/process/codex_executable_locator.dart';
+import 'package:codex_native_unofficial/src/transport/process/host_executable_locator.dart';
 import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 
 Future<void> main() async {
   final executable = await const CodexExecutableLocator().locate();
   if (executable == null) {
     stderr.writeln('TURN_SMOKE=CODEX_NOT_FOUND');
+    exitCode = 2;
+    return;
+  }
+  final host = await const HostExecutableLocator().locate();
+  if (host == null) {
+    stderr.writeln('TURN_SMOKE=HOST_NOT_FOUND');
     exitCode = 2;
     return;
   }
@@ -25,7 +32,10 @@ Future<void> main() async {
   var assistantText = '';
 
   try {
-    transport = await ProcessTransport.start(executablePath: executable);
+    transport = await ProcessTransport.startHost(
+      hostExecutablePath: host,
+      codexExecutablePath: executable,
+    );
     await transport.initialize(const InitializeRequest());
     final startedThread = await transport.startThread(
       ThreadStartOptions(cwd: Directory.current.path),

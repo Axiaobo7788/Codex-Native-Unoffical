@@ -20,6 +20,10 @@ Desktop Flutter UI
         |
         | stdio / JSONL
         v
+codex-native-host
+        |
+        | bounded/sanitized JSONL
+        v
 stock codex app-server
         |
         v
@@ -40,9 +44,9 @@ The UI is a projection of Codex state, never the source of truth.
 ## Status
 
 Pre-alpha. Phase 1 is implemented: the Flutter desktop app locates a stock
-`codex` executable, starts `codex app-server --listen stdio://`, completes the
-initialization handshake, displays typed runtime state, and owns the child
-process lifecycle. Linux, Windows, macOS, and Android project shells are in the
+`codex` executable, starts the bundled Rust Host, completes the stock app-server
+initialization handshake, displays typed runtime state, and owns the process
+lifecycle. Linux, Windows, macOS, and Android project shells are in the
 repository; Android remote control is a later phase.
 
 Phase 2 is locally implemented. The current desktop slice lists bounded pages
@@ -56,15 +60,17 @@ explicit, and dangerous choices require confirmation. Turn diffs are projected
 into bounded file summaries with a virtualized selected-file view.
 
 Phase 3 is in progress. Stored history uses bounded `thread/turns/list` summary
-pages and loads full items for only one selected turn through
-`thread/items/list`; inactive-thread history is evicted immediately. Lazy
-command-output retrieval and measured long-session memory profiling remain.
+pages and loads full items for only one selected turn. The Host incrementally
+spools large command output behind opaque IDs before Dart sees the JSON, and the
+UI reads only a 64 KiB virtualized range at a time. Inactive-thread history is
+evicted immediately. Cross-platform and Human UI validation remain.
 
 ## Run locally
 
 Prerequisites:
 
 - Flutter 3.47.1 or a compatible newer version;
+- Rust 1.87 or newer with Cargo;
 - Codex available on `PATH`, or `CODEX_EXECUTABLE` set to the executable path.
 
 ```sh
@@ -82,16 +88,26 @@ dart run tool/approval_smoke.dart
 dart run tool/model_smoke.dart
 flutter test tool/coding_task_smoke.dart --reporter expanded
 flutter test tool/history_memory_benchmark.dart --reporter expanded
+dart run tool/host_memory_benchmark.dart
 ```
 
 ## Verify
 
 ```sh
 dart format --output=none --set-exit-if-changed lib test tool
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 flutter analyze
 flutter test
 flutter build linux --debug
 ```
+
+Linux and Windows native builds compile and place `codex-native-host` beside the
+Flutter executable. The macOS build embeds it in `Contents/MacOS`; macOS is a
+direct, signed/notarized distribution rather than a Mac App Store sandboxed app.
+Set `CODEX_NATIVE_HOST` only for development diagnostics when using a separately
+built Host. There is intentionally no direct app-server fallback.
 
 ## License
 

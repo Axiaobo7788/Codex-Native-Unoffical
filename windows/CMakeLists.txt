@@ -52,6 +52,29 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+# Build the bounded Rust Host and place it beside the Flutter executable. Use a
+# release Host for every Visual Studio configuration so the production transport
+# is measured/optimized consistently.
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
+set(NATIVE_HOST_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/../Cargo.toml")
+set(NATIVE_HOST_TARGET_DIR "${CMAKE_BINARY_DIR}/native_host_target")
+set(NATIVE_HOST_BINARY
+  "${NATIVE_HOST_TARGET_DIR}/release/codex-native-host.exe")
+file(GLOB_RECURSE NATIVE_HOST_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native_host/src/*.rs")
+add_custom_command(
+  OUTPUT "${NATIVE_HOST_BINARY}"
+  COMMAND "${CARGO_EXECUTABLE}" build --locked --release
+    --manifest-path "${NATIVE_HOST_MANIFEST}"
+    --target-dir "${NATIVE_HOST_TARGET_DIR}"
+  DEPENDS ${NATIVE_HOST_SOURCES} "${NATIVE_HOST_MANIFEST}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../Cargo.lock"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  COMMENT "Building codex-native-host"
+  VERBATIM)
+add_custom_target(codex_native_host ALL DEPENDS "${NATIVE_HOST_BINARY}")
+add_dependencies(${BINARY_NAME} codex_native_host)
+
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
@@ -73,6 +96,9 @@ set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+install(PROGRAMS "${NATIVE_HOST_BINARY}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

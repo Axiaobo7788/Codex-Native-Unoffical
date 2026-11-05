@@ -5,6 +5,7 @@ import 'dart:io';
 import '../../domain/approval_models.dart';
 import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
+import '../../domain/output_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../protocol/approval_protocol.dart';
@@ -12,6 +13,7 @@ import '../../protocol/history_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/model_protocol.dart';
+import '../../protocol/output_protocol.dart';
 import '../../protocol/protocol_models.dart';
 import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
@@ -40,6 +42,7 @@ class ProcessTransport implements CodexTransport {
     _threadProtocol = ThreadProtocolAdapter(request: _peer.request);
     _historyProtocol = HistoryProtocolAdapter(request: _peer.request);
     _modelProtocol = ModelProtocolAdapter(request: _peer.request);
+    _outputProtocol = OutputProtocolAdapter(request: _peer.request);
     _turnProtocol = TurnProtocolAdapter(
       request: _peer.request,
       notifications: _peer.notifications,
@@ -66,6 +69,7 @@ class ProcessTransport implements CodexTransport {
   late final ThreadProtocolAdapter _threadProtocol;
   late final HistoryProtocolAdapter _historyProtocol;
   late final ModelProtocolAdapter _modelProtocol;
+  late final OutputProtocolAdapter _outputProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ApprovalProtocolAdapter _approvalProtocol;
   late final StreamSubscription<String> _stderrSubscription;
@@ -76,15 +80,12 @@ class ProcessTransport implements CodexTransport {
 
   static Future<ProcessTransport> start({
     required String executablePath,
+    List<String> arguments = const ['app-server', '--listen', 'stdio://'],
     ProcessLauncher launcher = launchIoProcess,
     Duration shutdownTimeout = const Duration(seconds: 3),
     int stderrTailLimit = 32 * 1024,
   }) async {
-    final process = await launcher(executablePath, const [
-      'app-server',
-      '--listen',
-      'stdio://',
-    ]);
+    final process = await launcher(executablePath, arguments);
     return ProcessTransport._(
       executablePath: executablePath,
       process: process,
@@ -92,6 +93,20 @@ class ProcessTransport implements CodexTransport {
       stderrTailLimit: stderrTailLimit,
     );
   }
+
+  static Future<ProcessTransport> startHost({
+    required String hostExecutablePath,
+    required String codexExecutablePath,
+    ProcessLauncher launcher = launchIoProcess,
+    Duration shutdownTimeout = const Duration(seconds: 7),
+    int stderrTailLimit = 32 * 1024,
+  }) => start(
+    executablePath: hostExecutablePath,
+    arguments: ['--codex', codexExecutablePath],
+    launcher: launcher,
+    shutdownTimeout: shutdownTimeout,
+    stderrTailLimit: stderrTailLimit,
+  );
 
   int get processId => _process.pid;
   String get stderrTail => _stderrTail;
@@ -131,12 +146,44 @@ class ProcessTransport implements CodexTransport {
       _modelProtocol.listModels(query);
 
   @override
+  Future<OutputDescriptor> statOutput(String reference) =>
+      _outputProtocol.stat(reference);
+
+  @override
+  Future<OutputChunk> readOutputRange({
+    required String reference,
+    required int offset,
+    required int length,
+  }) => _outputProtocol.readRange(
+    reference: reference,
+    offset: offset,
+    length: length,
+  );
+
+  @override
+  Future<OutputChunk> readOutputTail({
+    required String reference,
+    required int length,
+  }) => _outputProtocol.tail(reference: reference, length: length);
+
+  @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
       _historyProtocol.listTurns(query);
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
       _historyProtocol.listItems(query);
+
+  @override
+  Future<List<HistoryItem>> readHistoryItems({
+    required String threadId,
+    required String turnId,
+    required List<String> itemIds,
+  }) => _historyProtocol.readItems(
+    threadId: threadId,
+    turnId: turnId,
+    itemIds: itemIds,
+  );
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>

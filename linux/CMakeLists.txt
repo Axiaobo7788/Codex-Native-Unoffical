@@ -60,6 +60,35 @@ add_subdirectory("runner")
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
+# Build the bounded Rust Host and place it beside the Flutter executable. The
+# application intentionally has no direct app-server fallback.
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
+set(NATIVE_HOST_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/../Cargo.toml")
+set(NATIVE_HOST_TARGET_DIR "${CMAKE_BINARY_DIR}/native_host_target")
+file(GLOB_RECURSE NATIVE_HOST_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native_host/src/*.rs")
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  set(NATIVE_HOST_PROFILE "debug")
+  set(NATIVE_HOST_RELEASE_ARG "")
+else()
+  set(NATIVE_HOST_PROFILE "release")
+  set(NATIVE_HOST_RELEASE_ARG "--release")
+endif()
+set(NATIVE_HOST_BINARY
+  "${NATIVE_HOST_TARGET_DIR}/${NATIVE_HOST_PROFILE}/codex-native-host")
+add_custom_command(
+  OUTPUT "${NATIVE_HOST_BINARY}"
+  COMMAND "${CARGO_EXECUTABLE}" build --locked ${NATIVE_HOST_RELEASE_ARG}
+    --manifest-path "${NATIVE_HOST_MANIFEST}"
+    --target-dir "${NATIVE_HOST_TARGET_DIR}"
+  DEPENDS ${NATIVE_HOST_SOURCES} "${NATIVE_HOST_MANIFEST}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../Cargo.lock"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  COMMENT "Building codex-native-host"
+  VERBATIM)
+add_custom_target(codex_native_host ALL DEPENDS "${NATIVE_HOST_BINARY}")
+add_dependencies(${BINARY_NAME} codex_native_host)
+
 # Only the install-generated bundle's copy of the executable will launch
 # correctly, since the resources must in the right relative locations. To avoid
 # people trying to run the unbundled copy, put it in a subdirectory instead of
@@ -92,6 +121,9 @@ set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+install(PROGRAMS "${NATIVE_HOST_BINARY}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

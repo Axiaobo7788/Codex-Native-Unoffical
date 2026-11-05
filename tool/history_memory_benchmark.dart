@@ -112,6 +112,13 @@ class _BenchmarkGateway implements HistoryGateway {
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
       throw UnimplementedError();
+
+  @override
+  Future<List<HistoryItem>> readHistoryItems({
+    required String threadId,
+    required String turnId,
+    required List<String> itemIds,
+  }) async => const [];
 }
 
 ThreadSummary _thread() => ThreadSummary(

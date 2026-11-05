@@ -161,3 +161,38 @@ mandatory.
   deltas remain bounded/sublinear; app-server is reported separately.
 - A real installed app-server smoke must still pass initialization, thread/turn
   flows, approvals, interruption, history, and one coding task through the Host.
+
+## Desktop packaging and the macOS process model
+
+_Reviewed: 2026-11-05_
+
+### Sources reviewed
+
+- Flutter's official
+  [desktop build](https://docs.flutter.dev/platform-integration/desktop) and
+  [macOS distribution](https://docs.flutter.dev/platform-integration/macos/building)
+  documentation.
+- Apple's official
+  [App Sandbox](https://developer.apple.com/documentation/security/app-sandbox),
+  [sandbox inheritance](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html),
+  and
+  [embedded command-line tool](https://developer.apple.com/documentation/xcode/embedding-a-helper-tool-in-a-sandboxed-app)
+  documentation.
+
+### Findings and decision
+
+- Flutter's release artifacts are ordinary native desktop bundles; the Host must
+  be built and copied as part of each platform's native build rather than found
+  accidentally in a repository `target` directory.
+- Apple supports embedded command-line helpers, but a sandboxed child inherits
+  only its parent's static sandbox rights. Rights granted after launch, such as
+  user-selected file access, are not automatically inherited. Mac App Store
+  distribution requires App Sandbox.
+- Stock Codex must access arbitrary user-selected development workspaces and run
+  their toolchains. That cannot be made equivalent to a normal Codex shell by
+  embedding only the Host with sandbox inheritance.
+- Therefore macOS v1 is a direct, notarized distribution with App Sandbox
+  disabled. The Host is nested in `Contents/MacOS`, signed during the build, and
+  located beside the Flutter executable. Real macOS signing, notarization, child
+  launch, workspace access, and cleanup remain platform gates because this Linux
+  environment cannot execute them.

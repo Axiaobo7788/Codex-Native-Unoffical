@@ -42,14 +42,46 @@ void main() {
             'nextCursor': 'older',
           };
         }
+        if (method == 'thread/items/read') {
+          return {
+            'data': [
+              {
+                'turnId': 'turn-1',
+                'item': {
+                  'id': 'command-2',
+                  'type': 'commandExecution',
+                  'command': 'cargo test',
+                  'status': 'completed',
+                  'aggregatedOutput': null,
+                  '_codexNativeOutput': {
+                    'ref': '0123456789abcdef0123456789abcdef',
+                    'bytes': 1024,
+                    'storedBytes': 1024,
+                    'truncated': false,
+                    'available': true,
+                  },
+                },
+              },
+            ],
+          };
+        }
         return {
           'data': [
             {
               'turnId': 'turn-1',
               'item': {
-                'id': 'assistant-1',
-                'type': 'agentMessage',
-                'text': 'Done',
+                'id': 'command-2',
+                'type': 'commandExecution',
+                'command': 'cargo test',
+                'status': 'completed',
+                'aggregatedOutput': null,
+                '_codexNativeOutput': {
+                  'ref': '0123456789abcdef0123456789abcdef',
+                  'bytes': 1024,
+                  'storedBytes': 1024,
+                  'truncated': false,
+                  'available': true,
+                },
               },
             },
           ],
@@ -89,8 +121,38 @@ void main() {
       'cursor': 'next',
       'limit': 25,
       'sortDirection': 'asc',
+      'deferOutput': {'commandExecution': true},
     });
-    expect(page.items.single.text, 'Done');
+    expect(page.items.single.text, 'Command: cargo test');
+    expect(page.items.single.output?.bytes, 1024);
+    expect(
+      page.items.single.output?.reference,
+      '0123456789abcdef0123456789abcdef',
+    );
+  });
+
+  test('reads only explicitly selected deferred item IDs', () async {
+    final items = await adapter.readItems(
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemIds: const ['command-2'],
+    );
+
+    expect(requests.single.$1, 'thread/items/read');
+    expect(requests.single.$2, {
+      'threadId': 'thread-1',
+      'turnId': 'turn-1',
+      'itemIds': ['command-2'],
+    });
+    expect(items.single.output?.storedBytes, 1024);
+    await expectLater(
+      adapter.readItems(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemIds: const [],
+      ),
+      throwsRangeError,
+    );
   });
 }
 
