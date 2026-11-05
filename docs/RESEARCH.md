@@ -443,3 +443,43 @@ _Reviewed: 2026-11-05_
 - Plaintext non-loopback configuration must fail before binding. Later WSS uses
   rustls with an explicit certificate/key policy; it must not silently downgrade
   to `ws://` when TLS configuration fails.
+
+### Initial read-only Codex routing surface
+
+_Reviewed: 2026-11-05_
+
+- Generated the experimental JSON Schema bundle from the actually installed
+  stock app-server `0.166.0-alpha.5.1` and compared `ModelListParams`,
+  `ThreadListParams`, and `ThreadReadParams` with the current typed Flutter
+  adapters. This was a temporary generated artifact and was removed after the
+  review; no upstream schema is copied into the product.
+- The first Remote Codex allowlist is `model/list`, `thread/list`, and
+  metadata-only `thread/read`. Both list methods normalize a hard maximum of 100
+  results; cursors are capped at 4 KiB. `thread/list` accepts only pagination,
+  bounded sort, and `archived=false`; it does not accept cwd/search/project or
+  relationship filters. `thread/read` forces `includeTurns=false` and bounds the
+  thread ID. Unknown fields, write methods, idempotency keys, and missing read
+  scope fail before app-server dispatch.
+- The Host remains the only app-server stdio peer. Remote requests use a
+  process-session-qualified internal ID namespace, while local input is barred
+  from that namespace. Only a top-level response matching that exact random
+  session prefix is removed from desktop stdout; other stock server requests,
+  notifications, desktop responses, and even another session-like prefix remain
+  on the local path.
+- Target responses are captured only after the existing `aggregatedOutput`
+  sanitizer/file spool completes. Capture is capped below the 1 MiB WebSocket
+  message ceiling; an oversized sanitized response becomes an explicit Remote
+  error without being loaded into memory or leaked to Flutter. Late responses
+  after disconnect stay suppressed and are discarded when their bounded
+  correlation no longer exists.
+- The shared Host event queue is capped at 64 messages, Remote correlations at
+  64 requests/64 KiB, and each connection's application queue at 16 messages
+  and 2 MiB. A WebSocket message is capped at 1 MiB and a socket write at five
+  seconds. Queue/byte overflow or a 30-second upstream timeout closes the
+  connection so disconnect cleanup releases every pending correlation; it does
+  not leave retryable-looking requests resident indefinitely.
+
+Deliberately deferred: stock notifications are not published to the replay
+journal yet, so resume currently negotiates but has no Codex event suffix to
+recover. Write methods, approvals, output-range transfer, non-loopback TLS, and
+Android secure storage remain unavailable.

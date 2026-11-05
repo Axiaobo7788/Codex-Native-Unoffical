@@ -1,3 +1,4 @@
+use crate::events::AppServerRemoteResponse;
 use crate::json_string::JsonStringDecoder;
 use crate::spool::{CandidateFile, OutputSpool, SpoolStore};
 use json_skimmer::{Event, Mode, Parser, StringKind};
@@ -7,14 +8,19 @@ use std::num::NonZeroUsize;
 const INPUT_BUFFER_BYTES: usize = 16 * 1024;
 const MAX_JSON_DEPTH: usize = 256;
 const TARGET_KEY: &[u8] = b"aggregatedOutput";
+const ID_KEY: &[u8] = b"id";
 const MAX_KEY_BYTES: usize = 256;
+const MAX_REMOTE_ID_BYTES: usize = 128;
+const MAX_REMOTE_RESPONSE_BYTES: usize = 1024 * 1024 - 4096;
 
 pub(crate) fn transform_stream(
     mut input: impl Read,
     mut output: impl Write,
     store: &SpoolStore,
+    remote_id_prefix: Option<String>,
+    mut on_remote_response: impl FnMut(AppServerRemoteResponse) -> io::Result<()>,
 ) -> io::Result<()> {
-    let mut transformer = Transformer::new(store);
+    let mut transformer = Transformer::new(store, remote_id_prefix);
     let mut buffer = [0_u8; INPUT_BUFFER_BYTES];
     loop {
         let count = match input.read(&mut buffer) {
@@ -23,9 +29,9 @@ pub(crate) fn transform_stream(
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error),
         };
-        transformer.push(&buffer[..count], &mut output)?;
+        transformer.push(&buffer[..count], &mut output, &mut on_remote_response)?;
     }
-    transformer.finish(&mut output)
+    transformer.finish(&mut output, &mut on_remote_response)
 }
 
 struct Transformer<'a> {
@@ -34,17 +40,22 @@ struct Transformer<'a> {
 }
 
 impl<'a> Transformer<'a> {
-    fn new(store: &'a SpoolStore) -> Self {
+    fn new(store: &'a SpoolStore, remote_id_prefix: Option<String>) -> Self {
         Self {
             parser: Parser::with_max_depth(
                 Mode::Scan,
                 NonZeroUsize::new(MAX_JSON_DEPTH).expect("positive JSON depth"),
             ),
-            processor: Processor::new(store),
+            processor: Processor::new(store, remote_id_prefix),
         }
     }
 
-    fn push(&mut self, input: &[u8], output: &mut impl Write) -> io::Result<()> {
+    fn push(
+        &mut self,
+        input: &[u8],
+        output: &mut impl Write,
+        on_remote_response: &mut dyn FnMut(AppServerRemoteResponse) -> io::Result<()>,
+    ) -> io::Result<()> {
         let base = self.parser.offset();
         if self.processor.cursor != base {
             return Err(invalid_data("JSON transformer offset mismatch"));
@@ -52,7 +63,7 @@ impl<'a> Transformer<'a> {
         let processor = &mut self.processor;
         self.parser.push(input, |event| {
             if processor.error.is_none()
-                && let Err(error) = processor.handle(event, input, base, output)
+                && let Err(error) = processor.handle(event, input, base, output, on_remote_response)
             {
                 processor.error = Some(error);
             }
@@ -65,12 +76,17 @@ impl<'a> Transformer<'a> {
         Ok(())
     }
 
-    fn finish(&mut self, output: &mut impl Write) -> io::Result<()> {
+    fn finish(
+        &mut self,
+        output: &mut impl Write,
+        on_remote_response: &mut dyn FnMut(AppServerRemoteResponse) -> io::Result<()>,
+    ) -> io::Result<()> {
         let parser_offset = self.parser.offset();
         let processor = &mut self.processor;
         self.parser.finish(|event| {
             if processor.error.is_none()
-                && let Err(error) = processor.handle(event, &[], parser_offset, output)
+                && let Err(error) =
+                    processor.handle(event, &[], parser_offset, output, on_remote_response)
             {
                 processor.error = Some(error);
             }
@@ -94,14 +110,18 @@ struct Processor<'a> {
     depth: usize,
     key: Option<KeyCollector>,
     pending_target_depth: Option<usize>,
+    pending_id_depth: Option<usize>,
     active_output: Option<ActiveOutput<'a>>,
+    active_id: Option<BoundedStringCollector>,
+    remote_response_id: Option<String>,
+    remote_id_prefix: Option<String>,
     completed_candidate: bool,
     separator_has_line_break: bool,
     error: Option<io::Error>,
 }
 
 impl<'a> Processor<'a> {
-    fn new(store: &'a SpoolStore) -> Self {
+    fn new(store: &'a SpoolStore, remote_id_prefix: Option<String>) -> Self {
         Self {
             store,
             candidate: None,
@@ -109,7 +129,11 @@ impl<'a> Processor<'a> {
             depth: 0,
             key: None,
             pending_target_depth: None,
+            pending_id_depth: None,
             active_output: None,
+            active_id: None,
+            remote_response_id: None,
+            remote_id_prefix,
             completed_candidate: false,
             separator_has_line_break: false,
             error: None,
@@ -122,6 +146,7 @@ impl<'a> Processor<'a> {
         input: &[u8],
         base: u64,
         output: &mut impl Write,
+        on_remote_response: &mut dyn FnMut(AppServerRemoteResponse) -> io::Result<()>,
     ) -> io::Result<()> {
         match event {
             Event::CandidateStart { offset, .. } => {
@@ -138,7 +163,10 @@ impl<'a> Processor<'a> {
                 self.depth = 0;
                 self.key = None;
                 self.pending_target_depth = None;
+                self.pending_id_depth = None;
                 self.active_output = None;
+                self.active_id = None;
+                self.remote_response_id = None;
                 self.separator_has_line_break = false;
             }
             Event::ObjectStart { .. } | Event::ArrayStart { .. } => {
@@ -161,6 +189,9 @@ impl<'a> Processor<'a> {
                         self.key = Some(KeyCollector::default());
                     }
                     StringKind::Value => {
+                        if self.pending_id_depth.take() == Some(self.depth) {
+                            self.active_id = Some(BoundedStringCollector::new(MAX_REMOTE_ID_BYTES));
+                        }
                         if self.pending_target_depth.take() == Some(self.depth) {
                             self.candidate_mut()?.write_all(b"null")?;
                             self.cursor = offset + 1;
@@ -183,6 +214,9 @@ impl<'a> Processor<'a> {
                     }
                 }
                 StringKind::Value if self.active_output.is_some() => {
+                    if let Some(id) = self.active_id.as_mut() {
+                        id.feed(bytes)?;
+                    }
                     self.copy_until(offset, input, base)?;
                     let active = self.active_output.as_mut().expect("checked above");
                     active
@@ -190,7 +224,11 @@ impl<'a> Processor<'a> {
                         .feed(bytes, |decoded| active.spool.write_decoded(decoded))?;
                     self.cursor = offset + bytes.len() as u64;
                 }
-                StringKind::Value => {}
+                StringKind::Value => {
+                    if let Some(id) = self.active_id.as_mut() {
+                        id.feed(bytes)?;
+                    }
+                }
             },
             Event::StringEnd { kind, offset } => match kind {
                 StringKind::Key => {
@@ -198,9 +236,14 @@ impl<'a> Processor<'a> {
                         .key
                         .take()
                         .ok_or_else(|| invalid_data("missing JSON key state"))?;
-                    self.pending_target_depth = key.matches_target().then_some(self.depth);
+                    if let Some(key) = key.finish() {
+                        self.pending_target_depth = (key == TARGET_KEY).then_some(self.depth);
+                        self.pending_id_depth =
+                            (self.depth == 1 && key == ID_KEY).then_some(self.depth);
+                    }
                 }
                 StringKind::Value if self.active_output.is_some() => {
+                    self.finish_active_id();
                     self.copy_until(offset, input, base)?;
                     self.cursor = offset + 1;
                     let active = self.active_output.take().expect("checked above");
@@ -210,7 +253,7 @@ impl<'a> Processor<'a> {
                         .write_all(b",\"_codexNativeOutput\":")?;
                     serde_json::to_writer(self.candidate_mut()?, &descriptor.to_wire_value())?;
                 }
-                StringKind::Value => {}
+                StringKind::Value => self.finish_active_id(),
             },
             Event::NumberStart { .. } | Event::Boolean { .. } | Event::Null { .. } => {
                 self.clear_pending_for_non_string_value();
@@ -220,7 +263,9 @@ impl<'a> Processor<'a> {
                 if self.depth != 0
                     || self.key.is_some()
                     || self.pending_target_depth.is_some()
+                    || self.pending_id_depth.is_some()
                     || self.active_output.is_some()
+                    || self.active_id.is_some()
                 {
                     return Err(invalid_data("incomplete JSON transformer state"));
                 }
@@ -228,7 +273,16 @@ impl<'a> Processor<'a> {
                     .candidate
                     .take()
                     .ok_or_else(|| invalid_data("missing JSON candidate"))?;
-                candidate.publish_to(output)?;
+                if let Some(host_id) = self.remote_response_id.take() {
+                    let captured = candidate.capture_bounded(MAX_REMOTE_RESPONSE_BYTES)?;
+                    on_remote_response(AppServerRemoteResponse {
+                        host_id,
+                        payload: captured.payload,
+                        total_bytes: captured.total_bytes,
+                    })?;
+                } else {
+                    candidate.publish_to(output)?;
+                }
                 self.completed_candidate = true;
                 self.separator_has_line_break = false;
             }
@@ -273,6 +327,9 @@ impl<'a> Processor<'a> {
         if self.pending_target_depth == Some(self.depth) {
             self.pending_target_depth = None;
         }
+        if self.pending_id_depth == Some(self.depth) {
+            self.pending_id_depth = None;
+        }
     }
 
     fn candidate_mut(&mut self) -> io::Result<&mut CandidateFile> {
@@ -286,6 +343,26 @@ impl<'a> Processor<'a> {
         self.active_output.take();
         self.key.take();
         self.pending_target_depth = None;
+        self.pending_id_depth = None;
+        self.active_id.take();
+        self.remote_response_id.take();
+    }
+
+    fn finish_active_id(&mut self) {
+        let Some(id) = self
+            .active_id
+            .take()
+            .and_then(BoundedStringCollector::finish)
+        else {
+            return;
+        };
+        if self
+            .remote_id_prefix
+            .as_ref()
+            .is_some_and(|prefix| id.starts_with(prefix))
+        {
+            self.remote_response_id = Some(id);
+        }
     }
 }
 
@@ -315,8 +392,47 @@ impl KeyCollector {
         })
     }
 
-    fn matches_target(self) -> bool {
-        self.decoder.finish().is_ok() && !self.overflow && self.decoded == TARGET_KEY
+    fn finish(self) -> Option<Vec<u8>> {
+        (self.decoder.finish().is_ok() && !self.overflow).then_some(self.decoded)
+    }
+}
+
+struct BoundedStringCollector {
+    decoder: JsonStringDecoder,
+    decoded: Vec<u8>,
+    max_bytes: usize,
+    overflow: bool,
+}
+
+impl BoundedStringCollector {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            decoder: JsonStringDecoder::default(),
+            decoded: Vec::new(),
+            max_bytes,
+            overflow: false,
+        }
+    }
+
+    fn feed(&mut self, bytes: &[u8]) -> io::Result<()> {
+        let decoded = &mut self.decoded;
+        let overflow = &mut self.overflow;
+        let max_bytes = self.max_bytes;
+        self.decoder.feed(bytes, |fragment| {
+            if decoded.len() + fragment.len() <= max_bytes {
+                decoded.extend_from_slice(fragment);
+            } else {
+                *overflow = true;
+            }
+            Ok(())
+        })
+    }
+
+    fn finish(self) -> Option<String> {
+        if self.decoder.finish().is_err() || self.overflow {
+            return None;
+        }
+        String::from_utf8(self.decoded).ok()
     }
 }
 
@@ -343,7 +459,7 @@ mod tests {
                 temp.path().to_owned(),
                 max_output,
                 max_total,
-                1024 * 1024,
+                2 * 1024 * 1024,
                 1024,
                 Duration::from_secs(60),
             )
@@ -352,13 +468,36 @@ mod tests {
         }
 
         fn transform(&self, input: &[u8], chunk_size: usize) -> io::Result<Vec<u8>> {
-            let mut transformer = Transformer::new(&self.store);
+            let mut transformer =
+                Transformer::new(&self.store, Some("codex-remote:session:".to_owned()));
             let mut output = Vec::new();
+            let mut ignore_remote = |_| Ok(());
             for chunk in input.chunks(chunk_size) {
-                transformer.push(chunk, &mut output)?;
+                transformer.push(chunk, &mut output, &mut ignore_remote)?;
             }
-            transformer.finish(&mut output)?;
+            transformer.finish(&mut output, &mut ignore_remote)?;
             Ok(output)
+        }
+
+        fn transform_with_remote(
+            &self,
+            input: &[u8],
+            chunk_size: usize,
+        ) -> io::Result<(Vec<u8>, Vec<AppServerRemoteResponse>)> {
+            let mut transformer =
+                Transformer::new(&self.store, Some("codex-remote:session:".to_owned()));
+            let mut output = Vec::new();
+            let mut remote = Vec::new();
+            let mut collect_remote = |response| {
+                remote.push(response);
+                Ok(())
+            };
+            for chunk in input.chunks(chunk_size) {
+                transformer.push(chunk, &mut output, &mut collect_remote)?;
+            }
+            transformer.finish(&mut output, &mut collect_remote)?;
+            drop(collect_remote);
+            Ok((output, remote))
         }
     }
 
@@ -409,6 +548,57 @@ mod tests {
         assert!(first["result"]["nested"]["aggregatedOutput"].is_null());
         assert_eq!(first["result"]["nested"]["_codexNativeOutput"]["bytes"], 3);
         assert_eq!(second["params"]["_codexNativeOutput"]["bytes"], 3);
+    }
+
+    #[test]
+    fn suppresses_only_top_level_reserved_responses_after_sanitizing_them() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"id":1,"result":{"value":"desktop"}}
+{"result":{"aggregatedOutput":"secret output"},"id":"codex-remote:session:1"}
+{"method":"event","params":{"id":"codex-remote:not-a-top-level-response"}}
+{"id":"codex-remote:other-session:1","result":{"value":"not ours"}}
+"#;
+        let (output, remote) = fixture.transform_with_remote(input, 5).unwrap();
+        let forwarded = std::str::from_utf8(&output)
+            .unwrap()
+            .lines()
+            .collect::<Vec<_>>();
+        assert_eq!(forwarded.len(), 3);
+        assert_eq!(
+            serde_json::from_str::<Value>(forwarded[0]).unwrap()["id"],
+            1
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(forwarded[1]).unwrap()["method"],
+            "event"
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(forwarded[2]).unwrap()["id"],
+            "codex-remote:other-session:1"
+        );
+        assert_eq!(remote.len(), 1);
+        assert_eq!(remote[0].host_id, "codex-remote:session:1");
+        let captured: Value = serde_json::from_slice(remote[0].payload.as_ref().unwrap()).unwrap();
+        assert!(captured["result"]["aggregatedOutput"].is_null());
+        assert_eq!(captured["result"]["_codexNativeOutput"]["bytes"], 13);
+        assert!(
+            !String::from_utf8_lossy(remote[0].payload.as_ref().unwrap()).contains("secret output")
+        );
+    }
+
+    #[test]
+    fn reports_an_oversized_remote_response_without_forwarding_or_materializing_it() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = serde_json::to_vec(&serde_json::json!({
+            "id": "codex-remote:session:2",
+            "result": {"padding": "x".repeat(MAX_REMOTE_RESPONSE_BYTES)},
+        }))
+        .unwrap();
+        let (output, remote) = fixture.transform_with_remote(&input, 8192).unwrap();
+        assert!(output.is_empty());
+        assert_eq!(remote.len(), 1);
+        assert!(remote[0].payload.is_none());
+        assert!(remote[0].total_bytes > MAX_REMOTE_RESPONSE_BYTES as u64);
     }
 
     #[test]

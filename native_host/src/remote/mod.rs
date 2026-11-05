@@ -5,7 +5,7 @@ mod journal;
 mod protocol;
 
 pub use auth::{AuthError, Device, DeviceRegistry, DeviceScope, IssuedCredential, PairingTicket};
-pub use correlation::{CorrelationError, CorrelationMap, PendingCorrelation};
+pub use correlation::{CorrelationError, CorrelationMap, HOST_ID_PREFIX, PendingCorrelation};
 pub use idempotency::{
     BeginOutcome, CompletionOutcome, IdempotencyError, IdempotencyLedger, OperationLease,
     RpcOutcome,

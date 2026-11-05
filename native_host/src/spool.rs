@@ -402,6 +402,11 @@ pub(crate) struct CandidateFile {
     finished: bool,
 }
 
+pub(crate) struct CandidateCapture {
+    pub(crate) payload: Option<Vec<u8>>,
+    pub(crate) total_bytes: u64,
+}
+
 impl CandidateFile {
     pub(crate) fn publish_to(mut self, output: &mut impl Write) -> io::Result<()> {
         self.file.flush()?;
@@ -412,6 +417,24 @@ impl CandidateFile {
         self.finished = true;
         fs::remove_file(&self.path)?;
         Ok(())
+    }
+
+    pub(crate) fn capture_bounded(mut self, max_bytes: usize) -> io::Result<CandidateCapture> {
+        self.file.flush()?;
+        let payload = if self.bytes <= max_bytes as u64 {
+            self.file.seek(SeekFrom::Start(0))?;
+            let mut payload = Vec::with_capacity(self.bytes as usize);
+            self.file.read_to_end(&mut payload)?;
+            Some(payload)
+        } else {
+            None
+        };
+        self.finished = true;
+        fs::remove_file(&self.path)?;
+        Ok(CandidateCapture {
+            payload,
+            total_bytes: self.bytes,
+        })
     }
 }
 

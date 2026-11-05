@@ -1,11 +1,15 @@
 mod config;
+mod events;
 mod json_string;
+mod remote_bridge;
 mod remote_server;
 mod rpc;
 mod spool;
 mod transform;
 
 use config::Config;
+use events::{HOST_EVENT_CAPACITY, HostEvent};
+use remote_bridge::RemoteCoordinator;
 use remote_server::RemoteServer;
 use rpc::{ClientMessage, RemoteAdmin, route_client_message};
 use spool::SpoolStore;
@@ -33,9 +37,11 @@ fn run() -> io::Result<()> {
     let remote_admin = Arc::new(Mutex::new(RemoteAdmin::new(
         config.remote_device_file.clone(),
     )));
+    let (events_tx, events_rx) = mpsc::sync_channel(HOST_EVENT_CAPACITY);
     let remote_server = match config.remote_listen {
         Some(address) => {
-            let server = RemoteServer::start(address, Arc::clone(&remote_admin))?;
+            let server =
+                RemoteServer::start(address, Arc::clone(&remote_admin), events_tx.clone())?;
             remote_admin
                 .lock()
                 .map_err(|_| io::Error::other("Remote administration lock poisoned"))?
@@ -89,7 +95,6 @@ fn run() -> io::Result<()> {
         .take()
         .ok_or_else(|| io::Error::other("app-server stdout is unavailable"))?;
 
-    let (events_tx, events_rx) = mpsc::channel();
     let input_tx = events_tx.clone();
     let _input_thread = thread::Builder::new()
         .name("host-client-input".into())
@@ -100,8 +105,8 @@ fn run() -> io::Result<()> {
                 input_tx.clone(),
             );
             let event = match result {
-                Ok(()) => Event::ClientEof,
-                Err(error) => Event::InputFailed(error),
+                Ok(()) => HostEvent::ClientEof,
+                Err(error) => HostEvent::InputFailed(error),
             };
             let _ = input_tx.send(event);
         })?;
@@ -110,6 +115,7 @@ fn run() -> io::Result<()> {
     let output_store = Arc::clone(&store);
     let output_lock = Arc::clone(&stdout_lock);
     let output_tx = events_tx.clone();
+    let remote_id_prefix = remote_server.as_ref().map(RemoteServer::correlation_prefix);
     let output_thread = thread::Builder::new()
         .name("host-app-server-output".into())
         .spawn(move || {
@@ -117,39 +123,86 @@ fn run() -> io::Result<()> {
                 child_stdout,
                 LockedStdout::new(&output_lock),
                 &output_store,
+                remote_id_prefix,
+                |response| {
+                    output_tx
+                        .send(HostEvent::AppServerRemoteResponse(response))
+                        .map_err(|_| io::Error::other("Host event loop is unavailable"))
+                },
             );
-            let _ = output_tx.send(Event::OutputFinished(result));
+            let _ = output_tx.send(HostEvent::OutputFinished(result));
         })?;
     drop(events_tx);
 
     let mut primary_error = None;
     let mut shutdown_requested = false;
+    let mut remote_coordinator = remote_server
+        .as_ref()
+        .map(|server| RemoteCoordinator::new(server.session_id()))
+        .transpose()?;
     for event in events_rx {
         match event {
-            Event::ClientLine(line) => match route_client_message(line, &store, &remote_admin) {
-                ClientMessage::Forward(line) => {
-                    if let Err(error) = write_line(&mut child_stdin, &line) {
-                        primary_error = Some(error);
-                        break;
+            HostEvent::ClientLine(line) => {
+                match route_client_message(line, &store, &remote_admin) {
+                    ClientMessage::Forward(line) => {
+                        if let Err(error) = write_line(&mut child_stdin, &line) {
+                            primary_error = Some(error);
+                            break;
+                        }
                     }
-                }
-                ClientMessage::Respond(Some(line)) => {
-                    if let Err(error) = write_stdout_line(&stdout_lock, &line) {
-                        primary_error = Some(error);
-                        break;
+                    ClientMessage::Respond(Some(line)) => {
+                        if let Err(error) = write_stdout_line(&stdout_lock, &line) {
+                            primary_error = Some(error);
+                            break;
+                        }
                     }
+                    ClientMessage::Respond(None) => {}
                 }
-                ClientMessage::Respond(None) => {}
-            },
-            Event::ClientEof => {
+            }
+            HostEvent::ClientEof => {
                 shutdown_requested = true;
                 break;
             }
-            Event::InputFailed(error) => {
+            HostEvent::InputFailed(error) => {
                 primary_error = Some(error);
                 break;
             }
-            Event::OutputFinished(result) => {
+            HostEvent::RemoteRpc(call) => {
+                let Some(coordinator) = remote_coordinator.as_mut() else {
+                    let _ = call.reply.send(remote_bridge::remote_error(
+                        call.client_id,
+                        -32603,
+                        "Remote listener is unavailable",
+                    ));
+                    continue;
+                };
+                if let Some((host_id, line)) = coordinator.prepare(call)
+                    && let Err(error) = write_line(&mut child_stdin, &line)
+                {
+                    coordinator.dispatch_failed(&host_id);
+                    primary_error = Some(error);
+                    break;
+                }
+            }
+            HostEvent::RemoteDisconnected(connection_id) => {
+                if let Some(coordinator) = remote_coordinator.as_mut() {
+                    coordinator.disconnect(&connection_id);
+                }
+            }
+            HostEvent::AppServerRemoteResponse(response) => {
+                let Some(coordinator) = remote_coordinator.as_mut() else {
+                    primary_error = Some(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "app-server returned a reserved Remote response without a listener",
+                    ));
+                    break;
+                };
+                if let Err(error) = coordinator.receive(response) {
+                    primary_error = Some(error);
+                    break;
+                }
+            }
+            HostEvent::OutputFinished(result) => {
                 if let Err(error) = result {
                     primary_error = Some(error);
                 }
@@ -201,21 +254,14 @@ fn run() -> io::Result<()> {
     }
 }
 
-enum Event {
-    ClientLine(Vec<u8>),
-    ClientEof,
-    InputFailed(io::Error),
-    OutputFinished(io::Result<()>),
-}
-
 fn read_client_input(
     input: impl Read,
     max_message_bytes: usize,
-    events: mpsc::Sender<Event>,
+    events: mpsc::SyncSender<HostEvent>,
 ) -> io::Result<()> {
     let mut reader = BoundedLines::new(input, max_message_bytes);
     while let Some(line) = reader.next_line()? {
-        if events.send(Event::ClientLine(line)).is_err() {
+        if events.send(HostEvent::ClientLine(line)).is_err() {
             break;
         }
     }

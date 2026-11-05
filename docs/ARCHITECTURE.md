@@ -95,14 +95,17 @@ one-use local tickets, requires a scoped bearer token and protocol subprotocol,
 enforces explicit body/frame/message/write-buffer/connection limits, negotiates
 before RPC, sends heartbeat pings, checks live revocation, and broadcasts a
 bounded protocol close before Host shutdown. It currently exposes only the
-read-only `host/remote/status` foundation method; ordinary Codex RPC and event
-traffic are deliberately not routed through it yet.
+read-only `host/remote/status`, `model/list`, bounded `thread/list`, and
+metadata-only `thread/read` methods. Codex responses reuse the same Host output
+sanitizer, are correlated through a per-process reserved namespace, and are
+delivered through a per-connection count-and-byte-bounded queue without leaking
+the internal response to desktop stdout. Codex notifications/event replay and
+all writes are deliberately not routed through it yet.
 
 The remaining network and Android layers must still provide:
 
 - TLS-required non-loopback transport and certificate policy;
-- sanitized protocol-native Codex RPC/event routing with remapped IDs;
-- explicit count-and-byte-bounded application outbound queues;
+- sanitized replayable Codex notification/event routing;
 - chunked/resumable file transfer;
 - executable replay/gap/slow-reader and large-payload recovery gates;
 - platform-backed Android credential storage and lifecycle recovery.

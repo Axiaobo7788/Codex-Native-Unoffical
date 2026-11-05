@@ -59,7 +59,7 @@ choices come from live app-server discovery; approval and sandbox overrides are
 explicit, and dangerous choices require confirmation. Turn diffs are projected
 into bounded file summaries with a virtualized selected-file view.
 
-Phase 3 is in progress. Stored history uses bounded `thread/turns/list` summary
+Phase 3 is locally machine-verified on Linux. Stored history uses bounded `thread/turns/list` summary
 pages and loads full items for only one selected turn. The Host incrementally
 spools large command output behind opaque IDs before Dart sees the JSON, and the
 UI reads only a 64 KiB virtualized range at a time. Inactive-thread history is
@@ -68,6 +68,14 @@ bounded Markdown allowlist: raw HTML is inert, images never load, only explicit
 `http`/`https` clicks may open externally, streaming stays plain text, and rich
 parsing falls back to a bounded tail above 16 KiB. Cross-platform and Human UI
 validation remain.
+
+Phase 4 has started behind an explicit loopback-only Host option. Local trusted
+administration can issue one-use pairing tickets and revoke hash-only device
+credentials. The authenticated `codex-native-v1` WebSocket currently exposes a
+strict read-only subset—`model/list`, bounded `thread/list`, and metadata-only
+`thread/read`—through the same stock app-server and output sanitizer. Event
+replay, writes/approvals, TLS/non-loopback exposure, Android secure storage, and
+the Android UI are not implemented yet.
 
 ## Run locally
 
@@ -94,6 +102,8 @@ flutter test tool/coding_task_smoke.dart --reporter expanded
 flutter test tool/history_memory_benchmark.dart --reporter expanded
 dart run tool/host_memory_benchmark.dart
 dart run tool/host_lifecycle_soak.dart
+cargo build --release --workspace
+dart run tool/remote_smoke.dart
 ```
 
 ## Verify

@@ -61,7 +61,7 @@ pub enum ServerMessage {
     },
     RpcError {
         id: Value,
-        error: String,
+        error: Value,
     },
     ProtocolError {
         error: String,

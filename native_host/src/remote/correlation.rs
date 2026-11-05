@@ -6,6 +6,7 @@ const MAX_NAMESPACE_BYTES: usize = 128;
 const MAX_CONNECTION_ID_BYTES: usize = 128;
 const MAX_CLIENT_ID_BYTES: usize = 256;
 const ENTRY_OVERHEAD_BYTES: usize = 96;
+pub const HOST_ID_PREFIX: &str = "codex-remote:";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PendingCorrelation {
@@ -116,7 +117,7 @@ impl CorrelationMap {
             .next_id
             .checked_add(1)
             .ok_or(CorrelationError::CounterExhausted)?;
-        let host_id = format!("remote:{}:{sequence}", self.session_namespace);
+        let host_id = format!("{HOST_ID_PREFIX}{}:{sequence}", self.session_namespace);
         let retained_bytes = host_id
             .len()
             .saturating_add(connection_id.len().saturating_mul(2))

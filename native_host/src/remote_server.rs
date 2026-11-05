@@ -1,3 +1,5 @@
+use crate::events::{HostEvent, RemoteRpcCall};
+use crate::remote_bridge::{remote_error, validate_read_only_request};
 use crate::rpc::RemoteAdmin;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::extract::{DefaultBodyLimit, State};
@@ -6,17 +8,17 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router, middleware};
 use codex_native_host::remote::{
-    AuthError, ClientMessage, ConnectionAction, Device, DeviceScope, EventJournal,
+    AuthError, ClientMessage, ConnectionAction, Device, DeviceScope, EventJournal, HOST_ID_PREFIX,
     ProtocolConnection, ReplayDisposition, ServerMessage,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc::SyncSender};
 use std::thread;
 use std::time::{Duration, Instant};
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, watch};
 use uuid::Uuid;
 
 const WS_PROTOCOL: &str = "codex-native-v1";
@@ -27,7 +29,14 @@ const WS_MAX_WRITE_BUFFER_BYTES: usize = 2 * 1024 * 1024;
 const WS_MAX_FRAME_BYTES: usize = 256 * 1024;
 const WS_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 const MAX_CONNECTIONS: usize = 8;
+const OUTBOUND_QUEUE_MESSAGES: usize = 16;
+const OUTBOUND_QUEUE_BYTES: usize = 2 * 1024 * 1024;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(not(test))]
+const REMOTE_RPC_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const REMOTE_RPC_TIMEOUT: Duration = Duration::from_millis(100);
+const SOCKET_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(45);
 const SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
@@ -39,12 +48,17 @@ const PAIR_ATTEMPTS_PER_MINUTE: usize = 10;
 
 pub(crate) struct RemoteServer {
     address: SocketAddr,
+    session_id: Arc<str>,
     shutdown: Option<watch::Sender<bool>>,
     thread: Option<thread::JoinHandle<io::Result<()>>>,
 }
 
 impl RemoteServer {
-    pub(crate) fn start(address: SocketAddr, admin: Arc<Mutex<RemoteAdmin>>) -> io::Result<Self> {
+    pub(crate) fn start(
+        address: SocketAddr,
+        admin: Arc<Mutex<RemoteAdmin>>,
+        events: SyncSender<HostEvent>,
+    ) -> io::Result<Self> {
         if !address.ip().is_loopback() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -55,9 +69,11 @@ impl RemoteServer {
         listener.set_nonblocking(true)?;
         let address = listener.local_addr()?;
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let session_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
         let state = ServerState {
             admin,
-            session_id: Arc::from(Uuid::new_v4().to_string()),
+            events,
+            session_id: Arc::clone(&session_id),
             journal: Arc::new(Mutex::new(
                 EventJournal::new(512, 8 * 1024 * 1024).map_err(|error| {
                     io::Error::other(format!("failed to create Remote journal: {error}"))
@@ -75,6 +91,7 @@ impl RemoteServer {
             .spawn(move || run_server(listener, state, shutdown_rx))?;
         Ok(Self {
             address,
+            session_id,
             shutdown: Some(shutdown_tx),
             thread: Some(thread),
         })
@@ -82,6 +99,14 @@ impl RemoteServer {
 
     pub(crate) fn address(&self) -> SocketAddr {
         self.address
+    }
+
+    pub(crate) fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    pub(crate) fn correlation_prefix(&self) -> String {
+        format!("{HOST_ID_PREFIX}{}:", self.session_id)
     }
 
     pub(crate) fn stop(mut self) -> io::Result<()> {
@@ -110,6 +135,7 @@ impl Drop for RemoteServer {
 #[derive(Clone)]
 struct ServerState {
     admin: Arc<Mutex<RemoteAdmin>>,
+    events: SyncSender<HostEvent>,
     session_id: Arc<str>,
     journal: Arc<Mutex<EventJournal>>,
     connections: Arc<Semaphore>,
@@ -355,17 +381,80 @@ async fn websocket(
         })
 }
 
-async fn socket_loop(mut socket: WebSocket, state: ServerState, device: Device) {
+struct QueuedOutbound {
+    text: String,
+    _bytes: OwnedSemaphorePermit,
+}
+
+#[derive(Clone)]
+struct OutboundQueue {
+    sender: mpsc::Sender<QueuedOutbound>,
+    bytes: Arc<Semaphore>,
+    fatal: mpsc::Sender<()>,
+}
+
+impl OutboundQueue {
+    fn try_send(&self, message: ServerMessage) -> bool {
+        let text = serde_json::to_string(&message).expect("Remote server message is serializable");
+        if text.len() > WS_MAX_MESSAGE_BYTES || text.len() > u32::MAX as usize {
+            self.signal_fatal();
+            return false;
+        }
+        let permit = match Arc::clone(&self.bytes).try_acquire_many_owned(text.len() as u32) {
+            Ok(permit) => permit,
+            Err(_) => {
+                self.signal_fatal();
+                return false;
+            }
+        };
+        if self
+            .sender
+            .try_send(QueuedOutbound {
+                text,
+                _bytes: permit,
+            })
+            .is_err()
+        {
+            self.signal_fatal();
+            return false;
+        }
+        true
+    }
+
+    fn signal_fatal(&self) {
+        let _ = self.fatal.try_send(());
+    }
+}
+
+async fn socket_loop(socket: WebSocket, state: ServerState, device: Device) {
+    let connection_id = Uuid::new_v4().simple().to_string();
+    socket_loop_inner(socket, &state, device, &connection_id).await;
+    if *state.shutdown.borrow() {
+        return;
+    }
+    let events = state.events.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        events.send(HostEvent::RemoteDisconnected(connection_id))
+    })
+    .await;
+}
+
+async fn socket_loop_inner(
+    mut socket: WebSocket,
+    state: &ServerState,
+    device: Device,
+    connection_id: &str,
+) {
     let mut shutdown = state.shutdown.clone();
     let mut protocol = ProtocolConnection::current(
         state.session_id.to_string(),
-        ["ack".into(), "readOnlyFoundation".into()],
+        ["ack".into(), "readOnlyCodex".into()],
     );
     let hello = match state.journal.lock() {
         Ok(journal) => protocol.server_hello(&journal),
         Err(_) => return,
     };
-    if send_message(&mut socket, &hello).await.is_err() {
+    if !send_message(&mut socket, &hello).await {
         return;
     }
     let first_result = tokio::select! {
@@ -404,7 +493,7 @@ async fn socket_loop(mut socket: WebSocket, state: ServerState, device: Device) 
             return;
         }
     };
-    if send_message(&mut socket, &acknowledgement).await.is_err() {
+    if !send_message(&mut socket, &acknowledgement).await {
         return;
     }
     if let ReplayDisposition::Replay(events) = replay {
@@ -412,12 +501,19 @@ async fn socket_loop(mut socket: WebSocket, state: ServerState, device: Device) 
             let Ok(text) = String::from_utf8(event.encoded().to_vec()) else {
                 return;
             };
-            if socket.send(Message::Text(text.into())).await.is_err() {
+            if !send_text(&mut socket, text).await {
                 return;
             }
         }
     }
 
+    let (outbound_tx, mut outbound_rx) = mpsc::channel(OUTBOUND_QUEUE_MESSAGES);
+    let (fatal_tx, mut fatal_rx) = mpsc::channel(1);
+    let outbound = OutboundQueue {
+        sender: outbound_tx,
+        bytes: Arc::new(Semaphore::new(OUTBOUND_QUEUE_BYTES)),
+        fatal: fatal_tx,
+    };
     let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
     let mut revocation = tokio::time::interval(REVOCATION_INTERVAL);
     heartbeat.tick().await;
@@ -425,26 +521,21 @@ async fn socket_loop(mut socket: WebSocket, state: ServerState, device: Device) 
     let mut last_pong = Instant::now();
     loop {
         tokio::select! {
-            message = socket.recv() => match message {
-                Some(Ok(Message::Text(text))) => {
-                    if !handle_client_message(&mut socket, &mut protocol, &state, &device, &text).await {
-                        return;
-                    }
-                }
-                Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
-                Some(Ok(Message::Ping(_))) => {}
-                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
-                Some(Ok(Message::Binary(_))) => {
-                    close_with(&mut socket, close_code::UNSUPPORTED, "text messages only").await;
-                    return;
-                }
-            },
+            biased;
+            _ = wait_for_shutdown(&mut shutdown) => {
+                close_with(&mut socket, close_code::AWAY, "Host stopping").await;
+                return;
+            }
+            _ = fatal_rx.recv() => {
+                close_with(&mut socket, close_code::POLICY, "outbound queue limit exceeded").await;
+                return;
+            }
             _ = heartbeat.tick() => {
                 if last_pong.elapsed() >= HEARTBEAT_TIMEOUT {
                     close_with(&mut socket, close_code::POLICY, "heartbeat timed out").await;
                     return;
                 }
-                if socket.send(Message::Ping(b"codex-native".as_slice().into())).await.is_err() {
+                if !send_socket(&mut socket, Message::Ping(b"codex-native".as_slice().into())).await {
                     return;
                 }
             }
@@ -459,10 +550,33 @@ async fn socket_loop(mut socket: WebSocket, state: ServerState, device: Device) 
                     return;
                 }
             }
-            _ = wait_for_shutdown(&mut shutdown) => {
-                close_with(&mut socket, close_code::AWAY, "Host stopping").await;
-                return;
+            Some(queued) = outbound_rx.recv() => {
+                if !send_text(&mut socket, queued.text).await {
+                    return;
+                }
             }
+            message = socket.recv() => match message {
+                Some(Ok(Message::Text(text))) => {
+                    if !handle_client_message(
+                        &mut socket,
+                        &mut protocol,
+                        state,
+                        &device,
+                        connection_id,
+                        &outbound,
+                        &text,
+                    ).await {
+                        return;
+                    }
+                }
+                Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
+                Some(Ok(Message::Ping(_))) => {}
+                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
+                Some(Ok(Message::Binary(_))) => {
+                    close_with(&mut socket, close_code::UNSUPPORTED, "text messages only").await;
+                    return;
+                }
+            },
         }
     }
 }
@@ -472,6 +586,8 @@ async fn handle_client_message(
     protocol: &mut ProtocolConnection,
     state: &ServerState,
     device: &Device,
+    connection_id: &str,
+    outbound: &OutboundQueue,
     text: &str,
 ) -> bool {
     let client = match serde_json::from_str::<ClientMessage>(text) {
@@ -493,26 +609,69 @@ async fn handle_client_message(
             params,
             idempotency_key,
         }) => {
-            let response = if method == "host/remote/status"
+            if !device.scopes.contains(&DeviceScope::Read) {
+                return outbound.try_send(remote_error(
+                    id,
+                    -32003,
+                    "Device does not have the read scope",
+                ));
+            }
+            if idempotency_key.is_some() {
+                return outbound.try_send(remote_error(
+                    id,
+                    -32602,
+                    "Read-only Remote RPC does not accept an idempotency key",
+                ));
+            }
+            if method == "host/remote/status"
                 && params.as_object().is_some_and(serde_json::Map::is_empty)
-                && idempotency_key.is_none()
-                && device.scopes.contains(&DeviceScope::Read)
             {
-                ServerMessage::RpcResult {
+                return outbound.try_send(ServerMessage::RpcResult {
                     id,
                     result: serde_json::json!({
                         "sessionId": state.session_id.as_ref(),
                         "device": device,
-                        "mode": "loopbackReadOnlyFoundation",
+                        "mode": "loopbackReadOnlyCodex",
                     }),
-                }
-            } else {
-                ServerMessage::RpcError {
-                    id,
-                    error: "RPC is unavailable in the loopback read-only foundation".into(),
-                }
+                });
+            }
+            if let Err(message) = validate_read_only_request(&method, &params) {
+                return outbound.try_send(remote_error(id, -32602, message));
+            }
+
+            let fallback_id = id.clone();
+            let (reply, receiver) = tokio::sync::oneshot::channel();
+            let call = RemoteRpcCall {
+                connection_id: connection_id.to_owned(),
+                client_id: id,
+                method,
+                params,
+                reply,
             };
-            send_message(socket, &response).await.is_ok()
+            if state.events.try_send(HostEvent::RemoteRpc(call)).is_err() {
+                return outbound.try_send(remote_error(
+                    fallback_id,
+                    -32001,
+                    "Host request queue is full or unavailable",
+                ));
+            }
+            let outbound = outbound.clone();
+            tokio::spawn(async move {
+                match tokio::time::timeout(REMOTE_RPC_TIMEOUT, receiver).await {
+                    Ok(Ok(message)) => {
+                        let _ = outbound.try_send(message);
+                    }
+                    Ok(Err(_)) => {
+                        let _ = outbound.try_send(remote_error(
+                            fallback_id,
+                            -32603,
+                            "Host stopped before the Remote request completed",
+                        ));
+                    }
+                    Err(_) => outbound.signal_fatal(),
+                }
+            });
+            true
         }
         Ok(ConnectionAction::Negotiated { .. }) => {
             close_protocol(socket, "connection is already negotiated").await;
@@ -525,9 +684,20 @@ async fn handle_client_message(
     }
 }
 
-async fn send_message(socket: &mut WebSocket, message: &ServerMessage) -> Result<(), axum::Error> {
+async fn send_message(socket: &mut WebSocket, message: &ServerMessage) -> bool {
     let text = serde_json::to_string(message).expect("Remote server message is serializable");
-    socket.send(Message::Text(text.into())).await
+    send_text(socket, text).await
+}
+
+async fn send_text(socket: &mut WebSocket, text: String) -> bool {
+    send_socket(socket, Message::Text(text.into())).await
+}
+
+async fn send_socket(socket: &mut WebSocket, message: Message) -> bool {
+    matches!(
+        tokio::time::timeout(SOCKET_WRITE_TIMEOUT, socket.send(message)).await,
+        Ok(Ok(()))
+    )
 }
 
 async fn close_protocol(socket: &mut WebSocket, reason: &str) {
@@ -542,12 +712,14 @@ async fn close_protocol(socket: &mut WebSocket, reason: &str) {
 }
 
 async fn close_with(socket: &mut WebSocket, code: u16, reason: &'static str) {
-    let _ = socket
-        .send(Message::Close(Some(CloseFrame {
+    let _ = send_socket(
+        socket,
+        Message::Close(Some(CloseFrame {
             code,
             reason: reason.into(),
-        })))
-        .await;
+        })),
+    )
+    .await;
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
@@ -567,10 +739,12 @@ fn json_error(status: StatusCode, message: &'static str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::HOST_EVENT_CAPACITY;
     use serde_json::{Value, json};
     use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpStream;
+    use std::sync::mpsc as std_mpsc;
     use tempfile::TempDir;
     use tungstenite::client::IntoClientRequest;
     use tungstenite::{Message as ClientWsMessage, client};
@@ -588,7 +762,8 @@ mod tests {
     #[test]
     fn rejects_non_loopback_plaintext_listener_before_binding() {
         let admin = Arc::new(Mutex::new(RemoteAdmin::new(None)));
-        let error = RemoteServer::start("0.0.0.0:0".parse().unwrap(), admin)
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let error = RemoteServer::start("0.0.0.0:0".parse().unwrap(), admin, events)
             .err()
             .unwrap();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
@@ -610,13 +785,62 @@ mod tests {
     }
 
     #[test]
+    fn application_outbound_queue_is_bounded_by_count_bytes_and_message_size() {
+        let (fatal_tx, mut fatal_rx) = mpsc::channel(1);
+        let (count_tx, _count_rx) = mpsc::channel(1);
+        let by_count = OutboundQueue {
+            sender: count_tx,
+            bytes: Arc::new(Semaphore::new(4096)),
+            fatal: fatal_tx.clone(),
+        };
+        assert!(by_count.try_send(ServerMessage::RpcResult {
+            id: json!(1),
+            result: json!({"ok": true}),
+        }));
+        assert!(!by_count.try_send(ServerMessage::RpcResult {
+            id: json!(2),
+            result: json!({"ok": true}),
+        }));
+        assert!(fatal_rx.try_recv().is_ok());
+
+        let sample = ServerMessage::RpcResult {
+            id: json!(3),
+            result: json!({"value": "x".repeat(128)}),
+        };
+        let sample_bytes = serde_json::to_string(&sample).unwrap().len();
+        let (byte_tx, _byte_rx) = mpsc::channel(4);
+        let by_bytes = OutboundQueue {
+            sender: byte_tx,
+            bytes: Arc::new(Semaphore::new(sample_bytes)),
+            fatal: fatal_tx.clone(),
+        };
+        assert!(by_bytes.try_send(sample.clone()));
+        assert!(!by_bytes.try_send(sample));
+        assert!(fatal_rx.try_recv().is_ok());
+
+        let (large_tx, _large_rx) = mpsc::channel(1);
+        let by_message_size = OutboundQueue {
+            sender: large_tx,
+            bytes: Arc::new(Semaphore::new(OUTBOUND_QUEUE_BYTES)),
+            fatal: fatal_tx,
+        };
+        assert!(!by_message_size.try_send(ServerMessage::RpcResult {
+            id: json!(4),
+            result: json!({"value": "x".repeat(WS_MAX_MESSAGE_BYTES)}),
+        }));
+        assert!(fatal_rx.try_recv().is_ok());
+    }
+
+    #[test]
     fn loopback_pairing_handshake_status_and_live_revocation_work_over_tcp() {
         let temp = TempDir::new().unwrap();
         let device_file = temp.path().join("devices.json");
         let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(device_file.clone()))));
         let ticket = admin.lock().unwrap().create_pairing_ticket().unwrap();
+        let (events, event_receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
         let server =
-            RemoteServer::start("127.0.0.1:0".parse().unwrap(), Arc::clone(&admin)).unwrap();
+            RemoteServer::start("127.0.0.1:0".parse().unwrap(), Arc::clone(&admin), events)
+                .unwrap();
         let address = server.address();
 
         let health = http_get(address, "/healthz");
@@ -689,7 +913,36 @@ mod tests {
         assert_eq!(status["type"], "rpc_result");
         assert_eq!(status["id"], "status-1");
         assert_eq!(status["result"]["device"]["id"], device_id);
-        assert_eq!(status["result"]["mode"], "loopbackReadOnlyFoundation");
+        assert_eq!(status["result"]["mode"], "loopbackReadOnlyCodex");
+
+        socket
+            .send(ClientWsMessage::Text(
+                json!({
+                    "type": "rpc",
+                    "id": "models-1",
+                    "method": "model/list",
+                    "params": {"limit": 10, "includeHidden": false},
+                })
+                .to_string()
+                .into(),
+            ))
+            .unwrap();
+        let call = match event_receiver.recv_timeout(Duration::from_secs(1)).unwrap() {
+            HostEvent::RemoteRpc(call) => call,
+            _ => panic!("expected a Remote RPC Host event"),
+        };
+        assert_eq!(call.method, "model/list");
+        assert_eq!(call.params["limit"], 10);
+        call.reply
+            .send(ServerMessage::RpcResult {
+                id: call.client_id,
+                result: json!({"data": [], "nextCursor": null}),
+            })
+            .unwrap();
+        let models = read_json(&mut socket);
+        assert_eq!(models["type"], "rpc_result");
+        assert_eq!(models["id"], "models-1");
+        assert_eq!(models["result"]["data"], json!([]));
 
         let request = websocket_request(address, Some(&token));
         let (mut premature, _) = client(request, TcpStream::connect(address).unwrap()).unwrap();
@@ -768,7 +1021,8 @@ mod tests {
                 )
                 .unwrap()
         };
-        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin).unwrap();
+        let (events, _receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
         let request = websocket_request(server.address(), Some(&issued.token));
         let stream = TcpStream::connect(server.address()).unwrap();
         stream
@@ -796,6 +1050,76 @@ mod tests {
             ClientWsMessage::Close(Some(frame))
                 if frame.code == tungstenite::protocol::frame::coding::CloseCode::Away
         ));
+    }
+
+    #[test]
+    fn upstream_timeout_closes_the_connection_and_emits_disconnect_cleanup() {
+        let temp = TempDir::new().unwrap();
+        let admin = Arc::new(Mutex::new(RemoteAdmin::new(Some(
+            temp.path().join("devices.json"),
+        ))));
+        let ticket = admin.lock().unwrap().create_pairing_ticket().unwrap();
+        let issued = {
+            let mut admin = admin.lock().unwrap();
+            let now_ms = admin.now_ms().unwrap();
+            admin
+                .registry()
+                .unwrap()
+                .pair(
+                    &ticket.code,
+                    "Timeout phone",
+                    [DeviceScope::Read].into_iter().collect(),
+                    now_ms,
+                )
+                .unwrap()
+        };
+        let (events, receiver) = std_mpsc::sync_channel(HOST_EVENT_CAPACITY);
+        let server = RemoteServer::start("127.0.0.1:0".parse().unwrap(), admin, events).unwrap();
+        let request = websocket_request(server.address(), Some(&issued.token));
+        let stream = TcpStream::connect(server.address()).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let (mut socket, _) = client(request, stream).unwrap();
+        let _server_hello = read_json(&mut socket);
+        socket
+            .send(ClientWsMessage::Text(
+                json!({
+                    "type": "client_hello",
+                    "supportedProtocolVersions": [1],
+                })
+                .to_string()
+                .into(),
+            ))
+            .unwrap();
+        let _hello_ack = read_json(&mut socket);
+        socket
+            .send(ClientWsMessage::Text(
+                json!({
+                    "type": "rpc",
+                    "id": "will-time-out",
+                    "method": "model/list",
+                    "params": {"limit": 1},
+                })
+                .to_string()
+                .into(),
+            ))
+            .unwrap();
+        let pending_call = match receiver.recv_timeout(Duration::from_secs(1)).unwrap() {
+            HostEvent::RemoteRpc(call) => call,
+            _ => panic!("expected a Remote RPC Host event"),
+        };
+        assert!(matches!(
+            socket.read().unwrap(),
+            ClientWsMessage::Close(Some(frame))
+                if frame.code == tungstenite::protocol::frame::coding::CloseCode::Policy
+        ));
+        drop(pending_call);
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_secs(1)).unwrap(),
+            HostEvent::RemoteDisconnected(_)
+        ));
+        server.stop().unwrap();
     }
 
     fn http_post_json(address: SocketAddr, path: &str, body: &str) -> String {

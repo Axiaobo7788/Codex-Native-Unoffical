@@ -1,3 +1,4 @@
+use crate::remote_bridge::is_reserved_host_id;
 use crate::spool::{OutputChunk, OutputStat, SpoolStore};
 use base64::Engine;
 use codex_native_host::remote::{AuthError, Device, DeviceRegistry, PairingTicket};
@@ -114,11 +115,20 @@ pub(crate) fn route_client_message(
     let Some(method) = value.get("method").and_then(Value::as_str) else {
         return ClientMessage::Forward(line);
     };
+    let id = value.get("id").cloned();
+    if let Some(id) = id.as_ref().filter(|id| is_reserved_host_id(id)) {
+        return ClientMessage::Respond(Some(
+            serde_json::to_vec(&error_response(
+                id.clone(),
+                &invalid_params("request ID uses the reserved Host namespace"),
+            ))
+            .expect("host response is serializable"),
+        ));
+    }
     if !method.starts_with(HOST_PREFIX) {
         return ClientMessage::Forward(line);
     }
 
-    let id = value.get("id").cloned();
     let params = value.get("params").unwrap_or(&Value::Null);
     let result: io::Result<Value> = (|| match method {
         "host/status" => {
@@ -335,6 +345,14 @@ mod tests {
             ClientMessage::Forward(actual) => assert_eq!(actual, input),
             other => panic!("expected forward, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn rejects_the_reserved_remote_correlation_namespace_from_local_input() {
+        let (_temp, store, _, remote_admin) = fixture();
+        let input = br#"{"id":"codex-remote:spoof:1","method":"thread/list","params":{}}"#.to_vec();
+        let value = response(route_client_message(input, &store, &remote_admin));
+        assert_eq!(value["error"]["code"], -32602);
     }
 
     #[test]
