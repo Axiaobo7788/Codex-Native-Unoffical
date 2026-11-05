@@ -147,10 +147,11 @@ This file is the repository's durable project memory. Update it whenever a task 
   tags or Releases. Its assembler requires platform AOT/runtime layout, exact
   notices, no debug kernel, Host execution, source identity, per-file SHA-256,
   archive provenance, and extraction/reinventory verification. Every artifact
-  is explicitly `review-only` and `distributionReady=false`. Its first two
-  hosted executions exposed and preserved Windows checkout/source-drift and
-  macOS framework-mode defects; a corrected third run remains required before
-  any hosted artifact claim.
+  is explicitly `review-only` and `distributionReady=false`. Hosted run
+  `42095949000` at `e71e5ac` passed all three targets; the downloaded Linux,
+  Windows, and macOS outputs each passed a fresh independent verifier run and
+  exact sidecar checksum comparison. This is complete machine-review evidence,
+  not signing, native installation, publisher identity, or Human acceptance.
 - Android release variants no longer inherit the public debug certificate or
   emit an ambiguous unsigned candidate. A complete external, Git-ignored upload
   keystore contract is required at `preReleaseBuild`; debug CI remains
@@ -195,7 +196,8 @@ This file is the repository's durable project memory. Update it whenever a task 
   or hosted artifact. Direct-path `flutter analyze` again failed in Flutter
   3.47.1's Unicode-path LSP reader with truncated JSON; an independent ASCII
   repository copy passed Flutter analysis with no issues. Hosted three-platform
-  workflow execution is pending push.
+  workflow execution was still pending at that implementation point; the
+  subsequent hosted runs and final pass are recorded below.
 - The first manual hosted run `42091064595` reached release builds on Linux and
   macOS but exposed a pre-build Windows source-contract failure: checkout had
   converted the committed generated native notice to CRLF because the repository
@@ -228,6 +230,26 @@ This file is the repository's durable project memory. Update it whenever a task 
   a fourth hosted run must prove the targeted EOL contract. Its companion normal
   CI run `42093880114` passed all three jobs, including the full Ubuntu source,
   Rust, Flutter, Linux, and Android gates plus native Windows/macOS debug bundles.
+- Fourth run `42095949000` at `e71e5ac` closed the hosted artifact gate without
+  relaxing source identity. Linux x64, Windows x64, and macOS arm64 each passed
+  release build, clean-tree check, assembly/self-verification, a separate
+  verifier invocation, and upload. All three downloaded outputs were then
+  independently reverified from their artifact directories. Their sidecar
+  checksums also matched the archive bytes: Linux 13,388,830 bytes at
+  `8d0228a93b2704f3b7be0f318770ef51e31858c98156b0fd2919cc5cf837ccad`,
+  Windows 14,675,442 bytes at
+  `457c56340960901907ec0c406b19fe87431dd5a0ce4cfc09a6d2b038b84f2949`,
+  and macOS 21,631,021 bytes at
+  `4fd8345c3b100381f902e2d3164960c9bd03f9f73e00485d585a5442d3efd098`.
+  Each provenance sidecar records the exact clean revision, Flutter 3.47.1,
+  Rust 1.89.0, GitHub Actions origin, `reviewOnly: true`, and
+  `distributionReady: false`. The macOS archive retained nine safe framework
+  symlinks and executable app/Host launchers while correctly permitting the
+  non-executable AOT framework binary. Companion normal CI run `42095935941`
+  also passed its Ubuntu verification/Linux and Android debug build plus native
+  Windows x64 and macOS arm64 debug-build jobs. Native installation, Linux
+  dependency compatibility, Windows installer/ACL/SmartScreen, macOS Developer
+  ID/notarization/Gatekeeper, and Human review remain separate unrun gates.
 
 ### 2026-11-06 — Compact desktop shell overflow recovery
 

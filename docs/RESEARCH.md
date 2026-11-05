@@ -1722,8 +1722,9 @@ _Reviewed: 2026-11-06_
   was hidden behind that toolchain failure.
 - `.github/workflows/desktop-review-artifacts.yml` is manual-only, read-only,
   immutable-action pinned, fail-independent across the three desktop targets,
-  and retains review artifacts for 14 days. Hosted execution after publication,
-  downloaded-artifact verification, native installation, Linux dependency
+  and retains review artifacts for 14 days. At initial implementation, hosted
+  execution and downloaded-artifact verification remained separate gates; the
+  later results below close both. Native installation, Linux dependency
   compatibility, Windows ACL/installer/SmartScreen behavior, macOS Developer ID
   signing/notarization/Gatekeeper behavior, and Human use remain separate gates.
 - The first hosted run (`42091064595`) exposed one Windows-only pre-build defect
@@ -1762,3 +1763,31 @@ _Reviewed: 2026-11-06_
   removes only EOL drift and leaves the post-build tree clean. Companion normal
   CI run `42093880114` passed Ubuntu verification/Linux and Android debug builds
   plus native Windows x64 and macOS arm64 debug bundle gates.
+- Fourth hosted run `42095949000` at `e71e5ac` demonstrated the targeted EOL
+  contract on a fresh Windows Server 2022 runner: the release build left the
+  tracked source clean, and Windows x64 proceeded through assembly,
+  self-verification, independent verification, and upload. Linux x64 and macOS
+  arm64 passed the same complete path, so the run concluded successfully on all
+  three targets. This closes the hosted three-platform review-artifact gate while
+  preserving every prior negative result and the exact source-provenance check.
+- The three unexpired workflow artifacts were downloaded from that run and
+  verified again from their artifact directories with
+  `tool/verify_desktop_review_artifact.dart`; every invocation reported
+  `DESKTOP_REVIEW_ARTIFACT_VERIFY=PASS`, and an independent `sha256sum`
+  comparison matched each sidecar. The inner archive results were Linux
+  13,388,830 bytes / `8d0228a93b2704f3b7be0f318770ef51e31858c98156b0fd2919cc5cf837ccad`,
+  Windows 14,675,442 bytes /
+  `457c56340960901907ec0c406b19fe87431dd5a0ce4cfc09a6d2b038b84f2949`,
+  and macOS 21,631,021 bytes /
+  `4fd8345c3b100381f902e2d3164960c9bd03f9f73e00485d585a5442d3efd098`.
+  Their manifests contain 18, 17, and 43 entries respectively; only macOS has
+  symlinks (nine safe framework links). The macOS app runner and Host retained
+  mode 755, while `App.framework/Versions/A/App` retained its hosted mode 644,
+  confirming the corrected semantic permission boundary. All sidecars bind
+  clean revision `e71e5ac3aca98c38ed9e51f57fe0995efe1e24fd`, Flutter 3.47.1,
+  Rust 1.89.0, workflow origin `42095949000:1`, review-only state, and an
+  explicit platform signing gap. Companion normal CI `42095935941` also passed
+  Ubuntu verification/Linux and Android debug builds and both native desktop
+  debug-build jobs. None of this establishes installed dependency behavior,
+  Developer ID/notarization/Gatekeeper, Authenticode/installer/ACL/SmartScreen,
+  distribution signing, or Human acceptance.
