@@ -243,6 +243,40 @@ void main() {
     },
   );
 
+  test(
+    'exposes applied event sequences and a redacted revoked close',
+    () async {
+      final socket = _FakeRemoteSocket();
+      sockets.add(socket);
+      final transport = await _connect(socket);
+      transports.add(transport);
+      transport.completeResync(generation: transport.resyncGeneration);
+
+      final eventFuture = transport.sequencedNotifications.first;
+      socket.addJson({
+        'type': 'codex_event',
+        'sequence': 1,
+        'method': 'thread/status/changed',
+        'params': {'threadId': 'thread-1', 'status': 'active'},
+      });
+
+      final event = await eventFuture;
+      expect(event.sessionId, _sessionId);
+      expect(event.sequence, 1);
+      expect(event.notification.method, 'thread/status/changed');
+      await _waitFor(() => _acks(socket).contains(1));
+
+      socket.finishPeer(
+        WebSocketStatus.policyViolation,
+        reason: 'device credential revoked',
+      );
+      final close = await transport.closed;
+      expect(close.kind, RemoteTransportCloseKind.credentialRevoked);
+      expect(close.code, WebSocketStatus.policyViolation);
+      expect(close.toString(), isNot(contains('credential')));
+    },
+  );
+
   test('correlates typed RPC results that arrive out of order', () async {
     final socket = _FakeRemoteSocket();
     sockets.add(socket);
@@ -600,6 +634,7 @@ final class _FakeRemoteSocket implements RemoteSocket {
   @override
   int? closeCode;
 
+  @override
   String? closeReason;
 
   @override
@@ -626,8 +661,9 @@ final class _FakeRemoteSocket implements RemoteSocket {
     _messages.add(message);
   }
 
-  void finishPeer(int code) {
+  void finishPeer(int code, {String? reason}) {
     closeCode = code;
+    closeReason = reason;
     if (!_messages.isClosed) {
       unawaited(_messages.close());
     }

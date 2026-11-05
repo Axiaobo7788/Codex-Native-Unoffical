@@ -33,6 +33,29 @@ void main() {
     await messagesDone;
     expect(pair.client.closeCode, WebSocketStatus.protocolError);
   });
+
+  test('maps HTTP 401 to a redacted credential rejection', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.statusCode = HttpStatus.unauthorized;
+      await request.response.close();
+    });
+    final endpoint = Uri.parse(
+      'ws://${server.address.address}:${server.port}/v1/ws',
+    );
+
+    await expectLater(
+      IoRemoteSocket.connect(endpoint, _credential),
+      throwsA(
+        isA<RemoteCredentialRejected>().having(
+          (error) => error.toString(),
+          'redacted message',
+          allOf(isNot(contains(endpoint.host)), isNot(contains(_credential))),
+        ),
+      ),
+    );
+  });
 }
 
 final class _SocketPair {

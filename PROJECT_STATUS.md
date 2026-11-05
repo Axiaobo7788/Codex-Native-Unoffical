@@ -12,7 +12,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart Remote transport core, and a recoverable platform credential owner are implemented; pairing-bound local trust, reconnect/resync ownership, writes/approvals, and Android UI integration do not exist yet**
+**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart Remote transport core, a recoverable platform credential owner, and an unwired reconnect/authoritative-hydration coordinator are implemented; pairing-bound local trust, writes/approvals, Android lifecycle wiring, and Android UI integration do not exist yet**
 
 ## Current repository state
 
@@ -27,8 +27,10 @@ This file is the repository's durable project memory. Update it whenever a task 
   - capture a bounded stderr tail, report malformed protocol data and process exits, and close the child without leaving an orphan.
 - `CodexTransport` isolates feature/domain code from transport details. The
   production desktop uses `ProcessTransport`; a read-only `RemoteTransport`
-  now reuses the typed model/thread/turn adapters but is deliberately not wired
-  into Android runtime state before resync and reconnect ownership exist.
+  now reuses the typed model/thread/turn adapters. A separate `RemoteSession`
+  seam, bounded projection, applied-cursor store, and reconnect coordinator own
+  resync/readiness without changing desktop behavior, but are deliberately not
+  wired into Android product runtime state yet.
 - Typed thread operations now cover bounded `thread/list`, `thread/start`, metadata-only `thread/read`, history-excluding `thread/resume`, and exact-ID delete for smoke-test cleanup.
 - The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, and exposes select/resume actions. It does not retain turns or raw protocol JSON.
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
@@ -98,14 +100,61 @@ This file is the repository's durable project memory. Update it whenever a task 
   `host/remote/status`, `model/list`, bounded `thread/list`, and metadata-only
   `thread/read` through the same sanitized stock app-server process. Six bounded
   lifecycle/state notification methods feed sequenced live delivery and same-
-  session replay. Dart now has a bounded read-only client protocol core, but
-  there is still no Remote write/approval path, Android reconnect coordinator or
-  UI, or pairing-bound Android certificate trust.
+  session replay. Dart now has a bounded read-only client protocol core and an
+  unwired reconnect/authoritative-hydration coordinator, but there is still no
+  Remote write/approval path, Android product lifecycle/UI integration, or
+  pairing-bound Android certificate trust.
 - Lightweight GitHub Actions CI is configured for Dart/Rust format, analyze,
   Clippy, tests, and a Linux debug build. Hosted CI has not run for the current
   local commits.
 
 ## Completed
+
+### 2026-11-05 — Phase 4 Remote lifecycle and authoritative projection owner
+
+- Added a `RemoteSession` seam and production connector around
+  `RemoteTransport`. The transport now exposes exact session/sequence-bearing
+  notifications plus a redacted terminal close classification. HTTP 401 maps to
+  a typed credential rejection, and the Host's exact policy-close reason maps to
+  terminal device revocation instead of an endless reconnect loop.
+- Added a strict versioned applied-cursor store in the existing secure-storage
+  namespace. A cursor is bound to the paired device ID and exact Host
+  session/sequence, capped at 1 KiB, serialized, and verified by readback. It is
+  deliberately separate from the bearer record and is never trusted on cold
+  start without an in-memory projection representing the same session and
+  sequence.
+- Added a bounded authoritative Remote projection retaining at most 100 models
+  and 100 thread rows. Snapshot replacement records opaque next cursors, while
+  the allowlisted lifecycle events update only thread status and advance only an
+  exact next sequence. A gap, wrong session, malformed thread ID/status, or
+  unsupported event fails closed.
+- Added `RemoteLifecycleCoordinator` states for credential loading, unpaired and
+  credential-recovery gates, connecting, hydrating, ready, bounded retry,
+  revoked, suspended, and stopped. A socket is not ready until its device/session
+  status is verified and both bounded model/thread snapshots have replaced the
+  projection. The baseline cursor is persisted after replacement; each live
+  cursor is persisted only after its event mutation completes.
+- Same-session resume is allowed only when the retained projection, secure
+  cursor, device ID, Host session, and sequence all agree. A fresh process,
+  changed Host session, gap, invalid cursor, or resync generation performs a new
+  bounded snapshot. Generic connection failures back off from one second to a
+  30-second cap; credential rejection and live revocation are terminal. Run and
+  connection generations reject late connects and stale hydration, while a
+  cross-connection projection queue prevents a suspended session's delayed work
+  from overwriting a resumed run.
+- Preserved three negative results. The first real 401 test showed Dart's
+  `WebSocketException.message` omitted the HTTP status even though its bounded
+  `toString()` included it; the mapper now matches only the exact status phrase.
+  A suspend/late-connect test exposed duplicate close ownership; cleanup now
+  belongs to one `finally`. A direct `flutter analyze` again crashed in the
+  Unicode repository path, and an ASCII symlink still canonicalized back to that
+  path; an isolated ASCII copy passed instead.
+- Nineteen new tests bring the Flutter total to 118. `dart analyze
+  --fatal-infos`, the ASCII-copy `flutter analyze --no-pub`, all Flutter tests,
+  the Linux debug build, and Android `assembleDebug` pass. Android still needs
+  the documented temporary ASCII Flutter-SDK property; the restored three-ABI
+  APK remains 191,469,644 bytes. No emulator/physical-device, background OS,
+  process-death, real LAN, or Android UI behavior was exercised.
 
 ### 2026-11-05 — Phase 4 recoverable Android credential owner
 
@@ -781,29 +830,26 @@ All results below are from 2026-11-05 on Manjaro Linux x86_64 with Flutter 3.47.
 
 ## Next action
 
-Build the Android lifecycle/reconnect and authoritative hydration owner around
-the now-tested read-only `RemoteTransport` and recoverable system-CA credential
-record:
+Integrate the now-tested Remote lifecycle foundation into the Android product
+without weakening its fail-closed boundaries:
 
-1. add a lifecycle/reconnect coordinator with bounded backoff, persisted
-   session/sequence only after applied events, initial and gap-triggered bounded
-   authoritative reads, stale-attempt rejection, and explicit revoked/lost-key
-   states. Dart automatically handles WebSocket ping/pong control frames; the
-   coordinator must still own application readiness and request-timeout recovery;
-2. keep the cursor outside the secret record and persist it only after the
-   corresponding projection mutation succeeds; a fresh session, invalid cursor,
-   gap, or resync marker must discard incremental assumptions and rebuild only
-   bounded model/thread metadata;
+1. add an Android runtime owner that constructs the secure credential/cursor
+   adapters and `RemoteLifecycleCoordinator`, maps app foreground/background and
+   detach transitions to start/suspend/stop, and exposes the typed lifecycle plus
+   bounded model/thread projection without making socket-connected mean ready;
+2. adapt the existing thread/settings presentation owners to consume the bounded
+   Remote projection on Android while keeping desktop `ProcessTransport`
+   unchanged. Keep unsupported history/output, turns, approvals, server
+   requests, and all writes visibly unavailable rather than falling through to
+   RPC errors;
 3. design the local self-signed pairing artifact so certificate/CA identity is
    authenticated and stored through a new explicit record version; never use
    `badCertificateCallback` as onboarding;
-4. integrate Android runtime state only after reconnect and hydration boundaries
-   are real, then
-   exercise Host restart/session change, revocation, malformed/oversized input,
-   bounded hydration, and process/background lifecycle in Dart tests and the
-   available emulator/device/build gates. Keep server requests/approvals and
-   writes rejected until pending interaction state and idempotency are wired end
-   to end.
+4. exercise the integrated path against an available emulator/device: cold
+   start, suspend/resume, network loss, Host restart/session change, revocation,
+   malformed/oversized input, process death, Keystore recovery, bounded
+   hydration, and system-CA WSS. Keep server requests/approvals and writes
+   rejected until pending interaction state and idempotency are wired end to end.
 
 Preserve the unavailable Phase 3 Human, Windows/macOS, physical-Android, and
 installed-volume gates as RC requirements.

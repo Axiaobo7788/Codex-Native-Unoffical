@@ -12,9 +12,17 @@ abstract interface class RemoteSocket {
   String? get protocol;
   Future<void> get done;
   int? get closeCode;
+  String? get closeReason;
 
   Future<void> sendText(String message);
   Future<void> close([int? code, String? reason]);
+}
+
+final class RemoteCredentialRejected implements Exception {
+  const RemoteCredentialRejected();
+
+  @override
+  String toString() => 'Remote device credential was rejected.';
 }
 
 typedef RemoteSocketConnector = Future<RemoteSocket> Function(
@@ -74,6 +82,12 @@ final class IoRemoteSocket implements RemoteSocket {
         }, onError: (Object _, StackTrace _) {}),
       );
       rethrow;
+    } on WebSocketException catch (error) {
+      connectionClient.close(force: true);
+      if (RegExp(r'HTTP status code:\s*401\b').hasMatch(error.toString())) {
+        throw const RemoteCredentialRejected();
+      }
+      rethrow;
     } catch (_) {
       connectionClient.close(force: true);
       rethrow;
@@ -91,6 +105,9 @@ final class IoRemoteSocket implements RemoteSocket {
 
   @override
   int? get closeCode => _socket.closeCode;
+
+  @override
+  String? get closeReason => _socket.closeReason;
 
   @override
   Future<void> sendText(String message) {

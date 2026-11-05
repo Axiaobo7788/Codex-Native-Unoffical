@@ -797,3 +797,94 @@ _Reviewed: 2026-11-05_
 - Physical-device Keystore, transient service failure, backup/restore, device
   transfer, uninstall/reinstall, and system-CA TLS behavior remain unrun. The
   open upstream wrapping-key replacement defect remains a release watch item.
+
+### Remote readiness, applied cursors, and lifecycle recovery
+
+_Reviewed: 2026-11-05_
+
+#### Constraints applied
+
+- WebSocket negotiation success is only a transport fact. Product readiness
+  additionally requires the authenticated Host status to match the stored device
+  and negotiated session, followed by an authoritative bounded state snapshot.
+- The transport ACK tracks a contiguous received suffix so the Host can bound
+  replay. It is not an application durability claim. A distinct cursor may be
+  persisted only after the corresponding projection mutation succeeds.
+- A saved cursor alone cannot reconstruct state after process death. Until the
+  bounded projection itself is durable, cold start must ignore the cursor and
+  perform authoritative reads. Retained in-memory state may resume only when its
+  device, Host session, and applied sequence exactly match the verified cursor.
+- Suspend, reconnect, resync, and asynchronous snapshot work can overlap. Every
+  result needs both run and connection identity, and projection mutations must
+  be serialized across sessions so a late old result cannot overwrite new state.
+- Authentication rejection and live credential revocation require user recovery,
+  not automatic retry. Transient connection/request failures may retry, but with
+  a bounded delay and no write replay. The current Remote surface remains
+  read-only.
+
+#### Adopted here
+
+- `RemoteTransport` exposes each allowlisted notification together with its
+  exact Host session and sequence. Its terminal result distinguishes local,
+  peer, protocol, resync, credential-revoked, and generic failure classes while
+  keeping close text out of public diagnostics. The real socket converts HTTP
+  401 into one redacted typed credential rejection.
+- Store one versioned cursor record separately from the device bearer. Bind it
+  to device ID, Host session, and non-negative sequence; cap it at 1 KiB;
+  serialize access; verify write readback; and report malformed/unreadable data
+  generically without deleting it.
+- Retain at most 100 model entries and 100 thread summaries in the initial
+  projection. Model/thread next cursors remain opaque for explicit later paging.
+  Lifecycle events may update a known thread status or advance the exact next
+  sequence without inserting unbounded history. Wrong-session, gap, malformed,
+  and unsupported events fail closed.
+- The lifecycle owner loads credentials, connects, verifies status, concurrently
+  requests one bounded model and thread page, replaces the projection, saves the
+  baseline cursor, then releases the transport's held suffix. Each released
+  event is applied and only then persisted. A resync-generation change discards
+  completed stale reads and repeats the bounded snapshot.
+- Generic failures use exponential delays from one to 30 seconds. Credential
+  rejection and exact live revocation enter terminal state. Suspend closes the
+  session while retaining only verifiable applied state; stop also invalidates
+  the projection. A connection that completes after deactivation is closed and
+  never published.
+
+#### Validation and preserved negative evidence
+
+- Four cursor tests cover exact device binding, malformed/unreadable redaction,
+  write verification, and serialized concurrency. Three projection tests cover
+  the 100/100 cap, exact sequence application, and fail-closed input. Ten
+  lifecycle tests cover absent/recovery credentials, readiness gating,
+  apply-before-persist order, retained resume, Host session replacement,
+  rejection/revocation, exponential retry (including connected failures before
+  readiness), late connection cleanup, stale projection work, and invalidated
+  hydration.
+- The first real HTTP 401 assertion failed because Dart's
+  `WebSocketException.message` omitted the status; its `toString()` retained the
+  fixed `HTTP status code: 401` phrase. Matching only that phrase produced the
+  typed redacted result without parsing or surfacing the endpoint or bearer.
+- The first suspend/late-connection test failed because the stale branch closed
+  the session and the surrounding `finally` closed it again. Real
+  `RemoteTransport` coalesced this, but the coordinator interface should not rely
+  on implementation idempotence. One `finally` now owns cleanup.
+- A delayed projection test proves an old session cannot repopulate or advance a
+  resumed run. Projection work is serialized globally; resume waits for old work
+  to finish; a generation change invalidates the stale result before the new run
+  reads its cursor.
+- All 118 Flutter tests, `dart analyze --fatal-infos`, an isolated ASCII-copy
+  `flutter analyze --no-pub`, Linux debug build, and Android `assembleDebug`
+  pass. Direct `flutter analyze` still crashes on the Unicode repository path;
+  a simple ASCII symlink was insufficient because the analyzer canonicalized it
+  back to the real path. No real Android network, OS background, process death,
+  or secure-storage lifecycle was exercised.
+
+#### Deliberately deferred
+
+- The coordinator is not yet created by `RuntimeController`, driven by
+  `AppLifecycleState`, or presented in Android UI. Unit state-machine evidence is
+  not product/runtime integration.
+- Only bounded model/thread metadata is authoritative. Remote history, output,
+  turns, approvals, server requests, and every write remain unavailable.
+- Cursor-only cold resume remains intentionally disabled until there is a
+  separately designed bounded durable projection. Reconnecting with a stale
+  cursor and no matching state would be fast but incorrect.

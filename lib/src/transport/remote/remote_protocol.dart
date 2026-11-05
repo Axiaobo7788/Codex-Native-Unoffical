@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../../protocol/protocol_models.dart';
+
 final class RemoteResumeCursor {
   const RemoteResumeCursor({required this.sessionId, required this.sequence})
     : assert(sessionId != ''),
@@ -82,6 +84,37 @@ final class RemoteHandshake {
   final int serverSequence;
   final bool requiresResync;
   final Set<String> capabilities;
+}
+
+final class RemoteSequencedNotification {
+  const RemoteSequencedNotification({
+    required this.sessionId,
+    required this.sequence,
+    required this.notification,
+  });
+
+  final String sessionId;
+  final int sequence;
+  final CodexNotification notification;
+}
+
+enum RemoteTransportCloseKind {
+  local,
+  peer,
+  protocolViolation,
+  resyncRequired,
+  credentialRevoked,
+  failed,
+}
+
+final class RemoteTransportClose {
+  const RemoteTransportClose({required this.kind, this.code});
+
+  final RemoteTransportCloseKind kind;
+  final int? code;
+
+  @override
+  String toString() => 'Remote transport closed.';
 }
 
 final class RemoteResyncRequired implements Exception {

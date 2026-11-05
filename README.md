@@ -83,12 +83,16 @@ sequence journal with ACK, same-session replay, and explicit gap resync. Token
 deltas, diffs, server requests, and writes/approvals remain unrouted. A bounded
 Dart `RemoteTransport` now enforces WSS-by-default negotiation, request/event
 limits, ACK/resume, initial authoritative resync, and stale-resync rejection
-while reusing the typed protocol adapters. It is not wired into the Android UI
-yet. A versioned system-CA connection profile and device bearer now live behind
-platform secure storage with explicit unreadable/corrupt recovery and Android
-backup/transfer exclusions; the bearer is never put in ordinary preferences or
-diagnostics. Pairing-bound self-signed certificate trust, reconnect/background
-recovery, authoritative state hydration, and product integration remain.
+while reusing the typed protocol adapters. A separate lifecycle owner now adds
+device/session-bound applied-cursor persistence, bounded model/thread hydration,
+exact apply-before-persist sequencing, capped reconnect backoff, stale-attempt
+rejection, and terminal recovery/revocation states. It is not wired into the
+Android runtime or UI yet. A versioned system-CA connection profile and device
+bearer live behind platform secure storage with explicit unreadable/corrupt
+recovery and Android backup/transfer exclusions; the bearer is never put in
+ordinary preferences or diagnostics. Pairing-bound self-signed certificate
+trust, Android app/process lifecycle wiring, product integration, and real-device
+validation remain.
 
 ## Run locally
 

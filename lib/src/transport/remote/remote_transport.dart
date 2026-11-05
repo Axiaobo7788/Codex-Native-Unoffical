@@ -16,6 +16,7 @@ import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
 import '../codex_transport.dart';
 import 'remote_protocol.dart';
+import 'remote_session.dart';
 import 'remote_socket.dart';
 
 const _protocolVersion = 1;
@@ -34,7 +35,7 @@ const _eventMethods = {
   'host/resyncRequired',
 };
 
-final class RemoteTransport implements CodexTransport {
+final class RemoteTransport implements CodexTransport, RemoteSession {
   RemoteTransport._({
     required this._socket,
     required this._input,
@@ -49,6 +50,11 @@ final class RemoteTransport implements CodexTransport {
       sync: true,
       onListen: _drainBufferedEvents,
     );
+    _sequencedNotifications =
+        StreamController<RemoteSequencedNotification>.broadcast(
+          sync: true,
+          onListen: _drainBufferedEvents,
+        );
     _turnProtocol = TurnProtocolAdapter(
       request: _request,
       notifications: _notifications.stream,
@@ -205,6 +211,7 @@ final class RemoteTransport implements CodexTransport {
 
   final RemoteSocket _socket;
   final StreamIterator<Object?> _input;
+  @override
   final RemoteHandshake handshake;
   final Duration requestTimeout;
   final Map<int, _PendingRequest> _pending = {};
@@ -214,11 +221,14 @@ final class RemoteTransport implements CodexTransport {
   final StreamController<RemoteResyncRequired> _resyncEvents =
       StreamController<RemoteResyncRequired>.broadcast(sync: true);
   late final StreamController<CodexNotification> _notifications;
+  late final StreamController<RemoteSequencedNotification>
+  _sequencedNotifications;
   late final TurnProtocolAdapter _turnProtocol;
   late final ModelProtocolAdapter _modelProtocol;
   late final ThreadProtocolAdapter _threadProtocol;
   Future<void>? _reader;
   Future<void>? _finishOperation;
+  final Completer<RemoteTransportClose> _closed = Completer();
   RemoteResumeCursor? _durableCursor;
   var _lastSequence = 0;
   var _bufferedEventBytes = 0;
@@ -227,11 +237,23 @@ final class RemoteTransport implements CodexTransport {
   var _resyncGeneration = 0;
   var _closing = false;
 
+  @override
   RemoteResumeCursor? get resumeCursor => _durableCursor;
+  @override
   bool get requiresResync => _requiresResync;
+  @override
   int get resyncGeneration => _resyncGeneration;
+  @override
+  int get currentSequence => _lastSequence;
+  @override
   Stream<RemoteResyncRequired> get resyncEvents => _resyncEvents.stream;
+  @override
+  Stream<RemoteSequencedNotification> get sequencedNotifications =>
+      _sequencedNotifications.stream;
+  @override
+  Future<RemoteTransportClose> get closed => _closed.future;
 
+  @override
   void completeResync({required int generation}) {
     if (_closing) {
       throw const TransportClosedException();
@@ -262,6 +284,7 @@ final class RemoteTransport implements CodexTransport {
   @override
   Stream<ApprovalEvent> get approvalEvents => const Stream.empty();
 
+  @override
   Future<RemoteStatus> status() async {
     final result = await _request('host/remote/status');
     final device = _requiredObject(result, 'device');
@@ -388,6 +411,7 @@ final class RemoteTransport implements CodexTransport {
       unawaited(
         _finish(
           const TransportClosedException('Remote RPC timed out.'),
+          kind: RemoteTransportCloseKind.failed,
           closeSocket: true,
           closeCode: WebSocketStatus.policyViolation,
           closeReason: 'Remote RPC timed out',
@@ -421,6 +445,7 @@ final class RemoteTransport implements CodexTransport {
     var closeSocket = false;
     var closeCode = WebSocketStatus.normalClosure;
     var closeReason = 'Remote WebSocket closed';
+    var closeKind = RemoteTransportCloseKind.peer;
     try {
       while (!_closing && await _input.moveNext()) {
         await _handleMessage(_input.current);
@@ -441,6 +466,7 @@ final class RemoteTransport implements CodexTransport {
     } catch (error) {
       terminal = error;
       if (error is ProtocolViolation && !_protocolErrors.isClosed) {
+        closeKind = RemoteTransportCloseKind.protocolViolation;
         _protocolErrors.add(error);
         closeSocket = true;
         closeCode = WebSocketStatus.protocolError;
@@ -449,6 +475,7 @@ final class RemoteTransport implements CodexTransport {
       if (error is! RemoteResyncRequired &&
           error is! ProtocolViolation &&
           !_protocolErrors.isClosed) {
+        closeKind = RemoteTransportCloseKind.failed;
         _protocolErrors.add(
           ProtocolViolation('Remote transport failed.', error),
         );
@@ -457,14 +484,20 @@ final class RemoteTransport implements CodexTransport {
         closeReason = 'Remote transport failed';
       }
       if (error is RemoteResyncRequired) {
+        closeKind = RemoteTransportCloseKind.resyncRequired;
         closeSocket = true;
         closeCode = WebSocketStatus.policyViolation;
         closeReason = 'Authoritative resync required';
       }
     } finally {
+      if (_socket.closeCode == WebSocketStatus.policyViolation &&
+          _socket.closeReason == 'device credential revoked') {
+        closeKind = RemoteTransportCloseKind.credentialRevoked;
+      }
       unawaited(
         _finish(
           terminal,
+          kind: closeKind,
           closeSocket: closeSocket,
           closeCode: closeCode,
           closeReason: closeReason,
@@ -589,7 +622,14 @@ final class RemoteTransport implements CodexTransport {
         ),
       );
     } else {
-      _deliverOrBuffer(notification, utf8.encode(encoded).length);
+      _deliverOrBuffer(
+        RemoteSequencedNotification(
+          sessionId: handshake.sessionId,
+          sequence: sequence,
+          notification: notification,
+        ),
+        utf8.encode(encoded).length,
+      );
     }
     if (!_requiresResync) {
       _durableCursor = RemoteResumeCursor(
@@ -600,9 +640,15 @@ final class RemoteTransport implements CodexTransport {
     await _sendBounded(_socket, {'type': 'ack', 'sequence': sequence});
   }
 
-  void _deliverOrBuffer(CodexNotification notification, int bytes) {
-    if (!_requiresResync && _notifications.hasListener) {
-      _notifications.add(notification);
+  void _deliverOrBuffer(RemoteSequencedNotification event, int bytes) {
+    if (!_requiresResync &&
+        (_notifications.hasListener || _sequencedNotifications.hasListener)) {
+      if (_notifications.hasListener) {
+        _notifications.add(event.notification);
+      }
+      if (_sequencedNotifications.hasListener) {
+        _sequencedNotifications.add(event);
+      }
       return;
     }
     if (_bufferedEvents.length >= _maxBufferedEvents ||
@@ -618,18 +664,24 @@ final class RemoteTransport implements CodexTransport {
       );
       return;
     }
-    _bufferedEvents.add(_BufferedEvent(notification, bytes));
+    _bufferedEvents.add(_BufferedEvent(event, bytes));
     _bufferedEventBytes += bytes;
   }
 
   void _drainBufferedEvents() {
-    if (_requiresResync || !_notifications.hasListener) {
+    if (_requiresResync ||
+        (!_notifications.hasListener && !_sequencedNotifications.hasListener)) {
       return;
     }
     while (_bufferedEvents.isNotEmpty && !_notifications.isClosed) {
       final event = _bufferedEvents.removeFirst();
       _bufferedEventBytes -= event.bytes;
-      _notifications.add(event.notification);
+      if (_notifications.hasListener) {
+        _notifications.add(event.value.notification);
+      }
+      if (_sequencedNotifications.hasListener) {
+        _sequencedNotifications.add(event.value);
+      }
     }
   }
 
@@ -645,6 +697,7 @@ final class RemoteTransport implements CodexTransport {
   @override
   Future<void> close() => _finish(
     const TransportClosedException(),
+    kind: RemoteTransportCloseKind.local,
     closeSocket: true,
     closeCode: WebSocketStatus.normalClosure,
     closeReason: 'Client closing',
@@ -652,6 +705,7 @@ final class RemoteTransport implements CodexTransport {
 
   Future<void> _finish(
     Object cause, {
+    required RemoteTransportCloseKind kind,
     required bool closeSocket,
     int? closeCode,
     String? closeReason,
@@ -676,11 +730,23 @@ final class RemoteTransport implements CodexTransport {
         // The peer may already have closed while this side was finishing.
       }
     }
-    await Future.wait([
-      _notifications.close(),
-      _protocolErrors.close(),
-      _resyncEvents.close(),
-    ]);
+    try {
+      await Future.wait([
+        _notifications.close(),
+        _sequencedNotifications.close(),
+        _protocolErrors.close(),
+        _resyncEvents.close(),
+      ]);
+    } finally {
+      if (!_closed.isCompleted) {
+        _closed.complete(
+          RemoteTransportClose(
+            kind: kind,
+            code: _socket.closeCode ?? closeCode,
+          ),
+        );
+      }
+    }
   }();
 }
 
@@ -692,9 +758,9 @@ final class _PendingRequest {
 }
 
 final class _BufferedEvent {
-  const _BufferedEvent(this.notification, this.bytes);
+  const _BufferedEvent(this.value, this.bytes);
 
-  final CodexNotification notification;
+  final RemoteSequencedNotification value;
   final int bytes;
 }
 
