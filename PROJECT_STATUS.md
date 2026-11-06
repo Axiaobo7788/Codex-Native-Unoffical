@@ -14,7 +14,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 4 — Android Remote: PAUSED BY EXPLICIT PRIORITY OVERRIDE — the existing bounded read-only transport/onboarding/admin work remains intact, but writes, approvals, full conversation integration, headless Host work, relay migration, and mobile architecture work must not advance during the Desktop UI phase**
 
-**Current sole phase — Desktop UI fidelity: IN PROGRESS — targeted current-product research is recorded; the next implementation work is the native Flutter theme/component layer and presentation decomposition. This phase supersedes ADR-026's earlier sequencing through ADR-027. After its acceptance gates close, autonomous development must stop for a separately authorized mobile/Remote research phase.**
+**Current sole phase — Desktop UI fidelity: MACHINE-COMPLETE AND STOPPED — the researched Codex-inspired native Flutter workspace, responsive interactions, unified component language, bounded-memory regressions, Linux native run, and real stock-app-server smokes are complete. Cross-platform and Human visual acceptance remain explicitly unrun evidence, not hidden claims. `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH`; no mobile/Remote or adjacent autonomous phase may begin without a new user instruction.**
 
 ## Current repository state
 
@@ -41,11 +41,25 @@ This file is the repository's durable project memory. Update it whenever a task 
 - Command/file-change approvals support explicit approve-once and reject responses. Unknown and unsupported server requests fail closed and cannot expose an approve action. The real reject path is verified; approve-once is currently unit-tested but not Human-validated.
 - `model/list` drives typed visible-model and reasoning-effort controls. Model, effort, approval, and sandbox overrides are omitted by default; `never` approval and `danger-full-access` require an explicit UI confirmation.
 - Turn diff notifications are converted immediately into a bounded typed projection: at most 2 MiB processed input, 100 files, 512 KiB retained total, 128 KiB and 4,000 lines per file, and 2,000 characters per retained line. Only the selected file's rows are built by the diff view.
-- The desktop UI now provides a virtualized recent-activity timeline, composer,
-  race-safe stop action, pending-approval banner, execution settings, changed-
-  file summary, and selected-file diff. At compact widths the thread and
-  conversation panels keep bounded usable heights inside an explicitly
-  scrollable workspace; wide layouts preserve the 360-pixel thread split.
+- The desktop UI is now a full-window Codex-inspired product workspace rather
+  than a centered engineering card: a 264 px project/thread sidebar, 52 px
+  low-chrome headers, a maximum-760 px reading/composer column, compact typed
+  activity rows, user bubbles, inline approvals, selected-file diff, and a dark
+  bounded output viewer share one project-owned visual language. Wide mode uses
+  independently virtualized sidebar/timeline surfaces; below 760 px an explicit
+  thread/conversation mode switch avoids nested page scrolling. Selecting a
+  thread enters the conversation, Escape closes the narrow sidebar, Enter
+  sends, and Shift+Enter inserts a newline.
+- Explicit `CodexPalette` light/dark theme extensions now own neutral,
+  semantic, diff, code, focus, hover, selected, typography, radius, border, and
+  density tokens. System brightness selects the first default theme;
+  `ColorScheme.fromSeed()` no longer determines product appearance. Flutter
+  Material remains only the native input/focus/semantics implementation layer.
+- `codex_native_app.dart` retains root controller/lifecycle ownership while the
+  presentation is split into app shell, sidebar/activity, conversation/
+  composer/settings, approval/diff/output, runtime details, Remote setup, and
+  Remote onboarding modules. Protocol, domain, transport, pagination,
+  coalescing, output, diff, and retention contracts were not changed.
 - A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
 - Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns and can return directly to the newest page.
 - The typed history layer loads ascending `thread/items/list` pages for exactly
@@ -181,6 +195,60 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Desktop UI fidelity implementation, validation, and stop
+
+- Added the project-owned Codex-inspired light/dark theme and semantic palette
+  (`0876ebd`), split the presentation layer without changing controller
+  ownership (`e0c8735`), replaced the engineering shell with the responsive
+  product workspace (`dca8eb9`), and added narrow approval/output/keyboard
+  regression coverage (`4520c8f`). Every logical slice was pushed to
+  `origin/main` without history rewriting.
+- The product shell now groups the already-bounded thread metadata by project,
+  gives hover/selection/focus/runtime states distinct treatments, moves cwd and
+  runtime diagnostics behind explicit disclosures, and keeps Remote setup as a
+  functioning compact sidebar action. Conversation, empty/loading/error/
+  disconnected states, streaming assistant content, tool/activity rows,
+  composer, execution controls, approvals, diff, and command output use the
+  same token/component language. No OpenAI logo or copied proprietary asset is
+  present.
+- Responsive behavior is explicit rather than a stacked-scroll fallback. Wide
+  mode retains independent virtualized lists; narrow mode switches between
+  threads and conversation, enters conversation after selection, and closes the
+  sidebar with Escape. Composer interaction is Enter to send and Shift+Enter to
+  insert a newline. The timeline keeps near-end-only auto-scroll, Markdown
+  remains lazy/bounded, output retains one byte window, and diff renders one
+  bounded selected file.
+- Final static/widget/build evidence: `dart analyze` PASS; `flutter analyze
+  --no-pub` PASS through a temporary ASCII symlink; all 182 Flutter tests PASS;
+  and `flutter build linux --debug` PASS. Direct-path `flutter analyze` still
+  exits 255 before diagnostics because Flutter 3.47.1 writes an LSP
+  `Content-Length` based on characters while this repository path contains
+  multibyte Chinese characters. The failed direct-path run is preserved as a
+  toolchain/path limitation rather than overwritten by the symlink pass.
+- A real Linux debug bundle launched with stock Codex Desktop
+  `0.166.0-alpha.5.1`, displayed the new light workspace and live project/thread
+  groups, and left no Host/UI process after shutdown. The run still emitted the
+  previously known ATK socket-embedding and missing cursor-theme warnings.
+- Real stock-app-server gates PASS: runtime initialization and 60 ms shutdown;
+  thread list/read/resume with smoke cleanup and 87 ms shutdown; eight visible
+  models; completed and interrupted turns; rejected command approval; and the
+  production-controller coding task with one requested file/one addition,
+  typed diff/history/output, repeated-output deduplication, zero unexpected
+  approvals, cleanup, and 64 ms Host shutdown.
+- Bounded-state gates PASS: 1,000 source history turns retained only 100, ten
+  discarded 3 MiB outputs added 29,052,928 bytes RSS, the 3/30/300 MiB Host
+  benchmark kept Host deltas at 266,240/200,704/253,952 bytes and Dart deltas at
+  2,482,176/3,760,128/13,725,696 bytes, and the 12-iteration lifecycle soak left
+  zero processes and zero sessions (33 ms maximum shutdown).
+- Human visual acceptance was not run on Linux, Windows, or macOS; no Human
+  high-DPR, dark-mode, populated approval/diff/output, keyboard/accessibility,
+  or platform-native chrome review is claimed. Hosted CI for the new UI commits
+  is also a distinct external gate and is not claimed by the local evidence.
+- Accepted ADR-028 and stopped autonomous implementation. The next authorized
+  phase, if the user explicitly resumes work, starts with fresh current mobile/
+  Remote research and must not silently inherit the paused architecture
+  assumptions.
 
 ### 2026-11-06 — Desktop UI fidelity priority override and current-product research
 
@@ -1717,7 +1785,14 @@ specific evidence boundaries.
 
 ## Known risks / watch items
 
-- Direct `flutter analyze` from this repository's Unicode filesystem path currently crashes Flutter 3.47.1's LSP byte-stream parser with a truncated initialization JSON message. The same source passes `dart analyze --fatal-infos` at the real path and `flutter analyze` through an ASCII symlink. This is preserved as a toolchain/path issue, not recorded as a clean direct-path run.
+- Direct `flutter analyze` from this repository's Unicode filesystem path
+  currently crashes Flutter 3.47.1's LSP byte-stream parser with an initialize
+  message truncated at character 401. Flutter's tool writes LSP
+  `Content-Length` from Dart string characters rather than UTF-8 bytes; the
+  multibyte `文档` path therefore undercounts the frame. The same source passes
+  `dart analyze` at the real path and `flutter analyze --no-pub` through a
+  temporary ASCII symlink. This is preserved as a toolchain/path issue, not
+  recorded as a clean direct-path run.
 - The same Unicode-path toolchain defect affects Android settings evaluation:
   ordinary `flutter build apk --debug` corrupts the Flutter SDK path before
   compilation. A temporary ASCII SDK alias proves `assembleDebug` itself passes,
@@ -1792,7 +1867,11 @@ specific evidence boundaries.
   write a bounded `.part` before its digest is known. Same-size external
   mutation is not checksummed as a persistent-cache threat because the store is
   private and session-scoped.
-- The real GUI launch logged host GTK/Wayland warnings for ATK socket embedding and a missing cursor-theme asset. They did not prevent the window, handshake, or child cleanup, but should be rechecked during later Linux UI work.
+- The post-fidelity real GUI launch still logged GTK/Wayland warnings for ATK
+  socket embedding and a missing cursor-theme asset. They did not prevent the
+  window, live stock-app-server handshake, project/thread hydration, screenshot
+  inspection, or child cleanup. Linux Human review and installed-build
+  accessibility/cursor-theme validation remain separate gates.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
 - A prior GUI run after loading thread state did not exit within the 3-second
   stdin-EOF window or the following 3-second SIGTERM window; SIGKILL completed at
@@ -1820,27 +1899,21 @@ specific evidence boundaries.
 
 ## Next action
 
-Implement only the Desktop UI fidelity phase without weakening the bounded
-protocol, controller, lifecycle, or memory boundaries:
+`DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH`.
 
-1. replace the seed-derived Material 3 baseline with the small Codex-inspired
-   light/dark token and component layer defined by the current research;
-2. decompose the monolithic presentation file into app shell, sidebar/thread
-   list, conversation/composer/activity, approval, diff/output, execution
-   controls, Remote setup, and shared-state modules while leaving domain and
-   transport contracts unchanged;
-3. finish responsive wide/narrow layouts and the empty/loading/error/
-   disconnected/active visual states, then run widget/layout, bounded-memory,
-   desktop build, and real app-server smoke gates;
-4. perform direct Human visual review where available and report any unavailable
-   cross-platform/Human gates exactly;
-5. after the acceptance criteria are genuinely met, emit
-   `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH` and stop. Do not
-   begin Android/mobile/relay research or implementation without a new explicit
-   user instruction.
+Do not perform further autonomous implementation. Await a new explicit user
+instruction. If development is resumed for the next intended phase, begin with
+fresh research into the then-current official ChatGPT/Codex Android and iOS
+clients, official Remote relay/controller protocol and source, and current
+community implementations. Re-evaluate whether official mobile is still only a
+Remote control plane, whether a third-party client can interoperate, whether
+OpenAI Remote plus Direct Host is still a sound dual-backend model, and which
+parts of `codex-native-host` should remain only a Direct/Self-hosted fallback.
+Do not begin that research or modify Android/Remote until the user explicitly
+resumes the project.
 
-The earlier Android, signing/notarization, installed-volume, and release gates
-remain recorded but are not current autonomous work.
+The earlier Android, signing/notarization, installed-volume, hosted-CI, and
+Human visual gates remain recorded but are not current autonomous work.
 
 ## Milestone outline
 

@@ -1237,3 +1237,60 @@ research; it must not inherit current mobile assumptions by default.
 - Material component types in the widget tree are acceptable implementation
   details. Seed-derived appearance, oversized Material surfaces, and default
   dashboard-style cards are not the product baseline.
+
+---
+
+## ADR-028 — Close the Desktop UI fidelity phase at the verified native boundary
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Declare the authorized Desktop UI fidelity implementation complete after the
+project-owned light/dark theme, modular presentation, full-window project/thread
+workspace, responsive conversation/composer interactions, unified approval/
+diff/output states, bounded-memory regression evidence, Linux native execution,
+and real stock-app-server smoke gates pass. Emit
+`DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH` and perform no further
+autonomous implementation.
+
+Completion is a precise machine-actionable boundary, not a claim of Human or
+cross-platform visual acceptance. Preserve the unrun Linux/Windows/macOS Human,
+high-DPR, dark-mode, accessibility, populated-state, platform-chrome, and hosted
+CI gates in project status. Preserve the direct Unicode-path `flutter analyze`
+failure separately from the passing real-path `dart analyze` and ASCII-symlink
+`flutter analyze` evidence.
+
+If the user later resumes the project for mobile/Remote work, start a distinct
+research phase against then-current official ChatGPT/Codex Android/iOS clients,
+official Remote relay/controller implementation, and current community work.
+Do not assume that the paused Android transport, official-versus-Direct Host
+split, or `codex-native-host` product role is still correct.
+
+### Why
+
+- The prior engineering shell has been replaced by the researched native
+  product workspace while keeping every controller, protocol, pagination,
+  virtualization, lazy-output, bounded-diff, coalescing, and lifecycle boundary.
+- Local widget/build/memory evidence and real stock-app-server behavior now
+  exercise the complete existing Desktop feature loop rather than only visual
+  fixtures.
+- Human review and hosted cross-platform execution establish different claims;
+  explicitly listing them is more accurate than either blocking indefinitely
+  on unavailable reviewers or silently calling them passed.
+- The user's stop condition is part of product scope. Continuing into Remote,
+  mobile, ecosystem, release, or infrastructure work would be unauthorized even
+  if technically adjacent.
+
+### Consequence
+
+- Desktop UI code may be changed again only through a later explicit request;
+  this ADR does not create a background polish queue.
+- Known visual differences from current official Codex remain documented in
+  `docs/RESEARCH.md` instead of being represented by inert placeholder controls.
+- Paused Android/Remote, ChatGPT, Skills/MCP/Plugins, release, installer,
+  signing, CI-hardening, and ACL/TLS edge work remains intact but inactive.
+- The next recommended activity is research only after explicit authorization;
+  no implementation or protocol migration begins from this decision.

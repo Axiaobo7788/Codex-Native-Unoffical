@@ -231,6 +231,93 @@ The research directly changes the implementation plan:
    Machine tests do not replace Human visual review at normal and high DPR on
    Linux, Windows, and macOS.
 
+### Implemented fidelity result
+
+_Validated: 2026-11-06_
+
+The research targets are now implemented without changing the stock app-server,
+typed controller, lifecycle, or transport contracts:
+
+- `CodexPalette` provides explicit light/dark canvas, sidebar, surface, hover,
+  selected, border, text, semantic, diff, code, user-bubble, and shadow tokens.
+  `ColorScheme.fromSeed()` is absent from the product path; system brightness
+  selects the default. Material widgets remain only as native semantics/input/
+  focus primitives under the project-owned component styling.
+- The wide layout is a full-window 264 px sidebar plus a one-pixel divider and
+  conversation workspace. The header is 52 px, thread rows are 42 px including
+  vertical separation, and the reading/composer column is capped at 760 px. The
+  760 px breakpoint switches to one explicit thread/conversation surface rather
+  than stacking independently scrolling panels.
+- Sidebar groups are derived from the retained `cwd` metadata, and list rows
+  expose distinct idle/active, hover, selected, keyboard-focus, disabled, and
+  resume states. Working directory and runtime process details moved behind
+  explicit dialogs; the compact runtime state and functioning Remote setup
+  entry remain visible.
+- Conversation uses a low-chrome title/project header, virtualized timeline,
+  right-aligned user bubbles, unboxed assistant Markdown, compact activity rows,
+  bounded loading/empty/error states, inline approval, selected-file diff, and a
+  unified rounded composer. Enter sends, Shift+Enter inserts a newline, narrow
+  thread selection enters the conversation, and Escape closes the narrow
+  sidebar.
+- Approval, diff, output, runtime details, Remote administration, and Remote
+  onboarding now consume the same semantic palette. Output remains a dark code
+  viewport in both themes and retains only one existing bounded byte window;
+  diff still builds only the bounded selected file.
+- The prior monolith is now a small root/lifecycle file plus app shell,
+  sidebar/activity, conversation/composer/settings, approval/diff/output,
+  runtime-details, Remote-setup, and Remote-onboarding presentation modules.
+
+### Known differences from the current official product
+
+These are explicit differences, not hidden placeholders and not authorization
+for more work in the completed Desktop phase:
+
+- This client is a dedicated Codex workspace, not the unified ChatGPT Desktop
+  shell. Chat/Work navigation, account surfaces, shared ChatGPT history, and
+  official cloud UI are intentionally absent.
+- Official worktrees, editor handoff, source/comment review, commit/PR actions,
+  Automations, Skills/MCP/Plugins browsers, attachments, voice, and composer
+  predictions are not presented because the current controllers do not own
+  those complete behaviors.
+- Changes replace the center conversation view instead of opening the current
+  official multi-pane review experience. The implementation provides one
+  bounded selected file and no inline diff comments.
+- Model/reasoning/execution are integrated into the composer but open a native
+  settings dialog; they do not copy the official model slider/menu pixel for
+  pixel. Command output uses the existing bounded First/Previous/Next/Tail
+  viewer rather than an official terminal pane.
+- The window uses native Linux/Windows/macOS chrome and Material Symbols under
+  custom sizing/states. Official fonts, proprietary icons, OpenAI marks,
+  illustrations, motion, and asset bundles were deliberately not copied.
+- Project groups are derived from already paged thread metadata. They do not
+  crawl repositories, maintain a second project database, or preload inactive
+  threads for richer animation.
+
+### Validation boundary and remaining Human gates
+
+- `dart analyze`, all 182 Flutter tests, the Linux debug build, wide/narrow
+  layout, hover/selected/focus, composer keyboard behavior, narrow approval and
+  output, bounded 1,000-item timeline, Markdown, diff, and Remote-setup tests
+  pass. `flutter analyze --no-pub` passes through an ASCII symlink; the direct
+  Unicode-path invocation fails before diagnostics because Flutter 3.47.1
+  undercounts LSP UTF-8 bytes in `Content-Length`.
+- A real Linux debug bundle connected to stock Codex Desktop
+  `0.166.0-alpha.5.1`, hydrated ten live threads into project groups, and was
+  directly screenshot-inspected in the system light theme. Runtime, thread,
+  model, turn/interruption, rejected approval, and production-controller coding
+  smokes pass. History/output memory and 12-cycle Host lifecycle gates pass.
+- This is machine/agent evidence, not Human acceptance. Human review remains
+  unrun for Linux, Windows, and macOS; normal/high DPR; system dark mode;
+  populated long conversation, approval, diff, and output surfaces; keyboard
+  traversal/screen reader behavior; and platform window chrome. The live Linux
+  run also retained the known ATK socket-embedding and missing cursor-theme
+  warnings. Hosted CI for the new UI commits is not inferred from local runs.
+
+The Desktop UI phase is therefore closed at its machine-actionable boundary and
+autonomous work is stopped. A future mobile/Remote phase requires explicit user
+authorization and fresh research rather than extension of this document's
+Desktop assumptions.
+
 ## Large app-server output and the native Host boundary
 
 _Reviewed: 2026-11-05_
