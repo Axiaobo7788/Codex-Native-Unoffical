@@ -127,6 +127,7 @@ struct Processor<'a> {
     remote_id_prefix: Option<String>,
     completed_candidate: bool,
     separator_has_line_break: bool,
+    created_outputs: Vec<crate::spool::OutputDescriptor>,
     error: Option<io::Error>,
 }
 
@@ -150,6 +151,7 @@ impl<'a> Processor<'a> {
             remote_id_prefix,
             completed_candidate: false,
             separator_has_line_break: false,
+            created_outputs: Vec::new(),
             error: None,
         }
     }
@@ -172,6 +174,9 @@ impl<'a> Processor<'a> {
                 }
                 if self.candidate.is_some() {
                     return Err(invalid_data("nested JSON candidate lifecycle"));
+                }
+                if !self.created_outputs.is_empty() {
+                    return Err(invalid_data("unfinished output candidate lifecycle"));
                 }
                 self.candidate = Some(self.store.start_candidate()?);
                 self.depth = 0;
@@ -284,6 +289,9 @@ impl<'a> Processor<'a> {
                     let active = self.active_output.take().expect("checked above");
                     active.decoder.finish()?;
                     let descriptor = active.spool.finish()?;
+                    if descriptor.newly_stored {
+                        self.created_outputs.push(descriptor.clone());
+                    }
                     self.candidate_mut()?
                         .write_all(b",\"_codexNativeOutput\":")?;
                     serde_json::to_writer(self.candidate_mut()?, &descriptor.to_wire_value())?;
@@ -322,6 +330,7 @@ impl<'a> Processor<'a> {
                             total_bytes: captured.total_bytes,
                         },
                     ))?;
+                    self.created_outputs.clear();
                 } else if let Some(method) = self
                     .notification_method
                     .take()
@@ -329,6 +338,9 @@ impl<'a> Processor<'a> {
                 {
                     let captured =
                         candidate.publish_to_with_capture(output, MAX_REMOTE_NOTIFICATION_BYTES)?;
+                    // Local stdout has received the complete descriptor-bearing candidate.
+                    // It now owns every newly created output even if Remote publication fails.
+                    self.created_outputs.clear();
                     on_remote_observation(AppServerRemoteObservation::Notification(
                         AppServerRemoteNotification {
                             method,
@@ -338,6 +350,7 @@ impl<'a> Processor<'a> {
                     ))?;
                 } else {
                     candidate.publish_to(output)?;
+                    self.created_outputs.clear();
                 }
                 self.completed_candidate = true;
                 self.separator_has_line_break = false;
@@ -408,6 +421,9 @@ impl<'a> Processor<'a> {
         self.active_method.take();
         self.remote_response_id.take();
         self.notification_method.take();
+        for descriptor in self.created_outputs.drain(..) {
+            self.store.discard_new_output(&descriptor);
+        }
     }
 
     fn finish_active_id(&mut self) {
@@ -527,6 +543,7 @@ fn invalid_data(message: &'static str) -> io::Error {
 mod tests {
     use super::*;
     use serde_json::Value;
+    use std::fs;
     use std::time::Duration;
     use tempfile::TempDir;
 
@@ -632,6 +649,132 @@ mod tests {
         assert!(first["result"]["nested"]["aggregatedOutput"].is_null());
         assert_eq!(first["result"]["nested"]["_codexNativeOutput"]["bytes"], 3);
         assert_eq!(second["params"]["_codexNativeOutput"]["bytes"], 3);
+    }
+
+    #[test]
+    fn reuses_one_spool_for_repeated_complete_output_messages() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"id":1,"result":{"aggregatedOutput":"repeat"}}
+{"id":2,"result":{"aggregatedOutput":"repeat"}}
+"#;
+        let output = fixture.transform(input, 3).unwrap();
+        let messages = std::str::from_utf8(&output)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[0]["result"]["_codexNativeOutput"]["ref"],
+            messages[1]["result"]["_codexNativeOutput"]["ref"]
+        );
+        assert_eq!(fixture.store.stored_bytes(), 6);
+        assert_eq!(fixture.store.stored_output_count(), 1);
+    }
+
+    #[test]
+    fn rolls_back_a_finished_output_when_the_json_candidate_is_invalid() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"aggregatedOutput":"temporary","invalid":]}
+"#;
+
+        assert!(fixture.transform(input, 2).is_err());
+        assert_eq!(fixture.store.stored_bytes(), 0);
+        assert_eq!(fixture.store.stored_output_count(), 0);
+        assert_eq!(
+            fs::read_dir(fixture.store.session_path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    matches!(
+                        entry.path().extension().and_then(|value| value.to_str()),
+                        Some("data" | "json" | "part")
+                    )
+                })
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn invalid_duplicate_candidate_does_not_remove_a_prior_valid_output() {
+        let fixture = Fixture::new(1024, 4096);
+        let valid = fixture
+            .transform(
+                br#"{"aggregatedOutput":"durable"}
+"#,
+                2,
+            )
+            .unwrap();
+        let output_ref =
+            serde_json::from_slice::<Value>(&valid).unwrap()["_codexNativeOutput"]["ref"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+
+        assert!(
+            fixture
+                .transform(
+                    br#"{"aggregatedOutput":"durable","invalid":]}
+"#,
+                    2,
+                )
+                .is_err()
+        );
+        assert_eq!(fixture.store.stored_bytes(), 7);
+        assert_eq!(fixture.store.stored_output_count(), 1);
+        assert_eq!(
+            fixture.store.read_range(&output_ref, 0, 7).unwrap().bytes,
+            b"durable"
+        );
+    }
+
+    #[test]
+    fn rolls_back_an_undelivered_remote_response_when_the_observer_fails() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"id":"codex-remote:session:1","result":{"aggregatedOutput":"temporary"}}
+"#;
+        let mut transformer =
+            Transformer::new(&fixture.store, Some("codex-remote:session:".to_owned()));
+        let mut output = Vec::new();
+        let mut fail_remote = |_| Err(io::Error::other("remote observer failed"));
+
+        assert!(
+            transformer
+                .push(input, &mut output, &mut fail_remote)
+                .is_err()
+        );
+        assert!(output.is_empty());
+        assert_eq!(fixture.store.stored_bytes(), 0);
+        assert_eq!(fixture.store.stored_output_count(), 0);
+    }
+
+    #[test]
+    fn keeps_output_after_local_notification_delivery_if_remote_observation_fails() {
+        let fixture = Fixture::new(1024, 4096);
+        let input =
+            br#"{"method":"item/completed","params":{"item":{"aggregatedOutput":"durable"}}}
+"#;
+        let mut transformer =
+            Transformer::new(&fixture.store, Some("codex-remote:session:".to_owned()));
+        let mut output = Vec::new();
+        let mut fail_remote = |_| Err(io::Error::other("remote observer failed"));
+
+        assert!(
+            transformer
+                .push(input, &mut output, &mut fail_remote)
+                .is_err()
+        );
+        let forwarded: Value = serde_json::from_slice(&output).unwrap();
+        let descriptor = &forwarded["params"]["item"]["_codexNativeOutput"];
+        let output_ref = descriptor["ref"].as_str().unwrap();
+        assert_eq!(fixture.store.stored_bytes(), 7);
+        assert_eq!(fixture.store.stored_output_count(), 1);
+        assert_eq!(
+            fixture.store.read_range(output_ref, 0, 7).unwrap().bytes,
+            b"durable"
+        );
     }
 
     #[test]

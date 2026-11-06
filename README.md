@@ -65,9 +65,11 @@ stack of bounded thread/conversation panels below 760 logical pixels.
 Phase 3 is locally machine-verified on Linux. Stored history uses bounded `thread/turns/list` summary
 pages and loads full items for only one selected turn. The Host incrementally
 spools large command output behind opaque IDs before Dart sees the JSON, and the
-UI reads only a 64 KiB virtualized range at a time. Inactive-thread history is
-evicted immediately. Completed assistant responses render through a strict,
-bounded Markdown allowlist: raw HTML is inert, images never load, only explicit
+UI reads only a 64 KiB virtualized range at a time. Exact repeated output within
+one Host session reuses the same opaque object, while a malformed or otherwise
+undelivered JSON candidate rolls back every output it created. Inactive-thread
+history is evicted immediately. Completed assistant responses render through a
+strict, bounded Markdown allowlist: raw HTML is inert, images never load, only explicit
 `http`/`https` clicks may open externally, streaming stays plain text, and rich
 parsing falls back to a bounded tail above 16 KiB. Cross-platform and Human UI
 validation remain.
@@ -111,6 +113,16 @@ expired tickets plus their QR projections are removed automatically. Android
 now offers explicit QR-only camera intake that validates and fills the existing
 obscured invitation field without auto-pairing; manual paste remains available.
 Full conversation features and real-device validation remain.
+
+After Android Remote writes/sessions/approvals/output/attachments, a headless
+Host, and the Skills/MCP/Plugins product paths form a daily-usable core loop,
+the project's highest priority switches immediately to official Codex Desktop
+UI fidelity. The current official product must be re-researched at that point;
+its information architecture, layout, density, interactions, component states,
+and visual language will then replace the engineering-oriented surfaces in
+native Flutter without giving up bounded memory, virtualization, or native
+performance. Non-blocking CI, release, and infrastructure expansion must not
+delay that transition.
 
 ## Run locally
 

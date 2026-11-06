@@ -45,8 +45,18 @@ The Host consumes only its reserved `host/*` request namespace. Every ordinary
 Codex request, notification, server request, and response remains on the stock
 app-server protocol. Large `aggregatedOutput` values are decoded incrementally
 to private capped files and replaced with typed descriptors before the ordinary
-JSON reaches Dart. Flutter can read only capped byte ranges or tails using opaque
-references; it cannot submit filesystem paths.
+JSON reaches Dart. A streaming SHA-256 plus logical byte length identifies exact
+repeats only inside the current Host session; clients continue to receive one
+opaque random reference and never a digest or path. Newly stored output remains
+owned by its sanitized JSON candidate until that candidate is delivered. A
+pre-delivery parse/capture/observer failure removes its data, metadata, index,
+and accounted bytes; after a complete local delivery, a later Remote observer
+failure must retain the object so Flutter never receives a dangling reference.
+The session index is independently capped at 16,384 objects; a new unique output
+beyond that cap becomes unavailable, while an exact existing object remains
+reusable.
+Flutter can read only capped byte ranges or tails using opaque references; it
+cannot submit filesystem paths.
 
 Possible future implementation:
 
@@ -84,6 +94,29 @@ The app-server/thread store is authoritative. Flutter retains only the current w
 - Inactive thread: unload UI models and caches.
 
 The target is bounded UI memory even when a Codex session has accumulated very large historical context.
+
+## Product sequencing and UI fidelity
+
+The current product priority is to close the daily-use functional loop: Android
+Remote session and write flows, approvals, bounded output and attachments, a
+headless Host lifecycle, and the required Skills/MCP/Plugins surfaces. Physical
+device evidence remains a release gate, but unavailable hardware must not stop
+independent implementation of those bounded product paths.
+
+As soon as that core loop is daily-usable, official Codex Desktop UI fidelity
+becomes the highest-priority workstream. Re-research the then-current official
+product rather than relying on a stale screenshot or this project's bootstrap
+UI. Reproduce its information architecture, layout, density, interaction
+patterns, component states, and visual language as native Flutter components.
+This is presentation fidelity, not permission to copy the agent harness,
+hydrate complete history, retain unbounded widget/model state, or replace lazy
+output/diff loading. Virtualization, bounded projections, and native performance
+remain architectural constraints.
+
+After this switch, CI, release, packaging, and infrastructure work is justified
+only when it blocks functional correctness, supported-platform execution,
+security, realistic validation, or delivery. Non-blocking expansion must not
+displace the UI-fidelity track.
 
 ## Remote model
 

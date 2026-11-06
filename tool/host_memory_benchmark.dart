@@ -115,6 +115,13 @@ Future<_MemoryResult> _runCase({
         limit: 1,
       ),
     );
+    final repeatedPage = await transport.listHistoryItems(
+      const HistoryItemQuery(
+        threadId: 'thread-fixture',
+        turnId: 'turn-fixture',
+        limit: 1,
+      ),
+    );
     while (sampling) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
@@ -125,6 +132,7 @@ Future<_MemoryResult> _runCase({
     dartPeak = math.max(dartPeak, ProcessInfo.currentRss);
 
     final output = page.items.single.output;
+    final repeatedOutput = repeatedPage.items.single.output;
     if (output == null ||
         output.reference == null ||
         output.bytes != size ||
@@ -132,6 +140,33 @@ Future<_MemoryResult> _runCase({
         output.truncated ||
         !output.available) {
       throw StateError('Unexpected output descriptor for $size bytes.');
+    }
+    if (repeatedOutput == null ||
+        repeatedOutput.reference != output.reference ||
+        repeatedOutput.bytes != output.bytes ||
+        repeatedOutput.storedBytes != output.storedBytes ||
+        repeatedOutput.truncated != output.truncated ||
+        !repeatedOutput.available) {
+      throw StateError('Repeated output was not deduplicated for $size bytes.');
+    }
+    final spoolFiles = await cache
+        .list(recursive: true, followLinks: false)
+        .where((entry) => entry is File)
+        .cast<File>()
+        .toList();
+    final dataFiles = spoolFiles
+        .where((file) => file.path.endsWith('.data'))
+        .length;
+    final metadataFiles = spoolFiles
+        .where((file) => file.path.endsWith('.json'))
+        .length;
+    final partialFiles = spoolFiles
+        .where((file) => file.path.endsWith('.part'))
+        .length;
+    if (dataFiles != 1 || metadataFiles != 1 || partialFiles != 0) {
+      throw StateError(
+        'Repeated output left an unexpected spool inventory for $size bytes.',
+      );
     }
     final first = await transport.readOutputRange(
       reference: output.reference!,

@@ -143,12 +143,26 @@ Future<void> _runSmoke() async {
       turnId: persistedTurn.id,
       itemIds: [command.id],
     );
+    final repeatedReread = await runtime.readHistoryItems(
+      threadId: thread.id,
+      turnId: persistedTurn.id,
+      itemIds: [command.id],
+    );
     final output = reread.single.output;
+    final repeatedOutput = repeatedReread.single.output;
     if (output == null ||
         output.reference == null ||
         !output.available ||
         output.storedBytes == 0) {
       throw StateError('Host did not provide a readable command output.');
+    }
+    if (repeatedOutput == null ||
+        repeatedOutput.reference != output.reference ||
+        repeatedOutput.bytes != output.bytes ||
+        repeatedOutput.storedBytes != output.storedBytes ||
+        repeatedOutput.truncated != output.truncated ||
+        !repeatedOutput.available) {
+      throw StateError('Host did not deduplicate the repeated command output.');
     }
     final tail = await runtime.readOutputTail(
       reference: output.reference!,
@@ -166,6 +180,7 @@ Future<void> _runSmoke() async {
     stdout.writeln('HISTORY_TURNS=${history.turns.length}');
     stdout.writeln('HISTORY_ITEMS=${persistedItems.items.length}');
     stdout.writeln('OUTPUT_STORED_BYTES=${output.storedBytes}');
+    stdout.writeln('OUTPUT_DEDUPLICATED=true');
   } catch (error, stackTrace) {
     stderr.writeln('CODING_TASK_SMOKE=FAIL');
     stderr.writeln(error);

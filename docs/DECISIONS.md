@@ -1048,3 +1048,116 @@ macOS release candidate.
   installed-workspace access, and Human review remain separate release gates.
 - Flutter's announced Intel deprecation is not guessed around here. A later
   Flutter/toolchain upgrade must deliberately retain or revise this decision.
+
+---
+
+## ADR-025 — Deduplicate exact Host outputs inside one session
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+While incrementally decoding each `aggregatedOutput`, compute a streaming
+SHA-256 over every logical decoded byte and pair it with the complete logical
+byte length. Use that identity only inside the current Host process to reuse an
+already readable spool object. Keep the public descriptor unchanged: an opaque
+random UUID reference plus bounded size/truncation/availability metadata. Never
+expose the digest, a filesystem path, or a client-selected object key.
+
+Cap the session identity index at 16,384 objects independently of the byte
+budget. Check for an existing identity first so a duplicate remains readable at
+capacity; publish a new unique output as unavailable when the object cap is
+reached and remove its temporary data/metadata with exact byte-account rollback.
+
+A sanitized JSON candidate owns only the output objects it newly created. If
+parsing, capture, or the sole observer fails before complete delivery, remove
+those objects from the index, delete their data/metadata, and release their
+exact session-budget bytes. Once any consumer has received the complete
+descriptor-bearing candidate, the object is committed and cannot be rolled
+back by a later secondary-delivery failure. A duplicate candidate never owns or
+deletes the pre-existing shared object.
+
+Do not add a public release RPC until the presentation model has explicit
+descriptor ownership and can prove that no retained history row, dialog, or
+Remote consumer can still read the reference.
+
+### Why
+
+- Re-reading one unchanged command item should not consume another share of the
+  2 GiB session budget or leave another data/metadata pair.
+- Hashing every logical byte, including bytes beyond the stored truncation cap,
+  prevents different large outputs with the same stored prefix from aliasing.
+- Opaque references preserve the Host boundary and leave hash algorithms and
+  corruption policy as implementation details.
+- Immediate client-driven release is unsafe while the same descriptor can be
+  retained by more than one projection. A stale reference is worse than bounded
+  session-lifetime storage.
+- Candidate ownership closes a leak in which a valid output string could be
+  published before later malformed JSON invalidated the containing message.
+
+### Consequence
+
+- The second exact read still streams and hashes the complete upstream string
+  and may temporarily write a bounded `.part` file before its identity is known;
+  CPU and transient I/O therefore remain linear in the source payload.
+- Deduplication is process/session local. It is not a persistent content-addressed
+  cache, does not trust client-provided digests, and does not claim same-size
+  corruption detection for private session files.
+- Unique outputs remain until Host shutdown and are still constrained by the
+  per-output, per-session-byte, and 16,384-object caps. A future release protocol
+  requires a separate ownership ADR.
+- The Host still cannot prevent stock app-server from first materializing the
+  complete string in its own serializer.
+
+---
+
+## ADR-026 — Switch to official Desktop UI fidelity after the core daily-use loop
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+First complete the core daily-use product loop: Android Remote session and
+write behavior, approvals, bounded output and attachments, a headless Host, and
+the Skills/MCP/Plugins paths required for real Codex work. As soon as that loop
+is usable, make official Codex Desktop UI fidelity the project's highest
+priority.
+
+At the transition, systematically research the then-current official product
+and reproduce its information architecture, layout, density, interactions,
+component states, and visual language with native Flutter. Replace the current
+engineering-oriented surfaces incrementally, while preserving bounded memory,
+virtualized lists, lazy output/diff loading, typed protocol boundaries, and
+native performance.
+
+After the transition, do not continue open-ended non-blocking CI, release,
+packaging, or infrastructure expansion. Such work may preempt UI fidelity only
+when it is necessary for functional correctness, security, supported-platform
+execution, realistic validation, or delivery.
+
+### Why
+
+- The bootstrap UI proves protocol and memory behavior but is not the intended
+  product finish.
+- Functional parity must come first so visual work is exercised against real
+  sessions, approvals, output, attachments, and extension surfaces rather than
+  mocks.
+- A deliberate priority switch prevents release machinery from becoming an
+  infinite substitute for the user-facing product.
+- Re-research at the switch avoids freezing a moving official design into a
+  stale local interpretation.
+
+### Consequence
+
+- UI fidelity is a product requirement, not a request to copy official prompts,
+  agent logic, assets without license, or internal Rust crates.
+- Visual similarity cannot weaken ADR-005's bounded-state rules or turn an
+  inactive thread into resident presentation state.
+- Human visual/interaction review and cross-platform layout evidence become
+  explicit acceptance gates for the fidelity phase.
+- Until the core loop closes, fidelity research may inform reusable foundations,
+  but it must not displace the missing functional paths.

@@ -1,8 +1,11 @@
 use fs2::FileExt;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -11,6 +14,7 @@ const SESSION_PREFIX: &str = "session-";
 const METADATA_SUFFIX: &str = ".json";
 const DATA_SUFFIX: &str = ".data";
 const PART_SUFFIX: &str = ".part";
+const MAX_SESSION_OUTPUT_OBJECTS: usize = 16 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct OutputDescriptor {
@@ -19,6 +23,31 @@ pub(crate) struct OutputDescriptor {
     pub(crate) stored_bytes: u64,
     pub(crate) truncated: bool,
     pub(crate) available: bool,
+    pub(crate) newly_stored: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct OutputIdentity {
+    sha256: [u8; 32],
+    bytes: u64,
+}
+
+#[derive(Debug, Default)]
+struct OutputIndex {
+    by_identity: HashMap<OutputIdentity, IndexedOutput>,
+    by_ref: HashMap<String, OutputIdentity>,
+}
+
+#[derive(Clone, Debug)]
+struct IndexedOutput {
+    output_ref: String,
+    stored_bytes: u64,
+}
+
+enum OutputRegistration {
+    Registered,
+    Existing(OutputDescriptor),
+    CapacityReached,
 }
 
 impl OutputDescriptor {
@@ -60,7 +89,9 @@ pub(crate) struct SpoolStore {
     max_session_bytes: u64,
     max_forward_message_bytes: u64,
     max_read_bytes: usize,
+    max_output_objects: usize,
     stored_bytes: AtomicU64,
+    output_index: Mutex<OutputIndex>,
 }
 
 impl SpoolStore {
@@ -106,7 +137,9 @@ impl SpoolStore {
             max_session_bytes,
             max_forward_message_bytes,
             max_read_bytes,
+            max_output_objects: MAX_SESSION_OUTPUT_OBJECTS,
             stored_bytes: AtomicU64::new(0),
+            output_index: Mutex::new(OutputIndex::default()),
         })
     }
 
@@ -138,6 +171,7 @@ impl SpoolStore {
             truncated: false,
             failed: false,
             finalized: false,
+            hasher: Sha256::new(),
         }
     }
 
@@ -226,6 +260,35 @@ impl SpoolStore {
         }
     }
 
+    pub(crate) fn discard_new_output(&self, descriptor: &OutputDescriptor) {
+        if !descriptor.newly_stored {
+            return;
+        }
+        let Some(output_ref) = descriptor.output_ref.as_deref() else {
+            return;
+        };
+        let mut index = self
+            .output_index
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(identity) = index.by_ref.remove(output_ref)
+            && index
+                .by_identity
+                .get(&identity)
+                .is_some_and(|existing| existing.output_ref == output_ref)
+        {
+            index.by_identity.remove(&identity);
+        }
+        drop(index);
+
+        let data_removed = remove_file_if_present(&self.data_path(output_ref));
+        let _ = remove_file_if_present(&self.metadata_path(output_ref));
+        if data_removed && descriptor.stored_bytes > 0 {
+            self.stored_bytes
+                .fetch_sub(descriptor.stored_bytes, Ordering::Relaxed);
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn session_path(&self) -> &Path {
         &self.session
@@ -236,12 +299,88 @@ impl SpoolStore {
         self.stored_bytes.load(Ordering::Relaxed)
     }
 
+    #[cfg(test)]
+    pub(crate) fn stored_output_count(&self) -> usize {
+        self.output_index
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .by_identity
+            .len()
+    }
+
     fn data_path(&self, output_ref: &str) -> PathBuf {
         self.session.join(format!("{output_ref}{DATA_SUFFIX}"))
     }
 
     fn metadata_path(&self, output_ref: &str) -> PathBuf {
         self.session.join(format!("{output_ref}{METADATA_SUFFIX}"))
+    }
+
+    fn existing_output(&self, identity: OutputIdentity) -> Option<OutputDescriptor> {
+        let mut index = self
+            .output_index
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        existing_output_locked(self, &mut index, identity)
+    }
+
+    fn register_output(
+        &self,
+        identity: OutputIdentity,
+        output_ref: &str,
+        stored_bytes: u64,
+    ) -> OutputRegistration {
+        let mut index = self
+            .output_index
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(existing) = existing_output_locked(self, &mut index, identity) {
+            return OutputRegistration::Existing(existing);
+        }
+        if index.by_identity.len() >= self.max_output_objects {
+            return OutputRegistration::CapacityReached;
+        }
+        index.by_identity.insert(
+            identity,
+            IndexedOutput {
+                output_ref: output_ref.to_owned(),
+                stored_bytes,
+            },
+        );
+        index.by_ref.insert(output_ref.to_owned(), identity);
+        OutputRegistration::Registered
+    }
+}
+
+fn existing_output_locked(
+    store: &SpoolStore,
+    index: &mut OutputIndex,
+    identity: OutputIdentity,
+) -> Option<OutputDescriptor> {
+    let indexed = index.by_identity.get(&identity)?.clone();
+    match store.stat(&indexed.output_ref) {
+        Ok(stat) if stat.bytes == identity.bytes && stat.stored_bytes == indexed.stored_bytes => {
+            Some(OutputDescriptor {
+                output_ref: Some(stat.output_ref),
+                bytes: stat.bytes,
+                stored_bytes: stat.stored_bytes,
+                truncated: stat.truncated,
+                available: true,
+                newly_stored: false,
+            })
+        }
+        _ => {
+            index.by_identity.remove(&identity);
+            index.by_ref.remove(&indexed.output_ref);
+            let data_removed = remove_file_if_present(&store.data_path(&indexed.output_ref));
+            let _ = remove_file_if_present(&store.metadata_path(&indexed.output_ref));
+            if data_removed && indexed.stored_bytes > 0 {
+                store
+                    .stored_bytes
+                    .fetch_sub(indexed.stored_bytes, Ordering::Relaxed);
+            }
+            None
+        }
     }
 }
 
@@ -255,6 +394,7 @@ pub(crate) struct OutputSpool<'a> {
     truncated: bool,
     failed: bool,
     finalized: bool,
+    hasher: Sha256,
 }
 
 impl OutputSpool<'_> {
@@ -263,6 +403,7 @@ impl OutputSpool<'_> {
             .bytes
             .checked_add(bytes.len() as u64)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "output size overflow"))?;
+        self.hasher.update(bytes);
         if self.failed {
             self.truncated = true;
             return Ok(());
@@ -297,6 +438,15 @@ impl OutputSpool<'_> {
     }
 
     pub(crate) fn finish(mut self) -> io::Result<OutputDescriptor> {
+        let identity = OutputIdentity {
+            sha256: std::mem::take(&mut self.hasher).finalize().into(),
+            bytes: self.bytes,
+        };
+        if let Some(descriptor) = self.store.existing_output(identity) {
+            self.fail_storage();
+            self.finalized = true;
+            return Ok(descriptor);
+        }
         if self.failed || self.file.is_none() {
             self.fail_storage();
             self.finalized = true;
@@ -309,14 +459,30 @@ impl OutputSpool<'_> {
             return Ok(self.unavailable_descriptor());
         }
 
-        self.finalized = true;
-        Ok(OutputDescriptor {
+        let mut descriptor = OutputDescriptor {
             output_ref: Some(self.output_ref.clone()),
             bytes: self.bytes,
             stored_bytes: self.stored_bytes,
             truncated: self.truncated,
             available: true,
-        })
+            newly_stored: true,
+        };
+        match self
+            .store
+            .register_output(identity, &self.output_ref, self.stored_bytes)
+        {
+            OutputRegistration::Registered => {}
+            OutputRegistration::Existing(existing) => {
+                self.fail_storage();
+                descriptor = existing;
+            }
+            OutputRegistration::CapacityReached => {
+                self.fail_storage();
+                descriptor = self.unavailable_descriptor();
+            }
+        }
+        self.finalized = true;
+        Ok(descriptor)
     }
 
     fn max_output_remaining(&self) -> u64 {
@@ -384,6 +550,7 @@ impl OutputSpool<'_> {
             stored_bytes: 0,
             truncated: true,
             available: false,
+            newly_stored: false,
         }
     }
 }
@@ -417,7 +584,7 @@ impl CandidateFile {
         output.write_all(b"\n")?;
         output.flush()?;
         self.finished = true;
-        fs::remove_file(&self.path)?;
+        let _ = fs::remove_file(&self.path);
         Ok(())
     }
 
@@ -445,10 +612,6 @@ impl CandidateFile {
         max_bytes: usize,
     ) -> io::Result<CandidateCapture> {
         self.file.flush()?;
-        self.file.seek(SeekFrom::Start(0))?;
-        io::copy(&mut self.file, output)?;
-        output.write_all(b"\n")?;
-        output.flush()?;
         let payload = if self.bytes <= max_bytes as u64 {
             self.file.seek(SeekFrom::Start(0))?;
             let mut payload = Vec::with_capacity(self.bytes as usize);
@@ -457,8 +620,12 @@ impl CandidateFile {
         } else {
             None
         };
+        self.file.seek(SeekFrom::Start(0))?;
+        io::copy(&mut self.file, output)?;
+        output.write_all(b"\n")?;
+        output.flush()?;
         self.finished = true;
-        fs::remove_file(&self.path)?;
+        let _ = fs::remove_file(&self.path);
         Ok(CandidateCapture {
             payload,
             total_bytes: self.bytes,
@@ -532,6 +699,14 @@ fn validate_ref(output_ref: &str) -> io::Result<()> {
             io::ErrorKind::InvalidInput,
             "invalid output reference",
         ))
+    }
+}
+
+fn remove_file_if_present(path: &Path) -> bool {
+    match fs::remove_file(path) {
+        Ok(()) => true,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => true,
+        Err(_) => false,
     }
 }
 
@@ -651,6 +826,8 @@ fn open_private_file(path: &Path, truncate: bool) -> io::Result<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::TempDir;
 
     fn store(root: &Path, max_output: u64, max_total: u64) -> SpoolStore {
@@ -702,6 +879,154 @@ mod tests {
         assert_eq!(second.bytes, 6);
         assert_eq!(second.stored_bytes, 2);
         assert!(second.truncated);
+    }
+
+    #[test]
+    fn deduplicates_exact_complete_outputs_with_one_opaque_reference() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 1024, 2048);
+
+        let mut first = store.start_output();
+        first.write_decoded(b"repeated output").unwrap();
+        let first = first.finish().unwrap();
+        assert!(first.newly_stored);
+        assert_eq!(store.stored_bytes(), 15);
+        assert_eq!(store.stored_output_count(), 1);
+
+        let mut second = store.start_output();
+        second.write_decoded(b"repeated output").unwrap();
+        let second = second.finish().unwrap();
+        assert!(!second.newly_stored);
+        assert_eq!(second.output_ref, first.output_ref);
+        assert_eq!(second.stored_bytes, first.stored_bytes);
+        assert_eq!(store.stored_bytes(), 15);
+        assert_eq!(store.stored_output_count(), 1);
+    }
+
+    #[test]
+    fn hashes_the_complete_output_instead_of_only_the_stored_prefix() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 4, 16);
+
+        let mut first = store.start_output();
+        first.write_decoded(b"same-first-tail").unwrap();
+        let first = first.finish().unwrap();
+        let mut second = store.start_output();
+        second.write_decoded(b"same-second-tail").unwrap();
+        let second = second.finish().unwrap();
+
+        assert_ne!(second.output_ref, first.output_ref);
+        assert_eq!(first.stored_bytes, 4);
+        assert_eq!(second.stored_bytes, 4);
+        assert!(first.truncated);
+        assert!(second.truncated);
+        assert_eq!(store.stored_bytes(), 8);
+        assert_eq!(store.stored_output_count(), 2);
+    }
+
+    #[test]
+    fn reuses_an_existing_output_after_the_session_budget_is_full() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 4, 4);
+
+        let mut first = store.start_output();
+        first.write_decoded(b"same").unwrap();
+        let first = first.finish().unwrap();
+        let mut second = store.start_output();
+        second.write_decoded(b"same").unwrap();
+        let second = second.finish().unwrap();
+
+        assert_eq!(second.output_ref, first.output_ref);
+        assert_eq!(second.stored_bytes, 4);
+        assert!(!second.truncated);
+        assert!(second.available);
+        assert_eq!(store.stored_bytes(), 4);
+        assert_eq!(store.stored_output_count(), 1);
+    }
+
+    #[test]
+    fn bounds_unique_output_objects_but_still_reuses_an_existing_one() {
+        let temp = TempDir::new().unwrap();
+        let mut store = store(temp.path(), 1024, 2048);
+        store.max_output_objects = 1;
+
+        let mut first = store.start_output();
+        first.write_decoded(b"first").unwrap();
+        let first = first.finish().unwrap();
+
+        let mut rejected = store.start_output();
+        rejected.write_decoded(b"second").unwrap();
+        let rejected = rejected.finish().unwrap();
+        assert!(!rejected.available);
+        assert!(rejected.output_ref.is_none());
+        assert_eq!(store.stored_bytes(), 5);
+        assert_eq!(store.stored_output_count(), 1);
+
+        let mut duplicate = store.start_output();
+        duplicate.write_decoded(b"first").unwrap();
+        let duplicate = duplicate.finish().unwrap();
+        assert!(duplicate.available);
+        assert_eq!(duplicate.output_ref, first.output_ref);
+        assert_eq!(store.stored_bytes(), 5);
+        assert_eq!(store.stored_output_count(), 1);
+    }
+
+    #[test]
+    fn concurrent_identical_finishes_publish_only_one_output() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 1024, 2048);
+        let barrier = Arc::new(Barrier::new(2));
+
+        let (first, second) = thread::scope(|scope| {
+            let first_barrier = Arc::clone(&barrier);
+            let first_store = &store;
+            let first = scope.spawn(move || {
+                let mut output = first_store.start_output();
+                output.write_decoded(b"concurrent output").unwrap();
+                first_barrier.wait();
+                output.finish().unwrap()
+            });
+            let second_barrier = Arc::clone(&barrier);
+            let second_store = &store;
+            let second = scope.spawn(move || {
+                let mut output = second_store.start_output();
+                output.write_decoded(b"concurrent output").unwrap();
+                second_barrier.wait();
+                output.finish().unwrap()
+            });
+            (first.join().unwrap(), second.join().unwrap())
+        });
+
+        assert_eq!(first.output_ref, second.output_ref);
+        assert_ne!(first.newly_stored, second.newly_stored);
+        assert_eq!(store.stored_bytes(), 17);
+        assert_eq!(store.stored_output_count(), 1);
+    }
+
+    #[test]
+    fn missing_indexed_data_is_evicted_before_republishing() {
+        let temp = TempDir::new().unwrap();
+        let store = store(temp.path(), 1024, 2048);
+
+        let mut first = store.start_output();
+        first.write_decoded(b"repair me").unwrap();
+        let first = first.finish().unwrap();
+        let first_ref = first.output_ref.unwrap();
+        fs::remove_file(store.data_path(&first_ref)).unwrap();
+
+        let mut replacement = store.start_output();
+        replacement.write_decoded(b"repair me").unwrap();
+        let replacement = replacement.finish().unwrap();
+        let replacement_ref = replacement.output_ref.unwrap();
+
+        assert_ne!(replacement_ref, first_ref);
+        assert!(!store.metadata_path(&first_ref).exists());
+        assert_eq!(store.stored_bytes(), 9);
+        assert_eq!(store.stored_output_count(), 1);
+        assert_eq!(
+            store.read_range(&replacement_ref, 0, 9).unwrap().bytes,
+            b"repair me"
+        );
     }
 
     #[test]

@@ -14,6 +14,12 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, trusted desktop setup/device management, bounded desktop QR presentation, and explicit bounded Android QR intake are implemented; real-device validation, writes/approvals, and full conversation integration do not exist yet**
 
+**Post-core priority gate:** once Android Remote writes, sessions, approvals,
+output, attachments, a headless Host, and required Skills/MCP/Plugins paths form
+a daily-usable loop, immediately make current official Codex Desktop UI fidelity
+the highest priority. Non-blocking CI/release/infrastructure expansion must not
+delay that transition (ADR-026).
+
 ## Current repository state
 
 - Flutter application shells exist for Linux, Windows, macOS, and Android under the Dart package `codex_native_unofficial`.
@@ -54,14 +60,19 @@ This file is the repository's durable project memory. Update it whenever a task 
 - `codex-native-host` now supervises stock app-server by default, validates
   stdout incrementally without line buffering, spools decoded
   `aggregatedOutput` values behind opaque references, replaces them with bounded
-  descriptors, and implements capped `host/status`, `stat`, `readRange`, and
-  `tail` RPCs. Flutter locates Codex and the bundled Host independently and has
-  no silent direct-app-server fallback.
+  descriptors, reuses one session object for exact repeated logical content,
+  and implements capped `host/status`, `stat`, `readRange`, and `tail` RPCs.
+  The content digest remains internal; Flutter locates Codex and the bundled
+  Host independently and has no silent direct-app-server fallback.
 - Unpublished output spools are transactional: write, parse-abandonment, flush,
   rename, or metadata failures remove partial artifacts and return their bytes
-  to the session budget. Linux disk-full simulation degrades the selected output
-  to an unavailable descriptor without reinjecting it; invalid or unwritable
-  cache roots fail with context before Codex is spawned.
+  to the session budget. Newly created objects remain candidate-owned until the
+  first complete descriptor-bearing delivery; pre-delivery malformed JSON or a
+  sole-observer failure rolls them back, while a later secondary-delivery
+  failure cannot invalidate an object already received by Flutter. Linux
+  disk-full simulation degrades the selected output to an unavailable descriptor
+  without reinjecting it; invalid or unwritable cache roots fail with context
+  before Codex is spawned.
 - Historical command rows load full items for only one selected turn. List
   requests prefer upstream output deferral; a deferred selected item uses the
   gated `thread/items/read` API, whose response is still sanitized by the Host.
@@ -174,6 +185,43 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Session-local exact output deduplication and candidate rollback
+
+- Reviewed current Codex whole-item output behavior, the Chrome DevTools
+  explicit stream-close ownership model, Bazel Remote Execution's digest+size
+  CAS identity, and ccache's separate reuse/corruption model. ADR-025 adopts only
+  a private session identity: streaming SHA-256 over every decoded logical byte
+  plus complete logical length. Public descriptors remain opaque random UUIDs.
+- Exact repeated output now reuses one readable data/metadata pair even after
+  the session budget is full. The identity covers bytes beyond a truncated
+  stored prefix; concurrent identical finishes keep one winner; a missing or
+  size-inconsistent indexed object is evicted before replacement with
+  conservative accounting when deletion cannot be proved. The in-memory index
+  and retained object count are independently capped at 16,384; an existing
+  duplicate can still be reused at capacity, while a new unique output becomes
+  unavailable and rolls back its files/bytes.
+- A JSON candidate now tracks only the output objects it created. Malformed,
+  truncated, or otherwise undelivered candidates remove their index/files and
+  release exact budget, while a failed duplicate cannot delete a prior shared
+  object. Remote-response observer failure rolls back an undelivered output;
+  once a notification is completely delivered to local stdout, a later Remote
+  observer failure retains the object and avoids a dangling Flutter reference.
+- The release benchmark now reads each 3/30/300 MiB fixture item twice, requires
+  one shared ref plus exactly one `.data`, one `.json`, and zero `.part` files,
+  and passed with Host RSS deltas of 200,704/200,704/266,240 bytes and Dart
+  deltas of 2,269,184/2,473,984/3,039,232 bytes. Fixture deltas remained
+  8,396,800/94,380,032/629,153,792 bytes.
+- The real stock-app-server coding smoke passed again: one file/one addition,
+  zero unexpected approvals, one retained 6-byte output, exact repeated-item
+  reference reuse, test thread/workspace cleanup, and 59 ms Host shutdown.
+  This does not remove stock app-server's preceding full-string allocation,
+  linear Host hashing/transient duplicate `.part` I/O, or the need for
+  Windows/macOS and installed-volume evidence.
+- Final local gates pass: Rust format/Clippy and 98 tests, Dart format/analyze,
+  native-license regeneration/packaging drift checks, all 176 Flutter tests,
+  release Host build, the repeated-output memory benchmark, and the real coding
+  smoke. Hosted Windows/macOS behavior remains a separate post-push gate.
 
 ### 2026-11-06 — macOS universal nested Host boundary
 
@@ -1500,7 +1548,7 @@ specific evidence boundaries.
 - `dart format lib test tool`: PASS.
 - `dart analyze --fatal-infos`: PASS, no issues.
 - `flutter analyze --no-pub <ASCII symlink argument from an ASCII working directory>`: PASS, no issues. Running from the symlink as the process working directory still resolves the Unicode real path and reproduces the known LSP truncation failure.
-- `flutter test`: PASS, 161 tests, including the Remote transport, invitation,
+- `flutter test`: PASS, 176 tests, including the Remote transport, invitation,
   record-v1 migration/v2 certificate trust, lifecycle, pairing/onboarding,
   trusted desktop administration/clipboard/QR, ticket-expiry behavior, and
   widget interaction gates.
@@ -1523,8 +1571,9 @@ specific evidence boundaries.
   private-file ignore rules, and placeholder-only example are enforced without
   reading ignored signing material.
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
-- `cargo test --workspace`: PASS, 26 Remote-library tests, 54 Host-binary tests,
-  and 4 executable failure-path tests (84 total), including real TCP/WSS,
+- `cargo test --workspace`: PASS, 26 Remote-library tests, 68 Host-binary tests,
+  and 4 executable failure-path tests (98 total), including exact-output dedup,
+  candidate rollback/first-delivery ownership, real TCP/WSS,
   exact event replay/gap recovery, abrupt reconnect, slow-reader disconnection,
   live revocation, certificate trust/rotation/rollback, protocol-close shutdown,
   deterministic storage failure, and cache/TLS startup gates.
@@ -1565,7 +1614,11 @@ specific evidence boundaries.
   6,299,648/62,922,752/629,153,792 bytes; Host deltas were 0/0/0 bytes at 2 ms
   sampling; Dart deltas were 57,344/774,144/2,281,472,
   36,864/765,952/4,431,872, and 49,152/630,784/2,211,840 bytes. First/tail reads
-  matched the complete spooled payload in every case.
+  matched the complete spooled payload in every case. The final exact-repeat
+  gate then read every size twice and required one shared ref plus one data/
+  metadata pair: fixture deltas were 8,396,800/94,380,032/629,153,792, Host
+  deltas 200,704/200,704/266,240, and Dart deltas
+  2,269,184/2,473,984/3,039,232 bytes.
 - `flutter build linux --debug` and `flutter build linux --release`: PASS with
   an executable packaged `codex-native-host` beside the Flutter binary and the
   native URL-launcher plugin.
@@ -1609,6 +1662,11 @@ specific evidence boundaries.
 - Real coding-task rerun after transactional storage recovery: PASS in 23
   seconds with 9 history items, a readable 6-byte output spool, exact thread and
   workspace cleanup, and a measured 63 ms Host shutdown.
+- Real coding-task rerun after exact-output reuse and the independent object cap:
+  PASS in 18 seconds with 9 history items, one readable 6-byte output, the same
+  reference on the second item read, one changed file/one addition, zero
+  unexpected approvals, exact thread/workspace cleanup, and a 59 ms Host
+  shutdown.
 - `CODEX_NATIVE_SOAK_ITERATIONS=50 dart run tool/host_lifecycle_soak.dart`: PASS;
   50 Host/Codex process pairs, 51 ms maximum and 26 ms mean close, zero surviving
   PIDs, and zero new cache sessions.
@@ -1692,10 +1750,15 @@ specific evidence boundaries.
   parent-directory custody, and installer validation remain separate. Universal
   Host construction and extracted verification are now hosted-macOS verified;
   physical Intel execution remains a separate cross-platform gate.
-- Re-reading the same upstream command item creates another session-scoped spool
-  object. The 2 GiB session cap prevents unbounded disk growth and UI actions do
-  not automatically reread a loaded item, but deduplication or explicit release
-  remains unresolved for very long sessions.
+- Exact repeated complete output now reuses one session-scoped spool object.
+  Unique outputs still remain until Host shutdown under the 2 GiB byte and
+  16,384-object session caps; there is deliberately no public release operation
+  because current history, dialog, and Remote projections do not have exclusive
+  descriptor ownership.
+  Duplicate ingest must still stream/hash the complete logical value and may
+  write a bounded `.part` before its digest is known. Same-size external
+  mutation is not checksummed as a persistent-cache threat because the store is
+  private and session-scoped.
 - The real GUI launch logged host GTK/Wayland warnings for ATK socket embedding and a missing cursor-theme asset. They did not prevent the window, handshake, or child cleanup, but should be rechecked during later Linux UI work.
 - Live thread validation established three upstream lifecycle constraints: an ephemeral empty thread has no readable rollout; a new persistent empty thread is also unreadable until its first turn materializes a rollout; and resuming a thread owned by another app-server fails with `already has an active writer`. The UI/controller must not treat those cases as generic transient retries.
 - A prior GUI run after loading thread state did not exit within the 3-second
@@ -1724,26 +1787,34 @@ specific evidence boundaries.
 
 ## Next action
 
-Close the remaining pairing/device gate, then expand Remote without weakening
-its now-versioned trust boundary:
+Close the remaining daily-use core without weakening the bounded protocol and
+trust boundaries, then enforce ADR-026's UI-fidelity priority switch:
 
-1. exercise both system-root and pairing-bound certificate invitations against
-   an available emulator/physical device and real Host: cold start,
-   foreground/background, process death, network loss/recovery, Host restart,
-   credential rejection/revocation, wrong/expired/rotated certificate,
-   unreadable Keystore state, pairing-save failure, backup/restore behavior,
-   camera permission denial/settings recovery, rotation, dense QR intake, and
-   exact desktop-to-phone interoperability;
-2. only after pairing/setup is device-verified, extend the Remote product beyond
-   bounded read-only metadata. Keep pagination, output, writes, approvals,
-   idempotency, and attachment bounds explicit rather than reusing the desktop
-   surface optimistically;
-3. while a physical Android device is unavailable, continue independent clean-
-   runtime/dependency/ACL and release-documentation work now that the corrected
-   Linux relocation and all three extracted Host smokes have clean hosted
-   evidence.
-   Keep signing, notarization, installer/store identity, GitHub permission
-   increases, publication, and Human acceptance behind their explicit gates.
+1. when an emulator/physical device is available, exercise system-root and
+   pairing-bound invitations against the real Host: cold start, lifecycle,
+   process/network/Host recovery, rejection/revocation, wrong/expired/rotated
+   identity, unreadable Keystore state, pairing-save failure, backup/restore,
+   permission denial/settings recovery, rotation, dense QR, and exact desktop-
+   to-phone interoperability. Preserve this as a release gate, not a reason to
+   stop independent product implementation;
+2. implement the headless Host lifecycle and expand Android Remote in bounded
+   end-to-end slices through full session/conversation writes, approvals,
+   paginated/lazy output, and resumable attachments. Keep idempotency, payload
+   caps, sequence/ACK recovery, credential custody, and attachment ownership
+   explicit;
+3. close the Skills, MCP, and Plugins discovery/configuration/invocation surfaces
+   needed for ordinary Codex work while preserving stock app-server semantics
+   and avoiding a client-side agent harness;
+4. once those paths form a daily-usable loop, immediately research the then-
+   current official Codex Desktop and make its information architecture,
+   layout, density, interactions, component states, and visual language the
+   highest-priority native Flutter track. Preserve bounded projections,
+   virtualization, lazy output/diffs, and native performance;
+5. perform CI, packaging, signing, installer, and release work only when it
+   blocks correctness, security, supported-platform execution, realistic
+   validation, or delivery. Do not continue non-blocking infrastructure work in
+   place of the UI-fidelity transition. GitHub permission increases,
+   publication, signing identities, and Human acceptance remain explicit gates.
 
 Preserve the unavailable Phase 3 Human, native install/ACL/signing/notarization,
 physical-Android, and installed-volume gates as RC requirements.

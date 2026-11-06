@@ -162,6 +162,100 @@ mandatory.
 - A real installed app-server smoke must still pass initialization, thread/turn
   flows, approvals, interruption, history, and one coding task through the Host.
 
+## Session-local exact output reuse and candidate ownership
+
+_Reviewed: 2026-11-06_
+
+### Sources reviewed
+
+- OpenAI Codex main and the installed `0.166.0-alpha.5.1` experimental schema
+  already reviewed above. `thread/items/read` still returns a complete
+  `aggregatedOutput`; the protocol exposes no byte-range or output-release
+  ownership operation.
+- Chrome DevTools Protocol's official
+  [`IO.read`](https://chromedevtools.github.io/devtools-protocol/tot/IO/#method-read)
+  and [`IO.close`](https://chromedevtools.github.io/devtools-protocol/tot/IO/#method-close)
+  methods model an explicitly owned stream handle whose close operation
+  discards backing storage.
+- Bazel's Remote Execution API at
+  [`c2c07e3d718d3d490a4958344d9c3e47de0bfaf3`](https://github.com/bazelbuild/remote-apis/commit/c2c07e3d718d3d490a4958344d9c3e47de0bfaf3)
+  identifies content-addressed blobs with a digest and byte size and lets a
+  client avoid re-uploading content already present. License: Apache-2.0.
+- ccache at
+  [`cb0e1e936f420311a8b6504ee4d730047a68d530`](https://github.com/ccache/ccache/commit/cb0e1e936f420311a8b6504ee4d730047a68d530)
+  uses cryptographic content identities for cache reuse and separate checksums
+  to detect persistent-cache corruption. License: GPL-3.0; research only for
+  this Apache-2.0 project.
+
+### Findings
+
+- Digest plus logical length is a suitable internal exact-content identity, but
+  a durable CAS is a different product. This Host's files are private,
+  session-scoped, capped, and deleted on shutdown; it neither needs nor claims a
+  persistent trust boundary.
+- Hashing only the stored prefix is incorrect because output is deliberately
+  truncated at the per-output or session cap. Two different complete outputs
+  can share the same retained prefix. The identity must cover every decoded
+  logical byte even when later bytes are not written.
+- A DevTools-style `close` is safe when one client clearly owns one handle. The
+  current descriptor may simultaneously be retained by a history row, an open
+  dialog, desktop state, and a Remote consumer. Adding close without an
+  ownership model would create stale references and read-after-release races.
+- Output publication and JSON publication are one transaction until the first
+  complete delivery. Finishing a string is not enough: later malformed JSON, a
+  bounded-capture failure, or a sole observer failure must roll back a newly
+  created output. Once local stdout has received a complete notification, a
+  subsequent Remote-observer error cannot reclaim the object without leaving a
+  descriptor that Flutter has already observed.
+
+### Adopted boundary
+
+- Stream SHA-256 over the complete decoded output and combine it with logical
+  length. Keep a session-only identity-to-reference and reference-to-identity
+  index. Reuse an existing object only after its data and metadata still pass
+  the Host's size/stat checks.
+- Keep the wire descriptor opaque. The client receives the existing random UUID
+  reference and bounded metadata, never the digest or a spool path.
+- Bound the session identity index independently at 16,384 objects. Resolve an
+  exact existing identity before the capacity check; a new unique output at the
+  cap becomes unavailable and its just-published files/bytes are rolled back.
+  This closes the object-count/memory boundary that a byte cap alone cannot
+  establish for many tiny outputs.
+- If two identical finishes race, register only one object; delete the losing
+  temporary/published pair and return its accounted bytes. An exact duplicate
+  can reuse the earlier object even when the session byte budget is otherwise
+  full.
+- Track only outputs newly created by the current JSON candidate. Roll them back
+  on pre-delivery parse, truncation, capture, or callback failure. A duplicate
+  candidate never owns the shared object. A complete local publish commits the
+  object before a secondary Remote notification callback.
+- If an indexed pair is missing or size-inconsistent, evict it and republish the
+  current bytes. Release its budget only when the data file is gone; a deletion
+  error deliberately keeps conservative accounting until session cleanup.
+
+### Deliberate non-adoptions and evidence boundary
+
+- Do not add persistent cross-session deduplication, a public content digest,
+  client-selected keys, or a release RPC. Explicit release requires a future
+  descriptor-ownership design.
+- Do not copy ccache's GPL implementation or claim persistent corruption
+  detection. Same-size external mutation is outside this private session store;
+  installed-volume behavior remains a separate platform gate.
+- The duplicate must still pass through stock app-server's full-string
+  serialization and the Host must stream/hash every logical byte. It can also
+  create a bounded `.part` before the digest is known. Deduplication removes
+  retained duplication, not upstream peak allocation or linear ingest work.
+- The final release benchmark read each 3/30/300 MiB synthetic item twice and
+  required the same descriptor plus exactly one `.data`, one `.json`, and zero
+  `.part` files. Fixture RSS deltas were 8,396,800/94,380,032/629,153,792
+  bytes, Host deltas were 200,704/200,704/266,240 bytes, and Dart deltas were
+  2,269,184/2,473,984/3,039,232 bytes. This is Linux fixture evidence, not real
+  app-server, Windows, macOS, or installed-volume proof.
+- A real stock-app-server coding task completed through production controllers,
+  read the persisted command item twice, reused one 6-byte output reference,
+  projected one file/one addition with no unexpected approvals, deleted its
+  thread/workspace, and shut the Host down in 59 ms.
+
 ## Desktop packaging and the macOS process model
 
 _Reviewed: 2026-11-05_
