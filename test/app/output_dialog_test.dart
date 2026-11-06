@@ -18,7 +18,7 @@ void main() {
   testWidgets('defers command output and navigates only bounded byte windows', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.physicalSize = const Size(600, 780);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

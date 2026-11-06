@@ -183,6 +183,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('approval stays actionable in a narrow conversation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 780);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final runtime = _ProductRuntimeController();
+    addTearDown(runtime.closeStreams);
+
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controls thread'));
+    await tester.pumpAndSettle();
+    runtime.emitApproval(
+      const ApprovalRequest(
+        requestId: 'approval-1',
+        kind: ApprovalKind.command,
+        threadId: 'controls-thread',
+        turnId: 'turn-1',
+        itemId: 'item-1',
+        summary: 'Run the requested project verification command',
+        detail: 'flutter test test/app/product_controls_test.dart',
+        reason: 'Verify the presentation change before completion.',
+        approveSupported: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approval required'), findsOneWidget);
+    expect(find.text('Reject'), findsOneWidget);
+    expect(find.text('Approve once'), findsOneWidget);
+    await tester.tap(find.text('Approve once'));
+    await tester.pumpAndSettle();
+    expect(runtime.approvalDecisions, [
+      (requestId: 'approval-1', decision: ApprovalDecision.approveOnce),
+    ]);
+    expect(find.text('Approval required'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'large diff view is truncated, virtualized, and file-selectable',
     (tester) async {
@@ -279,6 +320,8 @@ class _ProductRuntimeController extends RuntimeController {
   final StreamController<ApprovalEvent> _approvals =
       StreamController<ApprovalEvent>.broadcast(sync: true);
   final List<TurnStartOptions> turnOptions = [];
+  final List<({Object requestId, ApprovalDecision decision})>
+  approvalDecisions = [];
   final ThreadSummary thread = ThreadSummary(
     id: 'controls-thread',
     sessionId: 'controls-session',
@@ -370,13 +413,19 @@ class _ProductRuntimeController extends RuntimeController {
   Future<void> decideApproval({
     required Object requestId,
     required ApprovalDecision decision,
-  }) async {}
+  }) async {
+    approvalDecisions.add((requestId: requestId, decision: decision));
+  }
 
   @override
   Future<void> shutdown() async {}
 
   void emitDiff(DiffSnapshot snapshot) {
     _turns.add(TurnDiffUpdatedEvent(snapshot: snapshot));
+  }
+
+  void emitApproval(ApprovalRequest request) {
+    _approvals.add(ApprovalRequestedEvent(request: request));
   }
 
   Future<void> closeStreams() async {
