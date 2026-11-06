@@ -7,6 +7,7 @@ class _DiffView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final snapshot = controller.snapshot;
     final selected = controller.selectedFile;
     if (snapshot == null || snapshot.files.isEmpty || selected == null) {
@@ -59,7 +60,7 @@ class _DiffView extends StatelessWidget {
                 Text(
                   'Large diff truncated to the bounded presentation limit.',
                   style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: ThemeTokens.pending),
+                      ?.copyWith(color: palette.warning),
                 ),
               ],
             ],
@@ -79,6 +80,7 @@ class _DiffLines extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     return SelectionArea(
       child: ListView.builder(
         itemExtent: 21,
@@ -86,9 +88,9 @@ class _DiffLines extends StatelessWidget {
         itemBuilder: (context, index) {
           final line = file.lines[index];
           final background = line.startsWith('+') && !line.startsWith('+++')
-              ? ThemeTokens.connected.withValues(alpha: 0.1)
+              ? palette.diffAdded
               : line.startsWith('-') && !line.startsWith('---')
-              ? ThemeTokens.error.withValues(alpha: 0.1)
+              ? palette.diffRemoved
               : Colors.transparent;
           return ColoredBox(
             color: background,
@@ -119,6 +121,7 @@ class _ApprovalBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -128,86 +131,95 @@ class _ApprovalBanner extends StatelessWidget {
           return const SizedBox.shrink();
         }
         if (request == null) {
-          return Container(
-            padding: const EdgeInsets.all(ThemeTokens.space3),
-            color: ThemeTokens.error.withValues(alpha: 0.12),
-            child: SelectableText(
-              error!,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: ThemeTokens.error),
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: _InlineNotice(
+              icon: Icons.error_outline_rounded,
+              color: palette.danger,
+              text: error!,
             ),
           );
         }
 
         final deciding = controller.isDeciding(request.requestId);
-        return Container(
-          padding: const EdgeInsets.all(ThemeTokens.space3),
-          color: ThemeTokens.pending.withValues(alpha: 0.1),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Approval required'
-                      '${controller.pending.length > 1 ? ' (${controller.pending.length})' : ''}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  if (deciding)
-                    const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
+        return Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 760),
+            margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+            padding: const EdgeInsets.all(ThemeTokens.space3),
+            decoration: BoxDecoration(
+              color: palette.warning.withValues(alpha: 0.08),
+              border: Border.all(
+                color: palette.warning.withValues(alpha: 0.35),
               ),
-              const SizedBox(height: ThemeTokens.space2),
-              SelectableText(request.summary),
-              if (request.detail case final detail?) ...[
-                const SizedBox(height: ThemeTokens.space1),
-                SelectableText(
-                  detail,
-                  style: Theme.of(context).textTheme.bodySmall,
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Approval required'
+                        '${controller.pending.length > 1 ? ' (${controller.pending.length})' : ''}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    if (deciding)
+                      const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
                 ),
-              ],
-              if (request.reason case final reason?) ...[
-                const SizedBox(height: ThemeTokens.space1),
-                SelectableText(
-                  'Reason: $reason',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              const SizedBox(height: ThemeTokens.space2),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: deciding
-                        ? null
-                        : () => controller.reject(request.requestId),
-                    child: const Text('Reject'),
+                const SizedBox(height: ThemeTokens.space2),
+                SelectableText(request.summary),
+                if (request.detail case final detail?) ...[
+                  const SizedBox(height: ThemeTokens.space1),
+                  SelectableText(
+                    detail,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  if (request.approveSupported) ...[
-                    const SizedBox(width: ThemeTokens.space2),
-                    FilledButton(
+                ],
+                if (request.reason case final reason?) ...[
+                  const SizedBox(height: ThemeTokens.space1),
+                  SelectableText(
+                    'Reason: $reason',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: ThemeTokens.space2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
                       onPressed: deciding
                           ? null
-                          : () => controller.approve(request.requestId),
-                      child: const Text('Approve once'),
+                          : () => controller.reject(request.requestId),
+                      child: const Text('Reject'),
                     ),
+                    if (request.approveSupported) ...[
+                      const SizedBox(width: ThemeTokens.space2),
+                      FilledButton(
+                        onPressed: deciding
+                            ? null
+                            : () => controller.approve(request.requestId),
+                        child: const Text('Approve once'),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              if (error != null) ...[
-                const SizedBox(height: ThemeTokens.space2),
-                SelectableText(
-                  error,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: ThemeTokens.error),
                 ),
+                if (error != null) ...[
+                  const SizedBox(height: ThemeTokens.space2),
+                  SelectableText(
+                    error,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.danger),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         );
       },
@@ -346,10 +358,15 @@ class _OutputDialogState extends State<_OutputDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final viewport = MediaQuery.sizeOf(context);
+    final width = (viewport.width - 32).clamp(280, 820).toDouble();
+    final height = (viewport.height - 32).clamp(320, 680).toDouble();
     return Dialog(
+      insetPadding: const EdgeInsets.all(16),
       child: SizedBox(
-        width: 820,
-        height: 620,
+        width: width,
+        height: height,
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
@@ -391,7 +408,7 @@ class _OutputDialogState extends State<_OutputDialog> {
                 if (widget.descriptor.truncated)
                   Container(
                     padding: const EdgeInsets.all(ThemeTokens.space2),
-                    color: ThemeTokens.pending.withValues(alpha: 0.12),
+                    color: palette.warning.withValues(alpha: 0.1),
                     child: Text(
                       'Only ${widget.descriptor.storedBytes} of '
                       '${widget.descriptor.bytes} bytes were retained by the '
@@ -405,32 +422,39 @@ class _OutputDialogState extends State<_OutputDialog> {
                     child: SelectableText(
                       error,
                       style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: ThemeTokens.error),
+                          ?.copyWith(color: palette.danger),
                     ),
                   ),
                 const Divider(height: 1),
                 Expanded(
-                  child: _controller.loading && chunk == null
-                      ? const Center(child: CircularProgressIndicator())
-                      : SelectionArea(
-                          child: ListView.builder(
-                            itemExtent: 20,
-                            itemCount: rows.length,
-                            itemBuilder: (context, index) => Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: ThemeTokens.space3,
-                              ),
-                              child: Text(
-                                rows[index],
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.clip,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(fontFamily: 'monospace'),
+                  child: ColoredBox(
+                    color: palette.codeSurface,
+                    child: _controller.loading && chunk == null
+                        ? const Center(child: CircularProgressIndicator())
+                        : SelectionArea(
+                            child: ListView.builder(
+                              key: const ValueKey('output-window-list'),
+                              itemExtent: 20,
+                              itemCount: rows.length,
+                              itemBuilder: (context, index) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: ThemeTokens.space3,
+                                ),
+                                child: Text(
+                                  rows[index],
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.clip,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontFamily: 'monospace',
+                                        color: CodexPalette.dark.textPrimary,
+                                      ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                  ),
                 ),
                 const Divider(height: 1),
                 Padding(

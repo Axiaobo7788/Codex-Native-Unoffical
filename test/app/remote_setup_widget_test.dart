@@ -17,13 +17,14 @@ void main() {
     await _pumpApp(tester, physicalSize: const Size(320, 720));
 
     expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
-    final scrollbar = find.descendant(
-      of: find.byKey(const ValueKey('compact-workspace')),
-      matching: find.byType(Scrollbar),
+    expect(
+      find.byKey(const ValueKey('compact-workspace-toggle')),
+      findsOneWidget,
     );
-    expect(scrollbar, findsOneWidget);
-    expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
-    await tester.ensureVisible(find.text('Conversation'));
+    await tester.tap(find.byTooltip('Show conversation'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Show threads'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show threads'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('remote-setup-button')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -31,7 +32,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Remote setup'), findsNWidgets(2));
+    expect(find.text('Remote setup'), findsOneWidget);
     expect(find.textContaining('1 active'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -58,7 +59,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Remote setup'), findsNWidgets(2));
+    expect(find.text('Remote setup'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('remote-advertised-endpoint')),
       findsOneWidget,
@@ -89,6 +90,8 @@ void main() {
       platformCalls.where((call) => call.method == 'Clipboard.setData'),
       hasLength(1),
     );
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();

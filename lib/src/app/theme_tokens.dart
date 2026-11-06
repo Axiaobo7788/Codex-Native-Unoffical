@@ -196,18 +196,6 @@ abstract final class ThemeTokens {
   static const double radiusLarge = 18;
   static const double radiusComposer = 22;
 
-  // Temporary aliases keep the verified pre-fidelity widgets readable while
-  // they are moved to context-owned semantic colors in the following slices.
-  static const Color canvas = Color(0xFF181918);
-  static const Color surface = Color(0xFF222321);
-  static const Color surfaceRaised = Color(0xFF292A28);
-  static const Color border = Color(0xFF373936);
-  static const Color textPrimary = Color(0xFFEDEDE9);
-  static const Color textSecondary = Color(0xFFB2B3AD);
-  static const Color connected = Color(0xFF70C18A);
-  static const Color pending = Color(0xFFE2B86D);
-  static const Color error = Color(0xFFF08A86);
-
   static CodexPalette of(BuildContext context) =>
       Theme.of(context).extension<CodexPalette>() ??
       (Theme.of(context).brightness == Brightness.dark

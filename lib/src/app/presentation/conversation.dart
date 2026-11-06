@@ -44,12 +44,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: ThemeTokens.surface,
-        border: Border.all(color: ThemeTokens.border),
-        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
-      ),
+    final palette = ThemeTokens.of(context);
+    return ColoredBox(
+      color: palette.canvas,
       child: AnimatedBuilder(
         animation: Listenable.merge([
           widget.controller,
@@ -58,93 +55,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         ]),
         builder: (context, _) {
           final controller = widget.controller;
-          final thread = controller.thread;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  ThemeTokens.space4,
-                  ThemeTokens.space3,
-                  ThemeTokens.space3,
-                  ThemeTokens.space3,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        thread?.displayTitle ?? 'Conversation',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    _ExecutionSettingsButton(
-                      controller: widget.settingsController,
-                    ),
-                    if (widget.diffController.snapshot?.files.isNotEmpty ??
-                        false)
-                      TextButton.icon(
-                        onPressed: () =>
-                            setState(() => _showChanges = !_showChanges),
-                        icon: Icon(
-                          _showChanges ? Icons.chat_outlined : Icons.difference,
-                          size: 18,
-                        ),
-                        label: Text(
-                          _showChanges
-                              ? 'Conversation'
-                              : 'Changes ${widget.diffController.snapshot!.files.length}',
-                        ),
-                      ),
-                    if (controller.canInterrupt)
-                      TextButton.icon(
-                        onPressed: controller.interrupt,
-                        icon: const Icon(Icons.stop_circle_outlined, size: 18),
-                        label: const Text('Stop'),
-                      ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              _ApprovalBanner(controller: widget.approvalController),
+              _conversationHeader(controller),
               Expanded(
                 child: _showChanges && widget.diffController.snapshot != null
                     ? _DiffView(controller: widget.diffController)
                     : _timeline(controller),
               ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(ThemeTokens.space3),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _composerController,
-                        enabled: thread != null && !controller.busy,
-                        minLines: 1,
-                        maxLines: 5,
-                        decoration: InputDecoration(
-                          hintText: thread == null
-                              ? 'Select or create a thread'
-                              : 'Send a message to Codex',
-                          isDense: true,
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: ThemeTokens.space2),
-                    IconButton.filled(
-                      tooltip: 'Send',
-                      onPressed: thread == null || controller.busy
-                          ? null
-                          : _send,
-                      icon: const Icon(Icons.arrow_upward, size: 19),
-                    ),
-                  ],
-                ),
-              ),
+              _ApprovalBanner(controller: widget.approvalController),
+              _composer(controller),
             ],
           );
         },
@@ -152,14 +73,71 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  Widget _conversationHeader(ConversationController controller) {
+    final palette = ThemeTokens.of(context);
+    final thread = controller.thread;
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
+      decoration: BoxDecoration(
+        color: palette.canvas,
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  thread?.displayTitle ?? 'Conversation',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (thread != null)
+                  Text(
+                    _projectName(thread.cwd),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+              ],
+            ),
+          ),
+          if (widget.diffController.snapshot?.files.isNotEmpty ?? false)
+            TextButton.icon(
+              key: const ValueKey('changes-view-button'),
+              onPressed: () => setState(() => _showChanges = !_showChanges),
+              icon: Icon(
+                _showChanges
+                    ? Icons.chat_bubble_outline_rounded
+                    : Icons.difference_outlined,
+                size: 17,
+              ),
+              label: Text(
+                _showChanges
+                    ? 'Conversation'
+                    : 'Changes ${widget.diffController.snapshot!.files.length}',
+              ),
+            ),
+          if (controller.canInterrupt) ...[
+            const SizedBox(width: ThemeTokens.space1),
+            OutlinedButton.icon(
+              onPressed: controller.interrupt,
+              icon: const Icon(Icons.stop_rounded, size: 16),
+              label: const Text('Stop'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _timeline(ConversationController controller) {
     if (controller.thread == null) {
-      return Center(
-        child: Text(
-          'Select a thread to begin.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      );
+      return const _ConversationEmptyState();
     }
     final liveIds = controller.entries.map((entry) => entry.id).toSet();
     final historyItems = widget.historyController.timelineItems
@@ -167,15 +145,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         .toList(growable: false);
     if (controller.entries.isEmpty && historyItems.isEmpty) {
       if (widget.historyController.loadingTurns) {
-        return const Center(child: CircularProgressIndicator());
+        return const _ConversationLoadingState();
       }
-      return Center(
-        child: Text(
-          widget.historyController.errorMessage ?? 'No conversation history.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      );
+      if (widget.historyController.errorMessage case final error?) {
+        return _ConversationErrorState(
+          message: error,
+          onRetry: widget.historyController.refresh,
+        );
+      }
+      return _ThreadEmptyState(thread: controller.thread!);
     }
 
     final footerCount =
@@ -186,29 +164,135 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             widget.historyController.loadingItems
         ? 1
         : 0;
-    return ListView.builder(
+    return Scrollbar(
       controller: _scrollController,
-      padding: const EdgeInsets.all(ThemeTokens.space4),
-      itemCount: historyItems.length + controller.entries.length + footerCount,
-      itemBuilder: (context, index) {
-        if (index < historyItems.length) {
-          final item = historyItems[index];
-          return _HistoryEntryView(
-            key: ValueKey('history-${item.id}'),
-            item: item,
-            historyController: widget.historyController,
-            outputGateway: widget.outputGateway,
-          );
-        }
-        final liveIndex = index - historyItems.length;
-        if (liveIndex < controller.entries.length) {
-          return _ConversationEntryView(
-            key: ValueKey(controller.entries[liveIndex].id),
-            entry: controller.entries[liveIndex],
-          );
-        }
-        return _HistoryFooter(controller: widget.historyController);
-      },
+      child: ListView.builder(
+        key: const ValueKey('conversation-timeline'),
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 18),
+        itemCount:
+            historyItems.length + controller.entries.length + footerCount,
+        itemBuilder: (context, index) {
+          if (index < historyItems.length) {
+            final item = historyItems[index];
+            return _HistoryEntryView(
+              key: ValueKey('history-${item.id}'),
+              item: item,
+              historyController: widget.historyController,
+              outputGateway: widget.outputGateway,
+            );
+          }
+          final liveIndex = index - historyItems.length;
+          if (liveIndex < controller.entries.length) {
+            return _ConversationEntryView(
+              key: ValueKey(controller.entries[liveIndex].id),
+              entry: controller.entries[liveIndex],
+            );
+          }
+          return _HistoryFooter(controller: widget.historyController);
+        },
+      ),
+    );
+  }
+
+  Widget _composer(ConversationController controller) {
+    final palette = ThemeTokens.of(context);
+    final thread = controller.thread;
+    final enabled = thread != null && !controller.busy;
+    return Container(
+      color: palette.canvas,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: DecoratedBox(
+            key: const ValueKey('composer-surface'),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              border: Border.all(color: palette.borderStrong),
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusComposer),
+              boxShadow: [
+                BoxShadow(
+                  color: palette.shadow,
+                  blurRadius: 16,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CallbackShortcuts(
+                    bindings: {
+                      const SingleActivator(LogicalKeyboardKey.enter): () {
+                        if (enabled) {
+                          unawaited(_send());
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.enter,
+                        shift: true,
+                      ): _insertComposerNewline,
+                    },
+                    child: TextField(
+                      key: const ValueKey('conversation-composer'),
+                      controller: _composerController,
+                      enabled: enabled,
+                      minLines: 1,
+                      maxLines: 6,
+                      textInputAction: TextInputAction.newline,
+                      decoration: InputDecoration(
+                        hintText: thread == null
+                            ? 'Select or create a thread'
+                            : 'Send a message to Codex',
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      _ExecutionSettingsButton(
+                        controller: widget.settingsController,
+                      ),
+                      const Spacer(),
+                      if (controller.busy)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text(
+                            'Working…',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ),
+                      IconButton.filled(
+                        key: const ValueKey('composer-send-button'),
+                        tooltip: 'Send (Enter)',
+                        style: IconButton.styleFrom(
+                          shape: const CircleBorder(),
+                          minimumSize: const Size.square(34),
+                          maximumSize: const Size.square(34),
+                          backgroundColor: palette.textPrimary,
+                          foregroundColor: palette.canvas,
+                          disabledBackgroundColor: palette.border,
+                          disabledForegroundColor: palette.textMuted,
+                        ),
+                        onPressed: enabled ? _send : null,
+                        icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -217,6 +301,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (await widget.controller.submit(text)) {
       _composerController.clear();
     }
+  }
+
+  void _insertComposerNewline() {
+    final value = _composerController.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final text = value.text.replaceRange(selection.start, selection.end, '\n');
+    _composerController.value = value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: selection.start + 1),
+      composing: TextRange.empty,
+    );
   }
 
   void _handleConversationChanged() {
@@ -238,6 +335,294 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         curve: Curves.easeOut,
       );
     });
+  }
+}
+
+class _ConversationEntryView extends StatelessWidget {
+  const _ConversationEntryView({super.key, required this.entry});
+
+  final ConversationEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final isUser = entry.kind == ConversationEntryKind.user;
+    final isActivity = entry.kind == ConversationEntryKind.activity;
+    final isError = entry.kind == ConversationEntryKind.error;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Align(
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: isUser ? 560 : double.infinity,
+            ),
+            margin: const EdgeInsets.only(bottom: ThemeTokens.space4),
+            padding: isUser
+                ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10)
+                : isActivity || isError
+                ? const EdgeInsets.symmetric(horizontal: 11, vertical: 9)
+                : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: isUser
+                  ? palette.userBubble
+                  : isError
+                  ? palette.danger.withValues(alpha: 0.08)
+                  : isActivity
+                  ? palette.surfaceRaised
+                  : Colors.transparent,
+              border: isActivity || isError
+                  ? Border.all(
+                      color: isError
+                          ? palette.danger.withValues(alpha: 0.3)
+                          : palette.border,
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(
+                isUser ? ThemeTokens.radiusMedium : ThemeTokens.radiusSmall,
+              ),
+            ),
+            child: isActivity
+                ? _ActivityContent(entry: entry)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (entry.status case final status?) ...[
+                        Text(
+                          status,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: isUser
+                                    ? palette.onUserBubble.withValues(
+                                        alpha: 0.72,
+                                      )
+                                    : null,
+                              ),
+                        ),
+                        const SizedBox(height: ThemeTokens.space1),
+                      ],
+                      if (entry.kind == ConversationEntryKind.assistant)
+                        AssistantMarkdown(
+                          data: entry.text,
+                          completed: entry.completed,
+                        )
+                      else
+                        SelectableText(
+                          entry.text,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: isUser
+                                    ? palette.onUserBubble
+                                    : isError
+                                    ? palette.danger
+                                    : palette.textPrimary,
+                              ),
+                        ),
+                      if (!entry.completed) ...[
+                        const SizedBox(height: ThemeTokens.space2),
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: palette.accent,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityContent extends StatelessWidget {
+  const _ActivityContent({required this.entry});
+
+  final ConversationEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(
+            entry.completed
+                ? Icons.check_circle_outline_rounded
+                : Icons.hourglass_top_rounded,
+            size: 16,
+            color: entry.completed ? palette.success : palette.accent,
+          ),
+        ),
+        const SizedBox(width: ThemeTokens.space2),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (entry.status case final status?)
+                Text(status, style: Theme.of(context).textTheme.labelSmall),
+              SelectableText(
+                entry.text,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textPrimary),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConversationEmptyState extends StatelessWidget {
+  const _ConversationEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(ThemeTokens.space8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.code_rounded,
+              size: 28,
+              color: ThemeTokens.of(context).textMuted,
+            ),
+            const SizedBox(height: ThemeTokens.space3),
+            Text(
+              'Choose a thread',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              'Select existing work from the sidebar or start a new task.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreadEmptyState extends StatelessWidget {
+  const _ThreadEmptyState({required this.thread});
+
+  final ThreadSummary thread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(ThemeTokens.space8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Let’s build ${_projectName(thread.cwd)}',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              'Describe the change you want to make. Codex will keep progress, '
+              'tools, approvals, and changes in this thread.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationLoadingState extends StatelessWidget {
+  const _ConversationLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(ThemeTokens.space6),
+          itemCount: 4,
+          itemBuilder: (context, index) => Align(
+            alignment: index.isEven
+                ? Alignment.centerLeft
+                : Alignment.centerRight,
+            child: Container(
+              width: index.isEven ? 420 : 260,
+              height: index.isEven ? 54 : 42,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: ThemeTokens.of(context).surfaceRaised,
+                borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationErrorState extends StatelessWidget {
+  const _ConversationErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(ThemeTokens.space6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                color: palette.danger,
+                size: 28,
+              ),
+              const SizedBox(height: ThemeTokens.space3),
+              Text(
+                'Conversation unavailable',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: ThemeTokens.space2),
+              SelectableText(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: ThemeTokens.space4),
+              OutlinedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded, size: 17),
+                label: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -387,7 +772,7 @@ class _ExecutionSettingsDialog extends StatelessWidget {
                   SelectableText(
                     error,
                     style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: ThemeTokens.error),
+                        ?.copyWith(color: ThemeTokens.of(context).danger),
                   ),
                 ],
               ],

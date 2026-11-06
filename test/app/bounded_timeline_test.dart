@@ -37,7 +37,7 @@ void main() {
     });
     expect(builtHistoryRows, findsWidgets);
     expect(builtHistoryRows.evaluate().length, lessThan(100));
-    expect(find.byKey(const ValueKey('history-item-999')), findsNothing);
+    expect(find.byKey(const ValueKey('conversation-timeline')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

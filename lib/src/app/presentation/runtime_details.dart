@@ -1,105 +1,113 @@
 part of '../codex_native_app.dart';
 
-class _RuntimePanel extends StatelessWidget {
-  const _RuntimePanel({required this.controller});
+class _RuntimeDetailsDialog extends StatelessWidget {
+  const _RuntimeDetailsDialog({required this.controller});
 
   final RuntimeController controller;
 
   @override
   Widget build(BuildContext context) {
     final snapshot = controller.snapshot;
+    final palette = ThemeTokens.of(context);
     final statusColor = switch (snapshot.state) {
       RuntimeConnectionState.connected ||
-      RuntimeConnectionState.remoteReadOnly => ThemeTokens.connected,
+      RuntimeConnectionState.remoteReadOnly => palette.success,
       RuntimeConnectionState.error ||
       RuntimeConnectionState.processExited ||
       RuntimeConnectionState.notFound ||
       RuntimeConnectionState.hostNotFound ||
       RuntimeConnectionState.remoteCredentialRecoveryRequired ||
-      RuntimeConnectionState.remoteRevoked => ThemeTokens.error,
-      _ => ThemeTokens.pending,
+      RuntimeConnectionState.remoteRevoked => palette.danger,
+      _ => palette.warning,
     };
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: ThemeTokens.surface,
-        border: Border.all(color: ThemeTokens.border),
-        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(ThemeTokens.space6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Codex Native',
-              style: Theme.of(context).textTheme.headlineSmall,
+    return AlertDialog(
+      title: Row(
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: ThemeTokens.space1),
-            Text(
-              'Unofficial native-first client',
+          ),
+          const SizedBox(width: ThemeTokens.space2),
+          const Expanded(child: Text('Runtime details')),
+        ],
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Detail(label: 'State', value: snapshot.stateLabel),
+              if (snapshot.executablePath case final path?) ...[
+                const SizedBox(height: ThemeTokens.space3),
+                _Detail(label: 'Codex', value: path),
+              ],
+              if (snapshot.userAgent case final userAgent?) ...[
+                const SizedBox(height: ThemeTokens.space3),
+                _Detail(label: 'App server', value: userAgent),
+              ],
+              if (snapshot.processId case final processId?) ...[
+                const SizedBox(height: ThemeTokens.space3),
+                _Detail(label: 'Process', value: processId.toString()),
+              ],
+              if (snapshot.message case final message?) ...[
+                const SizedBox(height: ThemeTokens.space4),
+                _InlineNotice(
+                  icon: Icons.info_outline_rounded,
+                  color: statusColor,
+                  text: message,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _InlineNotice extends StatelessWidget {
+  const _InlineNotice({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(ThemeTokens.space3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: ThemeTokens.space2),
+          Expanded(
+            child: SelectableText(
+              text,
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: ThemeTokens.space6),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: ThemeTokens.space2,
-              runSpacing: ThemeTokens.space2,
-              children: [
-                Text('Runtime', style: Theme.of(context).textTheme.titleMedium),
-                if (snapshot.state == RuntimeConnectionState.connected &&
-                    !controller.usesRemote)
-                  OutlinedButton.icon(
-                    key: const ValueKey('remote-setup-button'),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (context) =>
-                          _RemoteSetupDialog(gateway: controller),
-                    ),
-                    icon: const Icon(Icons.devices_other, size: 18),
-                    label: const Text('Remote setup'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: ThemeTokens.space3),
-            Row(
-              children: [
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: ThemeTokens.space2),
-                Expanded(child: Text(snapshot.stateLabel)),
-              ],
-            ),
-            if (snapshot.executablePath case final path?) ...[
-              const SizedBox(height: ThemeTokens.space4),
-              _Detail(label: 'Codex', value: path),
-            ],
-            if (snapshot.userAgent case final userAgent?) ...[
-              const SizedBox(height: ThemeTokens.space3),
-              _Detail(label: 'App server', value: userAgent),
-            ],
-            if (snapshot.processId case final processId?) ...[
-              const SizedBox(height: ThemeTokens.space3),
-              _Detail(label: 'Process', value: processId.toString()),
-            ],
-            if (snapshot.message case final message?) ...[
-              const SizedBox(height: ThemeTokens.space4),
-              SelectableText(
-                message,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: statusColor),
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -120,7 +128,12 @@ class _Detail extends StatelessWidget {
           width: 88,
           child: Text(label, style: Theme.of(context).textTheme.bodySmall),
         ),
-        Expanded(child: SelectableText(value)),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
       ],
     );
   }

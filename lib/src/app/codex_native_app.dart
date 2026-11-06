@@ -37,8 +37,7 @@ part 'presentation/remote_setup.dart';
 part 'presentation/runtime_details.dart';
 
 const _desktopSplitMinimumWidth = 760.0;
-const _compactThreadPanelHeight = 320.0;
-const _compactConversationMinimumHeight = 420.0;
+const _desktopSidebarWidth = 264.0;
 
 class CodexNativeApp extends StatefulWidget {
   const CodexNativeApp({
@@ -115,7 +114,9 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Codex Native (Unofficial)',
-      theme: ThemeTokens.darkTheme,
+      theme: ThemeTokens.lightTheme,
+      darkTheme: ThemeTokens.darkTheme,
+      themeMode: ThemeMode.system,
       home: RuntimeStatusScreen(
         controller: _controller,
         threadController: _threadController,

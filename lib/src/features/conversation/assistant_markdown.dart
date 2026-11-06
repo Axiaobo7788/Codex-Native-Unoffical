@@ -50,6 +50,7 @@ class AssistantMarkdown extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
+    final palette = ThemeTokens.of(context);
     final bodyStyle = theme.textTheme.bodyMedium;
     final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
       a: bodyStyle?.copyWith(
@@ -59,8 +60,8 @@ class AssistantMarkdown extends StatelessWidget {
       ),
       p: bodyStyle,
       code: bodyStyle?.copyWith(
-        color: ThemeTokens.textPrimary,
-        backgroundColor: ThemeTokens.canvas,
+        color: palette.textPrimary,
+        backgroundColor: palette.surfaceRaised,
         fontFamily: 'monospace',
         fontSize: 13,
       ),
@@ -72,20 +73,20 @@ class AssistantMarkdown extends StatelessWidget {
       h6: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       blockSpacing: ThemeTokens.space2,
       listIndent: ThemeTokens.space6,
-      tableBorder: TableBorder.all(color: ThemeTokens.border),
+      tableBorder: TableBorder.all(color: palette.border),
       tableCellsPadding: const EdgeInsets.all(ThemeTokens.space2),
       blockquotePadding: const EdgeInsets.symmetric(
         horizontal: ThemeTokens.space3,
         vertical: ThemeTokens.space2,
       ),
-      blockquoteDecoration: const BoxDecoration(
-        color: ThemeTokens.canvas,
-        border: Border(left: BorderSide(color: ThemeTokens.border, width: 3)),
+      blockquoteDecoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border(left: BorderSide(color: palette.borderStrong, width: 3)),
       ),
       codeblockPadding: const EdgeInsets.all(ThemeTokens.space3),
       codeblockDecoration: BoxDecoration(
-        color: ThemeTokens.canvas,
-        border: Border.all(color: ThemeTokens.border),
+        color: palette.surfaceRaised,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
       ),
     );
@@ -97,7 +98,8 @@ class AssistantMarkdown extends StatelessWidget {
         selectable: false,
         extensionSet: _safeExtensions,
         styleSheet: styleSheet,
-        imageBuilder: _blockedImage,
+        imageBuilder: (uri, title, alt) =>
+            _blockedImage(context, uri, title, alt),
         onTapLink: (text, href, title) => unawaited(_openLink(context, href)),
       ),
     );
@@ -133,14 +135,20 @@ class AssistantMarkdown extends StatelessWidget {
         ?.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  static Widget _blockedImage(Uri uri, String? title, String? alt) {
+  static Widget _blockedImage(
+    BuildContext context,
+    Uri uri,
+    String? title,
+    String? alt,
+  ) {
     final label = _boundedLabel(alt?.trim());
+    final palette = ThemeTokens.of(context);
     return Container(
       key: const ValueKey('blocked-markdown-image'),
       padding: const EdgeInsets.all(ThemeTokens.space2),
       decoration: BoxDecoration(
-        color: ThemeTokens.canvas,
-        border: Border.all(color: ThemeTokens.border),
+        color: palette.surfaceRaised,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
       ),
       child: Row(

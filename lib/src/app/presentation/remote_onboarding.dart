@@ -29,12 +29,13 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final state = widget.controller.remoteOnboardingState;
     return DecoratedBox(
       key: const ValueKey('remote-pairing-panel'),
       decoration: BoxDecoration(
-        color: ThemeTokens.surface,
-        border: Border.all(color: ThemeTokens.border),
+        color: palette.surface,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
       ),
       child: SingleChildScrollView(
@@ -107,7 +108,7 @@ class _RemotePairingPanelState extends State<_RemotePairingPanel> {
                 key: const ValueKey('remote-onboarding-message'),
                 style: TextStyle(
                   color: state.phase == RemoteOnboardingPhase.failed
-                      ? ThemeTokens.error
+                      ? palette.danger
                       : null,
                 ),
               ),
@@ -160,14 +161,15 @@ class _RemoteRecoveryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final state = controller.remoteOnboardingState;
     final revoked =
         controller.snapshot.state == RuntimeConnectionState.remoteRevoked;
     return DecoratedBox(
       key: const ValueKey('remote-recovery-panel'),
       decoration: BoxDecoration(
-        color: ThemeTokens.surface,
-        border: Border.all(color: ThemeTokens.border),
+        color: palette.surface,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
       ),
       child: Padding(
@@ -179,7 +181,7 @@ class _RemoteRecoveryPanel extends StatelessWidget {
             Icon(
               revoked ? Icons.link_off : Icons.lock_reset,
               size: 40,
-              color: ThemeTokens.error,
+              color: palette.danger,
             ),
             const SizedBox(height: ThemeTokens.space3),
             Text(
@@ -207,7 +209,7 @@ class _RemoteRecoveryPanel extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: state.phase == RemoteOnboardingPhase.failed
-                      ? ThemeTokens.error
+                      ? palette.danger
                       : null,
                 ),
               ),
@@ -313,14 +315,15 @@ class _RemoteReadOnlyPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final models = controller.remoteModels;
     final threads = controller.remoteThreads;
     final defaultModel = models.where((model) => model.isDefault).firstOrNull;
     return DecoratedBox(
       key: const ValueKey('remote-read-only-panel'),
       decoration: BoxDecoration(
-        color: ThemeTokens.surface,
-        border: Border.all(color: ThemeTokens.border),
+        color: palette.surface,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
       ),
       child: Padding(

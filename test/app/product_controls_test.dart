@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
+import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
@@ -11,9 +12,91 @@ import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'desktop shell keeps dense hover, selection, and composer geometry',
+    (tester) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController();
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('desktop-split-workspace')),
+        findsOneWidget,
+      );
+      final row = find.byKey(const ValueKey('thread-row-controls-thread'));
+      expect(row, findsOneWidget);
+      expect(tester.getSize(row).height, 42);
+      final palette = ThemeTokens.of(tester.element(row));
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(row));
+      await tester.pumpAndSettle();
+      expect(
+        (tester.widget<AnimatedContainer>(row).decoration! as BoxDecoration)
+            .color,
+        palette.hover,
+      );
+
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(
+        (tester.widget<AnimatedContainer>(row).decoration! as BoxDecoration)
+            .color,
+        palette.selected,
+      );
+      final composer = find.byKey(const ValueKey('composer-surface'));
+      expect(composer, findsOneWidget);
+      expect(tester.getSize(composer).width, lessThanOrEqualTo(760));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'compact thread selection opens conversation and Escape closes sidebar',
+    (tester) async {
+      tester.view.physicalSize = const Size(600, 780);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController();
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('conversation-composer')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Show threads'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Show threads'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show conversation'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('conversation-composer')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'dangerous execution overrides require affirmative confirmation',
     (tester) async {
@@ -77,6 +160,28 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('composer sends with Enter and keeps Shift+Enter multiline', (
+    tester,
+  ) async {
+    final runtime = await _pumpSelectedApp(tester);
+    final composer = find.byKey(const ValueKey('conversation-composer'));
+
+    await tester.enterText(composer, 'first line');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    expect(tester.widget<TextField>(composer).controller?.text, 'first line\n');
+    await tester.enterText(composer, 'first line\nsecond line');
+    expect(runtime.turnOptions, isEmpty);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(runtime.turnOptions, hasLength(1));
+    expect(runtime.turnOptions.single.text, 'first line\nsecond line');
+    expect(tester.widget<TextField>(composer).controller?.text, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'large diff view is truncated, virtualized, and file-selectable',
@@ -164,7 +269,7 @@ Future<void> _send(WidgetTester tester, String text) async {
         widget.decoration?.hintText == 'Send a message to Codex',
   );
   await tester.enterText(composer, text);
-  await tester.tap(find.byTooltip('Send'));
+  await tester.tap(find.byKey(const ValueKey('composer-send-button')));
   await tester.pumpAndSettle();
 }
 

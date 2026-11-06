@@ -82,6 +82,7 @@ class _RemoteSetupContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final status = controller.status;
     final ticket = controller.ticket;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -107,7 +108,7 @@ class _RemoteSetupContent extends StatelessWidget {
           Text(
             error,
             key: const ValueKey('remote-setup-error'),
-            style: const TextStyle(color: ThemeTokens.error),
+            style: TextStyle(color: palette.danger),
           ),
         ],
         const SizedBox(height: ThemeTokens.space4),
@@ -146,7 +147,7 @@ class _RemoteSetupContent extends StatelessWidget {
           Container(
             key: const ValueKey('remote-ticket-expired-message'),
             padding: const EdgeInsets.all(ThemeTokens.space3),
-            color: ThemeTokens.pending.withValues(alpha: 0.08),
+            color: palette.warning.withValues(alpha: 0.08),
             child: const Text(
               'The one-use pairing ticket expired and was removed from this '
               'screen. Create a fresh ticket before pairing.',
@@ -195,11 +196,12 @@ class _RemoteListenerDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     if (!status.enabled) {
       return Container(
         key: const ValueKey('remote-listener-disabled'),
         padding: const EdgeInsets.all(ThemeTokens.space3),
-        color: ThemeTokens.pending.withValues(alpha: 0.08),
+        color: palette.warning.withValues(alpha: 0.08),
         child: const Text(
           'Remote listening is disabled. This screen will not enable it. '
           'Configure CODEX_NATIVE_REMOTE_LISTEN and restart the Host.',
@@ -211,7 +213,7 @@ class _RemoteListenerDetails extends StatelessWidget {
       key: const ValueKey('remote-listener-enabled'),
       padding: const EdgeInsets.all(ThemeTokens.space3),
       decoration: BoxDecoration(
-        border: Border.all(color: ThemeTokens.border),
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
       ),
       child: Column(
@@ -243,13 +245,13 @@ class _RemoteListenerDetails extends StatelessWidget {
           ),
           const SizedBox(height: ThemeTokens.space2),
           if (endpoint == null)
-            const Text(
+            Text(
               'No client endpoint is advertised. Set '
               'CODEX_NATIVE_REMOTE_ADVERTISE_ENDPOINT to the exact reachable '
               'wss://…/v1/ws address and restart the Host. A wildcard bind is '
               'never converted into an invitation address.',
               key: ValueKey('remote-advertised-endpoint-missing'),
-              style: TextStyle(color: ThemeTokens.pending),
+              style: TextStyle(color: palette.warning),
             )
           else ...[
             Text(
@@ -319,13 +321,14 @@ class _RemoteTicketCardState extends State<_RemoteTicketCard> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final ticket = widget.ticket;
     return Container(
       key: const ValueKey('remote-ticket-card'),
       padding: const EdgeInsets.all(ThemeTokens.space4),
       decoration: BoxDecoration(
-        color: ThemeTokens.connected.withValues(alpha: 0.08),
-        border: Border.all(color: ThemeTokens.connected),
+        color: palette.success.withValues(alpha: 0.08),
+        border: Border.all(color: palette.success),
         borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
       ),
       child: Column(
@@ -394,12 +397,13 @@ class _RemotePairingQrView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final qr = this.qr;
     if (qr == null) {
       return Container(
         key: const ValueKey('remote-ticket-qr-unavailable'),
         padding: const EdgeInsets.all(ThemeTokens.space3),
-        color: ThemeTokens.pending.withValues(alpha: 0.08),
+        color: palette.warning.withValues(alpha: 0.08),
         child: const Text(
           'This complete invitation is too large for one medium-correction QR '
           'code. Use Copy invitation instead; no data was split or omitted.',
@@ -412,7 +416,7 @@ class _RemotePairingQrView extends StatelessWidget {
           return Container(
             key: const ValueKey('remote-ticket-qr-too-narrow'),
             padding: const EdgeInsets.all(ThemeTokens.space3),
-            color: ThemeTokens.pending.withValues(alpha: 0.08),
+            color: palette.warning.withValues(alpha: 0.08),
             child: const Text(
               'The window is too narrow to show this QR code without reducing '
               'its module size. Enlarge the window or use Copy invitation.',
