@@ -221,7 +221,17 @@ delay that transition (ADR-026).
 - Final local gates pass: Rust format/Clippy and 98 tests, Dart format/analyze,
   native-license regeneration/packaging drift checks, all 176 Flutter tests,
   release Host build, the repeated-output memory benchmark, and the real coding
-  smoke. Hosted Windows/macOS behavior remains a separate post-push gate.
+  smoke.
+- Code-bearing CI run `42135777838` at `4d35b56` passed all three jobs. Linux/
+  Android job `127623402214` passed the complete formatting, license, signing,
+  scanner, Clippy, 98-test Rust, hosted `flutter analyze`, 176-test Flutter,
+  Linux build/runtime closure, Host/license package, and debug APK gates.
+  Windows job `127623402465` passed native tests, debug build, packaged Host,
+  and license verification. macOS job `127623402670` passed native tests,
+  universal release build, four-binary architecture checks, packaged Host
+  execution, and license identity. This is cross-platform build/package
+  evidence, not installed-volume exhaustion, physical-device, Intel execution,
+  signing/notarization, or Human acceptance.
 
 ### 2026-11-06 — macOS universal nested Host boundary
 
@@ -1681,6 +1691,11 @@ specific evidence boundaries.
 - Windows and macOS debug build/package execution: PASS on hosted Windows Server
   2022 x64 and macOS 15 arm64. Native install/ACL/Human validation, macOS
   signing/notarization, and physical-device validation remain unrun.
+- Exact-output code-bearing CI: run `42135777838` at `4d35b56` PASS. Linux/
+  Android job `127623402214`, Windows job `127623402465`, and macOS universal
+  job `127623402670` all completed successfully, including native tests on each
+  OS, hosted Flutter analysis/tests, supported desktop builds and Host/license
+  execution, Linux runtime closure, and the debug APK gate.
 
 ## Known risks / watch items
 
@@ -1827,9 +1842,11 @@ physical-Android, and installed-volume gates as RC requirements.
 - Process transport and app-server handshake: complete and locally verified.
 - Typed initialization/runtime UI: complete and locally verified.
 - Tests and local Linux build: complete and locally verified.
-- Hosted CI: latest completed code-bearing run `42107012629` at `3ab0997`
+- Hosted CI: latest completed code-bearing run `42135777838` at `4d35b56`
   passed exact-Rust, Dart/Flutter, Linux, Android debug, Windows x64, and macOS
-  arm64 gates, including the new Linux debug runtime-closure check.
+  universal gates, including all 98 native tests on every desktop OS, hosted
+  Flutter analysis/tests, the Linux runtime closure, the debug APK, and packaged
+  Host/license execution.
 
 ### Phase 2 — Local Codex workflow
 

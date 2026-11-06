@@ -255,6 +255,14 @@ _Reviewed: 2026-11-06_
   read the persisted command item twice, reused one 6-byte output reference,
   projected one file/one addition with no unexpected approvals, deleted its
   thread/workspace, and shut the Host down in 59 ms.
+- Code-bearing CI run `42135777838` at `4d35b56` passed Linux/Android job
+  `127623402214`, Windows job `127623402465`, and macOS universal job
+  `127623402670`. Every desktop OS ran the 98 native tests. The hosted Linux job
+  also passed Flutter analysis/tests, Linux runtime closure, Host/license
+  packaging, and the debug APK; Windows passed its debug bundle/Host/license
+  checks; macOS passed the universal release and exact four-binary architecture,
+  Host, and license checks. These gates do not simulate installed-volume fill,
+  persistent corruption, physical Intel execution, or Android-device behavior.
 
 ## Desktop packaging and the macOS process model
 
