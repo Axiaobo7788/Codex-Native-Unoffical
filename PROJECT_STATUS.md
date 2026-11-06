@@ -12,13 +12,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: IN PROGRESS — transport/auth/resume research, the Host protocol/auth core, authenticated WS/WSS transport, bounded read-only Codex RPC, sanitized event replay, operator-certificate non-loopback TLS, the bounded Dart transport/lifecycle/credential stack, Android visibility lifecycle wiring, versioned system/local-certificate pairing and recovery onboarding, a bounded read-only metadata UI, trusted desktop setup/device management, bounded desktop QR presentation, and explicit bounded Android QR intake are implemented; real-device validation, writes/approvals, and full conversation integration do not exist yet**
+**Phase 4 — Android Remote: PAUSED BY EXPLICIT PRIORITY OVERRIDE — the existing bounded read-only transport/onboarding/admin work remains intact, but writes, approvals, full conversation integration, headless Host work, relay migration, and mobile architecture work must not advance during the Desktop UI phase**
 
-**Post-core priority gate:** once Android Remote writes, sessions, approvals,
-output, attachments, a headless Host, and required Skills/MCP/Plugins paths form
-a daily-usable loop, immediately make current official Codex Desktop UI fidelity
-the highest priority. Non-blocking CI/release/infrastructure expansion must not
-delay that transition (ADR-026).
+**Current sole phase — Desktop UI fidelity: IN PROGRESS — targeted current-product research is recorded; the next implementation work is the native Flutter theme/component layer and presentation decomposition. This phase supersedes ADR-026's earlier sequencing through ADR-027. After its acceptance gates close, autonomous development must stop for a separately authorized mobile/Remote research phase.**
 
 ## Current repository state
 
@@ -185,6 +181,28 @@ delay that transition (ADR-026).
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-06 — Desktop UI fidelity priority override and current-product research
+
+- Reclassified Desktop UI fidelity as the immediate and sole product phase.
+  Android Remote expansion, official relay migration, ChatGPT integration,
+  headless Host work, Skills/MCP/Plugins expansion, release engineering,
+  installers, signing, extra CI hardening, and non-blocking ACL/TLS work are
+  explicitly paused rather than silently treated as abandoned.
+- Reviewed current first-party product material, including the unified ChatGPT
+  Desktop transition, the still-separate Codex view/history, current composer
+  behavior, the project/thread/change workflow, and a reported scrollbar/panel
+  interaction regression. Cross-checked the earlier standalone Codex layout
+  against one current tutorial and one unlicensed clean-room recreation without
+  copying either implementation or assets.
+- Recorded an evidence-ranked information architecture, component geometry,
+  visual token targets, responsive behavior, state matrix, keyboard/focus/scroll
+  requirements, deliberate non-adoptions, and bounded-memory validation plan in
+  `docs/RESEARCH.md`.
+- Accepted ADR-027: the first default theme is Codex-inspired rather than
+  seed-derived Material 3; Flutter Material remains an implementation substrate;
+  protocol, controller, lifecycle, and bounded-memory behavior are unchanged;
+  and completion requires an explicit stop.
 
 ### 2026-11-06 — Session-local exact output deduplication and candidate rollback
 
@@ -1802,37 +1820,27 @@ specific evidence boundaries.
 
 ## Next action
 
-Close the remaining daily-use core without weakening the bounded protocol and
-trust boundaries, then enforce ADR-026's UI-fidelity priority switch:
+Implement only the Desktop UI fidelity phase without weakening the bounded
+protocol, controller, lifecycle, or memory boundaries:
 
-1. when an emulator/physical device is available, exercise system-root and
-   pairing-bound invitations against the real Host: cold start, lifecycle,
-   process/network/Host recovery, rejection/revocation, wrong/expired/rotated
-   identity, unreadable Keystore state, pairing-save failure, backup/restore,
-   permission denial/settings recovery, rotation, dense QR, and exact desktop-
-   to-phone interoperability. Preserve this as a release gate, not a reason to
-   stop independent product implementation;
-2. implement the headless Host lifecycle and expand Android Remote in bounded
-   end-to-end slices through full session/conversation writes, approvals,
-   paginated/lazy output, and resumable attachments. Keep idempotency, payload
-   caps, sequence/ACK recovery, credential custody, and attachment ownership
-   explicit;
-3. close the Skills, MCP, and Plugins discovery/configuration/invocation surfaces
-   needed for ordinary Codex work while preserving stock app-server semantics
-   and avoiding a client-side agent harness;
-4. once those paths form a daily-usable loop, immediately research the then-
-   current official Codex Desktop and make its information architecture,
-   layout, density, interactions, component states, and visual language the
-   highest-priority native Flutter track. Preserve bounded projections,
-   virtualization, lazy output/diffs, and native performance;
-5. perform CI, packaging, signing, installer, and release work only when it
-   blocks correctness, security, supported-platform execution, realistic
-   validation, or delivery. Do not continue non-blocking infrastructure work in
-   place of the UI-fidelity transition. GitHub permission increases,
-   publication, signing identities, and Human acceptance remain explicit gates.
+1. replace the seed-derived Material 3 baseline with the small Codex-inspired
+   light/dark token and component layer defined by the current research;
+2. decompose the monolithic presentation file into app shell, sidebar/thread
+   list, conversation/composer/activity, approval, diff/output, execution
+   controls, Remote setup, and shared-state modules while leaving domain and
+   transport contracts unchanged;
+3. finish responsive wide/narrow layouts and the empty/loading/error/
+   disconnected/active visual states, then run widget/layout, bounded-memory,
+   desktop build, and real app-server smoke gates;
+4. perform direct Human visual review where available and report any unavailable
+   cross-platform/Human gates exactly;
+5. after the acceptance criteria are genuinely met, emit
+   `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH` and stop. Do not
+   begin Android/mobile/relay research or implementation without a new explicit
+   user instruction.
 
-Preserve the unavailable Phase 3 Human, native install/ACL/signing/notarization,
-physical-Android, and installed-volume gates as RC requirements.
+The earlier Android, signing/notarization, installed-volume, and release gates
+remain recorded but are not current autonomous work.
 
 ## Milestone outline
 

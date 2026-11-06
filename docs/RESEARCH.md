@@ -5,6 +5,232 @@ other working clients. It is not a catalog of projects or an endorsement of
 their architecture. Upstream behavior and measurements in this repository remain
 authoritative.
 
+## Current Codex Desktop UI fidelity
+
+_Reviewed: 2026-11-06_
+
+### Evidence boundary and sources
+
+The official Codex Desktop UI is not published as an open Flutter or reusable UI
+source tree. This review therefore ranks observable first-party product behavior
+above secondary reconstructions and separates observed facts from the concrete
+targets selected for this client.
+
+Primary evidence:
+
+- OpenAI's [Introducing the Codex app](https://openai.com/index/introducing-the-codex-app/)
+  defines the Codex-specific hierarchy and workflow: independent agent threads
+  grouped by projects, rapid switching among parallel work, in-thread change
+  review, diff comments, editor handoff, worktrees, and shared CLI/IDE history
+  and configuration.
+- The current [ChatGPT Work and Codex](https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex)
+  documentation, updated on the review date, establishes a product transition:
+  Codex now appears as a separate view inside the unified ChatGPT Desktop app,
+  retains separate history, and remains the repository/local-tool experience.
+  Its current model picker combines a default model/reasoning slider while an
+  explicitly selected model exposes its available reasoning levels.
+- The current [Composer predictions in Codex](https://help.openai.com/en/articles/20001601-composer-predictions-in-codex)
+  article and its first-party screenshots show the current conversation visual
+  language: restrained white/neutral canvas, a compact dark user bubble,
+  unboxed assistant content, quiet message actions, a large rounded bordered
+  composer, inline execution/model/effort controls, and a circular primary
+  send/voice affordance. `Tab` accepts a prediction into the composer without
+  sending it.
+- The first-party launch/store imagery for the earlier standalone shell shows a
+  narrow neutral sidebar, project folders with indented thread rows, compact
+  navigation, a low-chrome thread header, a centered empty-state/composer, and
+  changes/actions in the thread workspace. This is retained as Codex-specific IA
+  evidence, not treated as the complete current shared application shell.
+- OpenAI Codex issue
+  [#22363](https://github.com/openai/codex/issues/22363) records a real long-chat
+  regression where a hover-revealed side panel intercepted the conversation
+  scrollbar. This project must keep every timeline scrollbar hit target clear;
+  secondary panels require an explicit action and reserved layout space.
+
+Secondary cross-checks:
+
+- The current [Codex Desktop tutorial](https://coding.flowo.design/en/codex/07-desktop-app)
+  describes the desktop workbench as a sidebar, center conversation, and optional
+  right review/terminal/results region. It is a schematic cross-check, not an
+  authority for exact pixels, shortcuts, or features.
+- `STEVOHCODER/codex-desktop-recreation` records a clean-room behavioral
+  comparison with project-grouped recents, light/dark modes, user bubbles,
+  unboxed assistant messages, stop state, and a constrained composer. No license
+  was identified in the reviewed repository and its evidence includes reverse
+  engineering, so neither code nor assets are adopted.
+
+The developer documentation URLs previously under
+`developers.openai.com/codex/app` now redirect to general ChatGPT Learn pages.
+That redirect and the current Help material are additional evidence that the
+surface is moving. Static early-2026 screenshots alone cannot establish the
+November-2026 product.
+
+### Information architecture adopted here
+
+Wide desktop uses one persistent application workspace rather than stacked
+engineering cards:
+
+```text
+┌──────────── project/thread sidebar ────────────┬──────── conversation workspace ────────┐
+│ New thread                                    │ title + runtime state + Changes/Stop   │
+│                                               ├─────────────────────────────────────────┤
+│ Threads                                       │ virtualized bounded timeline            │
+│   project / working-directory group           │ user / assistant / tool / reasoning     │
+│     selected thread                    status │ approval appears in the work flow        │
+│     another thread                     status │                                         │
+│                                               │ bounded diff replaces this center view   │
+│ connection + Remote setup                     ├─────────────────────────────────────────┤
+│                                               │ max-width composer + execution controls  │
+└───────────────────────────────────────────────┴─────────────────────────────────────────┘
+```
+
+- The sidebar owns creation, project/working-directory grouping, thread
+  selection/resume affordance, pagination, and compact connection/Remote entry.
+  Runtime executable paths, process IDs, and server strings move out of the
+  persistent top-level workspace and remain available only in a details surface
+  or an actionable disconnected/error state.
+- The conversation workspace owns its thread title, state, changes toggle, stop
+  action, virtualized timeline, approvals, composer, and execution controls.
+  Diff is a deliberate center-mode switch; command output is a bounded viewer.
+- A third pane is not permanently opened in the first slice because current
+  controller state has one bounded selected diff file and one bounded output
+  window. The layout may reserve a future explicit panel, but must not introduce
+  an empty panel or preload more data for visual parity.
+- Project hierarchy is derived only from already retained thread `cwd` metadata.
+  No filesystem crawl, repository hydration, or second project database is
+  introduced. Groups are view projections; thread pagination and the 100-row
+  retention cap remain authoritative.
+
+### Density, geometry, and component states
+
+The following values are implementation targets selected from the first-party
+visual evidence and the native desktop constraints; they are not claimed as
+extracted proprietary design tokens:
+
+- Wide sidebar: 252 px target, resizable layout breakpoint near 760 px. Narrow
+  mode uses an explicit sidebar drawer/sheet or mode switch, never a tall stacked
+  page that places the composer below an independently scrolling thread card.
+- Global toolbar/header: 48–52 px. Sidebar primary actions: 34–38 px. Thread
+  rows: 38 px for one-line content and 48 px only when a visible secondary state
+  is necessary. Selected rows use a quiet neutral fill plus a slim accent/strong
+  text; hover uses a distinct weaker fill; keyboard focus uses a visible 2 px
+  outline without changing layout.
+- Conversation reading column and composer: 720–780 px preferred maximum inside
+  the available workspace. Assistant content is unboxed. User content is
+  right-aligned in a high-contrast compact bubble with a maximum width near 72%
+  of the reading column. Tool/activity/reasoning items use concise rows with
+  icon, label, status, and optional expandable detail rather than full chat
+  bubbles.
+- Composer: 14–18 px inner padding, 18–22 px outer radius, subtle one-pixel
+  border and restrained shadow/elevation. The text field grows to a bounded
+  height. Attach/add, execution policy, model/reasoning, and send/stop controls
+  share one visual container; disabled and busy states remain legible.
+- Small controls use 28–32 px visual height with at least 36 px pointer target
+  where layout allows. Ordinary surface radii are 8–12 px; dialogs and composer
+  may use 16–22 px. Borders are one physical/logical pixel depending on DPR;
+  heavy nested card borders are avoided.
+- Base desktop text is 13–14 px with 1.35–1.5 line height. Section labels and
+  metadata are 11–12 px; thread/header titles 14–16 px; empty-state heading
+  22–28 px. Monospace remains confined to code, diff, paths where selection
+  benefits, and command output.
+- Icons remain the platform-neutral Material symbol set for now, consistently
+  sized at 16/18/20 px and never used as a copied OpenAI mark. Every icon-only
+  action requires a tooltip and semantics label.
+
+### Theme and visual language
+
+- Define explicit light and dark neutral palettes plus semantic accent, success,
+  warning, danger, diff-add, and diff-delete colors. The default follows system
+  brightness. `ColorScheme.fromSeed()` is not a product color generator.
+- Light mode uses a very light neutral sidebar, near-white conversation canvas,
+  dark user bubble, restrained gray borders, and a cool blue focus/accent. Dark
+  mode uses charcoal rather than pure black, layered neutral surfaces, softened
+  white text, and adjusted semantic colors that preserve contrast.
+- Material widgets remain useful for text input, selection, menus, dialogs,
+  focus, keyboard, semantics, and platform behavior. Their final density,
+  shapes, fills, overlays, typography, focus, and disabled states come from the
+  project-owned theme/component layer.
+- The visible product name remains `Codex Native` with an explicit `Unofficial`
+  qualifier in About/details and documentation. No OpenAI logo, wordmark,
+  proprietary illustration, or assertion of endorsement is used.
+
+### Conversation and state language
+
+- User: compact right-aligned bubble; preserve selectable prompt text.
+- Assistant: unboxed Markdown in the reading column; streaming stays bounded
+  plain text as already required, with a small live indicator and no per-token
+  full-tree animation.
+- Tool/activity: a compact neutral row with leading state icon, status label,
+  summary, and lazy action. Reasoning remains visually quieter than assistant
+  output and never exposes hidden chain-of-thought beyond the typed summary the
+  server already supplies.
+- Approval: an inline, high-attention but non-modal card immediately above the
+  composer/timeline continuation, with risk text first, Reject secondary, and
+  Approve once primary. Unknown/unsupported requests remain reject-only.
+- Diff: explicit file navigator, aggregate `+/-` summary, selected-file-only
+  virtualized rows, clear truncation state, and restrained add/delete tint.
+- Output: terminal-like dark/neutral viewport in both themes, monospace rows,
+  current byte-window metadata, truncation warning, and bounded First/Previous/
+  Next/Tail controls. It must never concatenate pages in memory.
+- Empty: project/thread selection and new-task states use a quiet centered
+  heading and composer/primary action, not a diagnostic card. Loading uses local
+  skeleton/progress indicators that preserve geometry. Errors show an actionable
+  retry/details path. Disconnected/not-found states explain the runtime boundary
+  and keep diagnostic data behind disclosure rather than occupying every frame.
+
+### Resize, focus, keyboard, and scroll contract
+
+- At wide widths the sidebar and conversation own independent virtualized
+  scrolling. At narrow widths the sidebar is explicitly opened/closed while the
+  conversation and composer remain continuously usable. No nested vertical page
+  scroll owns both lists.
+- The timeline scrollbar has a reserved, unobstructed right-edge hit target.
+  Hover surfaces and future change/output panes cannot appear over it.
+- `Tab` traversal follows sidebar actions, thread rows, header actions, timeline
+  lazy actions, composer controls, and send. `Escape` closes dialogs/menus and a
+  narrow sidebar. Enter sends only under the composer rule implemented for this
+  client; multiline entry remains available through a modified newline action.
+- A selected thread and keyboard focus are independent states. Hover, selected,
+  focus, busy, disabled, error, and unread/attention states must each have a
+  visible treatment and cannot rely on color alone.
+- Auto-scroll remains conditional on being near the newest item. Loading older
+  pages must preserve reading position. Switching threads must discard the old
+  active projection exactly as the controller already does.
+
+### Deliberate non-adoptions
+
+- Do not reproduce the shared ChatGPT Chat/Work navigation, account surfaces,
+  plugin browser, Automations, Skills, browser, sources panel, voice, composer
+  predictions, worktrees, commit/PR controls, or cloud features unless an
+  existing controller already provides their behavior. Visual fidelity is not
+  authorization for new product or protocol scope.
+- Do not copy official logos, icons, screenshots, CSS, packaged fonts, Electron
+  assets, strings obtained only by reverse engineering, or third-party code.
+- Do not convert the Flutter client to a WebView/Electron layout, hydrate full
+  history, prefetch command output, build every diff file, or keep inactive
+  thread widgets alive for animation continuity.
+- Do not hide meaningful missing behavior behind polished placeholder buttons.
+  Absent official features remain documented differences rather than inert UI.
+
+### Implementation and validation consequences
+
+The research directly changes the implementation plan:
+
+1. Introduce explicit light/dark palettes and a small theme extension/component
+   layer; remove `ColorScheme.fromSeed()` from the default product path.
+2. Replace the centered runtime card plus 360 px engineering panel split with a
+   full-window shell, compact project/thread sidebar, header, reading column, and
+   integrated composer.
+3. Decompose `codex_native_app.dart` into presentation modules while preserving
+   controller instances and lifecycle ownership at the app root.
+4. Add widget evidence for theme palettes, wide/narrow layout, thread
+   hover/selected/focus states, major empty/loading/error/connected states,
+   composer constraints, and overflow-free approval/diff/output layouts.
+5. Re-run the existing bounded timeline, history/output, product-control,
+   Remote-setup, analyzer, desktop build, and real stock app-server smoke gates.
+   Machine tests do not replace Human visual review at normal and high DPR on
+   Linux, Windows, and macOS.
+
 ## Large app-server output and the native Host boundary
 
 _Reviewed: 2026-11-05_

@@ -1161,3 +1161,79 @@ execution, realistic validation, or delivery.
   explicit acceptance gates for the fidelity phase.
 - Until the core loop closes, fidelity research may inform reusable foundations,
   but it must not displace the missing functional paths.
+
+---
+
+## ADR-027 — Make Desktop UI fidelity the immediate sole phase, then stop
+
+**Status:** Accepted
+
+**Date:** 2026-11-06
+
+### Decision
+
+Supersede only ADR-026's sequencing rule. Begin the Desktop UI fidelity phase
+immediately, before Android Remote write/full-conversation work, a headless Host,
+official relay migration, ChatGPT integration, Skills/MCP/Plugins expansion, or
+additional non-blocking release/infrastructure work. Preserve those existing
+implementations and open gates without advancing them during this phase.
+
+Use current first-party Codex Desktop evidence as the primary design source. The
+current product now lives in the unified ChatGPT Desktop application while
+retaining a distinct Codex view and history, so combine the current shared
+conversation/composer visual language with Codex-specific project, thread,
+approval, diff, output, and repository information architecture. Earlier
+standalone Codex screenshots are historical evidence, not a license to freeze a
+stale shell. Do not copy OpenAI branding, logos, proprietary assets, or imply
+official affiliation.
+
+Replace the seed-derived Material 3 visual baseline with a small project-owned,
+Codex-inspired light/dark token and component layer. Flutter Material widgets may
+remain underneath for semantics, focus, input, and platform integration, but
+`ColorScheme.fromSeed()` must not choose the final visual system. Do not build a
+general theme framework for hypothetical Material You, KDE, or Breeze themes in
+advance.
+
+Decompose the presentation layer into coherent modules while leaving the typed
+protocol, domain, controllers, runtime ownership, and transport boundaries
+unchanged. Fidelity work must retain thread/history pagination, virtualized
+lists, bounded active projections, lazy Markdown, lazy range-based output,
+per-file bounded diff rendering, inactive-thread eviction, streaming
+coalescing, and bounded image/file behavior.
+
+When the defined Desktop UI acceptance gates are satisfied, stop autonomous
+development and report the exact phase marker
+`DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH`. A later mobile or
+Remote architecture phase requires a new explicit instruction and fresh
+research; it must not inherit current mobile assumptions by default.
+
+### Why
+
+- The existing interface proves runtime, protocol, and memory behavior but its
+  centered runtime card, separated engineering panels, exposed working-directory
+  field, and Material-default controls do not form a product-grade desktop
+  workspace.
+- Current product evidence changed after ADR-026: Codex moved into the unified
+  desktop application while preserving its dedicated developer workflow. A
+  research-first implementation prevents both a generic AI dashboard and a
+  pixel copy of an obsolete standalone shell.
+- The current controllers already exercise thread, conversation, approval,
+  settings, diff, output, and Remote administration paths. Refactoring their
+  presentation now produces fidelity against real behavior rather than mocks.
+- An explicit stop condition prevents adjacent Remote, CI, packaging, and
+  infrastructure work from displacing Human evaluation of the desktop product.
+
+### Consequence
+
+- Android Remote, official relay, ChatGPT history/backend, headless Host,
+  ecosystem expansion, release engineering, signing, installer, and non-blocking
+  security-edge work are paused, not deleted or declared complete.
+- Light and dark modes, wide and narrow desktop layouts, focus/keyboard/scroll
+  behavior, and major empty/loading/error/disconnected/active states become
+  acceptance requirements.
+- Existing controller and bounded-memory tests must continue to pass. UI tests
+  must add token, density, responsive, hover/selection, and overflow evidence;
+  realistic desktop/app-server smoke remains distinct from Human visual review.
+- Material component types in the widget tree are acceptable implementation
+  details. Seed-derived appearance, oversized Material surfaces, and default
+  dashboard-style cards are not the product baseline.
