@@ -1,4 +1,5 @@
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
+import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/history_protocol.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,15 @@ void main() {
                     'type': 'userMessage',
                     'content': [
                       {'type': 'text', 'text': 'Do the task'},
+                      {
+                        'type': 'localImage',
+                        'path': '/workspace/screenshots/review.png',
+                      },
+                      {
+                        'type': 'mention',
+                        'name': 'conversation.dart',
+                        'path': 'lib/src/app/presentation/conversation.dart',
+                      },
                     ],
                   },
                   {
@@ -100,6 +110,12 @@ void main() {
     expect(requests.single.$2['itemsView'], 'summary');
     expect(requests.single.$2['sortDirection'], 'desc');
     expect(page.turns.single.items, hasLength(2));
+    expect(page.turns.single.items.first.attachments, hasLength(2));
+    expect(page.turns.single.items.first.attachments.first.label, 'review.png');
+    expect(
+      page.turns.single.items.first.attachments.last.label,
+      'conversation.dart',
+    );
     expect(page.turns.single.items.last.text, 'Command: flutter test');
     expect(page.turns.single.items.last.text, isNot(contains('secret')));
     expect(page.nextCursor, 'older');
@@ -153,6 +169,45 @@ void main() {
       ),
       throwsRangeError,
     );
+  });
+
+  test('normalizes pasted-file and IDE-context user message envelopes', () {
+    const rawPasted = '''
+# Files pasted by the user:
+
+## "# Codex Native (Unofficial) — Handoff Prompt
+Inspect the scroll behavior.": /home/user/.codex/.tmp/pasted-text/1775627585654-000.txt
+
+Pasted text contains the user's request.
+
+## My request:
+''';
+    final pasted = parseUserMessagePresentation(rawPasted);
+    expect(pasted.hadStructuredEnvelope, isTrue);
+    expect(pasted.attachments, hasLength(1));
+    expect(pasted.attachments.single.kind, UserAttachmentKind.pastedText);
+    expect(pasted.attachments.single.label, 'Pasted · 1775627585654-000.txt');
+    expect(
+      pasted.bodyText,
+      contains('Codex Native (Unofficial) — Handoff Prompt'),
+    );
+    expect(pasted.bodyText, isNot(contains('# Files pasted by the user:')));
+    expect(
+      pasted.bodyText,
+      isNot(contains("Pasted text contains the user's request.")),
+    );
+
+    final summary = ThreadSummary(
+      id: 'thread-pasted',
+      sessionId: 'session-pasted',
+      preview: rawPasted,
+      cwd: '/workspace',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      status: ThreadRuntimeStatus.notLoaded,
+      ephemeral: false,
+    );
+    expect(summary.displayTitle, 'Codex Native (Unofficial) — Handoff Prompt');
   });
 }
 

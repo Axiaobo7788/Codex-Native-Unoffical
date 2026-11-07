@@ -276,6 +276,69 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('desktop sidebar collapses cleanly and filters threads inline', (
+    tester,
+  ) async {
+    await _pumpSelectedApp(tester);
+
+    // Filter threads inline.
+    await tester.tap(find.byKey(const ValueKey('thread-search-toggle')));
+    await tester.pumpAndSettle();
+    final searchField = find.byKey(const ValueKey('thread-search-field'));
+    expect(searchField, findsOneWidget);
+
+    await tester.enterText(searchField, 'nonexistent');
+    await tester.pumpAndSettle();
+    expect(find.text('No matching threads.'), findsOneWidget);
+
+    await tester.enterText(searchField, 'Controls');
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('thread-row-controls-thread')),
+      findsOneWidget,
+    );
+
+    // Collapse and expand sidebar.
+    await tester.tap(find.byKey(const ValueKey('sidebar-collapse-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('thread-row-controls-thread')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('sidebar-expand-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('sidebar-expand-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('thread-row-controls-thread')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'renders pasted-file user message envelope as attachment chip without protocol scaffolding',
+    (tester) async {
+      await _pumpSelectedApp(tester);
+      await _send(
+        tester,
+        '# Files pasted by the user:\n\n'
+        '## "Fix scroll restoration bug": /tmp/pasted-text/1775-000.txt\n\n'
+        "Pasted text contains the user's request.\n\n"
+        '## My request:\n',
+      );
+
+      expect(find.text('Pasted · 1775-000.txt'), findsOneWidget);
+      expect(find.text('Fix scroll restoration bug'), findsOneWidget);
+      expect(find.textContaining('# Files pasted by the user:'), findsNothing);
+      expect(
+        find.textContaining("Pasted text contains the user's request."),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<_ProductRuntimeController> _pumpSelectedApp(WidgetTester tester) async {
