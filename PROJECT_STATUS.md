@@ -6,21 +6,22 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Operating mode
 
-**Mode: `HUMAN_REVIEW`**
+**Mode: `SELF_ITERATION`**
 
-- Current status marker: **`REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`**.
-- The authorized `SELF_ITERATION` phase (**Reverse Analysis Correction, Evidence
-  Revalidation & Architecture Reconciliation**) is now complete and recorded in
-  `ADR-032`.
-- All 9 documents in `docs/reverse/*.md`, `tools/reverse/inspect_chatgpt_desktop.py
-  --evidence-report`, `docs/DECISIONS.md` (`ADR-032`), `docs/RESEARCH.md`, and
-  `PROJECT_STATUS.md` have been recalibrated against a line-by-line audit of
-  current `HEAD` (`17f08f3`), the stock `codex app-server 0.167.0-alpha.3.2`
-  JSON schemas (`PUBLIC_SOURCE`), and the formal two-axis Evidence Confidence +
-  Support Classification model.
-- Do **not** begin Chat, Work, or Mobile feature implementation or Desktop debt
-  fixes until Human review of the recalibrated architecture map and `ADR-032`
-  authorizes the next phase.
+- Human review has accepted the recalibrated reverse-analysis direction in
+  `ADR-032` and explicitly authorized a new implementation phase:
+  **Desktop Shared Conversation Foundation Hardening**.
+- Continue autonomously through the five code-verified Desktop conversation
+  debts (`16.A`–`16.E`) in priority order. Do not stop after an individual
+  commit, test suite, or local milestone while machine-actionable work remains.
+- The implementation baseline audited during reverse-analysis recalibration was
+  `17f08f3`; the recalibration itself was committed at `99e6141`.
+- This authorization is intentionally narrow. Do **not** begin Native Chat,
+  Work, Mobile/Android Remote expansion, private `/backend-api/*` integration,
+  official-relay migration, or unrelated release/CI hardening during this phase.
+- When the five debts are implemented and the strongest practical machine and
+  agent real-use validation are complete, switch to `HUMAN_REVIEW` with the
+  marker `DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED`.
 
 ## Current phase
 
@@ -38,7 +39,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Prior reverse-analysis marker (`17f08f3`, preserved history): `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` — superseded by Human/code review on 2026-11-07 (`ADR-032`) to correct current-state drift, separate static/live/public evidence grades, recalibrate `STEPS_PROSE`/Work/Chat/Remote conclusions, and reconcile adoption recommendations with current `HEAD`.**
 
-**Current phase — Reverse Analysis Correction, Evidence Revalidation & Architecture Reconciliation (`ADR-032`): `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).**
+**Reverse-analysis checkpoint — `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` at `99e6141` was Human-reviewed and accepted as the research baseline.**
+
+**Current phase — Desktop Shared Conversation Foundation Hardening: `SELF_ITERATION`. Fix the five code-verified debts `16.A`–`16.E` before any Chat/Work/Mobile feature expansion.**
 
 ## Current repository state
 
@@ -2146,20 +2149,46 @@ specific evidence boundaries.
 
 ## Next action
 
-`REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
+`Mode: SELF_ITERATION` — **Desktop Shared Conversation Foundation Hardening**.
 
-- **MACHINE VERIFIED**:
-  - `python3 tools/reverse/inspect_chatgpt_desktop.py --evidence-report` (0 errors, reproducible cross-check of `/opt/codex-desktop/resources/app.asar`, `preload.js`, and stock `codex app-server 0.167.0-alpha.3.2` generated JSON schemas), all 9 recalibrated reverse-analysis deliverables (`docs/reverse/*.md`), and `ADR-032` (preserving `ADR-031` as history).
-  - `dart analyze` (0 issues) and all 188 Flutter tests (`flutter test` PASS).
-- **AGENT REAL-USE VERIFIED**:
-  - Live DevTools inspection (`http://127.0.0.1:9333`) of the official ChatGPT Desktop and side-by-side live Linux desktop walkthrough of `Codex Native` against `/opt/codex-desktop/resources/codex` (`live_v2_01_landing.png` .. `live_v2_04_worked_expanded.png`).
-- **HUMAN REVIEWED**:
-  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), and `17f08f3` was reviewed by Human/code review, triggering the `ADR-032` reverse-analysis recalibration and architecture reconciliation.
-- **NOT YET HUMAN VERIFIED**:
-  - Human review and sign-off on the recalibrated 9-document reverse-analysis suite (`docs/reverse/*.md`), the 8-row `PREVIOUS CLAIM -> NEW FINDING` ledger in `docs/reverse/ADOPTION_MATRIX.md`, the 5 concrete `HEAD` code-review debt items (`16.A`–`16.E`), and `ADR-032`.
-  - Interactive user sign-off on the `Codex Native` desktop build across daily-use workflows, dark-mode and high-DPR visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
+Authorized priorities:
 
-Wait for Human review and an explicit instruction before starting either the 5 concrete Desktop code-review debt fixes (`16.A`–`16.E`) or any next product phase.
+1. **Debt 16.B — >100-turn retention / viewport anchoring (P1)**:
+   add a regression that actually crosses the bounded window (for example
+   `100 -> 120` turns), then preserve the visible reading anchor when the
+   newest edge is evicted.
+2. **Debt 16.A — cross-thread scroll restoration (P1)**:
+   replace raw pixel-only restoration with a stable content anchor
+   `(anchorTurnId, anchorItemId, relativeOffset)`; use a bounded `3..5`
+   thread history/cache starting point rather than blindly copying the official
+   Electron 10-thread constant.
+3. **Debt 16.C — domain dependency DAG (P2)**:
+   remove the `history_models.dart <-> thread_models.dart` circular import by
+   extracting the shared sort/presentation model into a leaf domain module.
+4. **Debt 16.E — attachment/envelope precedence (P2)**:
+   structured `UserInput` attachments take precedence; textual envelope
+   parsing remains a compatibility fallback with deterministic deduplication,
+   bounded scanning/caps, and adversarial tests for user-authored envelope-like
+   Markdown.
+5. **Debt 16.D — custom viewport audit (P2)**:
+   do not rewrite `_RenderConversationViewport` preemptively. Add regression
+   coverage for short/long transitions, resize, hit testing, selection,
+   semantics/focus reveal, and only replace it if correctness evidence requires
+   that.
+
+After implementation, run the full relevant Dart/Flutter/Rust test suites,
+Linux debug build, and an agent real-use long-thread walkthrough covering:
+
+`open latest -> scroll older -> cross 100-turn boundary -> switch thread -> return -> streaming -> attachment presentation`.
+
+Then switch to:
+
+`DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED`
+(`Mode: HUMAN_REVIEW`).
+
+Do not begin Native Chat, Work, Mobile/Android Remote expansion, private
+`/backend-api/*` integration, official-relay migration, or unrelated
+release/CI work in this phase.
 
 ## Milestone outline
 
