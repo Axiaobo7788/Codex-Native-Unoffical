@@ -29,8 +29,12 @@ class HistoryController extends ChangeNotifier {
   String? _selectedTurnId;
   String? _errorMessage;
   var _loadingTurns = false;
+  var _loadingOlderTurns = false;
   var _loadingItems = false;
   var _windowShifted = false;
+  var _loadOlderVersion = 0;
+  var _evictionVersion = 0;
+  List<String> _lastEvictedItemIds = const [];
   var _generation = 0;
   var _disposed = false;
 
@@ -38,9 +42,13 @@ class HistoryController extends ChangeNotifier {
   String? get selectedTurnId => _selectedTurnId;
   String? get errorMessage => _errorMessage;
   bool get loadingTurns => _loadingTurns;
+  bool get loadingOlderTurns => _loadingOlderTurns;
   bool get loadingItems => _loadingItems;
   bool get canLoadOlderTurns => _turnCursor != null;
   bool get canReturnToNewest => _windowShifted;
+  int get loadOlderVersion => _loadOlderVersion;
+  int get evictionVersion => _evictionVersion;
+  List<String> get lastEvictedItemIds => _lastEvictedItemIds;
   bool get canLoadMoreItems =>
       _itemCursor != null && _selectedTurnItems.length < maxRetainedItems;
 
@@ -53,14 +61,17 @@ class HistoryController extends ChangeNotifier {
     return null;
   }
 
+  List<HistoryItem> _itemsForTurn(HistoryTurn turn) =>
+      turn.id == _selectedTurnId && _selectedTurnItems.isNotEmpty
+      ? _selectedTurnItems
+      : turn.items;
+
   bool isFirstNonUserItemInTurn(HistoryItem candidate) {
     final turn = turnForId(candidate.turnId);
     if (turn == null) {
       return false;
     }
-    final source = turn.id == _selectedTurnId && _selectedTurnItems.isNotEmpty
-        ? _selectedTurnItems
-        : turn.items;
+    final source = _itemsForTurn(turn);
     for (final item in source) {
       if (item.kind != HistoryItemKind.user) {
         return item.id == candidate.id;
@@ -83,9 +94,7 @@ class HistoryController extends ChangeNotifier {
     final items = <HistoryItem>[];
     final seen = <String>{};
     for (final turn in _turns.reversed) {
-      final source = turn.id == _selectedTurnId && _selectedTurnItems.isNotEmpty
-          ? _selectedTurnItems
-          : turn.items;
+      final source = _itemsForTurn(turn);
       for (final item in source) {
         if (seen.add(item.id)) {
           items.add(item);
@@ -109,8 +118,10 @@ class HistoryController extends ChangeNotifier {
     _selectedTurnId = null;
     _errorMessage = null;
     _loadingTurns = false;
+    _loadingOlderTurns = false;
     _loadingItems = false;
     _windowShifted = false;
+    _lastEvictedItemIds = const [];
     _notify();
     if (thread != null) {
       await refresh();
@@ -124,6 +135,7 @@ class HistoryController extends ChangeNotifier {
     }
     final generation = _generation;
     _loadingTurns = true;
+    _loadingOlderTurns = false;
     _errorMessage = null;
     _notify();
     try {
@@ -138,6 +150,7 @@ class HistoryController extends ChangeNotifier {
         ..addAll(page.turns.take(maxRetainedTurns));
       _turnCursor = page.nextCursor;
       _windowShifted = false;
+      _lastEvictedItemIds = const [];
       _selectedTurnItems.clear();
       _selectedTurnId = null;
       _itemCursor = null;
@@ -148,6 +161,7 @@ class HistoryController extends ChangeNotifier {
     } finally {
       if (_isCurrent(thread.id, generation)) {
         _loadingTurns = false;
+        _loadingOlderTurns = false;
         _notify();
       }
     }
@@ -164,6 +178,7 @@ class HistoryController extends ChangeNotifier {
     }
     final generation = _generation;
     _loadingTurns = true;
+    _loadingOlderTurns = true;
     _notify();
     try {
       final page = await gateway.listHistoryTurns(
@@ -179,10 +194,31 @@ class HistoryController extends ChangeNotifier {
       final known = _turns.map((turn) => turn.id).toSet();
       _turns.addAll(page.turns.where((turn) => known.add(turn.id)));
       if (_turns.length > maxRetainedTurns) {
-        _turns.removeRange(0, _turns.length - maxRetainedTurns);
+        final removeCount = _turns.length - maxRetainedTurns;
+        final evictedTurns = _turns.sublist(0, removeCount);
+        final evictedIds = <String>[];
+        final seenIds = <String>{};
+        for (final turn in evictedTurns.reversed) {
+          for (final item in _itemsForTurn(turn)) {
+            if (seenIds.add(item.id)) {
+              evictedIds.add(item.id);
+            }
+          }
+        }
+        _lastEvictedItemIds = List.unmodifiable(evictedIds);
+        if (evictedTurns.any((turn) => turn.id == _selectedTurnId)) {
+          _selectedTurnId = null;
+          _selectedTurnItems.clear();
+          _itemCursor = null;
+        }
+        _turns.removeRange(0, removeCount);
         _windowShifted = true;
+        _evictionVersion += 1;
+      } else {
+        _lastEvictedItemIds = const [];
       }
       _turnCursor = page.nextCursor;
+      _loadOlderVersion += 1;
     } catch (error) {
       if (_isCurrent(thread.id, generation)) {
         _errorMessage = error.toString();
@@ -190,6 +226,7 @@ class HistoryController extends ChangeNotifier {
     } finally {
       if (_isCurrent(thread.id, generation)) {
         _loadingTurns = false;
+        _loadingOlderTurns = false;
         _notify();
       }
     }

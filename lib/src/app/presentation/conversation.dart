@@ -29,16 +29,59 @@ class _ConversationPanel extends StatefulWidget {
   State<_ConversationPanel> createState() => _ConversationPanelState();
 }
 
+class _ThreadScrollBookmark {
+  const _ThreadScrollBookmark({
+    required this.scrollPixels,
+    this.anchorItemKey,
+    this.anchorTurnId,
+    this.anchorViewportTopDy,
+  });
+
+  final double scrollPixels;
+  final String? anchorItemKey;
+  final String? anchorTurnId;
+  final double? anchorViewportTopDy;
+}
+
+class _VisibleAnchor {
+  const _VisibleAnchor({
+    required this.itemKey,
+    required this.turnId,
+    required this.viewportTopDy,
+  });
+
+  final String itemKey;
+  final String turnId;
+  final double viewportTopDy;
+}
+
 class _ConversationPanelState extends State<_ConversationPanel> {
-  static const _maxRetainedThreadScrollOffsets = 32;
+  static const _maxRetainedThreadScrollBookmarks = 32;
+  static const _maxMeasuredItemHeights = 512;
+  static const _maxRestorePages = 10;
+  static const _maxRestoreAlignmentPasses = 32;
   static const _followThresholdPixels = 160.0;
 
   late final TextEditingController _composerController;
   late final FocusNode _composerFocusNode;
   late final ScrollController _scrollController;
-  final LinkedHashMap<String, double> _threadScrollOffsets = LinkedHashMap();
+  final LinkedHashMap<String, _ThreadScrollBookmark> _threadScrollBookmarks =
+      LinkedHashMap();
+  final LinkedHashMap<String, double> _measuredItemHeights = LinkedHashMap();
+  final Map<String, RenderBox> _mountedItemBoxes = <String, RenderBox>{};
+  final Map<String, String> _mountedItemTurnIds = <String, String>{};
+  List<String> _currentTimelineItemKeys = const [];
+  _VisibleAnchor? _preLoadOlderAnchor;
   String? _activeThreadId;
+  var _lastMeasuredItemWidth = 0.0;
   var _pendingThreadRestore = false;
+  var _restoreScheduled = false;
+  var _aligningScrollAnchor = false;
+  var _wasLoadingOlderTurns = false;
+  var _wasWindowShifted = false;
+  var _lastHandledLoadOlderVersion = 0;
+  var _restorePagesLoaded = 0;
+  var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
   var _showChanges = false;
 
@@ -66,6 +109,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..addListener(_handleScrollPositionChanged);
     _activeThreadId = widget.controller.thread?.id;
     _pendingThreadRestore = _activeThreadId != null;
+    _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
+    _wasWindowShifted = widget.historyController.canReturnToNewest;
+    _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
     widget.controller.addListener(_handleConversationChanged);
     widget.historyController.addListener(_handleHistoryChanged);
   }
@@ -196,13 +242,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Widget _timeline(ConversationController controller) {
     if (controller.thread == null) {
+      _currentTimelineItemKeys = const [];
       return _ConversationEmptyState(workingDirectory: _activeProjectDirectory);
     }
-    final liveIds = controller.entries.map((entry) => entry.id).toSet();
+    final showLiveEntries = !widget.historyController.canReturnToNewest;
+    final liveEntries = showLiveEntries
+        ? controller.entries
+        : const <ConversationEntry>[];
+    final liveIds = liveEntries.map((entry) => entry.id).toSet();
     final historyItems = widget.historyController.timelineItems
         .where((item) => !liveIds.contains(item.id))
         .toList(growable: false);
-    if (controller.entries.isEmpty && historyItems.isEmpty) {
+    if (liveEntries.isEmpty && historyItems.isEmpty) {
+      _currentTimelineItemKeys = const [];
       if (widget.historyController.loadingTurns) {
         return const _ConversationLoadingState();
       }
@@ -223,8 +275,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             widget.historyController.loadingItems
         ? 1
         : 0;
-    final messageCount = historyItems.length + controller.entries.length;
+    final messageCount = historyItems.length + liveEntries.length;
     final totalCount = messageCount + footerCount;
+    _currentTimelineItemKeys = [
+      for (var reverseIndex = 0; reverseIndex < messageCount; reverseIndex += 1)
+        () {
+          final chronologicalIndex = messageCount - 1 - reverseIndex;
+          if (chronologicalIndex < historyItems.length) {
+            return 'history-${historyItems[chronologicalIndex].id}';
+          }
+          final liveIndex = chronologicalIndex - historyItems.length;
+          return 'live-${liveEntries[liveIndex].id}';
+        }(),
+    ];
     return Stack(
       children: [
         Scrollbar(
@@ -234,6 +297,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             controller: _scrollController,
             padding: const EdgeInsets.fromLTRB(16, 28, 16, 36),
             itemCount: totalCount,
+            findChildIndexCallback: (key) {
+              if (key is ValueKey<String>) {
+                final value = key.value;
+                if (value == 'history-pagination-footer') {
+                  return footerCount > 0 ? messageCount : null;
+                }
+                if (value.startsWith('measured-')) {
+                  final itemKey = value.substring('measured-'.length);
+                  final index = _currentTimelineItemKeys.indexOf(itemKey);
+                  return index >= 0 ? index : null;
+                }
+              }
+              return null;
+            },
             itemBuilder: (context, reverseIndex) {
               if (reverseIndex == messageCount) {
                 return _HistoryFooter(
@@ -244,18 +321,34 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               final chronologicalIndex = messageCount - 1 - reverseIndex;
               if (chronologicalIndex < historyItems.length) {
                 final item = historyItems[chronologicalIndex];
-                return _HistoryEntryView(
-                  key: ValueKey('history-${item.id}'),
-                  item: item,
-                  historyController: widget.historyController,
-                  outputGateway: widget.outputGateway,
+                final itemKey = 'history-${item.id}';
+                return _MeasuredTimelineItem(
+                  key: ValueKey('measured-$itemKey'),
+                  itemKey: itemKey,
+                  turnId: item.turnId,
+                  onMeasured: _recordItemMeasurement,
+                  onUnmount: _unregisterItemBox,
+                  child: _HistoryEntryView(
+                    key: ValueKey(itemKey),
+                    item: item,
+                    historyController: widget.historyController,
+                    outputGateway: widget.outputGateway,
+                  ),
                 );
               }
               final liveIndex = chronologicalIndex - historyItems.length;
-              final entry = controller.entries[liveIndex];
-              return _ConversationEntryView(
-                key: ValueKey(entry.id),
-                entry: entry,
+              final entry = liveEntries[liveIndex];
+              final itemKey = 'live-${entry.id}';
+              return _MeasuredTimelineItem(
+                key: ValueKey('measured-$itemKey'),
+                itemKey: itemKey,
+                turnId: '',
+                onMeasured: _recordItemMeasurement,
+                onUnmount: _unregisterItemBox,
+                child: _ConversationEntryView(
+                  key: ValueKey(entry.id),
+                  entry: entry,
+                ),
               );
             },
           ),
@@ -462,7 +555,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
     }
     if (_activeThreadId case final threadId?) {
-      _threadScrollOffsets.remove(threadId);
+      _threadScrollBookmarks.remove(threadId);
+    }
+    if (widget.historyController.canReturnToNewest) {
+      unawaited(widget.historyController.refresh());
     }
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -486,33 +582,312 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
-  void _handleScrollPositionChanged() {
+  void _recordItemMeasurement(String itemKey, String turnId, RenderBox box) {
+    if (!box.hasSize) {
+      return;
+    }
+    if ((_lastMeasuredItemWidth - box.size.width).abs() > 0.5) {
+      _lastMeasuredItemWidth = box.size.width;
+      _measuredItemHeights.clear();
+    }
+    _mountedItemBoxes[itemKey] = box;
+    _mountedItemTurnIds[itemKey] = turnId;
+    _measuredItemHeights.remove(itemKey);
+    _measuredItemHeights[itemKey] = box.size.height;
+    while (_measuredItemHeights.length > _maxMeasuredItemHeights) {
+      _measuredItemHeights.remove(_measuredItemHeights.keys.first);
+    }
+  }
+
+  void _unregisterItemBox(String itemKey, RenderBox box) {
+    if (identical(_mountedItemBoxes[itemKey], box)) {
+      _mountedItemBoxes.remove(itemKey);
+      _mountedItemTurnIds.remove(itemKey);
+    }
+  }
+
+  RenderViewport? _findViewport(RenderObject object) {
+    RenderObject? current = object.parent;
+    while (current != null) {
+      if (current is RenderViewport) {
+        return current;
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  _VisibleAnchor? _captureVisibleAnchor() {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      return null;
+    }
+    _VisibleAnchor? bestNonNegative;
+    _VisibleAnchor? bestNegative;
+    for (final entry in _mountedItemBoxes.entries) {
+      final itemKey = entry.key;
+      final box = entry.value;
+      if (!box.attached || !box.hasSize) {
+        continue;
+      }
+      final viewport = _findViewport(box);
+      if (viewport == null || !viewport.hasSize) {
+        continue;
+      }
+      final topDy = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+      final bottomDy = topDy + box.size.height;
+      if (bottomDy <= 0 || topDy >= viewport.size.height) {
+        continue;
+      }
+      final turnId = _mountedItemTurnIds[itemKey] ?? '';
+      final candidate = _VisibleAnchor(
+        itemKey: itemKey,
+        turnId: turnId,
+        viewportTopDy: topDy,
+      );
+      if (topDy >= 0) {
+        if (bestNonNegative == null || topDy < bestNonNegative.viewportTopDy) {
+          bestNonNegative = candidate;
+        }
+      } else {
+        if (bestNegative == null || topDy > bestNegative.viewportTopDy) {
+          bestNegative = candidate;
+        }
+      }
+    }
+    return bestNonNegative ?? bestNegative;
+  }
+
+  double get _averageMeasuredItemHeight {
+    if (_measuredItemHeights.isEmpty) {
+      return 72.0;
+    }
+    var sum = 0.0;
+    for (final value in _measuredItemHeights.values) {
+      sum += value;
+    }
+    return (sum / _measuredItemHeights.length).clamp(24.0, 4096.0);
+  }
+
+  double _estimatePixelsForReverseIndex(
+    int targetReverseIndex,
+    double targetTopDy,
+  ) {
+    final position = _scrollController.position;
+    final viewportHeight = position.viewportDimension;
+    final avgHeight = _averageMeasuredItemHeight;
+    final targetKey =
+        targetReverseIndex >= 0 &&
+            targetReverseIndex < _currentTimelineItemKeys.length
+        ? _currentTimelineItemKeys[targetReverseIndex]
+        : null;
+    final targetEstHeight =
+        (targetKey != null ? _measuredItemHeights[targetKey] : null) ??
+        avgHeight;
+    final minTopDy = (24.0 - targetEstHeight).clamp(-double.infinity, 0.0);
+    final maxTopDy = (viewportHeight - 24.0).clamp(0.0, viewportHeight);
+    final clampedTargetTopDy = targetTopDy.clamp(minTopDy, maxTopDy);
+
+    int? nearestIndex;
+    RenderBox? nearestBox;
+    RenderViewport? nearestViewport;
+    for (final entry in _mountedItemBoxes.entries) {
+      final box = entry.value;
+      if (!box.attached || !box.hasSize) {
+        continue;
+      }
+      final viewport = _findViewport(box);
+      if (viewport == null || !viewport.hasSize) {
+        continue;
+      }
+      final idx = _currentTimelineItemKeys.indexOf(entry.key);
+      if (idx < 0) {
+        continue;
+      }
+      if (nearestIndex == null ||
+          (idx - targetReverseIndex).abs() <
+              (nearestIndex - targetReverseIndex).abs()) {
+        nearestIndex = idx;
+        nearestBox = box;
+        nearestViewport = viewport;
+      }
+    }
+
+    if (nearestIndex != null &&
+        nearestBox != null &&
+        nearestViewport != null) {
+      final nearestTopDy =
+          nearestBox.localToGlobal(Offset.zero, ancestor: nearestViewport).dy;
+      var estimatedTargetTopDy = nearestTopDy;
+      if (targetReverseIndex > nearestIndex) {
+        for (var i = nearestIndex + 1; i <= targetReverseIndex; i += 1) {
+          final key = _currentTimelineItemKeys[i];
+          estimatedTargetTopDy -= _measuredItemHeights[key] ?? avgHeight;
+        }
+      } else if (targetReverseIndex < nearestIndex) {
+        for (var i = targetReverseIndex + 1; i <= nearestIndex; i += 1) {
+          final key = _currentTimelineItemKeys[i];
+          estimatedTargetTopDy += _measuredItemHeights[key] ?? avgHeight;
+        }
+      }
+      final delta = estimatedTargetTopDy - clampedTargetTopDy;
+      return position.pixels + delta;
+    }
+
+    var cumulativeHeight = 36.0;
+    for (
+      var i = 0;
+      i <= targetReverseIndex && i < _currentTimelineItemKeys.length;
+      i += 1
+    ) {
+      final key = _currentTimelineItemKeys[i];
+      cumulativeHeight += _measuredItemHeights[key] ?? avgHeight;
+    }
+    return viewportHeight - clampedTargetTopDy - cumulativeHeight;
+  }
+
+  ({bool mounted, bool jumped}) _alignAnchorToViewportOffset(
+    String itemKey,
+    double targetTopDy,
+  ) {
     if (!_scrollController.hasClients) {
+      return (mounted: false, jumped: false);
+    }
+    final box = _mountedItemBoxes[itemKey];
+    if (box == null || !box.attached || !box.hasSize) {
+      return (mounted: false, jumped: false);
+    }
+    final viewport = _findViewport(box);
+    if (viewport == null || !viewport.hasSize) {
+      return (mounted: false, jumped: false);
+    }
+    final minTopDy = (24.0 - box.size.height).clamp(-double.infinity, 0.0);
+    final maxTopDy = (viewport.size.height - 24.0).clamp(
+      0.0,
+      viewport.size.height,
+    );
+    final clampedTargetTopDy = targetTopDy.clamp(minTopDy, maxTopDy);
+    final currentTopDy = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    final delta = currentTopDy - clampedTargetTopDy;
+    var jumped = false;
+    if (delta.abs() > 0.5) {
+      final position = _scrollController.position;
+      final targetPixels = (position.pixels + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if ((position.pixels - targetPixels).abs() > 0.5) {
+        _aligningScrollAnchor = true;
+        try {
+          _scrollController.jumpTo(targetPixels);
+          jumped = true;
+        } finally {
+          _aligningScrollAnchor = false;
+        }
+      }
+    }
+    return (mounted: true, jumped: jumped);
+  }
+
+  ({bool settled, bool jumped}) _restoreAnchorItemPosition({
+    required String itemKey,
+    required double targetTopDy,
+  }) {
+    final alignment = _alignAnchorToViewportOffset(itemKey, targetTopDy);
+    if (alignment.mounted) {
+      return (settled: !alignment.jumped, jumped: alignment.jumped);
+    }
+    if (!_scrollController.hasClients) {
+      return (settled: false, jumped: false);
+    }
+    final targetReverseIndex = _currentTimelineItemKeys.indexOf(itemKey);
+    if (targetReverseIndex < 0) {
+      return (settled: true, jumped: false);
+    }
+    final position = _scrollController.position;
+    final estimated = _estimatePixelsForReverseIndex(
+      targetReverseIndex,
+      targetTopDy,
+    ).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((position.pixels - estimated).abs() > 0.5) {
+      _aligningScrollAnchor = true;
+      try {
+        _scrollController.jumpTo(estimated);
+      } finally {
+        _aligningScrollAnchor = false;
+      }
+      return (settled: false, jumped: true);
+    }
+    return (settled: false, jumped: false);
+  }
+
+  void _captureThreadScrollBookmark(String threadId) {
+    if (!_scrollController.hasClients ||
+        SchedulerBinding.instance.schedulerPhase ==
+            SchedulerPhase.persistentCallbacks) {
       return;
     }
     final position = _scrollController.position;
     final distanceFromEnd = position.maxScrollExtent - position.pixels;
-    final shouldShowJump = distanceFromEnd > _followThresholdPixels;
-    if (shouldShowJump != _showJumpToLatest && mounted) {
-      setState(() => _showJumpToLatest = shouldShowJump);
-    }
-    if (_pendingThreadRestore) {
-      return;
-    }
-    if (_activeThreadId case final threadId?) {
-      if (distanceFromEnd > _followThresholdPixels) {
-        _rememberThreadScrollOffset(threadId, position.pixels);
-      } else if (distanceFromEnd <= 40) {
-        _threadScrollOffsets.remove(threadId);
-      }
+    final windowShifted = widget.historyController.canReturnToNewest;
+    if (distanceFromEnd > _followThresholdPixels || windowShifted) {
+      final anchor = _captureVisibleAnchor();
+      _rememberThreadScrollBookmark(
+        threadId,
+        _ThreadScrollBookmark(
+          scrollPixels: position.pixels,
+          anchorItemKey: anchor?.itemKey,
+          anchorTurnId: anchor?.turnId,
+          anchorViewportTopDy: anchor?.viewportTopDy,
+        ),
+      );
+    } else if (distanceFromEnd <= 40) {
+      _threadScrollBookmarks.remove(threadId);
     }
   }
 
-  void _rememberThreadScrollOffset(String threadId, double offset) {
-    _threadScrollOffsets.remove(threadId);
-    _threadScrollOffsets[threadId] = offset;
-    while (_threadScrollOffsets.length > _maxRetainedThreadScrollOffsets) {
-      _threadScrollOffsets.remove(_threadScrollOffsets.keys.first);
+  void _handleScrollPositionChanged() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      _runAfterFrame(_handleScrollPositionChanged);
+      return;
+    }
+    final position = _scrollController.position;
+    final distanceFromEnd = position.maxScrollExtent - position.pixels;
+    final windowShifted = widget.historyController.canReturnToNewest;
+    final shouldShowJump =
+        distanceFromEnd > _followThresholdPixels || windowShifted;
+    if (shouldShowJump != _showJumpToLatest && mounted) {
+      setState(() => _showJumpToLatest = shouldShowJump);
+    }
+    if (_pendingThreadRestore || _aligningScrollAnchor) {
+      return;
+    }
+    if (_activeThreadId case final threadId?) {
+      _captureThreadScrollBookmark(threadId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            _pendingThreadRestore ||
+            _aligningScrollAnchor ||
+            _activeThreadId != threadId) {
+          return;
+        }
+        _captureThreadScrollBookmark(threadId);
+      });
+    }
+  }
+
+  void _rememberThreadScrollBookmark(
+    String threadId,
+    _ThreadScrollBookmark bookmark,
+  ) {
+    _threadScrollBookmarks.remove(threadId);
+    _threadScrollBookmarks[threadId] = bookmark;
+    while (_threadScrollBookmarks.length > _maxRetainedThreadScrollBookmarks) {
+      _threadScrollBookmarks.remove(_threadScrollBookmarks.keys.first);
     }
   }
 
@@ -521,8 +896,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (nextThreadId == _activeThreadId) {
       return;
     }
+    if (!_pendingThreadRestore && _activeThreadId != null) {
+      _captureThreadScrollBookmark(_activeThreadId!);
+    }
     _activeThreadId = nextThreadId;
     _pendingThreadRestore = nextThreadId != null;
+    _restorePagesLoaded = 0;
+    _restoreAlignmentPasses = 0;
+    _preLoadOlderAnchor = null;
+    _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
+    _wasWindowShifted = widget.historyController.canReturnToNewest;
+    _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
     if (_showJumpToLatest && mounted) {
       setState(() => _showJumpToLatest = false);
     }
@@ -533,9 +917,95 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   void _handleHistoryChanged() {
     _syncActiveThreadSelection();
-    if (_pendingThreadRestore) {
-      _scheduleThreadScrollRestore();
+    if (_wasWindowShifted &&
+        !widget.historyController.canReturnToNewest &&
+        !widget.historyController.loadingTurns) {
+      _wasWindowShifted = false;
+      _wasLoadingOlderTurns = false;
+      _preLoadOlderAnchor = null;
+      _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+      if (_activeThreadId case final threadId?) {
+        _threadScrollBookmarks.remove(threadId);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) {
+          return;
+        }
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        _handleScrollPositionChanged();
+      });
+      return;
     }
+
+    if (_pendingThreadRestore) {
+      _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
+      _wasWindowShifted = widget.historyController.canReturnToNewest;
+      _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+      _scheduleThreadScrollRestore();
+      return;
+    }
+
+    if (widget.historyController.loadingOlderTurns && !_wasLoadingOlderTurns) {
+      _preLoadOlderAnchor = _captureVisibleAnchor();
+    }
+    _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
+
+    if (widget.historyController.loadOlderVersion !=
+        _lastHandledLoadOlderVersion) {
+      _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+      final anchor = _preLoadOlderAnchor ?? _captureVisibleAnchor();
+      _preLoadOlderAnchor = null;
+      if (anchor != null) {
+        _schedulePostLoadAnchorAlignment(anchor, pass: 0);
+      }
+    }
+    _wasWindowShifted = widget.historyController.canReturnToNewest;
+  }
+
+  void _runAfterFrame(VoidCallback callback) {
+    void register() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        callback();
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.postFrameCallbacks) {
+      scheduleMicrotask(() {
+        if (!mounted) {
+          return;
+        }
+        register();
+      });
+    } else {
+      register();
+    }
+  }
+
+  void _schedulePostLoadAnchorAlignment(
+    _VisibleAnchor anchor, {
+    required int pass,
+  }) {
+    _runAfterFrame(() {
+      if (!_scrollController.hasClients || _pendingThreadRestore) {
+        return;
+      }
+      final result = _restoreAnchorItemPosition(
+        itemKey: anchor.itemKey,
+        targetTopDy: anchor.viewportTopDy,
+      );
+      if (!result.settled &&
+          result.jumped &&
+          pass + 1 < _maxRestoreAlignmentPasses) {
+        _schedulePostLoadAnchorAlignment(anchor, pass: pass + 1);
+        return;
+      }
+      _handleScrollPositionChanged();
+    });
   }
 
   void _handleConversationChanged() {
@@ -557,12 +1027,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
       return;
     }
-    if (!_scrollController.hasClients) {
+    if (!_scrollController.hasClients ||
+        widget.historyController.canReturnToNewest) {
       return;
     }
     final distanceFromEnd =
         _scrollController.position.maxScrollExtent - _scrollController.offset;
     if (distanceFromEnd > _followThresholdPixels) {
+      final anchor = _captureVisibleAnchor();
+      if (anchor != null) {
+        _schedulePostLoadAnchorAlignment(anchor, pass: 0);
+      }
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -582,7 +1057,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _scheduleThreadScrollRestore() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (_restoreScheduled) {
+      return;
+    }
+    _restoreScheduled = true;
+    _runAfterFrame(() {
+      _restoreScheduled = false;
       if (!mounted || !_pendingThreadRestore) {
         return;
       }
@@ -591,9 +1071,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _pendingThreadRestore = false;
         return;
       }
+      if (widget.historyController.loadingTurns) {
+        return;
+      }
       if (!_scrollController.hasClients) {
-        if (!widget.historyController.loadingTurns &&
-            widget.historyController.timelineItems.isEmpty &&
+        if (widget.historyController.timelineItems.isEmpty &&
             widget.controller.entries.isEmpty) {
           _pendingThreadRestore = false;
           if (!widget.controller.busy) {
@@ -602,28 +1084,91 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
         return;
       }
+      final bookmark = _threadScrollBookmarks[threadId];
+      if (bookmark == null) {
+        final position = _scrollController.position;
+        if ((position.pixels - position.maxScrollExtent).abs() > 0.5) {
+          _scrollController.jumpTo(position.maxScrollExtent);
+        }
+        _pendingThreadRestore = false;
+        _handleScrollPositionChanged();
+        return;
+      }
+
+      final targetTurnId = bookmark.anchorTurnId;
+      if (targetTurnId != null &&
+          targetTurnId.isNotEmpty &&
+          widget.historyController.turnForId(targetTurnId) == null &&
+          widget.historyController.canLoadOlderTurns &&
+          _restorePagesLoaded < _maxRestorePages) {
+        _restorePagesLoaded += 1;
+        unawaited(widget.historyController.loadOlderTurns());
+        return;
+      }
+
+      final anchorKey = bookmark.anchorItemKey;
+      final anchorTopDy = bookmark.anchorViewportTopDy;
+      if (anchorKey != null &&
+          anchorTopDy != null &&
+          _currentTimelineItemKeys.contains(anchorKey)) {
+        if (_restoreAlignmentPasses == 0 &&
+            !_mountedItemBoxes.containsKey(anchorKey)) {
+          final position = _scrollController.position;
+          final initialTarget = bookmark.scrollPixels.clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          );
+          if ((position.pixels - initialTarget).abs() > 0.5) {
+            _aligningScrollAnchor = true;
+            try {
+              _scrollController.jumpTo(initialTarget);
+            } finally {
+              _aligningScrollAnchor = false;
+            }
+          }
+          _restoreAlignmentPasses += 1;
+          _scheduleThreadScrollRestore();
+          return;
+        }
+        final result = _restoreAnchorItemPosition(
+          itemKey: anchorKey,
+          targetTopDy: anchorTopDy,
+        );
+        if (!result.settled &&
+            result.jumped &&
+            _restoreAlignmentPasses < _maxRestoreAlignmentPasses) {
+          _restoreAlignmentPasses += 1;
+          _scheduleThreadScrollRestore();
+          return;
+        }
+        _pendingThreadRestore = false;
+        _handleScrollPositionChanged();
+        return;
+      }
+
       final position = _scrollController.position;
-      final savedOffset = _threadScrollOffsets[threadId];
-      final target = (savedOffset ?? position.maxScrollExtent).clamp(
+      final target = bookmark.scrollPixels.clamp(
         position.minScrollExtent,
         position.maxScrollExtent,
       );
       if ((position.pixels - target).abs() > 0.5) {
         _scrollController.jumpTo(target);
       }
-      if (!widget.historyController.loadingTurns) {
-        _pendingThreadRestore = false;
-        _handleScrollPositionChanged();
-      }
+      _pendingThreadRestore = false;
+      _handleScrollPositionChanged();
     });
   }
 
   void _jumpToLatest() {
     if (_activeThreadId case final threadId?) {
-      _threadScrollOffsets.remove(threadId);
+      _threadScrollBookmarks.remove(threadId);
     }
     if (_showJumpToLatest && mounted) {
       setState(() => _showJumpToLatest = false);
+    }
+    if (widget.historyController.canReturnToNewest) {
+      unawaited(widget.historyController.refresh());
+      return;
     }
     if (!_scrollController.hasClients) {
       return;
@@ -641,6 +1186,79 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         ),
       );
     }
+  }
+}
+
+class _MeasuredTimelineItem extends SingleChildRenderObjectWidget {
+  const _MeasuredTimelineItem({
+    super.key,
+    required this.itemKey,
+    required this.turnId,
+    required this.onMeasured,
+    required this.onUnmount,
+    required super.child,
+  });
+
+  final String itemKey;
+  final String turnId;
+  final void Function(String itemKey, String turnId, RenderBox box) onMeasured;
+  final void Function(String itemKey, RenderBox box) onUnmount;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasuredTimelineItem(
+        itemKey: itemKey,
+        turnId: turnId,
+        onMeasured: onMeasured,
+        onUnmount: onUnmount,
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderMeasuredTimelineItem renderObject,
+  ) {
+    renderObject
+      ..itemKey = itemKey
+      ..turnId = turnId
+      ..onMeasured = onMeasured
+      ..onUnmount = onUnmount;
+  }
+}
+
+class _RenderMeasuredTimelineItem extends RenderProxyBox {
+  _RenderMeasuredTimelineItem({
+    required String itemKey,
+    required this.turnId,
+    required this.onMeasured,
+    required this.onUnmount,
+  }) {
+    _itemKey = itemKey;
+  }
+
+  late String _itemKey;
+  String turnId;
+  void Function(String itemKey, String turnId, RenderBox box) onMeasured;
+  void Function(String itemKey, RenderBox box) onUnmount;
+
+  set itemKey(String value) {
+    if (_itemKey == value) {
+      return;
+    }
+    onUnmount(_itemKey, this);
+    _itemKey = value;
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    onMeasured(_itemKey, turnId, this);
+  }
+
+  @override
+  void detach() {
+    onUnmount(_itemKey, this);
+    super.detach();
   }
 }
 
@@ -691,11 +1309,13 @@ class _ConversationScrollView extends CustomScrollView {
     super.controller,
     required this.padding,
     required this.itemCount,
+    this.findChildIndexCallback,
     required this.itemBuilder,
   }) : super(anchor: 1.0, center: const ValueKey('conversation-bottom-anchor'));
 
   final EdgeInsets padding;
   final int itemCount;
+  final ChildIndexGetter? findChildIndexCallback;
   final IndexedWidgetBuilder itemBuilder;
 
   @override
@@ -704,6 +1324,7 @@ class _ConversationScrollView extends CustomScrollView {
       padding: padding,
       sliver: SliverList.builder(
         itemCount: itemCount,
+        findChildIndexCallback: findChildIndexCallback,
         itemBuilder: itemBuilder,
       ),
     ),
@@ -792,6 +1413,33 @@ class _RenderConversationViewport extends RenderViewport {
       final parentData = child.parentData! as SliverPhysicalParentData;
       parentData.paintOffset = parentData.paintOffset.translate(0, -shift);
     }
+  }
+
+  @override
+  RevealedOffset getOffsetToReveal(
+    RenderObject target,
+    double alignment, {
+    Rect? rect,
+    Axis? axis,
+  }) {
+    if (this.axis != Axis.vertical || center == null || !hasSize) {
+      return super.getOffsetToReveal(
+        target,
+        alignment,
+        rect: rect,
+        axis: axis,
+      );
+    }
+    rect ??= target.paintBounds;
+    final transform = target.getTransformTo(this);
+    final targetRect = MatrixUtils.transformRect(transform, rect);
+    final desiredTop = (size.height - targetRect.height) * alignment;
+    final delta = targetRect.top - desiredTop;
+    final targetOffset = offset.pixels + delta;
+    return RevealedOffset(
+      offset: targetOffset,
+      rect: targetRect.translate(0.0, -delta),
+    );
   }
 }
 

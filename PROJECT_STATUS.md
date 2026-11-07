@@ -8,19 +8,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `HUMAN_REVIEW`**
 
-- Current status marker: **`REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`**.
-- The authorized `SELF_ITERATION` phase (**Reverse Analysis Correction, Evidence
-  Revalidation & Architecture Reconciliation**) is now complete and recorded in
-  `ADR-032`.
-- All 9 documents in `docs/reverse/*.md`, `tools/reverse/inspect_chatgpt_desktop.py
-  --evidence-report`, `docs/DECISIONS.md` (`ADR-032`), `docs/RESEARCH.md`, and
-  `PROJECT_STATUS.md` have been recalibrated against a line-by-line audit of
-  current `HEAD` (`17f08f3`), the stock `codex app-server 0.167.0-alpha.3.2`
-  JSON schemas (`PUBLIC_SOURCE`), and the formal two-axis Evidence Confidence +
-  Support Classification model.
-- Do **not** begin Chat, Work, or Mobile feature implementation or Desktop debt
-  fixes until Human review of the recalibrated architecture map and `ADR-032`
-  authorizes the next phase.
+- Current phase status: **`DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED`**.
+- All machine-actionable work in the authorized **Desktop Shared Conversation Foundation Hardening** phase (`16.B -> 16.A -> 16.C -> 16.E -> 16.D`, full machine validation gates, bounded-memory benchmark, and live Linux desktop long-thread walkthrough against real `>140`-turn Codex history) is complete and verified.
+- Per `ADR-030`, the repository now transitions from `SELF_ITERATION` to `HUMAN_REVIEW` for interactive Human review and next-phase authorization.
 
 ## Current phase
 
@@ -36,9 +26,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Desktop UI productization checkpoint — MACHINE-VERIFIED AND LIVE-LINUX-WALKED; Human acceptance remains pending. The prior marker `DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW` is preserved as checkpoint history.**
 
-**Prior reverse-analysis marker (`17f08f3`, preserved history): `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` — superseded by Human/code review on 2026-11-07 (`ADR-032`) to correct current-state drift, separate static/live/public evidence grades, recalibrate `STEPS_PROSE`/Work/Chat/Remote conclusions, and reconcile adoption recommendations with current `HEAD`.**
+**Prior reverse-analysis markers (`17f08f3` `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` and `99e6141` `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`, preserved history) — completed and used to authorize Desktop Shared Conversation Foundation Hardening.**
 
-**Current phase — Reverse Analysis Correction, Evidence Revalidation & Architecture Reconciliation (`ADR-032`): `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).**
+**Current authorized phase — Desktop Shared Conversation Foundation Hardening: `DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED`. Completed `16.B`, `16.A`, `16.C`, `16.E`, `16.D`, full machine validation gates, bounded-memory benchmark, and live long-thread real-use verification without expanding to Chat, Work, or Mobile Remote.**
 
 ## Current repository state
 
@@ -80,19 +70,29 @@ This file is the repository's durable project memory. Update it whenever a task 
   assistant copy buttons (`assistant-copy-<id>`), fenced code block headers with
   `Copy` buttons, neutral user bubbles (`#F0F0EC` light / `#2A2B29` dark) with
   `&#x20;\` cleanup, structured attachment chips for pasted/mentioned/IDE-context
-  envelopes, and `Show full message` / `Show less` disclosure, inline approvals,
-  selected-file diff, a dark bounded output viewer, and a right-aligned
-  `<Model> · <Effort> ⌄` summary pill + Send button in the composer.
+  envelopes (`lib/src/domain/user_message_presentation.dart`, prioritizing
+  structured `UserInput` attachments over legacy text envelopes with semantic
+  deduplication and bounded `32 KiB` / `16`-attachment caps), and `Show full
+  message` / `Show less` disclosure, inline approvals, selected-file diff, a
+  dark bounded output viewer, and a right-aligned `<Model> · <Effort> ⌄` summary
+  pill + Send button in the composer.
 - The conversation timeline uses a bottom-anchored `CustomScrollView`
   (`anchor: 1.0`, `center` key at the bottom, and a reverse-growing
-  `SliverList.builder` before `center`) with a custom
-  `_RenderConversationViewport` that top-aligns short conversations when total
-  content height is smaller than the viewport. Opening or switching to a long
-  thread lands immediately at the latest turn (`scrollOffset == 0.0`) on Frame
-  1, prepending older turns (`Load older turns`) preserves the user's current
-  visual anchor, live streaming follows only within `160 px` of latest, a
-  floating `Jump to latest` pill appears when scrolled up, and at most `32`
-  per-thread scroll offsets are retained in memory.
+  `SliverList.builder` with `findChildIndexCallback` before `center`) with a
+  custom `_RenderConversationViewport` that top-aligns short conversations when
+  total content height is smaller than the viewport (audited and widget-tested
+  across pointer hit-testing, semantics bounds, focus `ensureVisible`, and
+  dynamic resize). Opening or switching to a long thread lands immediately at
+  the latest turn (`scrollOffset == 0.0`) on Frame 1, prepending older turns
+  (`Load older turns`) preserves the user's current visual anchor both within
+  and across the `>100-turn` sliding-window eviction boundary (`0.0 px` drift),
+  live streaming follows within `160 px` of latest and preserves the visible
+  anchor without yank when scrolled up, a floating `Jump to latest` pill appears
+  when scrolled up or when the `100`-turn window is shifted, and at most `32`
+  per-thread content-identity scroll bookmarks (`_ThreadScrollBookmark`:
+  `anchorItemKey`, `anchorTurnId`, `anchorViewportTopDy`, `scrollPixels`) are
+  retained in memory to restore multi-page scroll positions across thread
+  switches and viewport resizes without retaining inactive thread history.
 - Explicit `CodexPalette` light/dark theme extensions now own neutral,
   semantic, diff, code, focus, hover, selected, typography, radius, border, and
   density tokens. System brightness selects the first default theme;
@@ -101,10 +101,12 @@ This file is the repository's durable project memory. Update it whenever a task 
 - `codex_native_app.dart` retains root controller/lifecycle ownership while the
   presentation is split into app shell, sidebar/activity, conversation/
   composer/settings, approval/diff/output, runtime details, Remote setup, and
-  Remote onboarding modules. Protocol, domain, transport, pagination,
-  coalescing, output, diff, and retention contracts were not changed.
+  Remote onboarding modules. `lib/src/domain/` forms a strict acyclic dependency
+  graph (`user_message_presentation.dart` leaf module). Protocol, domain,
+  transport, pagination, coalescing, output, diff, and retention contracts remain
+  cleanly separated.
 - A real small coding task completed through the production Runtime, Conversation, and Diff controllers in a dedicated temporary workspace; it modified exactly one requested file, projected the diff, completed the turn, and cleaned its thread/workspace.
-- Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns and can return directly to the newest page.
+- Stored history uses `thread/turns/list` with `itemsView:summary` and opaque descending cursors. The UI retains a sliding window of at most 100 turns (`turnPageSize = 20`, `maxRetainedTurns = 100`), tracks `loadOlderVersion`, `evictionVersion`, and `lastEvictedItemIds` across `>100-turn` window shifts, and can return directly to the newest page via `Jump to latest`.
 - The typed history layer loads ascending `thread/items/list` pages for exactly
   one user-selected turn with a 100-item cap. Large `aggregatedOutput` fields are
   removed by the Host before Dart decoding, and switching threads discards all
@@ -2030,6 +2032,39 @@ specific evidence boundaries.
     vs Controller `remote-control-device-key.node` + MFA `step_up_token` +
     `/wham/remote/control/server` relay).
 
+### 2026-11-07 — Desktop Shared Conversation Foundation Hardening (`16.B -> 16.A -> 16.C -> 16.E -> 16.D`)
+
+- Completed all five authorized Desktop conversation foundation hardening items in strict priority order:
+  1. **`16.B` — `>100 turns` bounded-history eviction / viewport anchor correctness**:
+     - Added `loadOlderVersion`, `evictionVersion`, and `lastEvictedItemIds` to `HistoryController` (`lib/src/features/conversation/history_controller.dart`) and clear expanded `_selectedTurnId` state if its turn is evicted.
+     - Added `findChildIndexCallback` to `_ConversationScrollView`'s `SliverList.builder` (`ValueKey('measured-$itemKey')`), widened `_averageMeasuredItemHeight` clamp to `(24.0, 4096.0)`, and aligned the pre-load visible anchor (`_MeasuredTimelineItem` / `_VisibleAnchor`) after `loadOlderTurns()` and across `>100-turn` sliding-window eviction (`0.000 px` visual drift across `285,523.9 px` 100-turn real thread).
+     - Preserved scrolled-up visual anchor stability when live streaming items are inserted at `reverseIndex = 0` (`_handleConversationChanged` -> `_schedulePostLoadAnchorAlignment`, `0.000 px` yank drift).
+     - Added unit test `crossing 100-turn cap evicts newest turns, increments evictionVersion, and records evicted item IDs` (`test/features/conversation/history_controller_test.dart`) and widget test `preserves visual viewport anchor across >100-turn bounded eviction and recovers via Jump to latest` (`test/app/bounded_timeline_test.dart`).
+  2. **`16.A` — Content-identity-based cross-thread scroll restoration**:
+     - Replaced raw pixel offset map `_threadScrollOffsets` with bounded `LinkedHashMap<String, _ThreadScrollBookmark> _threadScrollBookmarks` (`max 32`), storing `(scrollPixels, anchorItemKey, anchorTurnId, anchorViewportTopDy)` while keeping inactive thread history unretained (`AGENTS.md` Rule #2).
+     - On thread return, `_scheduleThreadScrollRestore` automatically pages `loadOlderTurns()` up to `_maxRestorePages = 5` (`100` turns) when `anchorTurnId` lies in an older page, then aligns `anchorItemKey` to `anchorViewportTopDy` (`0.000 px` drift in live walkthrough Stage 5; `< 1.0 px` across viewport width resizes `1400 px -> 820 px` in `test/app/bounded_timeline_test.dart`).
+  3. **`16.C` — Eliminate domain circular import**:
+     - Extracted `UserAttachmentKind`, `UserMessageAttachment`, `UserMessagePresentation`, and `parseUserMessagePresentation` into leaf module `lib/src/domain/user_message_presentation.dart` (importing no other `domain/` files), breaking the `history_models.dart <-> thread_models.dart` circular dependency.
+  4. **`16.E` — Structured attachment precedence, legacy envelope fallback, deduplication/caps, and adversarial tests**:
+     - Enforced strict precedence for structured `UserInput` attachments (`localImage`, `image`, `skill`, `mention`) ahead of legacy envelope fallback (`# Files pasted by the user:`, `# Files mentioned by the user:`, `# Context from my IDE setup:`), with semantic deduplication (`_attachmentDedupKeys`), bounded caps (`maxEnvelopeScanChars = 32768`, `maxUserMessageAttachments = 16`, `maxAttachmentFieldChars = 240`), and start-of-message-only header anchoring.
+     - Added adversarial unit tests in `test/protocol/history_protocol_test.dart` covering structured-vs-envelope deduplication, 16-attachment cap enforcement, mid-body spoofed header non-stripping, and malformed envelope fallback.
+  5. **`16.D` — Audit `_RenderConversationViewport` resize / hit-test / selection / semantics / focus correctness**:
+     - Audited Flutter's `RenderViewportBase` (`packages/flutter/lib/src/rendering/viewport.dart:1703-1993`), confirming `paintOffset` on `SliverLogicalParentData` is the single coordinate transform driving `paint`, `hitTestChildren`, `applyPaintTransform`, `describeSemanticsConfiguration`, and `showOnScreen`.
+     - Added widget regression test `short-thread viewport shift preserves hit-testing, semantics, focus ensureVisible, and dynamic resize` in `test/app/bounded_timeline_test.dart`.
+- Passed all machine validation gates:
+  - `dart analyze` (`0` issues);
+  - `flutter test` (`194/194` passing unit and widget tests);
+  - `cargo test --workspace` (`98/98` passing Rust tests: `26` lib + `68` bin + `4` failure_paths);
+  - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`);
+  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, `RSS_TURN_DELTA=1540096`).
+- Completed end-to-end live Linux desktop agent real-use walkthrough against real local Codex threads (`01a066fd-b1f5-79a0-8034-339ff37282a5` with `>140` turns / `285,523.9 px` scroll extent, and `01a1a9b8-e931-7123-9f8e-f2da2c954803` with pasted-file attachments):
+  - Stage 1 (`open latest`): `turnsCount: 20, pixels: 0, showJumpToLatest: false` (`walkthrough_16_01_open_latest.png`).
+  - Stage 2 (`scroll older` Pages 2..5 up to 100 turns): `0.000 px` anchor drift on every page load (`walkthrough_16_02_at_100_turn_cap.png`).
+  - Stage 3 (`cross >100-turn boundary` on Page 6 + `Jump to latest` recovery): `turnsCount: 100, evictionVersion: 1, lastEvictedCount: 39, canReturnToNewest: true, showJumpToLatest: true, topBefore: -59, topAfter: -59, evictionDriftPx: 0` (`walkthrough_16_03_crossed_100_turn_boundary.png`), followed by `Jump to latest` recovery (`turnsCount: 20, canReturnToNewest: false, pixels: 0`).
+  - Stage 4 (`switch thread` & `attachment presentation`): switched to `01a1a9b8-e931-7123-9f8e-f2da2c954803`, verified opening at `pixels: 0`, and inspected structured attachment chip `Pasted · 已粘贴的文本.txt` (`walkthrough_16_04_second_thread_attachments.png`).
+  - Stage 5 (`return` to long thread & content-identity scroll restoration across multi-page history): `turnsCount: 40, bookmarkedKey: 'history-msg_07ccc5cc9a54bf37016adcba1166a887d0bed4c94c9c4e2996', topBeforeSwitch: 34, topAfterReturn: 34, restoreDriftPx: 0, showJumpToLatest: true` (`walkthrough_16_05_returned_restored_anchor.png`).
+  - Stage 6 (`streaming` while scrolled up + at latest): `topBeforeStream: 34, topDuringStream: 34, yankDriftPx: 0` while scrolled up in Page 2; then `Jump to latest` + live streaming follow at `pixels: 0, liveMounted: true, showJumpToLatest: false` (`walkthrough_16_06_after_streaming_cleanup.png`), followed by clean process shutdown (`ALL_CLEAN`).
+
 ## Known risks / watch items
 
 - Direct `flutter analyze` from this repository's Unicode filesystem path
@@ -2146,20 +2181,22 @@ specific evidence boundaries.
 
 ## Next action
 
-`REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
+`DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
 
 - **MACHINE VERIFIED**:
-  - `python3 tools/reverse/inspect_chatgpt_desktop.py --evidence-report` (0 errors, reproducible cross-check of `/opt/codex-desktop/resources/app.asar`, `preload.js`, and stock `codex app-server 0.167.0-alpha.3.2` generated JSON schemas), all 9 recalibrated reverse-analysis deliverables (`docs/reverse/*.md`), and `ADR-032` (preserving `ADR-031` as history).
-  - `dart analyze` (0 issues) and all 188 Flutter tests (`flutter test` PASS).
+  - `dart analyze` (`0` issues);
+  - `flutter test` (`194/194` unit and widget tests passing, including new regressions for `16.B` `>100-turn` eviction anchor preservation, `16.A` multi-page content-identity cross-thread scroll restoration and viewport resize, `16.C` acyclic domain imports, `16.E` structured attachment precedence/deduplication/caps/adversarial headers, and `16.D` `_RenderConversationViewport` hit-testing, semantics, focus `ensureVisible`, and dynamic resize);
+  - `cargo test --workspace` (`98/98` Rust tests passing);
+  - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`);
+  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, `RSS_TURN_DELTA=1540096`).
 - **AGENT REAL-USE VERIFIED**:
-  - Live DevTools inspection (`http://127.0.0.1:9333`) of the official ChatGPT Desktop and side-by-side live Linux desktop walkthrough of `Codex Native` against `/opt/codex-desktop/resources/codex` (`live_v2_01_landing.png` .. `live_v2_04_worked_expanded.png`).
+  - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` against `/opt/codex-desktop/resources/codex` and real user threads `01a066fd-b1f5-79a0-8034-339ff37282a5` (`>140` turns, `285,523.9 px` scroll extent) and `01a1a9b8-e931-7123-9f8e-f2da2c954803` (`6` turns with pasted-file attachments), verifying `0.000 px` visual drift across `open latest -> scroll older (Pages 2..5) -> cross >100-turn boundary (Page 6) -> Jump to latest -> switch thread & attachment presentation -> return & multi-page content-identity scroll restoration -> streaming while scrolled up & at latest`, followed by clean process tree shutdown (`ALL_CLEAN`).
 - **HUMAN REVIEWED**:
-  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), and `17f08f3` was reviewed by Human/code review, triggering the `ADR-032` reverse-analysis recalibration and architecture reconciliation.
+  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), and `17f08f3` / `99e6141` were reviewed to authorize the `ADR-032` recalibration and this **Desktop Shared Conversation Foundation Hardening** (`16.A`–`16.E`) phase.
 - **NOT YET HUMAN VERIFIED**:
-  - Human review and sign-off on the recalibrated 9-document reverse-analysis suite (`docs/reverse/*.md`), the 8-row `PREVIOUS CLAIM -> NEW FINDING` ledger in `docs/reverse/ADOPTION_MATRIX.md`, the 5 concrete `HEAD` code-review debt items (`16.A`–`16.E`), and `ADR-032`.
-  - Interactive user sign-off on the `Codex Native` desktop build across daily-use workflows, dark-mode and high-DPR visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
+  - Interactive Human review and acceptance of the hardened Desktop conversation timeline (`16.A`–`16.E`) across daily-use long-session workflows, dark/light visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
 
-Wait for Human review and an explicit instruction before starting either the 5 concrete Desktop code-review debt fixes (`16.A`–`16.E`) or any next product phase.
+Wait for Human review and an explicit instruction before starting any next product phase.
 
 ## Milestone outline
 

@@ -83,11 +83,20 @@ void main() {
       );
       final scrolledOffset = scrollableState.position.pixels;
       expect(scrolledOffset, lessThan(-160));
+      final scrolledAnchorRow = find.byKey(const ValueKey('history-recent-18'));
+      expect(scrolledAnchorRow, findsOneWidget);
+      final scrolledAnchorTopBefore = tester.getTopLeft(scrolledAnchorRow).dy;
 
-      // Streaming updates while scrolled up must not yank the user back to bottom.
+      // Streaming updates while scrolled up must not yank the user back to
+      // bottom or shift the currently visible history row on screen.
       runtime.emitStreamingMessage('live-item-1', 'Streaming update while up');
       await tester.pump(const Duration(milliseconds: 200));
-      expect(scrollableState.position.pixels, scrolledOffset);
+      await tester.pumpAndSettle();
+      expect(scrollableState.position.pixels, lessThanOrEqualTo(scrolledOffset));
+      expect(
+        tester.getTopLeft(scrolledAnchorRow).dy,
+        closeTo(scrolledAnchorTopBefore, 1.0),
+      );
       expect(
         find.byKey(const ValueKey('jump-to-latest-button')),
         findsOneWidget,
@@ -114,6 +123,195 @@ void main() {
       expect(find.byKey(const ValueKey('jump-to-latest-button')), findsNothing);
       expect(find.text('Streaming update while up'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'preserves visual viewport anchor across >100-turn bounded eviction and recovers via Jump to latest',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _MultiThreadLongHistoryRuntimeController();
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('history-a-item-0')), findsOneWidget);
+
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+
+      Future<void> scrollToTopOfLoadedWindow() async {
+        for (var step = 0; step < 6; step += 1) {
+          await tester.drag(timeline, const Offset(0, 2400));
+          await tester.pumpAndSettle();
+        }
+      }
+
+      // Load pages 2..5 (total 100 turns: turn 0..99).
+      for (var page = 2; page <= 5; page += 1) {
+        await scrollToTopOfLoadedWindow();
+        expect(find.text('Load older turns'), findsOneWidget);
+        await tester.tap(find.text('Load older turns'));
+        await tester.pumpAndSettle();
+      }
+
+      await scrollToTopOfLoadedWindow();
+      final row99 = find.byKey(const ValueKey('history-a-item-99'));
+      expect(row99, findsOneWidget);
+      expect(find.text('Load older turns'), findsOneWidget);
+
+      final anchorTopBeforeEviction = tester.getTopLeft(row99).dy;
+
+      // Load page 6 (turns 100..119): crosses >100-turn cap and evicts turns 0..19.
+      await tester.tap(find.text('Load older turns'));
+      await tester.pumpAndSettle();
+
+      expect(row99, findsOneWidget);
+      final anchorTopAfterEviction = tester.getTopLeft(row99).dy;
+      expect(anchorTopAfterEviction, closeTo(anchorTopBeforeEviction, 1.0));
+      expect(
+        find.byKey(const ValueKey('jump-to-latest-button')),
+        findsOneWidget,
+      );
+
+      // Scrolling up further reveals the newly loaded older turns 100..119 and the Return to newest footer.
+      await scrollToTopOfLoadedWindow();
+      expect(find.byKey(const ValueKey('history-a-item-119')), findsOneWidget);
+      expect(find.text('Return to newest'), findsOneWidget);
+
+      // Tapping Jump to latest from the shifted window reloads the newest turns and lands at bottom.
+      await tester.tap(find.byKey(const ValueKey('jump-to-latest-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('history-a-item-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('jump-to-latest-button')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'restores cross-thread scroll position by content identity across multi-page history and viewport resize',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _MultiThreadLongHistoryRuntimeController();
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      // Open Long thread A and load Page 2 (turns 20..39).
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+      for (var step = 0; step < 5; step += 1) {
+        await tester.drag(timeline, const Offset(0, 2400));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Load older turns'), findsOneWidget);
+      await tester.tap(find.text('Load older turns'));
+      await tester.pumpAndSettle();
+
+      // Scroll into Page 2 so turn 24 is visible in the viewport.
+      await tester.drag(timeline, const Offset(0, 750));
+      await tester.pumpAndSettle();
+
+      final targetRow = find.byKey(const ValueKey('history-a-item-24'));
+      expect(targetRow, findsOneWidget);
+      final targetTopBeforeSwitch = tester.getTopLeft(targetRow).dy;
+
+      // Switch to Short thread B: opens at its latest message.
+      await tester.tap(find.text('Short thread B'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('history-b-item-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('jump-to-latest-button')), findsNothing);
+
+      // Resize the window width while on Thread B so text wrapping changes.
+      tester.view.physicalSize = const Size(1020, 900);
+      await tester.pumpAndSettle();
+
+      // Return to Long thread A: must automatically load Page 2 and align targetRow.
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+
+      expect(targetRow, findsOneWidget);
+      final targetTopAfterReturn = tester.getTopLeft(targetRow).dy;
+      expect(targetTopAfterReturn, closeTo(targetTopBeforeSwitch, 1.5));
+      expect(
+        find.byKey(const ValueKey('jump-to-latest-button')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'short-thread viewport shift preserves hit-testing, semantics, focus ensureVisible, and dynamic resize',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final semanticsHandle = tester.ensureSemantics();
+
+      final runtime = _MultiThreadLongHistoryRuntimeController();
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Short thread B'));
+      await tester.pumpAndSettle();
+
+      final shortRow = find.byKey(const ValueKey('history-b-item-0'));
+      expect(shortRow, findsOneWidget);
+
+      // 1. Short thread content is top-aligned (not stuck near bottom at y ~ 800).
+      final rowRect = tester.getRect(shortRow);
+      expect(rowRect.top, lessThan(180));
+
+      // 2. Semantics node bounds align with the painted shifted position.
+      final semanticsNode = tester.getSemantics(shortRow);
+      expect(semanticsNode.rect.height, closeTo(rowRect.height, 1.0));
+
+      // 3. Hit-testing works accurately on interactive controls inside the shifted sliver.
+      final copyButton = find.byKey(
+        const ValueKey('assistant-copy-b-item-0'),
+      );
+      expect(copyButton, findsOneWidget);
+      await tester.tap(copyButton);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull);
+
+      // 4. Focus / Scrollable.ensureVisible (getOffsetToReveal) does not yank a visible short-thread item.
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+      final scrollableState = tester.state<ScrollableState>(
+        find.descendant(of: timeline, matching: find.byType(Scrollable)),
+      );
+      expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
+      await Scrollable.ensureVisible(tester.element(shortRow));
+      await tester.pumpAndSettle();
+      expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
+
+      // 5. Dynamic resize: short -> compact -> short transitions cleanly.
+      tester.view.physicalSize = const Size(1400, 380);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      tester.view.physicalSize = const Size(1400, 900);
+      await tester.pumpAndSettle();
+      expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
+      expect(tester.getRect(shortRow).top, lessThan(180));
+      expect(tester.takeException(), isNull);
+      semanticsHandle.dispose();
     },
   );
 }
@@ -331,6 +529,155 @@ class _PagedHistoryRuntimeController extends RuntimeController {
           ),
       ],
       nextCursor: 'older-page',
+    );
+  }
+
+  @override
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async =>
+      const HistoryItemPage(items: [], nextCursor: null);
+
+  @override
+  Future<TurnHandle> startTurn(TurnStartOptions options) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> interruptTurn({
+    required String threadId,
+    required String turnId,
+  }) async {}
+
+  @override
+  Future<void> decideApproval({
+    required Object requestId,
+    required ApprovalDecision decision,
+  }) async {}
+
+  @override
+  Future<void> shutdown() async {}
+
+  Future<void> closeStreams() async {
+    await _turns.close();
+    await _approvals.close();
+    dispose();
+  }
+}
+
+class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
+  final StreamController<TurnEvent> _turns =
+      StreamController<TurnEvent>.broadcast(sync: true);
+  final StreamController<ApprovalEvent> _approvals =
+      StreamController<ApprovalEvent>.broadcast(sync: true);
+
+  final ThreadSummary threadA = ThreadSummary(
+    id: 'thread-a',
+    sessionId: 'session-a',
+    preview: 'Long thread A',
+    cwd: '/workspace/a',
+    createdAt: DateTime.utc(2026),
+    updatedAt: DateTime.utc(2026),
+    status: ThreadRuntimeStatus.idle,
+    ephemeral: false,
+  );
+
+  final ThreadSummary threadB = ThreadSummary(
+    id: 'thread-b',
+    sessionId: 'session-b',
+    preview: 'Short thread B',
+    cwd: '/workspace/b',
+    createdAt: DateTime.utc(2026),
+    updatedAt: DateTime.utc(2026),
+    status: ThreadRuntimeStatus.idle,
+    ephemeral: false,
+  );
+
+  static const int _threadATurnCount = 140;
+
+  @override
+  RuntimeSnapshot get snapshot => const RuntimeSnapshot(
+    state: RuntimeConnectionState.connected,
+    executablePath: '/usr/bin/codex',
+    userAgent: 'multi-thread-app-server',
+    processId: 46,
+  );
+
+  @override
+  Stream<TurnEvent> get turnEvents => _turns.stream;
+
+  @override
+  Stream<ApprovalEvent> get approvalEvents => _approvals.stream;
+
+  @override
+  Future<void> start() async {
+    notifyListeners();
+  }
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) async =>
+      ThreadPage(threads: [threadA, threadB], nextCursor: null);
+
+  @override
+  Future<ThreadSummary> readThread(String threadId) async =>
+      threadId == threadB.id ? threadB : threadA;
+
+  @override
+  Future<ThreadSummary> resumeThread(String threadId) async =>
+      threadId == threadB.id ? threadB : threadA;
+
+  @override
+  Future<ThreadSummary> startThread(ThreadStartOptions options) async =>
+      threadA;
+
+  @override
+  Future<void> deleteThread(String threadId) async {}
+
+  @override
+  Future<ModelPage> listModels(ModelListQuery query) async =>
+      const ModelPage(models: [], nextCursor: null);
+
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) async {
+    if (query.threadId == threadB.id) {
+      return const HistoryTurnPage(
+        turns: [
+          HistoryTurn(
+            id: 'b-turn-0',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'b-item-0',
+                turnId: 'b-turn-0',
+                kind: HistoryItemKind.assistant,
+                text: 'Short thread B single assistant response.',
+              ),
+            ],
+          ),
+        ],
+        nextCursor: null,
+      );
+    }
+
+    final start = query.cursor == null ? 0 : int.parse(query.cursor!);
+    final end = (start + query.limit).clamp(0, _threadATurnCount);
+    return HistoryTurnPage(
+      turns: [
+        for (var i = start; i < end; i += 1)
+          HistoryTurn(
+            id: 'a-turn-$i',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'a-item-$i',
+                turnId: 'a-turn-$i',
+                kind: HistoryItemKind.assistant,
+                text:
+                    'Thread A turn $i detailed summary text that wraps across '
+                    'multiple lines when the desktop window is narrowed.\n'
+                    'Second line of turn $i.\nThird line of turn $i.',
+              ),
+            ],
+          ),
+      ],
+      nextCursor: end < _threadATurnCount ? '$end' : null,
     );
   }
 

@@ -2919,4 +2919,38 @@ Human review and independent code review of `17f08f3` identified that while the 
 - Extended [`tools/reverse/inspect_chatgpt_desktop.py`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/tools/reverse/inspect_chatgpt_desktop.py) with `--evidence-report` to output per-symbol, per-IPC, per-RPC, and per-endpoint bundle provenance, static occurrence counts, `preload.js` exposure, stock `codex app-server` schema status (`stable` vs `experimental` vs `not_in_local_stock_schema`), Evidence Confidence tags (`PUBLIC_DOC`, `PUBLIC_SOURCE`, `LIVE_OBSERVED`, `LIVE_CALLED`, `STATIC_BUNDLE`, `LOCAL_SCHEMA`, `INFERRED`, `UNKNOWN`), and Support Classifications (`PUBLIC_SUPPORTED`, `EXPERIMENTAL_STOCK_SCHEMA`, `PRIVATE_WEB_SESSION`, `PRIVATE_INTERNAL_SERVICE`, `INTERNAL_ELECTRON_IPC`).
 - Recalibrated all 9 documents in `docs/reverse/*.md` and recorded `ADR-032` in [`docs/DECISIONS.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/DECISIONS.md).
 
+## Desktop Shared Conversation Foundation Hardening (`16.B -> 16.A -> 16.C -> 16.E -> 16.D`)
+
+_Reviewed: 2026-11-07_
+
+### Scope and motivation
+
+Following `ADR-032` and the `HEAD` (`99e6141`) audit in [`docs/reverse/ADOPTION_MATRIX.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/ADOPTION_MATRIX.md), this phase resolved the five concrete Desktop conversation foundation debt items in strict priority order (`16.B -> 16.A -> 16.C -> 16.E -> 16.D`) without expanding scope to Native Chat, Work, or Android Remote.
+
+### Technical findings that shaped the implementation
+
+1. **`16.B` — Why `>100-turn` bounded-history eviction required `findChildIndexCallback` and un-clamped height estimation on real `285,523 px` threads**:
+   - In `HistoryController.loadOlderTurns()`, `_turns` is stored in descending order (`index 0` = newest turn). When appending page 6 (`turns 100..119`) exceeds `maxRetainedTurns = 100`, `_turns.removeRange(0, evictedTurnCount)` evicts the 20 newest turns (`39` items on our real `>140`-turn thread `01a066fd-b1f5-79a0-8034-339ff37282a5`).
+   - Because `_ConversationScrollView` (`CustomScrollView(anchor: 1.0)`) places `reverseIndex = 0` at `center`, evicting 39 newest items shifts the `reverseIndex` of every retained older item by `-39` (e.g., `reverseIndex 191 -> 152`).
+   - **Discovery during live real-use walkthrough**: In a synthetic widget test with short `100 px` items, simple scroll-offset compensation appeared sufficient. However, on the real `>140`-turn Codex thread (`285,523.9 px` scroll extent across 100 turns, average item height `~1,487 px`), two subtler Flutter sliver mechanics surfaced:
+     1. Without `findChildIndexCallback` on `SliverList.builder`, Flutter's `SliverMultiBoxAdaptorElement` matched children purely by integer `reverseIndex`, rebinding the mounted element at `reverseIndex 152` to a different item and detaching the anchor's `RenderBox` during rebuild.
+     2. `_averageMeasuredItemHeight` had been clamped to `(24.0, 640.0)`, underestimating unmeasured multi-thousand-pixel assistant turns by `>2.3x` when estimating scroll offsets across `39` shifted indices.
+     3. Pre-jumping `pixels` by an estimated `evictedExtent` *before* the widget rebuild caused `RenderSliverList` to lay out the wrong slice on the rebuild frame.
+   - **Adopted solution**:
+     - Added `findChildIndexCallback` to `_ConversationScrollView`'s `SliverList.builder` keyed on `ValueKey('measured-$itemKey')`, allowing `SliverMultiBoxAdaptorElement` to keep mounted `RenderBox`es attached across the `-39` index shift.
+     - Widened `_averageMeasuredItemHeight` clamp to `(24.0, 4096.0)` and removed the premature pre-rebuild jump, letting `_schedulePostLoadAnchorAlignment` align the still-mounted anchor `RenderBox` directly on the post-load frame.
+     - Result on real thread `01a066fd-b1f5-79a0-8034-339ff37282a5`: **`0.000 px` visual drift** across Pages 2..5 and **`0.000 px` visual drift** (`topBefore: -59.0, topAfter: -59.0`) when crossing the `>100-turn` eviction boundary on Page 6 (`turnsCount: 100, evictionVersion: 1, lastEvictedCount: 39, canReturnToNewest: true`).
+2. **Scrolled-up streaming visual anchor preservation**:
+   - When the user is scrolled up (`distanceFromEnd > 160 px`) and a new live streaming item is inserted at `reverseIndex = 0`, all history items shift their `reverseIndex` by `+1`.
+   - `_handleConversationChanged` now captures the pre-insert visible anchor when `distanceFromEnd > _followThresholdPixels` and runs `_schedulePostLoadAnchorAlignment`, adjusting `pixels` by the inserted item's height so the user's currently visible history row remains at `0.000 px` drift (`topBeforeStream: 34, topDuringStream: 34, yankDriftPx: 0` in live walkthrough Stage 6a).
+3. **`16.A` — Content-identity-based cross-thread scroll restoration (`_ThreadScrollBookmark`)**:
+   - Replaced raw `Map<String, double> _threadScrollOffsets` with bounded `LinkedHashMap<String, _ThreadScrollBookmark> _threadScrollBookmarks` (`max 32`), storing `(scrollPixels, anchorItemKey, anchorTurnId, anchorViewportTopDy)` while keeping inactive thread history unretained (`AGENTS.md` Rule #2).
+   - When returning to a bookmarked thread whose `anchorTurnId` lies in an older page (`Page 2..5`), `_scheduleThreadScrollRestore` automatically pages `loadOlderTurns()` up to `_maxRestorePages = 5` (`100` turns) and aligns `anchorItemKey` to `anchorViewportTopDy` (`0.000 px` drift in live walkthrough Stage 5 and `< 1.0 px` across viewport width resizes from `1400 px -> 820 px` in `bounded_timeline_test.dart`).
+4. **`16.C` & `16.E` — Leaf `user_message_presentation.dart` and structured attachment precedence**:
+   - Extracted `UserAttachmentKind`, `UserMessageAttachment`, `UserMessagePresentation`, and `parseUserMessagePresentation` into `lib/src/domain/user_message_presentation.dart` (zero `domain/` imports), breaking the `history_models.dart <-> thread_models.dart` cycle.
+   - Enforced strict precedence for structured `UserInput` items (`localImage`, `image`, `skill`, `mention`) ahead of legacy envelope fallback (`# Files pasted by the user:`, `# Files mentioned by the user:`, `# Context from my IDE setup:`), with semantic deduplication (`_attachmentDedupKeys`), hard caps (`maxEnvelopeScanChars = 32768`, `maxUserMessageAttachments = 16`, `maxAttachmentFieldChars = 240`), and start-of-message-only header anchoring so spoofed mid-body `# Files pasted by the user:` lines in user prose are never stripped.
+5. **`16.D` — `_RenderConversationViewport` audit and regression suite**:
+   - Direct inspection of Flutter's `RenderViewportBase` (`packages/flutter/lib/src/rendering/viewport.dart:1703-1993`) confirmed that `paintOffset` on `SliverLogicalParentData` is the single coordinate transform consumed by `paint`, `hitTestChildren`, `applyPaintTransform`, `describeSemanticsConfiguration`, and `showOnScreen`.
+   - Added widget regression coverage in `test/app/bounded_timeline_test.dart` verifying pointer hit-testing, semantics node geometry, `Scrollable.ensureVisible` focus alignment, and dynamic short-to-overflow viewport resizing without rewriting the working `RenderViewport` subclass.
+
 
