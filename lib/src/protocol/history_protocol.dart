@@ -115,6 +115,7 @@ final class HistoryProtocolAdapter {
         turnId: turnId,
         kind: HistoryItemKind.user,
         text: _bounded(_userText(value['content'])),
+        attachments: _userAttachments(value['content']),
       ),
       'agentMessage' => HistoryItem(
         id: id,
@@ -171,6 +172,69 @@ final class HistoryProtocolAdapter {
         .map((part) => part['text'])
         .whereType<String>()
         .join('\n');
+  }
+
+  static List<UserAttachment> _userAttachments(Object? content) {
+    if (content is! List<Object?>) {
+      return const [];
+    }
+    final attachments = <UserAttachment>[];
+    for (final part in content.whereType<Map<String, Object?>>()) {
+      if (attachments.length >= 16) {
+        break;
+      }
+      final type = part['type'];
+      switch (type) {
+        case 'localImage':
+          final path = _optionalString(part, 'path') ?? '';
+          attachments.add(
+            UserAttachment(
+              kind: UserAttachmentKind.image,
+              label: path.isEmpty ? 'Local image' : _shortPath(path),
+              path: path.isEmpty ? null : path,
+            ),
+          );
+        case 'image':
+          final url = _optionalString(part, 'url');
+          attachments.add(
+            UserAttachment(
+              kind: UserAttachmentKind.image,
+              label: 'Image',
+              path: url,
+            ),
+          );
+        case 'skill':
+          final name = _optionalString(part, 'name') ?? 'Skill';
+          final path = _optionalString(part, 'path');
+          attachments.add(
+            UserAttachment(
+              kind: UserAttachmentKind.skill,
+              label: name,
+              path: path,
+            ),
+          );
+        case 'mention':
+          final name = _optionalString(part, 'name') ?? 'Mention';
+          final path = _optionalString(part, 'path');
+          attachments.add(
+            UserAttachment(
+              kind: UserAttachmentKind.mention,
+              label: name,
+              path: path,
+            ),
+          );
+      }
+    }
+    return attachments.isEmpty ? const [] : List.unmodifiable(attachments);
+  }
+
+  static String _shortPath(String path) {
+    final normalized = path.trim().replaceAll(r'\', '/');
+    final segments = normalized
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
+    return segments.isEmpty ? normalized : segments.last;
   }
 
   String _bounded(String value) => value.length <= maxTextCharacters

@@ -1,4 +1,5 @@
 import 'execution_settings.dart';
+import 'history_models.dart';
 
 enum ThreadRuntimeStatus { notLoaded, idle, active, systemError, unknown }
 
@@ -38,9 +39,13 @@ class ThreadSummary {
     if (explicitName != null && explicitName.isNotEmpty) {
       return explicitName;
     }
-    final firstLine = preview.trim().split('\n').firstOrNull;
-    if (firstLine != null && firstLine.isNotEmpty) {
-      return firstLine;
+    final normalized = parseUserMessagePresentation(preview).bodyText.trim();
+    final source = normalized.isEmpty ? preview.trim() : normalized;
+    for (final rawLine in source.split('\n')) {
+      final cleaned = rawLine.trim().replaceFirst(RegExp(r'^#+\s*'), '').trim();
+      if (cleaned.isNotEmpty) {
+        return cleaned;
+      }
     }
     return 'Untitled thread';
   }

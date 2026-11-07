@@ -248,82 +248,59 @@ class _HistoryEntryView extends StatelessWidget {
       HistoryItemKind.reasoning ||
       HistoryItemKind.unknown => ConversationEntryKind.activity,
     };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ConversationEntryView(
-          entry: ConversationEntry(
-            id: item.id,
-            kind: kind,
-            text: item.text,
-            completed: true,
-            status: item.status,
-          ),
-        ),
-        if (item.isCommand) _commandOutputAction(context),
-      ],
+    return _ConversationEntryView(
+      entry: ConversationEntry(
+        id: item.id,
+        kind: kind,
+        text: item.text,
+        completed: true,
+        status: item.status,
+      ),
+      attachments: item.attachments,
+      isReasoning: item.kind == HistoryItemKind.reasoning,
+      isCommand: item.isCommand,
+      trailingAction: item.isCommand ? _commandOutputAction(context) : null,
     );
   }
 
-  Widget _commandOutputAction(BuildContext context) {
+  Widget? _commandOutputAction(BuildContext context) {
     final output = item.output;
     if (output != null && output.available && output.reference != null) {
-      return Padding(
-        padding: const EdgeInsets.only(
-          left: ThemeTokens.space2,
-          bottom: ThemeTokens.space3,
+      return TextButton.icon(
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (context) =>
+              _OutputDialog(gateway: outputGateway, descriptor: output),
         ),
-        child: TextButton.icon(
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (context) =>
-                _OutputDialog(gateway: outputGateway, descriptor: output),
-          ),
-          icon: const Icon(Icons.terminal, size: 16),
-          label: Text(
-            output.truncated ? 'View stored output (truncated)' : 'View output',
-          ),
+        icon: const Icon(Icons.terminal, size: 15),
+        label: Text(
+          output.truncated ? 'View stored output (truncated)' : 'View output',
         ),
       );
     }
     if (output != null && !output.available) {
-      return const Padding(
-        padding: EdgeInsets.only(
-          left: ThemeTokens.space2,
-          bottom: ThemeTokens.space3,
-        ),
-        child: Text('Output unavailable'),
+      return Text(
+        'Output unavailable',
+        style: Theme.of(context).textTheme.labelSmall,
       );
     }
     if (item.outputDeferred) {
-      return Padding(
-        padding: const EdgeInsets.only(
-          left: ThemeTokens.space2,
-          bottom: ThemeTokens.space3,
-        ),
-        child: TextButton(
-          onPressed: historyController.loadingItems
-              ? null
-              : () => historyController.loadDeferredOutput(item),
-          child: const Text('Fetch output safely'),
-        ),
+      return TextButton(
+        onPressed: historyController.loadingItems
+            ? null
+            : () => historyController.loadDeferredOutput(item),
+        child: const Text('Fetch output safely'),
       );
     }
     if (historyController.selectedTurnId != item.turnId) {
-      return Padding(
-        padding: const EdgeInsets.only(
-          left: ThemeTokens.space2,
-          bottom: ThemeTokens.space3,
-        ),
-        child: TextButton(
-          onPressed: historyController.loadingItems
-              ? null
-              : () => historyController.loadTurnItems(item.turnId),
-          child: const Text('Load turn details'),
-        ),
+      return TextButton(
+        onPressed: historyController.loadingItems
+            ? null
+            : () => historyController.loadTurnItems(item.turnId),
+        child: const Text('Load turn details'),
       );
     }
-    return const SizedBox.shrink();
+    return null;
   }
 }
 

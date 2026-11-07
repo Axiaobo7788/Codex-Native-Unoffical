@@ -70,9 +70,9 @@ final class CodexPalette extends ThemeExtension<CodexPalette> {
     codeSurface: Color(0xFF171817),
     diffAdded: Color(0xFFE5F5E9),
     diffRemoved: Color(0xFFFBE8E7),
-    userBubble: Color(0xFF252523),
-    onUserBubble: Color(0xFFF8F8F6),
-    shadow: Color(0x24000000),
+    userBubble: Color(0xFFF0F0EC),
+    onUserBubble: Color(0xFF20201E),
+    shadow: Color(0x20000000),
   );
 
   static const dark = CodexPalette(
@@ -95,8 +95,8 @@ final class CodexPalette extends ThemeExtension<CodexPalette> {
     codeSurface: Color(0xFF101110),
     diffAdded: Color(0xFF203829),
     diffRemoved: Color(0xFF422827),
-    userBubble: Color(0xFFE9E9E5),
-    onUserBubble: Color(0xFF20201E),
+    userBubble: Color(0xFF2A2B29),
+    onUserBubble: Color(0xFFEDEDE9),
     shadow: Color(0x66000000),
   );
 

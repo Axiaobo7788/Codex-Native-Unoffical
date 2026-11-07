@@ -668,35 +668,61 @@ class _RenderConversationViewport extends RenderViewport {
 }
 
 class _ConversationEntryView extends StatelessWidget {
-  const _ConversationEntryView({super.key, required this.entry});
+  const _ConversationEntryView({
+    super.key,
+    required this.entry,
+    this.attachments = const [],
+    this.isReasoning = false,
+    this.isCommand = false,
+    this.trailingAction,
+  });
 
   final ConversationEntry entry;
+  final List<UserAttachment> attachments;
+  final bool isReasoning;
+  final bool isCommand;
+  final Widget? trailingAction;
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final isUser = entry.kind == ConversationEntryKind.user;
+    if (entry.kind == ConversationEntryKind.user) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: _UserMessageEntryView(entry: entry, attachments: attachments),
+        ),
+      );
+    }
+
+    if (isReasoning ||
+        (entry.kind == ConversationEntryKind.activity &&
+            entry.text == 'Reasoning')) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: _ReasoningEntryView(entry: entry),
+        ),
+      );
+    }
+
     final isActivity = entry.kind == ConversationEntryKind.activity;
     final isError = entry.kind == ConversationEntryKind.error;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: Align(
-          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          alignment: Alignment.centerLeft,
           child: Container(
-            constraints: BoxConstraints(
-              maxWidth: isUser ? 560 : double.infinity,
+            width: double.infinity,
+            margin: EdgeInsets.only(
+              bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
             ),
-            margin: const EdgeInsets.only(bottom: ThemeTokens.space4),
-            padding: isUser
-                ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10)
-                : isActivity || isError
-                ? const EdgeInsets.symmetric(horizontal: 11, vertical: 9)
+            padding: isActivity || isError
+                ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
                 : EdgeInsets.zero,
             decoration: BoxDecoration(
-              color: isUser
-                  ? palette.userBubble
-                  : isError
+              color: isError
                   ? palette.danger.withValues(alpha: 0.08)
                   : isActivity
                   ? palette.surfaceRaised
@@ -708,26 +734,22 @@ class _ConversationEntryView extends StatelessWidget {
                           : palette.border,
                     )
                   : null,
-              borderRadius: BorderRadius.circular(
-                isUser ? ThemeTokens.radiusMedium : ThemeTokens.radiusSmall,
-              ),
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
             ),
             child: isActivity
-                ? _ActivityContent(entry: entry)
+                ? _ActivityContent(
+                    entry: entry,
+                    isCommand: isCommand,
+                    trailingAction: trailingAction,
+                  )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (entry.status case final status?) ...[
+                      if (_nonNominalStatus(entry.status)
+                          case final statusLabel?) ...[
                         Text(
-                          status,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: isUser
-                                    ? palette.onUserBubble.withValues(
-                                        alpha: 0.72,
-                                      )
-                                    : null,
-                              ),
+                          statusLabel,
+                          style: Theme.of(context).textTheme.labelSmall,
                         ),
                         const SizedBox(height: ThemeTokens.space1),
                       ],
@@ -741,9 +763,7 @@ class _ConversationEntryView extends StatelessWidget {
                           entry.text,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
-                                color: isUser
-                                    ? palette.onUserBubble
-                                    : isError
+                                color: isError
                                     ? palette.danger
                                     : palette.textPrimary,
                               ),
@@ -768,42 +788,340 @@ class _ConversationEntryView extends StatelessWidget {
   }
 }
 
-class _ActivityContent extends StatelessWidget {
-  const _ActivityContent({required this.entry});
+String? _nonNominalStatus(String? status) {
+  if (status == null) {
+    return null;
+  }
+  final normalized = status.trim();
+  if (normalized.isEmpty ||
+      normalized == 'completed' ||
+      normalized == 'inProgress') {
+    return null;
+  }
+  return normalized;
+}
+
+class _UserMessageEntryView extends StatefulWidget {
+  const _UserMessageEntryView({required this.entry, required this.attachments});
+
+  final ConversationEntry entry;
+  final List<UserAttachment> attachments;
+
+  @override
+  State<_UserMessageEntryView> createState() => _UserMessageEntryViewState();
+}
+
+class _UserMessageEntryViewState extends State<_UserMessageEntryView> {
+  static const _collapseLineLimit = 12;
+  static const _collapseCharLimit = 680;
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final presentation = parseUserMessagePresentation(
+      widget.entry.text,
+      attachments: widget.attachments,
+    );
+    final fullText = presentation.bodyText.trim();
+    final lines = fullText.isEmpty ? const <String>[] : fullText.split('\n');
+    final isCollapsible =
+        lines.length > _collapseLineLimit ||
+        fullText.length > _collapseCharLimit;
+    final displayedText = !isCollapsible || _expanded
+        ? fullText
+        : _collapsedPreview(fullText, lines);
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (presentation.attachments.isNotEmpty) ...[
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (
+                      var index = 0;
+                      index < presentation.attachments.length;
+                      index += 1
+                    )
+                      _UserAttachmentChip(
+                        key: ValueKey(
+                          'user-attachment-${widget.entry.id}-$index',
+                        ),
+                        attachment: presentation.attachments[index],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (displayedText.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.userBubble,
+                    border: Border.all(color: palette.border),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SelectableText(
+                        displayedText,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: palette.onUserBubble,
+                          height: 1.48,
+                        ),
+                      ),
+                      if (isCollapsible) ...[
+                        const SizedBox(height: 6),
+                        InkWell(
+                          key: ValueKey('user-expand-${widget.entry.id}'),
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => setState(() => _expanded = !_expanded),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 2,
+                              horizontal: 4,
+                            ),
+                            child: Text(
+                              _expanded ? 'Show less' : 'Show full message',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: palette.accent),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _collapsedPreview(String fullText, List<String> lines) {
+    final limitedLines = lines.take(10).join('\n');
+    final clipped = limitedLines.length > _collapseCharLimit
+        ? limitedLines.substring(0, _collapseCharLimit)
+        : limitedLines;
+    return '${clipped.trimRight()}…';
+  }
+}
+
+class _UserAttachmentChip extends StatelessWidget {
+  const _UserAttachmentChip({super.key, required this.attachment});
+
+  final UserAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final icon = switch (attachment.kind) {
+      UserAttachmentKind.pastedText => Icons.notes_rounded,
+      UserAttachmentKind.file => Icons.description_outlined,
+      UserAttachmentKind.ideContext => Icons.code_rounded,
+      UserAttachmentKind.image => Icons.image_outlined,
+      UserAttachmentKind.skill => Icons.auto_fix_high_outlined,
+      UserAttachmentKind.mention => Icons.alternate_email_rounded,
+    };
+    final hasDetails =
+        (attachment.path != null && attachment.path!.isNotEmpty) ||
+        (attachment.preview != null && attachment.preview!.isNotEmpty);
+    return Material(
+      color: palette.surfaceRaised,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: palette.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: hasDetails ? () => _showAttachmentDetails(context) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: palette.textSecondary),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Text(
+                  attachment.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium
+                      ?.copyWith(color: palette.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAttachmentDetails(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(attachment.label),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 420),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (attachment.path case final path?) ...[
+                  Text('Source', style: Theme.of(context).textTheme.labelSmall),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    path,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(fontFamily: 'monospace'),
+                  ),
+                ],
+                if (attachment.preview case final preview?) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Preview',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    preview,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReasoningEntryView extends StatelessWidget {
+  const _ReasoningEntryView({required this.entry});
 
   final ConversationEntry entry;
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(
-            entry.completed
-                ? Icons.check_circle_outline_rounded
-                : Icons.hourglass_top_rounded,
-            size: 16,
-            color: entry.completed ? palette.success : palette.accent,
+    final raw = entry.text.trim();
+    final summary = raw.isEmpty || raw == 'Reasoning'
+        ? (entry.completed ? 'Thought' : 'Thinking…')
+        : raw;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ThemeTokens.space2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.psychology_outlined,
+              size: 15,
+              color: palette.textMuted,
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(
+              summary,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: palette.textSecondary, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityContent extends StatelessWidget {
+  const _ActivityContent({
+    required this.entry,
+    this.isCommand = false,
+    this.trailingAction,
+  });
+
+  final ConversationEntry entry;
+  final bool isCommand;
+  final Widget? trailingAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final effectiveCommand = isCommand || entry.text.startsWith('Command: ');
+    final isFileChange = entry.text.startsWith('File changes:');
+    final statusBadge = _nonNominalStatus(entry.status);
+    final icon = !entry.completed
+        ? Icons.hourglass_top_rounded
+        : effectiveCommand
+        ? Icons.terminal_rounded
+        : isFileChange
+        ? Icons.difference_outlined
+        : Icons.check_circle_outline_rounded;
+    final iconColor = !entry.completed
+        ? palette.accent
+        : statusBadge != null
+        ? palette.warning
+        : effectiveCommand || isFileChange
+        ? palette.textSecondary
+        : palette.success;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 15, color: iconColor),
         const SizedBox(width: ThemeTokens.space2),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (entry.status case final status?)
-                Text(status, style: Theme.of(context).textTheme.labelSmall),
+              if (statusBadge != null)
+                Text(
+                  statusBadge,
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: palette.warning),
+                ),
               SelectableText(
                 entry.text,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.textPrimary),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: palette.textPrimary,
+                  fontFamily: effectiveCommand ? 'monospace' : null,
+                  fontSize: effectiveCommand ? 12.2 : null,
+                ),
               ),
             ],
           ),
         ),
+        if (trailingAction case final action?) ...[
+          const SizedBox(width: ThemeTokens.space2),
+          action,
+        ],
       ],
     );
   }
