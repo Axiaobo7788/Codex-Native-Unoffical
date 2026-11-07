@@ -40,21 +40,22 @@ class RuntimeStatusScreen extends StatelessWidget {
     return switch (controller.snapshot.state) {
       RuntimeConnectionState.connected => LayoutBuilder(
         builder: (context, constraints) {
-          final sidebar = _ThreadPanel(
-            controller: threadController,
-            settingsController: settingsController,
-            runtimeController: controller,
-            defaultWorkingDirectory: defaultWorkingDirectory,
-          );
-          final conversation = _ConversationPanel(
-            controller: conversationController,
-            historyController: historyController,
-            approvalController: approvalController,
-            settingsController: settingsController,
-            diffController: diffController,
-            outputGateway: controller,
-          );
           if (constraints.maxWidth < _desktopSplitMinimumWidth) {
+            final sidebar = _ThreadPanel(
+              controller: threadController,
+              settingsController: settingsController,
+              runtimeController: controller,
+              defaultWorkingDirectory: defaultWorkingDirectory,
+            );
+            final conversation = _ConversationPanel(
+              controller: conversationController,
+              threadController: threadController,
+              historyController: historyController,
+              approvalController: approvalController,
+              settingsController: settingsController,
+              diffController: diffController,
+              outputGateway: controller,
+            );
             return _CompactWorkspace(
               key: const ValueKey('compact-workspace'),
               threadController: threadController,
@@ -62,14 +63,16 @@ class RuntimeStatusScreen extends StatelessWidget {
               conversation: conversation,
             );
           }
-          return Row(
+          return _DesktopSplitWorkspace(
             key: const ValueKey('desktop-split-workspace'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(width: _desktopSidebarWidth, child: sidebar),
-              VerticalDivider(width: 1, color: ThemeTokens.of(context).border),
-              Expanded(child: conversation),
-            ],
+            runtimeController: controller,
+            threadController: threadController,
+            conversationController: conversationController,
+            historyController: historyController,
+            approvalController: approvalController,
+            settingsController: settingsController,
+            diffController: diffController,
+            defaultWorkingDirectory: defaultWorkingDirectory,
           );
         },
       ),
@@ -91,6 +94,84 @@ class RuntimeStatusScreen extends StatelessWidget {
       ),
       _ => _RuntimeConnectionScreen(controller: controller),
     };
+  }
+}
+
+class _DesktopSplitWorkspace extends StatefulWidget {
+  const _DesktopSplitWorkspace({
+    super.key,
+    required this.runtimeController,
+    required this.threadController,
+    required this.conversationController,
+    required this.historyController,
+    required this.approvalController,
+    required this.settingsController,
+    required this.diffController,
+    required this.defaultWorkingDirectory,
+  });
+
+  final RuntimeController runtimeController;
+  final ThreadListController threadController;
+  final ConversationController conversationController;
+  final HistoryController historyController;
+  final ApprovalController approvalController;
+  final ExecutionSettingsController settingsController;
+  final DiffController diffController;
+  final String defaultWorkingDirectory;
+
+  @override
+  State<_DesktopSplitWorkspace> createState() => _DesktopSplitWorkspaceState();
+}
+
+class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
+  var _sidebarCollapsed = false;
+
+  void _toggleSidebar() {
+    setState(() => _sidebarCollapsed = !_sidebarCollapsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyB, control: true):
+            _toggleSidebar,
+        const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
+            _toggleSidebar,
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!_sidebarCollapsed) ...[
+            SizedBox(
+              width: _desktopSidebarWidth,
+              child: _ThreadPanel(
+                controller: widget.threadController,
+                settingsController: widget.settingsController,
+                runtimeController: widget.runtimeController,
+                defaultWorkingDirectory: widget.defaultWorkingDirectory,
+                onToggleSidebar: _toggleSidebar,
+              ),
+            ),
+            VerticalDivider(width: 1, color: palette.border),
+          ],
+          Expanded(
+            child: _ConversationPanel(
+              controller: widget.conversationController,
+              threadController: widget.threadController,
+              historyController: widget.historyController,
+              approvalController: widget.approvalController,
+              settingsController: widget.settingsController,
+              diffController: widget.diffController,
+              outputGateway: widget.runtimeController,
+              sidebarCollapsed: _sidebarCollapsed,
+              onToggleSidebar: _toggleSidebar,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -410,6 +491,28 @@ class _RuntimeStatusPill extends StatelessWidget {
           width: 9,
           height: 9,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+      );
+    }
+    if (!showDetails && snapshot.state == RuntimeConnectionState.connected) {
+      return TextButton.icon(
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (context) => _RuntimeDetailsDialog(controller: controller),
+        ),
+        style: TextButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          foregroundColor: ThemeTokens.of(context).textSecondary,
+        ),
+        icon: Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        label: Text(
+          snapshot.stateLabel,
+          style: Theme.of(context).textTheme.labelMedium,
         ),
       );
     }

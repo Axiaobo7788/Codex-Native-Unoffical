@@ -179,6 +179,19 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
+  Future<bool> ensureSelectedThreadLoaded() async {
+    final current = _selectedThread;
+    if (current == null) {
+      return false;
+    }
+    if (current.status != ThreadRuntimeStatus.notLoaded ||
+        _unmaterializedThreadIds.contains(current.id)) {
+      return true;
+    }
+    final resumed = await resumeThread(current.id);
+    return resumed != null;
+  }
+
   void _replaceOrPrepend(ThreadSummary thread) {
     _threads.removeWhere((candidate) => candidate.id == thread.id);
     _threads.insert(0, thread);

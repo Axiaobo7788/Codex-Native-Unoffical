@@ -6,12 +6,14 @@ class _ThreadPanel extends StatefulWidget {
     required this.settingsController,
     required this.runtimeController,
     required this.defaultWorkingDirectory,
+    this.onToggleSidebar,
   });
 
   final ThreadListController controller;
   final ExecutionSettingsController settingsController;
   final RuntimeController runtimeController;
   final String defaultWorkingDirectory;
+  final VoidCallback? onToggleSidebar;
 
   @override
   State<_ThreadPanel> createState() => _ThreadPanelState();
@@ -19,85 +21,194 @@ class _ThreadPanel extends StatefulWidget {
 
 class _ThreadPanelState extends State<_ThreadPanel> {
   late String _workingDirectory;
+  late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
+  final Set<String> _collapsedProjects = <String>{};
+  var _showSearch = false;
+  var _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _workingDirectory = widget.defaultWorkingDirectory;
+    _searchController = TextEditingController()
+      ..addListener(() {
+        final next = _searchController.text.trim();
+        if (next != _searchQuery && mounted) {
+          setState(() => _searchQuery = next);
+        }
+      });
+    _searchFocusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _searchFocusNode.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _showSearch = !_showSearch;
+      if (!_showSearch) {
+        _searchController.clear();
+        _searchQuery = '';
+      }
+    });
+    if (_showSearch) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _searchFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return ColoredBox(
-      color: palette.sidebar,
-      child: AnimatedBuilder(
-        animation: widget.controller,
-        builder: (context, _) {
-          final controller = widget.controller;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _brandHeader(context),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        key: const ValueKey('new-thread-button'),
-                        onPressed: controller.mutating ? null : _startThread,
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('New thread'),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _toggleSearch,
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            _toggleSearch,
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () {
+          if (!widget.controller.mutating) {
+            unawaited(_startThread());
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.keyN, meta: true): () {
+          if (!widget.controller.mutating) {
+            unawaited(_startThread());
+          }
+        },
+      },
+      child: ColoredBox(
+        color: palette.sidebar,
+        child: AnimatedBuilder(
+          animation: widget.controller,
+          builder: (context, _) {
+            final controller = widget.controller;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _brandHeader(context),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          key: const ValueKey('new-thread-button'),
+                          onPressed: controller.mutating ? null : _startThread,
+                          icon: const Icon(Icons.edit_square, size: 16),
+                          label: const Text('New thread'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: ThemeTokens.space1),
-                    IconButton(
-                      key: const ValueKey('thread-directory-button'),
-                      tooltip: 'New thread location',
-                      onPressed: controller.mutating ? null : _chooseDirectory,
-                      icon: const Icon(Icons.folder_outlined, size: 18),
-                    ),
-                  ],
+                      const SizedBox(width: ThemeTokens.space1),
+                      IconButton(
+                        key: const ValueKey('thread-directory-button'),
+                        tooltip: 'New thread location',
+                        onPressed: controller.mutating
+                            ? null
+                            : _chooseDirectory,
+                        icon: const Icon(Icons.folder_outlined, size: 18),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'THREADS',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          letterSpacing: 0.7,
-                          fontWeight: FontWeight.w700,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 2, 6, 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Threads',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: palette.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                      IconButton(
+                        key: const ValueKey('thread-search-toggle'),
+                        tooltip: 'Filter threads',
+                        onPressed: _toggleSearch,
+                        icon: Icon(
+                          _showSearch
+                              ? Icons.filter_list_off_rounded
+                              : Icons.search_rounded,
+                          size: 16,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Refresh threads',
+                        onPressed: controller.loading || controller.mutating
+                            ? null
+                            : controller.refresh,
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_showSearch)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
+                    child: CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(LogicalKeyboardKey.escape):
+                            _toggleSearch,
+                      },
+                      child: TextField(
+                        key: const ValueKey('thread-search-field'),
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Filter threads…',
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            size: 16,
+                          ),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 30,
+                          ),
+                          suffixIcon: _searchQuery.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Clear filter',
+                                  onPressed: _searchController.clear,
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                  ),
+                                ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
                         ),
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Refresh threads',
-                      onPressed: controller.loading || controller.mutating
-                          ? null
-                          : controller.refresh,
-                      icon: const Icon(Icons.refresh_rounded, size: 17),
-                    ),
-                  ],
-                ),
-              ),
-              if (controller.errorMessage case final error?)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                  child: _InlineNotice(
-                    icon: Icons.error_outline_rounded,
-                    color: palette.danger,
-                    text: error,
                   ),
-                ),
-              Expanded(child: _threadList(controller)),
-              _sidebarFooter(context),
-            ],
-          );
-        },
+                if (controller.errorMessage case final error?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                    child: _InlineNotice(
+                      icon: Icons.error_outline_rounded,
+                      color: palette.danger,
+                      text: error,
+                    ),
+                  ),
+                Expanded(child: _threadList(controller)),
+                _sidebarFooter(context),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -106,19 +217,19 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     final palette = ThemeTokens.of(context);
     return Container(
       height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
       child: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
+            width: 26,
+            height: 26,
             decoration: BoxDecoration(
               color: palette.textPrimary,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(7),
             ),
             child: Icon(
               Icons.terminal_rounded,
-              size: 16,
+              size: 15,
               color: palette.canvas,
             ),
           ),
@@ -131,6 +242,13 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
+          if (widget.onToggleSidebar != null)
+            IconButton(
+              key: const ValueKey('sidebar-collapse-button'),
+              tooltip: 'Hide sidebar',
+              onPressed: widget.onToggleSidebar,
+              icon: const Icon(Icons.view_sidebar_outlined, size: 17),
+            ),
         ],
       ),
     );
@@ -144,18 +262,51 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       return const _SidebarEmptyState();
     }
 
+    final query = _searchQuery.toLowerCase();
+    final filteredThreads = query.isEmpty
+        ? controller.threads
+        : controller.threads
+              .where((thread) {
+                return thread.displayTitle.toLowerCase().contains(query) ||
+                    _projectName(thread.cwd).toLowerCase().contains(query) ||
+                    thread.cwd.toLowerCase().contains(query);
+              })
+              .toList(growable: false);
+
+    if (filteredThreads.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(ThemeTokens.space4),
+          child: Text(
+            'No matching threads.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      );
+    }
+
     final projects = <String, List<ThreadSummary>>{};
-    for (final thread in controller.threads) {
+    for (final thread in filteredThreads) {
       projects.putIfAbsent(thread.cwd, () => <ThreadSummary>[]).add(thread);
     }
     final rows = <Object>[];
     for (final project in projects.entries) {
-      rows
-        ..add(_ProjectHeading(project.key))
-        ..addAll(project.value);
+      final collapsed =
+          query.isEmpty && _collapsedProjects.contains(project.key);
+      rows.add(
+        _ProjectHeading(
+          directory: project.key,
+          count: project.value.length,
+          collapsed: collapsed,
+        ),
+      );
+      if (!collapsed) {
+        rows.addAll(project.value);
+      }
     }
     final hasFooter =
-        controller.canLoadMore || controller.retentionLimitReached;
+        query.isEmpty &&
+        (controller.canLoadMore || controller.retentionLimitReached);
     return ListView.builder(
       key: const ValueKey('thread-list'),
       padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
@@ -184,7 +335,19 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         }
         final row = rows[index];
         if (row is _ProjectHeading) {
-          return _ProjectHeadingRow(directory: row.directory);
+          return _ProjectHeadingRow(
+            heading: row,
+            onToggleCollapse: () {
+              setState(() {
+                if (!_collapsedProjects.remove(row.directory)) {
+                  _collapsedProjects.add(row.directory);
+                }
+              });
+            },
+            onNewThreadInProject: controller.mutating
+                ? null
+                : () => _startThreadInDirectory(row.directory),
+          );
         }
         final thread = row as ThreadSummary;
         return _ThreadRow(
@@ -202,7 +365,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   Widget _sidebarFooter(BuildContext context) {
     final palette = ThemeTokens.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: palette.border)),
       ),
@@ -227,13 +390,18 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     );
   }
 
-  Future<void> _startThread() async {
-    final cwd = _workingDirectory.trim();
+  Future<void> _startThread() => _startThreadInDirectory(_workingDirectory);
+
+  Future<void> _startThreadInDirectory(String directory) async {
+    final cwd = directory.trim();
     if (cwd.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Choose a working directory first.')),
       );
       return;
+    }
+    if (cwd != _workingDirectory && mounted) {
+      setState(() => _workingDirectory = cwd);
     }
     await widget.controller.startThread(
       widget.settingsController.threadOptions(cwd),
@@ -279,38 +447,97 @@ class _ThreadPanelState extends State<_ThreadPanel> {
 }
 
 final class _ProjectHeading {
-  const _ProjectHeading(this.directory);
+  const _ProjectHeading({
+    required this.directory,
+    required this.count,
+    required this.collapsed,
+  });
 
   final String directory;
+  final int count;
+  final bool collapsed;
 }
 
-class _ProjectHeadingRow extends StatelessWidget {
-  const _ProjectHeadingRow({required this.directory});
+class _ProjectHeadingRow extends StatefulWidget {
+  const _ProjectHeadingRow({
+    required this.heading,
+    required this.onToggleCollapse,
+    this.onNewThreadInProject,
+  });
 
-  final String directory;
+  final _ProjectHeading heading;
+  final VoidCallback onToggleCollapse;
+  final VoidCallback? onNewThreadInProject;
+
+  @override
+  State<_ProjectHeadingRow> createState() => _ProjectHeadingRowState();
+}
+
+class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
+  var _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: directory,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(9, 11, 8, 4),
-        child: Row(
-          children: [
-            const Icon(Icons.folder_outlined, size: 14),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                _projectName(directory),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: ThemeTokens.of(context).textPrimary,
+    final palette = ThemeTokens.of(context);
+    final heading = widget.heading;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Tooltip(
+        message: heading.directory,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+          onTap: widget.onToggleCollapse,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 9, 6, 4),
+            child: Row(
+              children: [
+                Icon(
+                  heading.collapsed
+                      ? Icons.keyboard_arrow_right_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 15,
+                  color: palette.textMuted,
                 ),
-              ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.folder_outlined,
+                  size: 14,
+                  color: palette.textSecondary,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _projectName(heading.directory),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: palette.textPrimary,
+                    ),
+                  ),
+                ),
+                if (_hovered && widget.onNewThreadInProject != null)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: widget.onNewThreadInProject,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.add_rounded,
+                        size: 15,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                  )
+                else if (heading.collapsed)
+                  Text(
+                    '${heading.count}',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -351,8 +578,8 @@ class _ThreadRowState extends State<_ThreadRow> {
         : Colors.transparent;
     final statusColor = switch (widget.thread.status) {
       ThreadRuntimeStatus.active => palette.accent,
-      ThreadRuntimeStatus.idle => palette.textMuted,
-      _ => palette.warning,
+      ThreadRuntimeStatus.systemError => palette.danger,
+      _ => null,
     };
     return MouseRegion(
       cursor: widget.enabled
@@ -390,39 +617,49 @@ class _ThreadRowState extends State<_ThreadRow> {
               borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
               onTap: widget.enabled ? widget.onSelect : null,
               child: Padding(
-                padding: const EdgeInsets.only(left: 9, right: 4),
+                padding: EdgeInsets.only(
+                  left: statusColor != null ? 10 : 22,
+                  right: 6,
+                ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        shape: BoxShape.circle,
+                    if (statusColor != null) ...[
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
+                      const SizedBox(width: 6),
+                    ],
                     Expanded(
                       child: Text(
                         widget.thread.displayTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 13,
                           fontWeight: widget.selected
                               ? FontWeight.w600
                               : FontWeight.w400,
+                          color: widget.selected
+                              ? palette.textPrimary
+                              : palette.textPrimary.withValues(alpha: 0.92),
                         ),
                       ),
                     ),
-                    if (_hovered || widget.selected)
+                    if (_hovered &&
+                        widget.thread.status == ThreadRuntimeStatus.notLoaded)
                       IconButton(
                         tooltip: 'Resume thread',
                         onPressed: widget.enabled ? widget.onResume : null,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 17),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 16),
                       )
                     else
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Text(
                           _shortTime(widget.thread.updatedAt),
                           style: Theme.of(context).textTheme.labelSmall,
@@ -505,7 +742,22 @@ String _projectName(String directory) {
 
 String _shortTime(DateTime time) {
   final local = time.toLocal();
-  final hour = local.hour.toString().padLeft(2, '0');
-  final minute = local.minute.toString().padLeft(2, '0');
-  return '$hour:$minute';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final date = DateTime(local.year, local.month, local.day);
+  final days = today.difference(date).inDays;
+  if (days <= 0) {
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+  if (days < 7) {
+    return '${days}d';
+  }
+  final month = local.month.toString().padLeft(2, '0');
+  final day = local.day.toString().padLeft(2, '0');
+  if (local.year == now.year) {
+    return '$month/$day';
+  }
+  return '${local.year}/$month';
 }

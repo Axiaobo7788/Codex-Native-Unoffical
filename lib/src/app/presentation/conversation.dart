@@ -3,19 +3,25 @@ part of '../codex_native_app.dart';
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
     required this.controller,
+    this.threadController,
     required this.historyController,
     required this.approvalController,
     required this.settingsController,
     required this.diffController,
     required this.outputGateway,
+    this.sidebarCollapsed = false,
+    this.onToggleSidebar,
   });
 
   final ConversationController controller;
+  final ThreadListController? threadController;
   final HistoryController historyController;
   final ApprovalController approvalController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final OutputGateway outputGateway;
+  final bool sidebarCollapsed;
+  final VoidCallback? onToggleSidebar;
 
   @override
   State<_ConversationPanel> createState() => _ConversationPanelState();
@@ -102,6 +108,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ),
       child: Row(
         children: [
+          if (widget.sidebarCollapsed && widget.onToggleSidebar != null) ...[
+            IconButton(
+              key: const ValueKey('sidebar-expand-button'),
+              tooltip: 'Show sidebar',
+              onPressed: widget.onToggleSidebar,
+              icon: const Icon(Icons.view_sidebar_outlined, size: 17),
+            ),
+            const SizedBox(width: ThemeTokens.space2),
+          ],
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -114,11 +129,24 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (thread != null)
-                  Text(
-                    _projectName(thread.cwd),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.folder_outlined,
+                        size: 12,
+                        color: palette.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          _projectName(thread.cwd),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -296,6 +324,46 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       _ExecutionSettingsButton(
                         controller: widget.settingsController,
                       ),
+                      if (thread != null) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: thread.cwd,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.surfaceRaised,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder_outlined,
+                                  size: 13,
+                                  color: palette.textMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 160,
+                                  ),
+                                  child: Text(
+                                    _projectName(thread.cwd),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                       const Spacer(),
                       if (controller.busy)
                         Padding(
@@ -333,6 +401,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Future<void> _send() async {
     final text = _composerController.text;
+    if (text.trim().isEmpty) {
+      return;
+    }
+    if (widget.threadController case final threadController?) {
+      final ready = await threadController.ensureSelectedThreadLoaded();
+      if (!ready) {
+        return;
+      }
+    }
     if (_activeThreadId case final threadId?) {
       _threadScrollOffsets.remove(threadId);
     }
