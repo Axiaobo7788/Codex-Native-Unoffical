@@ -9,7 +9,8 @@ This file is the repository's durable project memory. Update it whenever a task 
 **Mode: `HUMAN_REVIEW`**
 
 - Current phase status: **`DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED`**.
-- All machine-actionable work in the authorized **Desktop Shared Conversation Foundation Hardening** phase (`16.B -> 16.A -> 16.C -> 16.E -> 16.D`, full machine validation gates, bounded-memory benchmark, and live Linux desktop long-thread walkthrough against real `>140`-turn Codex history) is complete and verified.
+- Human review accepted the recalibrated reverse-analysis direction in `ADR-032` (`99e6141`, auditing `17f08f3`) and authorized **Desktop Shared Conversation Foundation Hardening** (`683d431`).
+- All machine-actionable work in **Desktop Shared Conversation Foundation Hardening** (`16.B -> 16.A -> 16.C -> 16.E -> 16.D`, full machine validation gates, bounded-memory benchmark, and live Linux desktop long-thread walkthrough against real `>140`-turn Codex history) is now complete and verified without expanding to Native Chat, Work, or Mobile Remote.
 - Per `ADR-030`, the repository now transitions from `SELF_ITERATION` to `HUMAN_REVIEW` for interactive Human review and next-phase authorization.
 
 ## Current phase
@@ -26,9 +27,11 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Desktop UI productization checkpoint — MACHINE-VERIFIED AND LIVE-LINUX-WALKED; Human acceptance remains pending. The prior marker `DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW` is preserved as checkpoint history.**
 
-**Prior reverse-analysis markers (`17f08f3` `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` and `99e6141` `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`, preserved history) — completed and used to authorize Desktop Shared Conversation Foundation Hardening.**
+**Prior reverse-analysis marker (`17f08f3`, preserved history): `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` — superseded by Human/code review on 2026-11-07 (`ADR-032`) to correct current-state drift, separate static/live/public evidence grades, recalibrate `STEPS_PROSE`/Work/Chat/Remote conclusions, and reconcile adoption recommendations with current `HEAD`.**
 
-**Current authorized phase — Desktop Shared Conversation Foundation Hardening: `DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED`. Completed `16.B`, `16.A`, `16.C`, `16.E`, `16.D`, full machine validation gates, bounded-memory benchmark, and live long-thread real-use verification without expanding to Chat, Work, or Mobile Remote.**
+**Reverse-analysis checkpoint — `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` at `99e6141` was Human-reviewed and accepted as the research baseline (`683d431`).**
+
+**Current phase — Desktop Shared Conversation Foundation Hardening: `DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`). Completed `16.B`, `16.A`, `16.C`, `16.E`, `16.D`, full machine validation gates, bounded-memory benchmark, and live long-thread real-use verification without expanding to Chat, Work, or Mobile Remote.**
 
 ## Current repository state
 
@@ -2192,7 +2195,7 @@ specific evidence boundaries.
 - **AGENT REAL-USE VERIFIED**:
   - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` against `/opt/codex-desktop/resources/codex` and real user threads `01a066fd-b1f5-79a0-8034-339ff37282a5` (`>140` turns, `285,523.9 px` scroll extent) and `01a1a9b8-e931-7123-9f8e-f2da2c954803` (`6` turns with pasted-file attachments), verifying `0.000 px` visual drift across `open latest -> scroll older (Pages 2..5) -> cross >100-turn boundary (Page 6) -> Jump to latest -> switch thread & attachment presentation -> return & multi-page content-identity scroll restoration -> streaming while scrolled up & at latest`, followed by clean process tree shutdown (`ALL_CLEAN`).
 - **HUMAN REVIEWED**:
-  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), and `17f08f3` / `99e6141` were reviewed to authorize the `ADR-032` recalibration and this **Desktop Shared Conversation Foundation Hardening** (`16.A`–`16.E`) phase.
+  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), and `17f08f3` / `99e6141` were reviewed to authorize the `ADR-032` recalibration and this **Desktop Shared Conversation Foundation Hardening** (`16.A`–`16.E`, `683d431`) phase.
 - **NOT YET HUMAN VERIFIED**:
   - Interactive Human review and acceptance of the hardened Desktop conversation timeline (`16.A`–`16.E`) across daily-use long-session workflows, dark/light visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
 
