@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
@@ -233,6 +235,174 @@ Pasted text contains the user's request.
       completedAt: DateTime.utc(2026, 1, 1, 0, 3, 58),
     );
     expect(multiMinuteTurn.formattedWorkDuration, 'Worked for 3m 58s');
+  });
+
+  test(
+    'enforces structured attachment precedence, deduplication, caps, and adversarial envelope safety',
+    () {
+      const envelope = '''
+# Files mentioned by the user:
+## conversation.dart: lib/src/app/presentation/conversation.dart
+## history_controller.dart: lib/src/features/conversation/history_controller.dart
+## history_controller_dup.dart: lib/src/features/conversation/history_controller.dart
+
+## My request for Codex:
+Please verify the scroll anchor fix.
+''';
+      final presentation = parseUserMessagePresentation(
+        envelope,
+        attachments: const [
+          UserAttachment(
+            kind: UserAttachmentKind.mention,
+            label: 'conversation.dart',
+            path: r'lib\src\app\presentation\conversation.dart',
+          ),
+          UserAttachment(
+            kind: UserAttachmentKind.image,
+            label: 'review.png',
+            path: '/workspace/screenshots/review.png',
+          ),
+        ],
+      );
+      expect(presentation.hadStructuredEnvelope, isTrue);
+      expect(presentation.bodyText, 'Please verify the scroll anchor fix.');
+      // Structured mention for conversation.dart suppresses the duplicate legacy file entry,
+      // and duplicate history_controller.dart path is deduplicated.
+      expect(presentation.attachments, hasLength(3));
+      expect(presentation.attachments[0].kind, UserAttachmentKind.mention);
+      expect(presentation.attachments[0].label, 'conversation.dart');
+      expect(presentation.attachments[1].kind, UserAttachmentKind.image);
+      expect(presentation.attachments[1].label, 'review.png');
+      expect(presentation.attachments[2].kind, UserAttachmentKind.file);
+      expect(presentation.attachments[2].label, 'history_controller.dart');
+
+      // Adversarial input 1: user prose starting with header line but without delimiter or valid entries.
+      const proseLookingLikeHeader = '''
+# Files mentioned by the user:
+This is actually plain user prose discussing how markdown headings work.
+It does not contain any valid attachment entries or request delimiter.
+''';
+      final safeProse = parseUserMessagePresentation(
+        proseLookingLikeHeader,
+        attachments: const [
+          UserAttachment(
+            kind: UserAttachmentKind.skill,
+            label: 'rust-check',
+            path: '/skills/rust-check',
+          ),
+        ],
+      );
+      expect(safeProse.hadStructuredEnvelope, isFalse);
+      expect(safeProse.bodyText, contains('plain user prose'));
+      expect(safeProse.attachments, hasLength(1));
+      expect(safeProse.attachments.single.kind, UserAttachmentKind.skill);
+
+      // Adversarial input 2: excessive attachment count and oversized labels/paths/previews.
+      final manyMentions = StringBuffer('# Files mentioned by the user:\n');
+      for (var i = 0; i < 40; i += 1) {
+        final longLabel = 'file_${i}_${'a' * 200}';
+        final longPath = '/workspace/dir_$i/${'p' * 1100}/file_$i.dart';
+        manyMentions.writeln('## $longLabel: $longPath');
+      }
+      manyMentions.writeln('\n## My request for Codex:\nBounded request.');
+
+      final capped = parseUserMessagePresentation(
+        manyMentions.toString(),
+        attachments: [
+          for (var i = 0; i < 6; i += 1)
+            UserAttachment(
+              kind: UserAttachmentKind.mention,
+              label: 'structured_$i',
+              path: '/workspace/structured_$i.dart',
+              preview: 'x' * 4000,
+            ),
+        ],
+      );
+      expect(capped.hadStructuredEnvelope, isTrue);
+      expect(capped.bodyText, 'Bounded request.');
+      expect(capped.attachments, hasLength(maxUserAttachments));
+      // First 6 must be the structured attachments.
+      for (var i = 0; i < 6; i += 1) {
+        expect(capped.attachments[i].kind, UserAttachmentKind.mention);
+        expect(capped.attachments[i].label, 'structured_$i');
+        expect(
+          capped.attachments[i].preview!.length,
+          lessThanOrEqualTo(maxAttachmentPreviewLength + 1),
+        );
+      }
+      // Remaining 10 are bounded legacy fallback attachments.
+      for (var i = 6; i < maxUserAttachments; i += 1) {
+        expect(capped.attachments[i].kind, UserAttachmentKind.file);
+        expect(
+          capped.attachments[i].label.length,
+          lessThanOrEqualTo(maxAttachmentLabelLength + 1),
+        );
+        expect(
+          capped.attachments[i].path!.length,
+          lessThanOrEqualTo(maxAttachmentPathLength + 1),
+        );
+      }
+    },
+  );
+
+  test('domain layer import graph is a strict DAG with zero circular imports', () {
+    final domainDir = Directory('lib/src/domain');
+    expect(domainDir.existsSync(), isTrue);
+
+    final directivePattern = RegExp(
+      r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+      multiLine: true,
+    );
+    final graph = <String, Set<String>>{};
+
+    for (final entity in domainDir.listSync().whereType<File>()) {
+      if (!entity.path.endsWith('.dart')) {
+        continue;
+      }
+      final fileName = entity.uri.pathSegments.last;
+      final edges = <String>{};
+      final content = entity.readAsStringSync();
+      for (final match in directivePattern.allMatches(content)) {
+        final target = match.group(1)!;
+        if (target.startsWith('dart:') || target.startsWith('package:')) {
+          continue;
+        }
+        edges.add(target.split('/').last);
+      }
+      graph[fileName] = edges;
+    }
+
+    final visiting = <String>{};
+    final visited = <String>{};
+    final cyclePath = <String>[];
+
+    bool hasCycle(String node) {
+      if (visiting.contains(node)) {
+        cyclePath.add(node);
+        return true;
+      }
+      if (visited.contains(node)) {
+        return false;
+      }
+      visiting.add(node);
+      for (final neighbor in graph[node] ?? const <String>{}) {
+        if (hasCycle(neighbor)) {
+          cyclePath.add(node);
+          return true;
+        }
+      }
+      visiting.remove(node);
+      visited.add(node);
+      return false;
+    }
+
+    for (final file in graph.keys) {
+      expect(
+        hasCycle(file),
+        isFalse,
+        reason: 'Circular dependency detected in lib/src/domain/: $cyclePath',
+      );
+    }
   });
 }
 

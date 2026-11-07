@@ -180,7 +180,7 @@ final class HistoryProtocolAdapter {
     }
     final attachments = <UserAttachment>[];
     for (final part in content.whereType<Map<String, Object?>>()) {
-      if (attachments.length >= 16) {
+      if (attachments.length >= maxUserAttachments) {
         break;
       }
       final type = part['type'];
@@ -201,6 +201,18 @@ final class HistoryProtocolAdapter {
               kind: UserAttachmentKind.image,
               label: 'Image',
               path: url,
+            ),
+          );
+        case 'file':
+          final path = _optionalString(part, 'path') ?? '';
+          final name = _optionalString(part, 'name') ?? '';
+          attachments.add(
+            UserAttachment(
+              kind: UserAttachmentKind.file,
+              label: name.isNotEmpty
+                  ? name
+                  : (path.isEmpty ? 'File' : _shortPath(path)),
+              path: path.isEmpty ? null : path,
             ),
           );
         case 'skill':
