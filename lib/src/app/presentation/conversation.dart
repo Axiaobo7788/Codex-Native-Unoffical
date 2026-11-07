@@ -22,23 +22,40 @@ class _ConversationPanel extends StatefulWidget {
 }
 
 class _ConversationPanelState extends State<_ConversationPanel> {
+  static const _maxRetainedThreadScrollOffsets = 32;
+  static const _followThresholdPixels = 160.0;
+
   late final TextEditingController _composerController;
+  late final FocusNode _composerFocusNode;
   late final ScrollController _scrollController;
+  final LinkedHashMap<String, double> _threadScrollOffsets = LinkedHashMap();
+  String? _activeThreadId;
+  var _pendingThreadRestore = false;
+  var _showJumpToLatest = false;
   var _showChanges = false;
 
   @override
   void initState() {
     super.initState();
     _composerController = TextEditingController();
-    _scrollController = ScrollController();
+    _composerFocusNode = FocusNode();
+    _scrollController = ScrollController(keepScrollOffset: false)
+      ..addListener(_handleScrollPositionChanged);
+    _activeThreadId = widget.controller.thread?.id;
+    _pendingThreadRestore = _activeThreadId != null;
     widget.controller.addListener(_handleConversationChanged);
+    widget.historyController.addListener(_handleHistoryChanged);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_handleConversationChanged);
+    widget.historyController.removeListener(_handleHistoryChanged);
+    _scrollController
+      ..removeListener(_handleScrollPositionChanged)
+      ..dispose();
+    _composerFocusNode.dispose();
     _composerController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -164,34 +181,51 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             widget.historyController.loadingItems
         ? 1
         : 0;
-    return Scrollbar(
-      controller: _scrollController,
-      child: ListView.builder(
-        key: const ValueKey('conversation-timeline'),
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 18),
-        itemCount:
-            historyItems.length + controller.entries.length + footerCount,
-        itemBuilder: (context, index) {
-          if (index < historyItems.length) {
-            final item = historyItems[index];
-            return _HistoryEntryView(
-              key: ValueKey('history-${item.id}'),
-              item: item,
-              historyController: widget.historyController,
-              outputGateway: widget.outputGateway,
-            );
-          }
-          final liveIndex = index - historyItems.length;
-          if (liveIndex < controller.entries.length) {
-            return _ConversationEntryView(
-              key: ValueKey(controller.entries[liveIndex].id),
-              entry: controller.entries[liveIndex],
-            );
-          }
-          return _HistoryFooter(controller: widget.historyController);
-        },
-      ),
+    final messageCount = historyItems.length + controller.entries.length;
+    final totalCount = messageCount + footerCount;
+    return Stack(
+      children: [
+        Scrollbar(
+          controller: _scrollController,
+          child: _ConversationScrollView(
+            key: const ValueKey('conversation-timeline'),
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 18),
+            itemCount: totalCount,
+            itemBuilder: (context, reverseIndex) {
+              if (reverseIndex == messageCount) {
+                return _HistoryFooter(
+                  key: const ValueKey('history-pagination-footer'),
+                  controller: widget.historyController,
+                );
+              }
+              final chronologicalIndex = messageCount - 1 - reverseIndex;
+              if (chronologicalIndex < historyItems.length) {
+                final item = historyItems[chronologicalIndex];
+                return _HistoryEntryView(
+                  key: ValueKey('history-${item.id}'),
+                  item: item,
+                  historyController: widget.historyController,
+                  outputGateway: widget.outputGateway,
+                );
+              }
+              final liveIndex = chronologicalIndex - historyItems.length;
+              final entry = controller.entries[liveIndex];
+              return _ConversationEntryView(
+                key: ValueKey(entry.id),
+                entry: entry,
+              );
+            },
+          ),
+        ),
+        if (_showJumpToLatest)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: Center(child: _JumpToLatestButton(onPressed: _jumpToLatest)),
+          ),
+      ],
     );
   }
 
@@ -239,6 +273,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     child: TextField(
                       key: const ValueKey('conversation-composer'),
                       controller: _composerController,
+                      focusNode: _composerFocusNode,
                       enabled: enabled,
                       minLines: 1,
                       maxLines: 6,
@@ -298,8 +333,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Future<void> _send() async {
     final text = _composerController.text;
+    if (_activeThreadId case final threadId?) {
+      _threadScrollOffsets.remove(threadId);
+    }
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    }
     if (await widget.controller.submit(text)) {
       _composerController.clear();
+      _jumpToLatest();
     }
   }
 
@@ -316,25 +358,312 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  void _handleScrollPositionChanged() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    final distanceFromEnd = position.maxScrollExtent - position.pixels;
+    final shouldShowJump = distanceFromEnd > _followThresholdPixels;
+    if (shouldShowJump != _showJumpToLatest && mounted) {
+      setState(() => _showJumpToLatest = shouldShowJump);
+    }
+    if (_pendingThreadRestore) {
+      return;
+    }
+    if (_activeThreadId case final threadId?) {
+      if (distanceFromEnd > _followThresholdPixels) {
+        _rememberThreadScrollOffset(threadId, position.pixels);
+      } else if (distanceFromEnd <= 40) {
+        _threadScrollOffsets.remove(threadId);
+      }
+    }
+  }
+
+  void _rememberThreadScrollOffset(String threadId, double offset) {
+    _threadScrollOffsets.remove(threadId);
+    _threadScrollOffsets[threadId] = offset;
+    while (_threadScrollOffsets.length > _maxRetainedThreadScrollOffsets) {
+      _threadScrollOffsets.remove(_threadScrollOffsets.keys.first);
+    }
+  }
+
+  void _syncActiveThreadSelection() {
+    final nextThreadId = widget.controller.thread?.id;
+    if (nextThreadId == _activeThreadId) {
+      return;
+    }
+    _activeThreadId = nextThreadId;
+    _pendingThreadRestore = nextThreadId != null;
+    if (_showJumpToLatest && mounted) {
+      setState(() => _showJumpToLatest = false);
+    }
+    if (nextThreadId != null) {
+      _scheduleThreadScrollRestore();
+    }
+  }
+
+  void _handleHistoryChanged() {
+    _syncActiveThreadSelection();
+    if (_pendingThreadRestore) {
+      _scheduleThreadScrollRestore();
+    }
+  }
+
   void _handleConversationChanged() {
+    final previousThreadId = _activeThreadId;
+    _syncActiveThreadSelection();
+    if (previousThreadId != _activeThreadId) {
+      final thread = widget.controller.thread;
+      if (thread != null &&
+          widget.controller.entries.isEmpty &&
+          widget.historyController.timelineItems.isEmpty &&
+          !widget.historyController.loadingTurns) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              widget.controller.thread?.id == thread.id &&
+              !widget.controller.busy) {
+            _composerFocusNode.requestFocus();
+          }
+        });
+      }
+      return;
+    }
     if (!_scrollController.hasClients) {
       return;
     }
     final distanceFromEnd =
         _scrollController.position.maxScrollExtent - _scrollController.offset;
-    if (distanceFromEnd > 160) {
+    if (distanceFromEnd > _followThresholdPixels) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) {
         return;
       }
+      final target = _scrollController.position.maxScrollExtent;
+      if ((_scrollController.offset - target).abs() <= 1.0) {
+        return;
+      }
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 140),
+        target,
+        duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
       );
     });
+  }
+
+  void _scheduleThreadScrollRestore() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pendingThreadRestore) {
+        return;
+      }
+      final threadId = _activeThreadId;
+      if (threadId == null) {
+        _pendingThreadRestore = false;
+        return;
+      }
+      if (!_scrollController.hasClients) {
+        if (!widget.historyController.loadingTurns &&
+            widget.historyController.timelineItems.isEmpty &&
+            widget.controller.entries.isEmpty) {
+          _pendingThreadRestore = false;
+          if (!widget.controller.busy) {
+            _composerFocusNode.requestFocus();
+          }
+        }
+        return;
+      }
+      final position = _scrollController.position;
+      final savedOffset = _threadScrollOffsets[threadId];
+      final target = (savedOffset ?? position.maxScrollExtent).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if ((position.pixels - target).abs() > 0.5) {
+        _scrollController.jumpTo(target);
+      }
+      if (!widget.historyController.loadingTurns) {
+        _pendingThreadRestore = false;
+        _handleScrollPositionChanged();
+      }
+    });
+  }
+
+  void _jumpToLatest() {
+    if (_activeThreadId case final threadId?) {
+      _threadScrollOffsets.remove(threadId);
+    }
+    if (_showJumpToLatest && mounted) {
+      setState(() => _showJumpToLatest = false);
+    }
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final target = _scrollController.position.maxScrollExtent;
+    final distance = (target - _scrollController.offset).abs();
+    if (distance > 1200) {
+      _scrollController.jumpTo(target);
+    } else if (distance > 0.5) {
+      unawaited(
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+}
+
+class _JumpToLatestButton extends StatelessWidget {
+  const _JumpToLatestButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Material(
+      color: palette.surface,
+      elevation: 3,
+      shadowColor: palette.shadow,
+      shape: StadiumBorder(side: BorderSide(color: palette.borderStrong)),
+      child: InkWell(
+        key: const ValueKey('jump-to-latest-button'),
+        customBorder: const StadiumBorder(),
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.arrow_downward_rounded,
+                size: 14,
+                color: palette.textPrimary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Jump to latest',
+                style: Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(color: palette.textPrimary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationScrollView extends CustomScrollView {
+  const _ConversationScrollView({
+    super.key,
+    super.controller,
+    required this.padding,
+    required this.itemCount,
+    required this.itemBuilder,
+  }) : super(anchor: 1.0, center: const ValueKey('conversation-bottom-anchor'));
+
+  final EdgeInsets padding;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+
+  @override
+  List<Widget> buildSlivers(BuildContext context) => [
+    SliverPadding(
+      padding: padding,
+      sliver: SliverList.builder(
+        itemCount: itemCount,
+        itemBuilder: itemBuilder,
+      ),
+    ),
+    const SliverToBoxAdapter(
+      key: ValueKey('conversation-bottom-anchor'),
+      child: SizedBox.shrink(),
+    ),
+  ];
+
+  @override
+  Widget buildViewport(
+    BuildContext context,
+    ViewportOffset offset,
+    AxisDirection axisDirection,
+    List<Widget> slivers,
+  ) => _ConversationViewport(
+    axisDirection: axisDirection,
+    offset: offset,
+    anchor: anchor,
+    center: center,
+    scrollCacheExtent: scrollCacheExtent,
+    clipBehavior: clipBehavior,
+    slivers: slivers,
+  );
+}
+
+class _ConversationViewport extends Viewport {
+  _ConversationViewport({
+    super.axisDirection,
+    required super.offset,
+    super.anchor,
+    super.center,
+    super.scrollCacheExtent,
+    super.clipBehavior,
+    super.slivers,
+  });
+
+  @override
+  RenderViewport createRenderObject(BuildContext context) =>
+      _RenderConversationViewport(
+        axisDirection: axisDirection,
+        crossAxisDirection: Viewport.getDefaultCrossAxisDirection(
+          context,
+          axisDirection,
+        ),
+        anchor: anchor,
+        offset: offset,
+        scrollCacheExtent: scrollCacheExtent,
+        clipBehavior: clipBehavior,
+      );
+}
+
+class _RenderConversationViewport extends RenderViewport {
+  _RenderConversationViewport({
+    super.axisDirection,
+    required super.crossAxisDirection,
+    required super.offset,
+    super.anchor,
+    super.scrollCacheExtent,
+    super.clipBehavior,
+  });
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (axis != Axis.vertical || center == null) {
+      return;
+    }
+    var totalExtent = 0.0;
+    for (
+      RenderSliver? child = firstChild;
+      child != null;
+      child = childAfter(child)
+    ) {
+      totalExtent += child.geometry?.scrollExtent ?? 0.0;
+    }
+    final shift = size.height - totalExtent;
+    if (shift <= 0) {
+      return;
+    }
+    for (
+      RenderSliver? child = firstChild;
+      child != null;
+      child = childAfter(child)
+    ) {
+      final parentData = child.parentData! as SliverPhysicalParentData;
+      parentData.paintOffset = parentData.paintOffset.translate(0, -shift);
+    }
   }
 }
 

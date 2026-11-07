@@ -526,7 +526,7 @@ bool _isHighSurrogate(int codeUnit) => codeUnit >= 0xd800 && codeUnit <= 0xdbff;
 bool _isLowSurrogate(int codeUnit) => codeUnit >= 0xdc00 && codeUnit <= 0xdfff;
 
 class _HistoryFooter extends StatelessWidget {
-  const _HistoryFooter({required this.controller});
+  const _HistoryFooter({super.key, required this.controller});
 
   final HistoryController controller;
 
