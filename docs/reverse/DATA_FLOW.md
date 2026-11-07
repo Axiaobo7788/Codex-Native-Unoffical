@@ -1,209 +1,146 @@
-# ChatGPT Desktop (`26.1103.32239`) — End-to-End Data Flows & State Ownership
+# ChatGPT Desktop State & Data Flow Architecture (Recalibrated)
 
-> **Scope**: Documents the runtime state machines, data-flow pipelines, hydration/pagination algorithms, viewport-protected eviction rules, and shared vs mode-specific boundaries across **Chat**, **Work**, and **Codex**.
-
----
-
-## 1. Unified Startup & Sidebar Catalog Data Flow
-
-### 1.1 Zero-Flicker Bootstrap + Multi-Host Sync (`early-bootstrap-920`)
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant UI as Renderer (React + Jotai/Signal Store)
-  participant Preload as preload.js (electronBridge)
-  participant Main as Main Process (ThreadCatalogSyncManager ehf)
-  participant DB as ~/.codex/sqlite/codex.db (local_thread_catalog)
-  participant AppSrv as codex app-server (stdio/ssh/wsl/remote)
-  participant Cloud as chatgpt.com (/backend-api/conversations)
-
-  UI->>Preload: window.electronBridge.getInitialSidebarBootstrap() [sync IPC]
-  Preload->>Main: ipcRenderer.sendSync("codex_desktop:get-initial-sidebar-bootstrap")
-  Main->>DB: SELECT top projects + recent threads (ordered by updated_at DESC)
-  DB-->>Main: Cached catalog rows
-  Main-->>UI: Synchronous bootstrap payload (0ms first-paint sidebar)
-
-  par Sync App-Server Hosts (local, ssh, wsl, remote-control)
-    Main->>AppSrv: JSON-RPC thread/list (limit: 50, cursor)
-    AppSrv-->>Main: Thread summaries + git/cwd metadata
-    Main->>DB: UPSERT INTO local_thread_catalog (source_kind='app-server')
-  and Sync Signed-In ChatGPT Host (chatgpt:<accountId>:<userId>)
-    Main->>Cloud: GET /backend-api/conversations?offset=0&limit=100&order=updated&is_archived=false&hide_snorlax=false
-    Cloud-->>Main: Cloud conversation list (id, title, gizmo_id, conversation_origin, async_status)
-    Main->>DB: UPSERT INTO local_thread_catalog (host_kind='chatgpt', maxHistoryAgeMs=30d)
-  end
-
-  Main->>UI: codex_desktop:message-for-view { type: "changes", tokenized delta }
-  UI->>UI: Update sidebar signal atoms (filtered by sidebarProductMode: "work" vs "codex")
-```
-
-### 1.2 Shared Catalog Row Normalization (`ehy` in `early-bootstrap-920`)
-
-Every conversation—whether local Codex CLI, SSH remote, WSL, Remote Control, or Cloud ChatGPT—is normalized into `local_thread_catalog` with a composite primary key `(host_id, thread_id)`:
-
-- `host_kind`: `'local' | 'ssh' | 'wsl' | 'remote-control' | 'chatgpt'`
-- `source_kind`: `'app-server'` or `'chatgpt'`
-- `conversation_origin`: `'chatgpt'` (mapped to `'chat'`), `'work'`, `'tpp'` (Third-Party/Local Executor, mapped to `'work'`), or `NULL` (native Codex thread)
-- `project_id`: Local project UUID or cloud Gizmo ID (`g-p-...` when `gizmo_id?.startsWith("g-p-")`)
-- `chatgpt_async_status`: Background cloud task status (`in_progress`, `completed`, `failed`, etc.)
+> **Evidence Sources**:
+> - `STATIC_BUNDLE`: `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (`@708000..735000`, `@886000..990000`, `@1168000..1170000`, `@1644000..1666500`, `@4399500..4403500`), `.vite/build/early-bootstrap-339-10eda6b28d12299c.js` (`@780000..792000`), and `webview/assets/index-Dup49xH6.js` + lazy chunks.
+> - `PUBLIC_SOURCE`: Stock `/opt/codex-desktop/resources/codex app-server generate-json-schema --experimental` (`0.167.0-alpha.3.2`).
+> - `LOCAL_SCHEMA`: Read-only DDL from `~/.codex/state_5.sqlite` and `~/.codex/sqlite/local_thread_catalog.sqlite`.
 
 ---
 
-## 2. Mode 1: Cloud Chat Data Flow (`conversation_origin = "chatgpt"`)
+## 0. Evidence & Calibration Table for Data Flow Claims
 
-### 2.1 Opening & Hydrating a Cloud Chat Conversation
-
-```text
-[User clicks Chat thread in Sidebar]
-      │
-      ▼
-[Renderer checks MrGp DAG store for conversationId]
-      ├── If cached in memory -> Render immediately from mapping + current_node
-      └── If not cached -> Fetch via Main Process proxy:
-            ├── Single conversation: GET /backend-api/conversation/:id
-            └── Catalog batch refresh: POST /backend-api/conversations/batch { conversation_ids: [...] }
-                  │
-                  ▼
-            [MrGp.ip (en) merges fetched mapping + current_node + pagination cursor]
-                  │
-                  ▼
-            [AuIy.Ph({ mapping, current_node }) flattens active branch of DAG into ordered message list]
-                  │
-                  ▼
-            [Projected into unified Transcript Store (182735) with conversationDetailMode = "STEPS_PROSE"]
-```
-
-### 2.2 Submitting a Prompt & Streaming in Cloud Chat (`uNU6.submitChatGPTCompletion`)
-
-1. **Attachment Upload (if present)**:
-   - Local file read via `codex_desktop:FileAttachmentRead`.
-   - Initiate upload (`s.QK`, `entry_surface: "chat_composer"`), PUT bytes to `/backend-api/estuary/content` / presigned blob URL (`uploadChatGptFileBytes`), finalize (`s.ez`, `index_for_retrieval`).
-2. **Optimistic DAG Insertion**:
-   - `uNU6` (`ta` -> `tl`) creates an optimistic user message node in `MrGp` (`localPromptStateByMessageId[msgId] = { isOptimistic: true }`) parented to `current_node`.
-3. **SSE Stream over IPC**:
-   - Renderer invokes `codex_desktop:fetch-stream` -> `POST https://chatgpt.com/backend-api/f/conversation`.
-   - Main process streams SSE events (`WvOS.oW`) back via `codex_desktop:FetchStreamEvent`.
-4. **Delta Application**:
-   - Each SSE event updates only the active message node in `MrGp` (`mapping[nodeId].message`), preserving sibling branches (`children: [...]`) for branch switching (`1/2`, `< >`), inline editing, or regeneration (`submitChatGPTRegeneration`).
+| Subsystem / Claim | Evidence Tags | Support Classification | Calibration Note |
+|---|---|---|---|
+| **History Islands (`canonical` turn topology: `islands`, `olderBoundary`, `newerBoundary`, `entitiesByKey`)** | `STATIC_BUNDLE` (`early-bootstrap-920 @895000..901000`) | `ADAPT_NATIVE` | Supports bidirectional pagination and non-contiguous turn islands |
+| **Initial Tail Hydration (`thread/turns/list`, `limit: 5`, `sortDirection: "desc"`, `itemsView: "summary"`)** | `STATIC_BUNDLE` (`yU @911500`, `bC @897200`, `readLatestPreviewPage @934500`), `PUBLIC_SOURCE` (`--experimental`) | `EXPERIMENTAL_STOCK_SCHEMA` | **Correction**: `ADR-031` previously stated `"newest 15 turns"` due to conflating a `15e3` (`15,000 ms`) timeout with `limit: 5`. The actual turn page size in `yU`/`bC`/`readLatestPreviewPage` is **`5`** |
+| **Timeline Hydration (`thread/timeline/list`, `limit: 500` + `thread/turns/list`, `limit: 100, itemsView: "none"`)** | `STATIC_BUNDLE` (`bX @921000`, `@4402302`), `PUBLIC_SOURCE` (`--experimental`) | `EXPERIMENTAL_STOCK_SCHEMA` (Feature-gated) | Gated in Desktop by Statsig gate `"codex-app-thread-timeline-history"` (`readThreadTimelineEnabled`) |
+| **Active History Eviction (`yV = 1000 -> yZ = 500` items)** | `STATIC_BUNDLE` (`yX`/`yY @975000..985000`, `@4402302`) | `ADAPT_NATIVE` (Feature-gated in Desktop!) | Gated in Desktop by Statsig experiment `"codex_app_active_history_eviction_v1"` (`enabled`, fallback default `false`!) |
+| **Bounded Cloud History (`maxTurns: 1..100`, `maxItemsPerTurn: 1..500`)** | `STATIC_BUNDLE` (`yN @972000`, `@4399600`) | `ADAPT_NATIVE` (Feature-gated) | Gated in Desktop by Statsig gate `"codex-app-bounded-cloud-history"` |
+| **10-Thread Hydrated LRU (`yW = 10`)** | `STATIC_BUNDLE` (`@968000`, `readRetainedRecentThreadIds @4402600`) | `ADAPT_NATIVE` | Retains up to 10 inactive threads per host; never evicts active/pending-approval/subagent threads |
+| **Chat Conversation Tree DAG (`MrGp`: `mapping`, `current_node`, `parent`, `children`)** | `STATIC_BUNDLE` (`webview/assets/async/182735.d3d917f28d.js`) | `PRIVATE_WEB_SESSION` (API) / `ADOPT_PATTERN` (Domain model if building Chat) | Used for `/backend-api/f/conversation` (`source_kind = "chatgpt"`), distinct from Codex linear turn history |
 
 ---
 
-## 3. Mode 2: Work Data Flow (`conversation_origin = "work" | "tpp"` & `"aeon"`)
+## 1. Complete Inventory of Codex/Work History Hydration Paths & Constants
 
-Work is a **hybrid execution mode** that bridges Cloud ChatGPT orchestration with local/cloud agent capabilities while defaulting to `conversationDetailMode = "STEPS_PROSE"`:
+Inspection of `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (`@886000..990000` and `@4399500..4403500`) reveals that ChatGPT Desktop does **not** have a single hardcoded history loader. Instead, it has **six coordinated hydration/retention mechanisms**, several of which are controlled by runtime Statsig gates:
 
-```mermaid
-flowchart LR
-  Composer["Unified Composer (Work Mode)"]
-  Composer -->|Cloud Chat + Local Tool Execution<br/>conversation_origin = 'tpp'| TPP["/backend-api/f/conversation<br/>+ tppExecutionTarget (installation_id)"]
-  Composer -->|Durable Cloud Agent<br/>SKU = 'aeon' / 'codex'| Aeon["wss://codex-cloud-backend.chatgpt.com/<br/>JSON-RPC: thread/startAeon"]
-  Composer -->|Local App-Server in Prose Mode<br/>STEPS_PROSE| LocalApp["Local codex app-server<br/>includeProseDetailLevelInstructions: true"]
+### 1.1 Path A: Initial Tail Hydration & Incremental Turn Pagination (`limit: 5`)
+- **Where in Bundle**: `yU` (`@911500`), `bC` (`@897200`), `bd` (`@894600`), `readLatestPreviewPage` (`@934500`).
+- **Gate**: Enabled by default (`history.useTailHydration: true`, `history.canonicalTurnHistory: true`, `history.paginatedHistoryEnabled: true` at `@4402400`).
+- **Exact RPC Call**:
+  ```json
+  {
+    "method": "thread/turns/list",
+    "params": {
+      "threadId": "<thread-id>",
+      "limit": 5,
+      "sortDirection": "desc",
+      "itemsView": "summary",
+      "itemSnapshot": "full"
+    }
+  }
+  ```
+  *(Note: `readLatestPreviewPage` passes `itemSnapshot: "metadata"` and `limit: 5`; `bC` paginates older/newer turns from an island boundary using `limit: s?.limit ?? 5` and `cursor: n.handle.cursor`.)*
+- **Why `ADR-031` Previously Said `15`**: Initial summarization misread a nearby `15e3` (`15,000 ms`) timeout constant as a turn count. There is **no** `limit: 15` in `thread/turns/list`.
 
-  TPP -->|Tool Call: node_repl / browser / cua| LocalExec["Local Capability Host<br/>codex-code-mode-host | codex-browser-app | cua_node"]
-  LocalExec -->|submitChatGPTLocalFunctionResult (uNU6.ts)| TPP
-```
+### 1.2 Path B: Opening User Message Backfill (`limit: 2`)
+- **Where in Bundle**: `fI` (`@902000`).
+- **Purpose**: When a turn is hydrated in summary mode without its opening user prompt, `fI` fetches the first two items of the turn:
+  ```json
+  {
+    "method": "thread/items/list",
+    "params": {
+      "threadId": "<thread-id>",
+      "turnId": "<turn-id>",
+      "limit": 2,
+      "sortDirection": "asc",
+      "deferOutput": { "commandExecution": true }
+    }
+  }
+  ```
 
-### 3.1 Three Execution Paths Inside Work Mode
+### 1.3 Path C: Per-Turn Item Pagination & Deferred Command Output (`limit: 28 | 30 | 100`)
+- **Where in Bundle**: `bk.loadTurnItems` (`@905400..909500`) and `prefetchSharedThreadTurns` (`@945200`).
+- **Exact RPC Calls**:
+  - `thread/items/list` with `turnId`, `sortDirection: "asc" | "desc"`, `limit: 30` (interactive turn expansion), `limit: 28` (`prefetchSharedThreadTurns` across up to `12` subthreads with concurrency `3`), or `limit: 100` (full turn backfill), always passing `deferOutput: { "commandExecution": true }`.
+  - When the user expands a command card whose output was deferred (`outputDeferred: true`), the client calls `thread/items/read` (`itemIds: ["<item-id>"]`, schema limit `1..100`).
 
-1. **TPP (Third-Party / Local Executor) Hybrid Path (`conversation_origin === "tpp"`)**:
-   - The conversation lives in Cloud ChatGPT (`/backend-api/f/conversation`), tagged with `tppExecutionTarget: { installation_id, ... }`.
-   - When the cloud model invokes a local tool (e.g., `node_repl`, `browser`, `unified-computer-use`, or an MCP server), the renderer receives the tool call, executes it locally through `codex-code-mode-host`, `cua_node`, or the in-app browser (`persist:codex-browser-app`), and posts the tool result back to the cloud turn via `submitChatGPTLocalFunctionResult` (`uNU6.ts`) or `daybreakContinuationMessageId`!
-2. **Aeon Durable Cloud Agent Path (`threadStartKind === "aeon"`, `X-OpenAI-Product-Sku: "aeon"`)**:
-   - Connects over WebSocket to `wss://codex-cloud-backend.chatgpt.com/` and invokes `thread/startAeon` (supported since app-server `0.156.0`).
-   - Runs long-lived cloud background work with resumable turn islands.
-3. **Local App-Server in Everyday Prose Mode (`conversationDetailMode === "STEPS_PROSE"`)**:
-   - Uses the local `codex app-server` runtime, but injects `includeProseDetailLevelInstructions` and `writing_blocks` feature flags, and renders tool activity in condensed prose summary pills (`usesCondensedPresentation = true`).
+### 1.4 Path D: Flat Timeline Hydration (`limit: 500` items + `limit: 100` turns, Feature-Gated)
+- **Where in Bundle**: `bX` (`@921000..926000`).
+- **Gate**: Statsig gate `"codex-app-thread-timeline-history"` (`readThreadTimelineEnabled` at `@4402450`).
+- **Exact RPC Calls**:
+  1. `thread/timeline/list` with `limit: s ?? 500`, `sortDirection: "desc" | "asc"`, `buildMode`, `includeSourceTypes`, `deferOutput: { "commandExecution": true }`.
+  2. Followed by `thread/turns/list` with `limit: 100, itemsView: "none"` to backfill turn-level metadata (`model`, `reasoningEffort`, `status`) without duplicating items.
 
----
+### 1.5 Path E: Viewport-Protected Active History Eviction (`1000 -> 500` items, Feature-Gated)
+- **Where in Bundle**: `yV = 1e3`, `yZ = 500`, `yX` / `yY` (`@975000..985000`).
+- **Gate**: Statsig experiment `"codex_app_active_history_eviction_v1"` (`get("enabled", false)` at `@4402500` — **disabled by default unless the experiment is active!**).
+- **Mechanism**:
+  - Tracks total loaded items across all turns in the active conversation.
+  - When total items exceed `yV = 1000`, evicts turns/items down to `yZ = 500` starting from the edge farthest from the user's current viewport anchor (`anchorTurnId`, `protectNewestEdge`), while never evicting an in-progress turn.
+  - Because canonical turn history is stored as **History Islands** (`islands: [{id, entries, olderBoundary, newerBoundary}]`, `entitiesByKey`), evicting a range simply splits or shrinks an island and marks its `olderBoundary` or `newerBoundary` as `"available"` with a pagination cursor so scrolling back re-fetches seamlessly.
 
-## 4. Mode 3: Codex Data Flow (`codex app-server` + Canonical History Islands)
+### 1.6 Path F: Bounded Cloud History (`maxTurns: 1..100`, `maxItemsPerTurn: 1..500`, Feature-Gated)
+- **Where in Bundle**: `yN` (`@972000`).
+- **Gate**: Statsig gate `"codex-app-bounded-cloud-history"` (`useBoundedCloudHistory` at `@4399600`).
+- **Mechanism**: Caps cloud-hydrated conversations to `maxTurns` (`1..100`) and `maxItemsPerTurn` (`1..500`), preserving each turn's `openingUserMessageItem` plus the newest tail items.
 
-### 4.1 Canonical Turn History Islands (`early-bootstrap-920 @964000..999000`)
-
-Unlike naive chat clients that store a flat `List<Turn>` per thread, official ChatGPT Desktop manages Codex thread history in the main process using **Canonical Turn History Islands** (`turnHistory.kind === "canonical"`):
-
-```text
-Thread Canonical History
-├── entitiesByKey: Map<EntityKey, TurnEntity>
-└── islands: List<HistoryIsland>
-      └── Island[0] (Tail / Active Island)
-            ├── olderBoundary: { cursor: TurnCursor | null, exhausted: boolean }
-            ├── newerBoundary: { cursor: null, exhausted: true }
-            └── entries: [TurnKey_N-4, TurnKey_N-3, TurnKey_N-2, TurnKey_N-1, TurnKey_N]
-                  │
-                  └── TurnEntity (e.g. TurnKey_N)
-                        ├── turnId, status, startedAt, completedAt
-                        ├── oldestUserInput (openingUserMessageId — ALWAYS preserved!)
-                        ├── itemsPagination: { olderCursor: { type: "item", itemId } | null }
-                        └── items: [OpeningUserMessage, ...TailItems]
-```
-
-### 4.2 Tail Hydration & Opening-User-Message Anchoring (`readLatestPreviewPage`)
-
-When opening an existing Codex thread:
-
-1. **Tail Turn Page Load**:
-   - If the app-server supports `threadTurnsList` (`>= 0.141.0`) and `threadTimelineList` (`>= 0.144.0`), the main process requests only the **latest 5 turns** (`limit: 5, sortDirection: "desc"`, `itemsView: "summary", itemSnapshot: "latest"`).
-2. **Opening User Message Guarantee (`openingUserMessageId`)**:
-   - If a turn has hundreds of tool items so that the tail item snapshot (`itemSnapshot: "latest"`) only includes the last few items (`summaryItemIds`), the main process issues a secondary call:
-     `thread/items/list` with `limit: 2, sortDirection: "asc"`
-     to fetch the turn's **first user message** (`oldestUserInput`).
-   - This guarantees the user always sees **what prompt started the turn** at the top of the turn, with an `"older items collapsed"` cursor (`olderCursor`) between the opening user prompt and the latest items!
-3. **Bottom-Anchored Initial Viewport**:
-   - The renderer mounts the tail island anchored to the bottom (latest turn/item) rather than `scrollOffset = 0` at the top of history.
-
-### 4.3 Viewport-Protected Active History Eviction (`setBoundary` -> `yV` / `yZ`)
-
-To prevent an active, long-running agent turn (e.g., 2,000 shell commands and file reads) from exhausting memory or causing scroll jumps while the user is reading:
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Viewport as Virtualized Scroll Viewport (Renderer)
-  participant Boundary as lTUh.setBoundary (182735)
-  participant MainEvict as yV / yZ Active Evictor (Main Process eb920)
-
-  Viewport->>Boundary: Visible items change -> setBoundary(viewId, { oldestProtectedTurnId, firstProtectedItemId })
-  Boundary->>MainEvict: IPC setHistoryViewport(renderedTurnIds$)
-  Note over MainEvict: Streaming item arrives from codex app-server
-  MainEvict->>MainEvict: Check island item count: size > 1000?
-  alt size <= 1000
-    MainEvict-->>Viewport: Keep all items; push incremental delta
-  else size > 1000 (Evict down to 500 items)
-    MainEvict->>MainEvict: Compute eviction boundary strictly OLDER than (oldestProtectedTurnId, firstProtectedItemId)
-    MainEvict->>MainEvict: Drop whole older turns OR cut non-structural items inside turn (preserving oldestUserInput, plan, todo-list, error, approval)
-    MainEvict->>MainEvict: Set turn.itemsPagination.olderCursor = { type: "item", itemId: firstKeptItemId }
-    MainEvict-->>Viewport: Push tokenized changes (user's visible viewport never jumps!)
-  end
-```
-
-- **Exact Thresholds (`yV` & `yZ` in `early-bootstrap-920 @971120`)**:
-  - High-water mark: **`1,000` items** (`size > 1e3`).
-  - Low-water target after eviction: **`500` items** (`d > 500`).
-  - **Never Evict Visible Items**: Eviction stops immediately when it reaches `(oldestProtectedTurnId, firstProtectedItemId)` reported by the renderer's `setBoundary`.
-  - **Preserved Structural Items (`!yX(item)`)**: Even when cutting items inside a turn, `yZ` never evicts `oldestUserInput` (the opening user prompt), `"todo-list"`, `"plan"`, `"planImplementation"`, `"error"`, `"automaticApprovalReview"`, `"strictReviewNotice"`, `"remoteTaskCreated"`, `"personalityChanged"`, or `"forkedFromConversation"`.
-
-### 4.4 Fine-Grained Reactive Transcript Store & 10-Thread LRU (`182735 @2048000`)
-
-In the renderer (`182735.d3d917f28d.js`), each conversation's state is decomposed into independent reactive signal maps so token streaming never triggers a full-conversation rebuild:
-
-- `w` (`turnEntityKeys`): Signal array of turn entity keys in the active viewport.
-- `H` (`turnDetailsByKey`): Map of `entityKey -> turn metadata` (status, timestamps, diff summary).
-- `B` (`itemSlotsByTurnKey`): Map of `entityKey -> ordered itemIds`.
-- `q` (`itemTypesByTurnKey`): Map of `entityKey -> Map<itemId, itemType>`.
-- `L` (`itemsByCompositeKey`): Map of `(entityKey, itemId) -> Item signal`.
-- **Streaming Token Coalescing**: When a `text` or `text-parts` delta arrives (`case "text"`), it mutates **only** `L.at((entityKey, itemId))` via string splice (`text.slice(0, start) + insert + text.slice(end)`). Neither `w`, `H`, `B`, nor sibling items are notified.
-- **10-Conversation LRU Cache**: Unmounted conversation scopes are tracked in an LRU list (`t.slice(-10)`); when a 11th conversation is opened, the oldest inactive conversation scope is disposed (`(0, s.v7)(x, eu(e))`), bounding renderer memory.
+### 1.7 Multi-Thread Hydrated Retention (`10`-Thread LRU)
+- **Where in Bundle**: `yW = 10` (`@968000`), `readRetainedRecentThreadIds` (`@4402600`), `bn` (`@893800`).
+- **Mechanism**: Keeps up to `10` recently viewed inactive threads hydrated in memory per host, while pinning any thread that is currently `active`, waiting on an approval/user-input request, or part of an active parent/subagent tree (`bn`).
 
 ---
 
-## 5. Shared vs Mode-Specific Data Flow Summary
+## 2. Reconciling Against Current `Codex-Native-Unoffical` (`HEAD` `17f08f3`)
 
-| Layer | Shared Across Chat, Work, and Codex | Mode-Specific |
-| :--- | :--- | :--- |
-| **App Shell & Router** | 100% shared (`107` routes, window chrome, sidebar layout, command menu) | Default landing route & mode toggle state (`sidebarProductMode`) |
-| **Sidebar Catalog** | Single SQLite table (`local_thread_catalog`) + `ThreadCatalogSyncManager` (`ehf`) | Sync transport per `host_kind` (`chatgpt` REST vs `app-server` RPC) |
-| **Composer (`g.r`)** | ProseMirror input, `@` mentions, `$` skills, attachments, voice dictation, queue | Footer controls (Codex shows Worktree/Sandbox/Approval; Chat/Work shows Cloud/Web/Apps) |
-| **Transcript Store (`182735`)** | 10-thread LRU, reactive item/slot maps, `conversationDetailMode` renderer | Source of updates (`MrGp` SSE DAG for Chat vs Canonical Turn Islands for Codex) |
-| **Right-Hand Panels** | Shared dock/overlay container (`--thread-floating-panel-width`) | Panel content (Diff/Terminal for Codex; In-App Browser/Canvas/Deliverables for Work/Chat) |
+A thorough source audit of `Codex-Native-Unoffical` at `HEAD` (`17f08f3`) confirms that our client **already implements** a sophisticated two-controller bounded history architecture—contrary to stale descriptions in earlier drafts of `ADOPTION_MATRIX.md`:
+
+| Mechanism | ChatGPT Desktop (`26.326.51703`) | Current `Codex-Native-Unoffical` (`HEAD` `17f08f3`) | Comparison & Real Remaining Debt |
+|---|---|---|---|
+| **Turn Pagination RPC** | `thread/turns/list` (`limit: 5`, `sortDirection: "desc"`, `itemsView: "summary"`) | [`HistoryController`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/lib/src/features/conversation/history_controller.dart#L29-L418) calls `thread/turns/list` (`turnPageSize = 20`, `sortDirection: SortDirection.descending`, `itemsView: 'summary'`) with opaque `nextCursor` (`loadOlderTurns()`) | **Already equivalent in protocol!** `turnPageSize = 20` is well-suited to desktop viewport height (`KEEP_OUR_ADVANTAGE` / `ADAPT_NATIVE`). |
+| **Turn Retention Window** | History Islands (`islands`, `olderBoundary`, `newerBoundary`) + experiment-gated `1000 -> 500` item eviction | `HistoryController` caps `_turns` at `maxRetainedTurns = 100` (`history_controller.dart:33`) | **Real Bug/Debt in Our `HEAD`**: In `HistoryController.loadOlderTurns()` (`history_controller.dart:175-179`), when `_turns.length > 100`, `_turns.removeRange(0, _turns.length - maxRetainedTurns)` removes indices `0..k` of the descending `_turns` list—which are the **newest** turns sitting right at `center` (`anchor: 1.0`) of `_ConversationScrollView`, shifting scroll extent while the user is reading older turns! |
+| **Per-Turn Item Expansion & Deferred Output** | `thread/items/list` (`limit: 30`, `deferOutput: {commandExecution: true}`) + `thread/items/read` | `HistoryController.loadTurnItems(turnId)` (`itemPageSize = 25`, `maxRetainedItems = 100`, `deferOutput: {'commandExecution': true}`) + `loadDeferredOutput(item)` via `thread/items/read` (`history_controller.dart:231-387`) | **Already equivalent!** (`KEEP_OUR_ADVANTAGE`) |
+| **Live Turn Streaming & Coalescing** | Renderer store updates from `codex_desktop:message-for-view` | [`ConversationController`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/lib/src/features/conversation/conversation_controller.dart#L24-L820) (`maxEntries = 200`, `maxEntryCharacters = 64 KiB`, `maxPendingDeltaItems = 16`, `50 ms` `coalesceInterval`), deduplicated by `item.id` in `conversation.dart` | **Native advantage!** Bounded 50 ms delta coalescing + Rust `codex-native-host` `512 MiB/item`, `2 GiB/session` streaming SHA-256 deduplicated spool (`KEEP_OUR_ADVANTAGE`). |
+| **Cross-Thread Switching & Scroll Restoration** | `10`-thread hydrated LRU (`yW = 10`) + turn-anchored scroll state | `HistoryController.bindThread()` clears `_turns` on every thread switch and reloads page 1 (`20` turns); `conversation.dart` stores raw pixel offset (`Map<String, double> _threadScrollOffsets`, max `32`) | **Real Bug/Debt in Our `HEAD`**: If a user loads >1 page of older turns, scrolls to `-4000 px`, switches threads, and returns, only page 1 (`20` turns) is loaded and `-4000 px` clamps to the wrong turn! Needs `(anchorTurnId, anchorItemId, relativeOffset)` + optional small (`3..5` thread) history cache (`ADAPT_NATIVE`). |
+
+---
+
+## 3. Chat Mode Data Flow: `MrGp` Conversation Tree DAG (`STATIC_BUNDLE`)
+
+In `webview/assets/async/182735.d3d917f28d.js`, standard ChatGPT Cloud Chat (`/chat/:conversationId`) uses the `MrGp` conversation tree DAG:
+
+```typescript
+interface ChatConversationDAG {
+  conversation_id: string;
+  title: string;
+  current_node: string;
+  mapping: Record<string, {
+    id: string;
+    parent?: string | null;
+    children: string[];
+    message?: {
+      id: string;
+      author: { role: 'system' | 'user' | 'assistant' | 'tool'; name?: string };
+      create_time?: number | null;
+      content: {
+        content_type:
+          | 'text'
+          | 'multimodal_text'
+          | 'code'
+          | 'execution_output'
+          | 'thoughts'
+          | 'reasoning_recap'
+          | 'tether_browsing_display'
+          | 'sonic_webpage';
+        parts?: Array<string | Record<string, unknown>>;
+      };
+      metadata?: Record<string, unknown>;
+    } | null;
+  }>;
+}
+```
+
+- **Branching & Sibling Switching**: Editing a user prompt or regenerating an assistant reply appends a new child node to the parent node's `children[]` array and updates `current_node` to the leaf of the newly active branch. The active linear transcript is computed by walking `parent` pointers backward from `current_node` to the root (`O(depth)`).
+- **Streaming Delta Protocol**: `/backend-api/f/conversation` streams SSE frames (`event: delta_encoding` / `event: delta`) using JSON-patch operations (`o: "append" | "replace" | "add" | "patch"`, `p: "/message/content/parts/0"`, `v: "..."`).
+- **Support Classification**: The `/backend-api/f/conversation` transport is `PRIVATE_WEB_SESSION`, whereas the `MrGp` parent/children branch-tree data structure itself is a general UI/domain pattern (`ADOPT_PATTERN` if/when `Codex-Native-Unoffical` adds a `ChatBackend`).

@@ -1463,7 +1463,7 @@ mobile, or a production dependency on discovered private/internal APIs.
 
 ## ADR-031 — Unified Native Chat + Work + Codex platform architecture from ChatGPT Desktop 26.1103.32239 reverse analysis
 
-**Status:** Accepted
+**Status:** Accepted (Superseded in part and recalibrated by ADR-032)
 
 **Date:** 2026-11-07
 
@@ -1559,5 +1559,123 @@ presentation`, strict bounded-memory rules, and public/private API separation:
   (`REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`) so the user can
   review both the updated Desktop UI build and the 9-document reverse-analysis
   architecture blueprint before authorizing the next implementation phase.
+
+---
+
+## ADR-032 — Reopen and recalibrate reverse-analysis conclusions with formal evidence grades
+
+**Status:** Accepted (Supersedes and recalibrates over-inferred claims in ADR-031)
+
+**Date:** 2026-11-07
+
+### Context
+
+Human review and independent code review of `17f08f3` (`docs/reverse/*.md`,
+`ADR-031`) established that while the raw forensic extraction from ChatGPT
+Desktop (`26.326.51703` / `codex-cli 0.167.0-alpha.3.2`) was high-value, mapping
+those observations onto `Codex-Native-Unoffical` and `ADR-031` suffered from:
+
+1. **Current-state repository drift** in `ADOPTION_MATRIX.md` (describing our
+   client as using `thread/read(includeTurns: true)`, `_allTurns`,
+   `maxRenderedTurns = 40`, `ListView.builder` post-frame jumps, a `120`-entry
+   Markdown AST cache, and a `1 MiB/item, 32 MiB/session` Host spool, whereas
+   `HEAD` already implements `HistoryController` with `thread/turns/list`
+   `turnPageSize = 20`, `maxRetainedTurns = 100`, `thread/items/list`
+   `itemPageSize = 25`, `thread/items/read`, `_ConversationScrollView` with
+   `CustomScrollView(anchor: 1.0)`, `parseUserMessagePresentation` in `domain/`,
+   and a `512 MiB/item, 2 GiB/session` SHA-256 deduplicated Rust spool).
+2. **Evidence-grade conflation** (treating static strings in `app.asar` as active
+   or `PUBLIC_SUPPORTED` without cross-checking `preload.js` or stock
+   `codex app-server generate-json-schema`).
+3. **Over-inferred product/runtime conclusions** (leaping from `STEPS_PROSE` to
+   claiming stock `codex app-server` is a `PUBLIC_SUPPORTED` Native Chat
+   backend; oversimplifying Work Mode as `"Chat + app-server"`; listing
+   cloud-only `thread/startAeon` and `thread/environmentReady` alongside stock
+   local RPCs; and treating Official Remote Control as a single proprietary
+   monolith).
+4. **Uncalibrated magic numbers** (stating `"newest 15 turns"` in `ADR-031` vs
+   `limit: 5` in `DATA_FLOW.md`, and treating Electron's `10`-thread LRU and
+   experiment-gated `1000 -> 500` active item eviction as mandatory constants).
+
+### Decision
+
+1. **Enforce the Two-Axis Evidence & Support Model Across All Reverse Docs**:
+   - **Evidence Confidence Tags**: `PUBLIC_DOC`, `PUBLIC_SOURCE`, `LIVE_OBSERVED`,
+     `LIVE_CALLED`, `STATIC_BUNDLE`, `LOCAL_SCHEMA`, `COMMUNITY_CORROBORATED`,
+     `INFERRED`, `UNKNOWN`.
+   - **Support Classifications**: `PUBLIC_SUPPORTED`,
+     `EXPERIMENTAL_STOCK_SCHEMA`, `PRIVATE_WEB_SESSION`,
+     `PRIVATE_INTERNAL_SERVICE`, `INTERNAL_ELECTRON_IPC`.
+   - Automated verification via `python3 tools/reverse/inspect_chatgpt_desktop.py
+     --evidence-report` cross-checks ASAR strings against `preload.js` (`10`
+     exposed IPC channels vs `9` internal) and stock `codex app-server
+     0.167.0-alpha.3.2` schemas (`105` stable + `74` experimental = `179`
+     `ClientRequest` methods; `9` stable + `2` experimental = `11`
+     `ServerRequest` methods; `82` `ServerNotification` methods).
+2. **Separate Shared Presentation Shell from Distinct Runtime Semantics**:
+   - Chat, Work, and Codex share the **UI shell, navigation, composer, and
+     renderer item/slot infrastructure**, but have **distinct runtime and
+     source-of-truth models**:
+     - **Chat**: `/backend-api/f/conversation` (`MrGp` tree DAG, `source_kind =
+       "chatgpt"`, `conversation_origin IS NOT 'tpp'`) (`PRIVATE_WEB_SESSION`).
+     - **Work**: Multi-runtime orchestration across **four** paths: (a) local
+       `codex app-server` with `STEPS_PROSE` (`includeProseDetailLevelInstructions:
+       true` injecting `<app-context>### Non-technical UI` in
+       `early-bootstrap-339 @780000`), (b) Durable Cloud Host
+       (`wss://codex-cloud-backend.chatgpt.com/` using cloud-only
+       `thread/startAeon`), (c) Local Work Executor (`tpp-local-executor`
+       registering via `POST /flora/cca/executor`, spawning `codex exec-server
+       --concurrent-requests 32 --remote <url> --environment-id <id>` over a
+       Noise rendezvous tunnel, and sending cloud-only
+       `thread/environmentReady`), and (d) cloud `/backend-api/f/conversation`
+       threads with `conversation_origin = 'tpp'` +
+       `submitChatGPTLocalFunctionResult`.
+     - **Codex**: Canonical `codex app-server` turn/item history (`PUBLIC_SOURCE`).
+3. **Recalibrate `STEPS_PROSE` and Future `ChatBackend` Options**:
+   - Supersede `ADR-031` §4's claim that `STEPS_PROSE` makes stock `app-server`
+     a `PUBLIC_SUPPORTED` ChatGPT Cloud Chat backend. `STEPS_PROSE` is a
+     Codex/Work detail-level mode, and copying its `a2` (`### Non-technical UI`)
+     prompt is forbidden by `AGENTS.md` Rule #1.
+   - Adopt `STEPS_PROSE` strictly as a **client-side UI presentation filter**
+     (`ADOPT_PATTERN`).
+   - Keep future `ChatBackend` options explicitly separated into Route A
+     (`OpenAIResponsesBackend`, `PUBLIC_SUPPORTED`), Route B
+     (`ChatGPTCompatibilityBackend`, `PRIVATE_WEB_SESSION`, never a default core
+     dependency), and Route C (`CodexBackend` prose UI filter,
+     `PUBLIC_SUPPORTED` local agent).
+4. **Calibrate History & Retention Constants (`ADAPT_NATIVE` + `KEEP_OUR_ADVANTAGE`)**:
+   - Supersede `ADR-031` §3's `"newest 15 turns"` claim (which misread a `15e3`
+     ms timeout) and its mandate to copy Electron's `1000 -> 500` eviction
+     (which is gated by Statsig experiment `codex_app_active_history_eviction_v1`,
+     default `false`) and `10`-thread LRU verbatim.
+   - Preserve our native `HistoryController` (`turnPageSize = 20`,
+     `maxRetainedTurns = 100`, `itemPageSize = 25`, `maxRetainedItems = 100`)
+     and Rust `codex-native-host` spool (`512 MiB/item`, `2 GiB/session`,
+     SHA-256 deduplication) as `KEEP_OUR_ADVANTAGE`, while targeting the five
+     concrete `HEAD` debt items (`16.A` cross-thread scroll anchor, `16.B`
+     `>100`-turn window-shift scroll stability, `16.C` domain circular import,
+     `16.D` `_RenderConversationViewport` audit, `16.E` structured attachment
+     deduplication) under `ADAPT_NATIVE`.
+5. **Stratify Official Remote Control into 8 Layers and Keep `RemoteBackend` Dual-Track**:
+   - Supersede `ADR-031` §6's monolithic rejection of Official Remote Control.
+   - Recognize that Layers 1–2 (Host-side `remoteControl/*` RPCs and
+     `codex app-server --listen ws:// --ws-auth`) are in **stock `codex
+     app-server` (`PUBLIC_SOURCE` `--experimental`)**, while Layers 3–7
+     (Controller `remote-control-device-key.node`, MFA `step_up_token`,
+     `/backend-api/codex/remote/control/client/*`, `/wham/remote/control/server`
+     relay) are `PRIVATE_INTERNAL_SERVICE`.
+   - Maintain a dual-track `RemoteBackend`: `DirectHostRemoteBackend` for
+     self-hosted Android-to-Desktop (`KEEP_OUR_ADVANTAGE`), plus optional
+     Desktop Host pairing support via stock `remoteControl/*` RPCs
+     (`EXPERIMENTAL_STOCK_SCHEMA`).
+
+### Consequence
+
+- All 9 documents in `docs/reverse/*.md`, `tools/reverse/inspect_chatgpt_desktop.py
+  --evidence-report`, `docs/RESEARCH.md`, and `PROJECT_STATUS.md` are now
+  reconciled with current `HEAD` and formal evidence grades.
+- No premature feature implementation was introduced in this recalibration pass.
+- Per `ADR-030`, the repository transitions to `Mode: HUMAN_REVIEW` with status
+  `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`.
 
 

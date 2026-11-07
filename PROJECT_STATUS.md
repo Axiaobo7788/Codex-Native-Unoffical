@@ -8,21 +8,19 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `HUMAN_REVIEW`**
 
-- Current authorized direction: full-stack reverse analysis of the installed
-  latest ChatGPT Desktop (`26.1103.32239`, `codexBuildNumber: 25471`) as a
-  reference implementation for the future unified Native Chat + Work + Codex
-  client is now machine-complete (`REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`).
-- This phase was strictly **research and architecture mapping**. All 9
-  reverse-analysis documents (`docs/reverse/*.md`), the clean-room inspector
-  (`tools/reverse/inspect_chatgpt_desktop.py`), and `ADR-031` are completed and
-  committed.
-- Per `ADR-030`, because machine-actionable reverse analysis is exhausted and
-  the next step requires Human review of both the Desktop UI productization
-  build and the unified Native Chat + Work + Codex architecture blueprint before
-  starting new feature implementation, the repository is now in
-  `Mode: HUMAN_REVIEW`.
-- A Human-reported defect or new phase authorization returns the affected scope
-  to `SELF_ITERATION`.
+- Current status marker: **`REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`**.
+- The authorized `SELF_ITERATION` phase (**Reverse Analysis Correction, Evidence
+  Revalidation & Architecture Reconciliation**) is now complete and recorded in
+  `ADR-032`.
+- All 9 documents in `docs/reverse/*.md`, `tools/reverse/inspect_chatgpt_desktop.py
+  --evidence-report`, `docs/DECISIONS.md` (`ADR-032`), `docs/RESEARCH.md`, and
+  `PROJECT_STATUS.md` have been recalibrated against a line-by-line audit of
+  current `HEAD` (`17f08f3`), the stock `codex app-server 0.167.0-alpha.3.2`
+  JSON schemas (`PUBLIC_SOURCE`), and the formal two-axis Evidence Confidence +
+  Support Classification model.
+- Do **not** begin Chat, Work, or Mobile feature implementation or Desktop debt
+  fixes until Human review of the recalibrated architecture map and `ADR-032`
+  authorizes the next phase.
 
 ## Current phase
 
@@ -38,7 +36,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Desktop UI productization checkpoint — MACHINE-VERIFIED AND LIVE-LINUX-WALKED; Human acceptance remains pending. The prior marker `DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW` is preserved as checkpoint history.**
 
-**Current phase — ChatGPT Desktop full-stack reverse analysis and future Native shared-platform mapping: `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`). All 9 `docs/reverse/*.md` maps, `tools/reverse/inspect_chatgpt_desktop.py`, and `ADR-031` are complete. Do not begin Chat/Work/mobile implementation until the user reviews the architecture blueprint and explicitly authorizes the next implementation phase.**
+**Prior reverse-analysis marker (`17f08f3`, preserved history): `REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` — superseded by Human/code review on 2026-11-07 (`ADR-032`) to correct current-state drift, separate static/live/public evidence grades, recalibrate `STEPS_PROSE`/Work/Chat/Remote conclusions, and reconcile adoption recommendations with current `HEAD`.**
+
+**Current phase — Reverse Analysis Correction, Evidence Revalidation & Architecture Reconciliation (`ADR-032`): `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).**
 
 ## Current repository state
 
@@ -1995,6 +1995,40 @@ specific evidence boundaries.
   job `127623402670` all completed successfully, including native tests on each
   OS, hosted Flutter analysis/tests, supported desktop builds and Host/license
   execution, Linux runtime closure, and the debug APK gate.
+- Reverse analysis correction, evidence revalidation & architecture
+  reconciliation (`ADR-032`):
+  - Audited current `HEAD` (`17f08f3`) source files (`history_controller.dart`,
+    `conversation_controller.dart`, `conversation.dart`, `history_protocol.dart`,
+    `history_models.dart`, `thread_models.dart`, `thread_list_controller.dart`,
+    `native_host/src/config.rs`, `native_host/src/spool.rs`) and eliminated all
+    stale repository descriptions in `docs/reverse/ADOPTION_MATRIX.md`.
+  - Extended `tools/reverse/inspect_chatgpt_desktop.py` with `--evidence-report`,
+    cross-checking ASAR symbols, IPC channels (`10` preload-exposed vs `9`
+    internal), RPC strings, and network endpoints (`168` `/backend-api/*` and
+    `/wham/*` templates) against the stock `codex app-server 0.167.0-alpha.3.2`
+    generated JSON schemas (`105` stable + `74` experimental = `179`
+    `ClientRequest` methods; `9` stable + `2` experimental = `11`
+    `ServerRequest` methods; `82` `ServerNotification` methods).
+  - Verified all 6 official history hydration/retention paths and their Statsig
+    gates (`limit: 5` turns in `yU`/`bC`/`readLatestPreviewPage`, `limit: 2`
+    items in `fI`, `limit: 28/30/100` in `loadTurnItems`, `limit: 500` items +
+    `limit: 100` turns in `bX` gated by `"codex-app-thread-timeline-history"`,
+    `maxTurns: 1..100` in `yN` gated by `"codex-app-bounded-cloud-history"`,
+    `1000 -> 500` active item eviction in `yX`/`yY` gated by experiment
+    `"codex_app_active_history_eviction_v1"` default `false`, and `10`-thread
+    LRU `yW = 10`), correcting the `"newest 15 turns"` claim from `ADR-031`.
+  - Proved from `early-bootstrap-339 @780000..792000` and `early-bootstrap-920
+    @4400493` that `STEPS_PROSE` (`includeProseDetailLevelInstructions: true`)
+    injects `<app-context>### Non-technical UI` (`a2`) into Codex/Work agent
+    threads and hides bash outputs in the UI rather than making stock
+    `app-server` a ChatGPT Cloud Chat backend; mapped the 4-path Work Mode
+    runtime orchestration (`local app-server`, `durable` cloud `thread/startAeon`,
+    `tpp-local-executor` `codex exec-server` Noise rendezvous +
+    `POST /flora/cca/executor` + `thread/environmentReady`, and `tpp` cloud
+    conversations); and stratified Official Remote Control into 8 layers (Host
+    `remoteControl/*` RPCs and `--listen ws://` in stock `--experimental` schema
+    vs Controller `remote-control-device-key.node` + MFA `step_up_token` +
+    `/wham/remote/control/server` relay).
 
 ## Known risks / watch items
 
@@ -2112,20 +2146,20 @@ specific evidence boundaries.
 
 ## Next action
 
-`REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
+`REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
 
 - **MACHINE VERIFIED**:
-  - `python3 tools/reverse/inspect_chatgpt_desktop.py --summary --plugins` (0 errors, reproducible clean-room inspection of `ChatGPT_Desktop_1.2026.103.0_x64.deb` / `/opt/codex-desktop/resources/app.asar` and `~/.codex/sqlite/codex.db` + `~/.codex/*.sqlite`), all 9 reverse-analysis deliverables (`docs/reverse/*.md`), and `ADR-031`.
-  - `dart analyze` (0 issues), `flutter analyze --no-pub` via ASCII workspace copy (0 issues), all 188 Flutter tests, all 98 Rust `codex-native-host` tests, and `flutter build linux --debug`.
+  - `python3 tools/reverse/inspect_chatgpt_desktop.py --evidence-report` (0 errors, reproducible cross-check of `/opt/codex-desktop/resources/app.asar`, `preload.js`, and stock `codex app-server 0.167.0-alpha.3.2` generated JSON schemas), all 9 recalibrated reverse-analysis deliverables (`docs/reverse/*.md`), and `ADR-032` (preserving `ADR-031` as history).
+  - `dart analyze` (0 issues) and all 188 Flutter tests (`flutter test` PASS).
 - **AGENT REAL-USE VERIFIED**:
-  - Live DevTools inspection (`http://127.0.0.1:9333`) of the official ChatGPT Desktop (`26.1103.32239`) and side-by-side live Linux desktop walkthrough of `Codex Native` against `/opt/codex-desktop/resources/codex` (`0.166.0-alpha.5.1`) with real window captures (`live_v2_01_landing.png` .. `live_v2_04_worked_expanded.png`).
+  - Live DevTools inspection (`http://127.0.0.1:9333`) of the official ChatGPT Desktop and side-by-side live Linux desktop walkthrough of `Codex Native` against `/opt/codex-desktop/resources/codex` (`live_v2_01_landing.png` .. `live_v2_04_worked_expanded.png`).
 - **HUMAN REVIEWED**:
-  - Prior revision `7f220d5` was reviewed by the user on Linux, reopening the Desktop UI phase under `ADR-029`, followed by `ADR-030` authorizing this full-stack ChatGPT Desktop reverse analysis.
+  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), and `17f08f3` was reviewed by Human/code review, triggering the `ADR-032` reverse-analysis recalibration and architecture reconciliation.
 - **NOT YET HUMAN VERIFIED**:
-  - Human review and sign-off on the 9-document ChatGPT Desktop reverse-analysis and unified Native **Chat + Work + Codex** platform architecture blueprint (`docs/reverse/*.md`, `ADR-031`).
-  - Interactive user sign-off on the updated `Codex Native` desktop build (`4d63e57`..`HEAD`) across daily-use workflows, dark-mode and high-DPR visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
+  - Human review and sign-off on the recalibrated 9-document reverse-analysis suite (`docs/reverse/*.md`), the 8-row `PREVIOUS CLAIM -> NEW FINDING` ledger in `docs/reverse/ADOPTION_MATRIX.md`, the 5 concrete `HEAD` code-review debt items (`16.A`–`16.E`), and `ADR-032`.
+  - Interactive user sign-off on the `Codex Native` desktop build across daily-use workflows, dark-mode and high-DPR visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
 
-Wait for Human review and an explicit instruction before starting Phase 1 implementation of the unified Native Chat + Work + Codex platform (`codex_native_catalog.sqlite`, canonical turn islands, `FollowUpTurnBehavior` mode switch, or Native Chat backend).
+Wait for Human review and an explicit instruction before starting either the 5 concrete Desktop code-review debt fixes (`16.A`–`16.E`) or any next product phase.
 
 ## Milestone outline
 

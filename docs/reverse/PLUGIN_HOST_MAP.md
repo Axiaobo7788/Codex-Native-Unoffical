@@ -1,107 +1,64 @@
-# ChatGPT Desktop (`26.1103.32239`) — Plugins, Apps, Skills, MCP, and Capability Host Map
+# ChatGPT Desktop Plugin, Skill, MCP & Skybridge Host Map (Recalibrated)
 
-> **Scope**: Disentangles the five overlapping capability abstractions in ChatGPT Desktop (`Plugins`, `Skills`, `MCP Servers`, `Apps/Connectors`, and `Skybridge Widget Sandboxes`), documents all bundled plugins in `26.1103.32239`, and defines the **Shared Capability Host** architecture for `Codex-Native-Unoffical`.
-
----
-
-## 1. Taxonomy: Plugins vs Skills vs MCP vs Apps vs Skybridge Widgets
-
-In ChatGPT Desktop `26.1103.32239`, these five terms refer to distinct layers of a single capability stack:
-
-```mermaid
-flowchart TB
-  subgraph Package["1. Plugin Package (.codex-plugin/plugin.json + receipt.json)"]
-    Manifest["plugin.json (Metadata, Brand Color, Capabilities, Hooks)"]
-    Skills["2. Skills (skills/<name>/SKILL.md + agents/openai.yaml)"]
-    LocalMCP["3. Local MCP Server (.mcp.json -> stdio / pipe / HTTP)"]
-    Scripts["Helper Scripts & Binaries (Python / Node / Tectonic / CUA)"]
-  end
-
-  subgraph CloudConnectors["4. Apps / Cloud Connectors (app:// & /backend-api/aip/connectors/*)"]
-    OAuthApp["Cloud OAuth Connector (GitHub, Google Drive, Slack, Linear, Notion...)"]
-    CloudMCP["Cloud MCP Proxy (/backend-api/ecosystem/call_mcp)"]
-  end
-
-  subgraph UIHost["5. Skybridge Widget & Browser Host (Renderer + Owl Partitions)"]
-    Sandbox["codex-sandbox:// iframe + sandbox-preload.js (19 MessagePort channels)"]
-    IAB["In-App Browser (persist:codex-browser-app + browser-page-preload.js)"]
-  end
-
-  Manifest --> Skills
-  Manifest --> LocalMCP
-  Manifest --> Scripts
-  LocalMCP -->|JSON-RPC tools/call| UIHost
-  CloudMCP -->|mcpToolCall / elicitation| UIHost
-```
-
-| Concept | Definition in `26.1103.32239` | Where It Lives | How the Agent Invokes It | Classification |
-| :--- | :--- | :--- | :--- | :--- |
-| **1. Plugin** | A signed distributable bundle (`.codex-plugin/plugin.json` + Ed25519 `receipt.json`) that packages **Skills**, **MCP servers**, **lifecycle hooks** (`Stop`, `Interrupt`, `SubagentStop`), and **helper scripts/assets** as a single installable unit. | `/opt/codex-desktop/resources/plugins/openai-bundled/plugins/*` & `~/.codex/plugins/` | Managed via `codex app-server` RPCs: `plugin/list`, `plugin/read`, `plugin/install`, `plugin/uninstall`. | `PUBLIC_SUPPORTED` (via `app-server`) |
-| **2. Skill** | A prompt-and-script workflow module defined by `SKILL.md` (YAML frontmatter `name`, `description` + Markdown instructions) and optional `agents/openai.yaml` (`display_name`, `default_prompt`, `allow_implicit_invocation`). | Inside a plugin (`plugins/<id>/skills/<skill>/SKILL.md`), workspace (`.agents/skills/`), or `~/.codex/skills/`. | Explicit `$skill-name` mention in composer (`type: "skill"` user input) or implicit model selection via `skills/list`. | `PUBLIC_SUPPORTED` |
-| **3. MCP Server** | A Model Context Protocol server speaking JSON-RPC (`tools/list`, `tools/call`, `resources/read`, elicitation). Can be standalone (`config.toml` `mcp_servers.*`) or bundled inside a plugin (`.mcp.json`). | Local `stdio` process, local named pipe (`CODEX_APP_TOOLS_PIPE_PATH`), or `streamable_http`. | Directly exposed as `mcp__<server>__<tool>` or `namespace` tools inside `codex app-server`. | `PUBLIC_SUPPORTED` |
-| **4. App / Connector** | A cloud OAuth integration (`app://<connectorId>`, e.g., Google Drive, GitHub, Slack, Linear) managed on `chatgpt.com`. | `/backend-api/aip/connectors/*` and `/backend-api/ecosystem/call_mcp` (or `codex_apps` MCP server in `app-server`). | Referenced via `@App` (`app://`) in composer; tool calls require OAuth consent or `codex_mcp_elicitation` approval. | `PRIVATE_COMPATIBILITY` / `SERVER_ONLY` |
-| **5. Skybridge Widget (`codex-sandbox://`)** | An isolated HTML/JS visual widget (charts, calendars, flamecharts, stacktraces, interactive MCP app views) rendered inline in a turn or in a side panel. | `codex-sandbox://` custom scheme iframe with `sandbox-preload.js`. | Emitted by `visualize` skill (`<viz-*>`, `mountChart`) or MCP app tool outputs; communicates via 19 `MessagePort` channels. | `LOCAL_IMPLEMENTATION_DETAIL` |
+> **Evidence Sources**:
+> - `STATIC_BUNDLE`: `/opt/codex-desktop/resources/plugins/openai-bundled/` (`marketplace.json`, 17 `.codex-plugin/plugin.json` manifests, `.mcp.json` configs, and 33 `SKILL.md` files) inspected via `python3 tools/reverse/inspect_chatgpt_desktop.py --plugins`, plus `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (`@2193000..2201500`) and `webview/assets/async/182735.d3d917f28d.js`.
+> - `PUBLIC_SOURCE`: Stock `/opt/codex-desktop/resources/codex app-server generate-json-schema` (`0.167.0-alpha.3.2`) for `plugin/*`, `skills/*`, `mcpServer/*`, and `apps/*` RPCs.
 
 ---
 
-## 2. Complete Inventory of Bundled Plugins (`resources/plugins/openai-bundled/`)
+## 0. Evidence & Support Classification Matrix
 
-Every bundled plugin in `/opt/codex-desktop/resources/plugins/openai-bundled/` is cryptographically signed in `receipt.json` (`signer_id: "codex-plugin-Signer-prod-1"`, Ed25519 signature over the canonical manifest of SHA-256 file hashes):
-
-| Plugin Name | Version | Category | Bundled MCP Server(s) | Bundled Skills (`SKILL.md`) | Architectural Purpose & Key Mechanics |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`codex-app-tools`** | `26.1103.32239` | Developer Tools (Hidden auto-installed: `xGqk`) | `codex_app` (`./scripts/launch_codex_app_tools_mcp ./server.mjs`) | *(None — pure MCP server)* | Bridges the agent back to the desktop UI over `CODEX_APP_TOOLS_PIPE_PATH`. Exposes 7 prompt-gated tools: `automation_update`, `create_thread`, `delete_thread`, `send_message_to_thread`, `fork_thread`, `handoff_thread`, `move_thread_to_project`. Outputs `<codex_delegation>` XML blocks (`EMCu`). |
-| **`browser`** | `26.1103.32239` | Engineering | Uses `node_repl` MCP server + `browser-service.mjs` (`1.6 MB`) + `browser-accessibility.wasm.br` (`4.08 MB`) | `control-in-app-browser` | Controls the in-app Chromium browser (`persist:codex-browser-app`, codenamed `iab` / `Dot`). Supports AX-tree diffing (`tab.ax.write()`), Playwright locators, CDP (`tab.capabilities.get("cdp")`), Sign in with ChatGPT (`siwc`), secure credential fill (`browserAuth`), WebMCP (`webmcp`), and `plugin://browser@openai-bundled?mention=tab-v1...` tab mentions. |
-| **`chrome`** | `26.1103.32239` | Productivity | `browser-service.mjs` + Native Messaging Host | `control-chrome-browser` | Controls the user's external Chrome / Edge / Brave / Opera / Vivaldi browser via WebExtensions (`hehggadaopoacecdllhhajmbjkdcmajg`, `odlomjlbamekndcpllcnffbgeohgkmjh`), with explicit tab claiming (`mentionedBrowser.user.claimTab(tab)`) and turn-end tab cleanup (`markDeliverable`, `markHandoff`). |
-| **`unified-computer-use`** | `26.1103.32239` | Engineering (Hidden auto-installed: `xGqk`) | `unified_computer_use` (spawns native sidecar `resources/cua_node`) | `computer-use` | Provides OS-level desktop screen capture, accessibility tree inspection, and mouse/keyboard automation via `cua_node`. |
-| **`latex`** | `0.2.8` | Education & Research | *(None — Python scripts + shared `CODEX_TECTONIC_PATH`)* | `latex-compile`, `latex-doctor`, `texlive-runtime-installer` | Compiles `.tex` projects using the bundled `resources/tectonic` (`0.17.0`) binary first for simple documents, falling back to system TeX Live/MacTeX or an opt-in user-scoped `~/.cache/codex-runtimes/codex-texlive/full` install. |
-| **`deep-research`** | `0.1.1` | Research | *(None — orchestrates subagent + `$documents`)* | `deep-research` | Configures `xhigh` reasoning effort, delegates multi-pass web/source discovery to a dedicated research subagent, writes a cited `report-source.md` ledger, and produces a visually verified `.docx` deliverable. |
-| **`visualize`** | `1.0.84` | Productivity | *(None — `render.py` + `chart_check.mjs` + Skybridge runtime)* | `visualize` | Authors interactive charts (`area`, `bar`, `boxPlot`, `funnel`, `heatmap`, `histogram`, `line`, `pie`, `ranking`, `sankey`, `scatter`, `sparkline`, `waterfall`) and widgets (`<viz-calendar>`, `<viz-flame-chart>`, `<viz-stack-trace>`, `<viz-waterfall>`) loaded from `persistent.oaistatic.com/plugins/visualize/*`. |
-
-### 2.1 Additional Built-In Plugin Identifiers Registered in `xGqk` (`972499.b9f8eb2bc4.js`)
-
-Beyond the 7 directories in `openai-bundled`, module `xGqk` registers internal/curated plugin descriptors:
-- `computer-use` (`installWhenMissingRequiresOptIn: true`)
-- `messages`
-- `record-and-replay`
-- `computer-history`
-- `notebook` (`installWhenMissing: true`)
-- `plan` (`plan@openai-bundled`, `installWhenMissing: true`)
+| Capability / Surface | Evidence Tags | Stock `app-server` Schema Status (`0.167.0-alpha.3.2`) | Support Classification |
+|---|---|---|---|
+| **Plugin Management RPCs** (`plugin/list`, `plugin/read`, `plugin/install`, `plugin/uninstall`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable `ClientRequest` (`PUBLIC_SOURCE`) | **`PUBLIC_SUPPORTED`** |
+| **Skills Management RPCs** (`skills/list`, `skills/config/write`, `skills/remote/list`, `skills/remote/export`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`skills/list`, `skills/config/write`) + Experimental (`skills/remote/*`) | **`PUBLIC_SUPPORTED`** (local) / **`EXPERIMENTAL_STOCK_SCHEMA`** (remote) |
+| **MCP Server RPCs** (`config/mcpServer/reload`, `mcpServer/oauth/login`, `mcpServerStatus/list`, `mcpServer/resource/read`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`reload`, `oauth/login`, `mcpServerStatus/list`) + Experimental (`mcpServer/resource/read`) | **`PUBLIC_SUPPORTED`** / **`EXPERIMENTAL_STOCK_SCHEMA`** |
+| **Apps / Connectors RPCs** (`apps/list`, ` apps/install`, `apps/uninstall`, `apps/getInfo`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`apps/list`) + Experimental (`install`, `uninstall`, `getInfo`) | **`PUBLIC_SUPPORTED`** / **`EXPERIMENTAL_STOCK_SCHEMA`** |
+| **Desktop Internal MCP Servers** (`openai_artifact_template_picker`, `codex_app` thread/sidebar/worktree tools) | `STATIC_BUNDLE` (`early-bootstrap-920 @2193000..2201500`) | Injected by Desktop Main Process via `buildMcpCodexConfig` | **`PRIVATE_INTERNAL_SERVICE`** (Desktop-specific MCP sidecar) |
+| **Skybridge (`ui://` MCP Apps Iframe Bridge)** | `STATIC_BUNDLE` (`webview/assets/async/182735.d3d917f28d.js`), `PUBLIC_SOURCE` (`mcpServer/resource/read`) | Renderer-hosted sandboxed iframe consuming `ui://` MCP resources | **`ADOPT_PATTERN`** (Optional WebView host when needed, per `AGENTS.md` Rule #5) |
 
 ---
 
-## 3. Skybridge Widget Sandbox (`codex-sandbox://`) & `MessagePort` Bridge
+## 1. Bundled Marketplace & Plugin Manifest Architecture (`STATIC_BUNDLE` + `PUBLIC_SOURCE`)
 
-When an assistant turn or MCP app renders an interactive HTML widget (`visualize`, `mcpapps`, or artifact preview), ChatGPT Desktop does **not** inject raw HTML into the main React DOM. Instead:
-
-1. **Custom Scheme Isolation (`codex-sandbox://`)**:
-   - The widget loads inside a sandboxed `<iframe src="codex-sandbox://...">` with `sandbox-preload.js`.
-   - CSP restricts network access to approved static CDNs (`persistent.oaistatic.com`) or declared MCP app origins.
-2. **19 `MessagePort` Channels**:
-   - Communication between the main renderer and the sandboxed iframe uses dedicated `MessagePort` channels for:
-     - `widgetState` (`getWidgetState` / `setWidgetState(snapshot)` — persisted per message so interactive filter/control state survives thread reloads!).
-     - Intrinsic height/resize reporting (auto-sizing the iframe in the conversation column without scrollbars).
-     - Theme synchronization (injecting `--color-*`, `--chart-*`, and light/dark mode variables into the iframe).
-     - Tool invocation / follow-up prompt dispatch (`sendFollowUpMessage`, `callMcpTool`).
-     - File download & fullscreen/side-panel expansion requests.
+Located at `/opt/codex-desktop/resources/plugins/openai-bundled/`:
+- **Marketplace Index**: `.agents/plugins/marketplace.json` (`name: "openai-bundled"`, `17` plugins).
+- **Per-Plugin Structure**:
+  ```text
+  plugins/<plugin-name>/
+    .codex-plugin/plugin.json   # name, version, description, author, interface metadata
+    .mcp.json                   # optional MCP server definitions (stdio or HTTP/SSE)
+    .app.json                   # optional ChatGPT App / connector ID binding
+    skills/<skill-name>/SKILL.md # YAML frontmatter + Markdown instructions & scripts
+  ```
+- **17 Bundled Plugins Verified via `--plugins`**:
+  `agent-browser`, `asana`, `build-ios-apps`, `canva`, `cloudflare`, `figma`, `github`, `gmail`, `google-calendar`, `google-drive`, `linear`, `notion`, `openai-docs`, `pdf`, `playwright`, ` slack`, `vercel` (totalling **33 bundled skills**).
 
 ---
 
-## 4. Shared Capability Host Design for `Codex-Native-Unoffical`
+## 2. Desktop-Injected Internal MCP Servers (`STATIC_BUNDLE` `@2193000..2201500`)
 
-### 4.1 What Stock `codex app-server` Already Gives Us for Free (`PUBLIC_SUPPORTED`)
+In `.vite/build/early-bootstrap-920-a204a41244c4b913.js`, `_o.buildMcpCodexConfig` (`@2200200`) and `_s` (`@2193200`) dynamically inject Desktop-managed MCP servers into `codex app-server` configuration when starting local/Work threads:
 
-Because our architecture preserves stock `codex app-server`, **we do not need to reimplement a custom skill parser, plugin manager, or MCP protocol client**:
-- `skills/list`, `skills/config/write`, and `$skill` user input items are natively executed by `codex app-server`.
-- `plugin/list`, `plugin/read`, `plugin/install`, and `plugin/uninstall` are natively managed by `codex app-server`.
-- `config/mcpServer/reload`, `mcpServerStatus/list`, `mcpServer/oauth/login`, and `mcpServer/elicitation/request` are natively handled by `codex app-server`.
+1. **`mcp_servers.openai_artifact_template_picker`**:
+   - Spawns bundled Node script `artifact-template-picker/server.mjs` with env `CODEX_ARTIFACT_TEMPLATE_SKILLS` (capped at `100` template skills / `24 KB` JSON payload) to provide slide/sheet/document templates in Work mode.
+2. **Desktop App MCP (`mcp__codex_app__*`)**:
+   - Exposes desktop workspace/sidebar/thread coordination tools (`create_thread`, `send_message_to_thread`, `handoff_thread`, `fork_thread`, `list_threads`, `create_worktree`, `archive_worktree`, `load_workspace_dependencies`).
+   - Note: For `Codex-Native-Unoffical`, core plugin/skill/MCP support should rely on stock `codex app-server`'s native `plugin/*`, `skills/*`, and `mcpServerStatus/list` RPCs (`PUBLIC_SUPPORTED`) rather than bundling Node sidecars (`AGENTS.md` Rule #5: *"No Electron or Node requirement for the core client"*).
 
-### 4.2 What the Native Client & `codex-native-host` Should Provide
+---
 
-We recommend a clean **3-Tier Shared Capability Host** shared across Chat, Work, and Codex:
+## 3. Skybridge (`ui://` MCP Apps Iframe Protocol — `STATIC_BUNDLE`)
 
-| Tier | Responsibility | Native vs WebView Decision |
-| :--- | :--- | :--- |
-| **Tier 1: Native Capability & Elicitation Surface (Flutter)** | - Skills & Plugins Browser / Manager UI (`plugin/list`, `skills/list`)<br/>- Composer `$skill` & `@mention` autocomplete<br/>- MCP Server status badges, OAuth login launch (`mcpServer/oauth/login`), and inline MCP tool approval / elicitation cards (`mcpServer/elicitation/request`)<br/>- Native rendering of standard charts (`line`, `bar`, `pie`, `area`, `scatter`, `stacktrace`, `calendar`) and LaTeX (`flutter_math_fork` + optional local `tectonic` PDF preview) | **100% Native Flutter** (zero WebView overhead, instant mount, bounded memory). |
-| **Tier 2: Host-Managed Local App Tools (`codex-native-host`)** | - Expose an optional local MCP server (`codex_app` compatible) over stdio/unix-socket from `codex-native-host` so the agent can request prompt-gated thread actions (`create_thread`, `fork_thread`, `handoff_thread`, `send_message_to_thread`) with native user confirmation cards. | **100% Native Rust (`codex-native-host`) + Flutter Approval Card**. |
-| **Tier 3: On-Demand Sandboxed WebView (`Skybridge` / `MCP Apps` fallback)** | - Only when an MCP server or `visualize` output produces custom arbitrary HTML/JS/3D WebGL widgets that cannot be represented by native Flutter blocks, mount an **on-demand, disposable system WebView** (`webview_flutter` / `flutter_inappwebview`) with a strict CSP and `postMessage` bridge (`setWidgetState`, resize, theme tokens), and **dispose it immediately when scrolled far off-screen or when switching threads**. | **On-Demand Disposable WebView** (complies with Rule 5 in `AGENTS.md`: *"Optional plugin web UI may use a system/embedded WebView later, only when required"*). |
+When an MCP tool returns a resource URI with scheme `ui://` (fetched via experimental `mcpServer/resource/read` + `mcpServer/elicitation/request`), ChatGPT Desktop renders a sandboxed iframe (`Skybridge`) that communicates via JSON-RPC 2.0 over `window.postMessage`:
+
+- **Initialization & Lifecycle**: `ui/initialize`, `ui/notifications/initialized`, `ui/notifications/size-changed`, `ui/notifications/tool-input`, `ui/notifications/tool-result`, `ui/notifications/host-context-changed`, `ui/resource-teardown`.
+- **Host Capability Methods (`openai/*` / `tools/call`)**:
+  - `tools/call` (invoke an MCP tool from the widget)
+  - `openai/sendFollowUpMessage` (insert/send a follow-up prompt)
+  - `openai/uploadFile` & `openai/getFileDownloadUrl`
+  - `openai/requestDisplayMode` (`inline | pip | fullscreen`)
+  - `openai/setWidgetState` (persist bounded widget state on the turn item)
+  - `openai/requestModal` & `openai/requestClose`
+  - `openai/openExternal` (`ui/open-link`)
+- **Policy for `Codex-Native-Unoffical`**: Per `AGENTS.md` Rule #5 (*"Optional plugin web UI may use a system/embedded WebView later, only when required"*), Skybridge is documented here as `ADOPT_PATTERN` for future optional MCP App WebView hosting, with zero requirement on the core client today.

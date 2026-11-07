@@ -1,194 +1,180 @@
-# ChatGPT Desktop (`26.1103.32239` / Build `25471`) — Full-Stack Architecture Map
+# ChatGPT Desktop Full-Stack Architecture Map (Recalibrated)
 
-> **Provenance & Clean-Room Notice**
-> - **Reference Build**: `chatgpt-26.1103.32239-amd64.deb` (`package.json`: `"name": "openai-codex-electron"`, `"productName": "Codex"`, `"version": "26.1103.32239"`, `"codexBuildNumber": "25471"`, `"codexBuildFlavor": "prod"`).
-> - **Runtime Engine**: `@oai/electron` (`npm:@oai/owl-linux-x64@157.0.8103.39` — OpenAI's custom Chromium/Electron fork "Owl").
-> - **Bundle Integrity**: `/opt/codex-desktop/resources/app.asar` (`757,450,773` bytes, `19,954` files, `sha256: 63106325f6c5fb668e57323ece7c1b29d617877132096e9b856e7606b10c68fe`), verified byte-for-byte identical to the upstream `.deb` package (`dpkg --verify chatgpt` clean).
-> - **Clean-Room Policy**: All findings in `docs/reverse/*.md` are behavioral, schema, protocol, and architectural descriptions derived for Apache-2.0 clean-room engineering. No proprietary code or assets are copied into the repository.
-
----
-
-## 1. Executive Architecture Discovery: One Unified Codebase for Chat, Work, and Codex
-
-The single most important architectural fact uncovered in `26.1103.32239` is that **ChatGPT Desktop is not a Chat app with a bolted-on Codex plugin, nor is it a standalone Codex app**. Instead:
-
-1. **Internal Monorepo Identity**: The application is built from `codex/codex-apps/electron` (`openai-codex-electron`) running on OpenAI's custom **Owl (`157.0.8103.39`)** Chromium/Electron runtime.
-2. **Unified Shell, Mode-Parameterized Presentation**:
-   - **Chat ("Everyday")**, **Work ("Everyday + Cloud/Local Executor + Writing Blocks + In-App Browser")**, and **Codex ("Coding")** all share the **exact same App Shell, Router, Sidebar Catalog (`local_thread_catalog`), Composer (`g.r`), and Fine-Grained Transcript Store (`182735.d3d917f28d.js`)**.
-   - The experience switches dynamically via two orthogonal axes:
-     - **Product Surface / Sidebar Mode (`sidebarProductMode`)**: `"work"` (Everyday / Chat + Work) vs `"codex"` (Coding), controlled by user access gates `tr()` (`codexLocalAccess`, `workCloudAccess`, `workLocalAccess`) and the header `ProductModeToggle` (`height: 32px`).
-     - **Conversation Detail Mode (`conversationDetailMode`)**:
-       - `"STEPS_PROSE"` (Everyday / Work default): Condenses tool calls, file reads, and searches into prose summaries (`usesCondensedPresentation`), activates `writing_blocks` and `includeProseDetailLevelInstructions`, and hides raw shell/diff noise unless expanded.
-       - `"STEPS_COMMANDS"` (Coding / Codex default): Renders full command execution cards, unified diffs, terminal drawers, and git/worktree controls.
-       - `"STEPS_EXECUTION"`: Full raw execution trace mode.
-3. **Dual Conversation Engine Under One UI**:
-   - **Cloud ChatGPT Conversations (`source_kind = "chatgpt"`, `conversation_origin = "chatgpt" | "work" | "tpp"`)**: Backed by `/backend-api/f/conversation` (SSE) + `/backend-api/conversations` REST catalog sync + `MrGp` message-tree DAG (`mapping` + `current_node`).
-   - **App-Server / Agent Threads (`host_kind = "local" | "ssh" | "wsl" | "remote-control"` or Durable Cloud Host `wss://codex-cloud-backend.chatgpt.com/`)**: Backed by `codex app-server` JSON-RPC 2.0 (`thread/*`, `turn/*`, `item/*`) + canonical turn history islands (`turnHistory.kind === "canonical"`).
-   - **Bridge Between Them**: Both populate the same SQLite table (`~/.codex/sqlite/codex.db` -> `local_thread_catalog`) and both project into the same renderer transcript item/slot store!
+> **Target Binary Inspected**: ChatGPT Desktop (Linux/Electron Packaging of `@openai/codex-electron`)
+> **Package Version**: `26.326.51703` (`codexBuildNumber: 51703`, `codexBuildFlavor: "prod"`)
+> **Renderer Entry**: `webview/index.html` (`assets/index-Dup49xH6.js` + `assets/index-CSK6N93K.css` + 465 lazy chunks)
+> **Main Process Bundle**: `.vite/build/main.js` + `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (~4.58 MB) + `.vite/build/early-bootstrap-339-10eda6b28d12299c.js` (~855 KB) + `.vite/build/early-bootstrap-133-3bca9e88e9a413b4.js` (~357 KB) + `.vite/build/worker.js` (~1.20 MB)
+> **Bundled Native Runtime**: `/opt/codex-desktop/resources/codex` (`codex-cli 0.167.0-alpha.3.2`, ~96.9 MB ELF binary)
+> **Bundled Sidecars (`app.asar.unpacked`)**: `codex-command-runner`, `codex-windows-sandbox-setup`, `native/sparkle.node`, `native/remote-control-device-key.node`, `better-sqlite3`, `node-pty`
+> **Inspection Tool**: [`tools/reverse/inspect_chatgpt_desktop.py`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/tools/reverse/inspect_chatgpt_desktop.py) (`--summary`, `--ipc`, `--endpoints`, `--sqlite-schemas`, `--css-tokens`, `--plugins`, `--evidence-report`)
 
 ---
 
-## 2. System Topology & Process Boundary Diagram
+## 0. Evidence Confidence & Support Classification Model
+
+Every technical claim in `docs/reverse/*.md` is tagged using two orthogonal axes:
+
+### A. Evidence Confidence Tags (How we know it)
+- **`PUBLIC_DOC`**: Documented in official OpenAI public documentation (`platform.openai.com`, `developers.openai.com`, `help.openai.com`).
+- **`PUBLIC_SOURCE`**: Verified in open-source `openai/codex` source or generated directly by the stock `codex app-server generate-json-schema` CLI (`codex-cli 0.167.0-alpha.3.2`).
+- **`LIVE_OBSERVED`**: Directly observed in a running ChatGPT Desktop process, DOM/computed styles, or runtime state.
+- **`LIVE_CALLED`**: Directly invoked/verified against a live local runtime or endpoint during inspection.
+- **`STATIC_BUNDLE`**: Extracted read-only from the installed `app.asar` bundle (`.vite/build/*.js`, `webview/assets/*.js`, `webview/assets/*.css`).
+- **`LOCAL_SCHEMA`**: Extracted read-only (`?mode=ro`) from local `~/.codex/*.sqlite` / `*.db` DDL (`sqlite_master`).
+- **`COMMUNITY_CORROBORATED`**: Corroborated by independent third-party engineering reports, never treated as a public contract.
+- **`INFERRED`**: Architectural synthesis derived from multiple lower-level observations; explicitly separated from raw facts.
+- **`UNKNOWN`**: Not determinable from available machine evidence without server-side source or live account gating.
+
+### B. Support & Contract Classifications (What we may depend on)
+- **`PUBLIC_SUPPORTED`**: Stable public API or open-source stock `codex app-server` protocol (`105` stable `ClientRequest`, `9` stable `ServerRequest`, `82` `ServerNotification`). Safe as a primary dependency.
+- **`EXPERIMENTAL_STOCK_SCHEMA`**: Present in stock `codex app-server generate-json-schema --experimental` (`74` experimental `ClientRequest`, `2` experimental `ServerRequest`, including `thread/turns/list`, `thread/items/list`, `thread/items/read`, `thread/timeline/list`, `remoteControl/*`). Safe for optional/adapter-isolated native features.
+- **`PRIVATE_WEB_SESSION`**: First-party ChatGPT web-session endpoints (`/backend-api/*`). Requires browser/session cookies + Sentinel/Turnstile anti-bot headers; **never** a default core dependency.
+- **`PRIVATE_INTERNAL_SERVICE`**: First-party internal Desktop/Cloud services (`/wham/*`, `/flora/cca/executor`, `wss://codex-cloud-backend.chatgpt.com/`, `wss://chatgpt.com/backend-api/wham/remote/control/server`, `thread/startAeon`, `thread/environmentReady`). Treated as reference architecture only unless explicitly unlocked by a future compatibility adapter.
+- **`INTERNAL_ELECTRON_IPC`**: Internal Electron `ipcMain`/`ipcRenderer` channels (`codex_desktop:*`).
+
+---
+
+## 1. Executive Architectural Summary: Shared Shell vs Distinct Runtimes
+
+ChatGPT Desktop (`26.326.51703`) is a **unified multi-mode Electron shell** built on code originating from the `@openai/codex-electron` workspace (`STATIC_BUNDLE`).
+
+### Critical Distinction: Shared Presentation Shell != Identical Runtime Model
+While **Chat**, **Work**, and **Codex** share the **application shell, sidebar navigation, composer chrome, and renderer item/slot virtualization infrastructure**, they do **not** share a single backend source of truth (`STATIC_BUNDLE`, `LOCAL_SCHEMA`):
+
+| Product Mode | Canonical Source of Truth | Execution / Transport Runtimes | Local SQLite Role | Evidence & Support |
+|---|---|---|---|---|
+| **Chat** (`/chat/:id`) | Cloud **Conversation Tree DAG** (`MrGp`: `mapping`, `current_node`, `parent`, `children`) on `/backend-api/f/conversation` | HTTPS SSE stream (`/backend-api/f/conversation` + `/backend-api/f/conversation/prepare`) | Metadata index only (`local_thread_catalog.sqlite` with `source_kind = 'chatgpt'`, `conversation_origin IS NOT 'tpp'`) | `STATIC_BUNDLE`, `LOCAL_SCHEMA` / `PRIVATE_WEB_SESSION` |
+| **Work** (`/work`, everyday/task mode) | **Multi-runtime product orchestration** across 4 execution paths (see Section 2.2) | 1. Local `codex app-server` (`STEPS_PROSE` + `<app-context>### Non-technical UI`)<br>2. Durable Cloud Host (`wss://codex-cloud-backend.chatgpt.com/`, `thread/startAeon`)<br>3. Local Work Executor (`codex exec-server --remote ... --environment-id ...` over Noise rendezvous + `POST /flora/cca/executor` + `thread/environmentReady`)<br>4. Cloud `/backend-api/f/conversation` with `conversation_origin = 'tpp'` + `submitChatGPTLocalFunctionResult` | Indexed in `local_thread_catalog.sqlite` (`source_kind = 'local' \| 'cloud' \| 'chatgpt'` with `conversation_origin = 'tpp'`); local threads in `state_5.sqlite` | `STATIC_BUNDLE`, `LOCAL_SCHEMA`, `PUBLIC_SOURCE` (`exec-server` CLI) / Mixed `PUBLIC_SUPPORTED` + `PRIVATE_INTERNAL_SERVICE` |
+| **Codex** (`/local/:id`, `/remote/:id`) | **Linear Turn/Item History** (`canonical` history islands + `thread/turns/list`, `thread/items/list`, `thread/timeline/list`) owned by `codex app-server` | 1. Local child `codex app-server` (stdio JSONL)<br>2. SSH remote `codex app-server` (OpenSSH stdio)<br>3. Durable Cloud Host (`wss://codex-cloud-backend.chatgpt.com/`)<br>4. Official Remote Control relay (`wss://chatgpt.com/backend-api/wham/remote/control/server`) | Full runtime state in `~/.codex/state_5.sqlite` (owned by Rust `codex app-server`); cross-host sidebar catalog in `local_thread_catalog.sqlite` | `PUBLIC_SOURCE`, `STATIC_BUNDLE`, `LOCAL_SCHEMA`, `LIVE_OBSERVED` / `PUBLIC_SUPPORTED` + `EXPERIMENTAL_STOCK_SCHEMA` |
 
 ```mermaid
 flowchart TB
-  subgraph Renderer["Renderer Process (Owl Chromium WebView — webview/index.html)"]
-    Shell["Unified App Shell & Router (107 routes)<br/>ProductModeToggle: Everyday (Work/Chat) ↔ Coding (Codex)"]
-    Sidebar["Unified Sidebar & Recents<br/>Sync Bootstrap: getInitialSidebarBootstrap()<br/>Live Catalog: local_thread_catalog"]
-    Composer["Unified Composer (g.r)<br/>ProseMirror + Mentions (@file, $skill, app://, plugin://)<br/>AdaptiveFooter (Model, Effort, Permission, Worktree/Cloud)"]
-    Transcript["Fine-Grained Reactive Transcript Store (182735)<br/>10-Conversation LRU | Item/Slot Signal Maps<br/>setBoundary() Viewport Eviction Protection"]
-    ChatStore["ChatGPT DAG Store (MrGp)<br/>mapping + current_node<br/>submitChatGPTCompletion (uNU6)"]
-    Skybridge["Skybridge Sandbox Host<br/>codex-sandbox:// iframe + 19 MessagePort channels"]
-  end
+    subgraph Renderer["Renderer Process (Chromium WebContents - React 19 + Jotai + TanStack Query)"]
+        Router["React Router Shell\n(/, /chat/:id, /work, /local/:id, /remote/:id, /settings/:section)"]
+        ModeSwitch["Sidebar Product Mode Switcher\n(Chat | Work | Codex)"]
+        ChatDAG["Chat Tree DAG Store (MrGp)\n(mapping, current_node, branch siblings)"]
+        CodexStore["Codex/Work Canonical Turn Store\n(History Islands, 10-thread LRU, 1000->500 item cap)"]
+        Skybridge["Skybridge / MCP Apps Bridge\n(ui:// iframe + openai/* postMessage)"]
+    end
 
-  subgraph Preload["Preload Bridges (.vite/build/)"]
-    MainPreload["preload.js<br/>window.electronBridge / codex_desktop:* IPC"]
-    SandboxPreload["sandbox-preload.js<br/>MCP App / Widget Isolation"]
-    BrowserPreload["browser-page-preload.js + mcp-annotation-runtime.js<br/>In-App Browser (IAB / Dot) Instrumentation"]
-  end
+    subgraph Preload["Preload ContextBridge (.vite/build/preload.js)"]
+        ElectronBridge["window.electronBridge\n(10 exposed codex_desktop:* IPC channels)"]
+    end
 
-  subgraph Main["Electron Main Process (.vite/build/early-bootstrap*.js)"]
-    IPC["Tokenized Chunked JSON IPC Router<br/>codex-host-chunked-message-v1 (256 KiB chunks)"]
-    CatalogSync["ThreadCatalogSyncManager (ehf)<br/>5 Host Kinds: local | ssh | wsl | remote-control | chatgpt"]
-    IslandMgr["Canonical Turn History & Active Eviction (yV / yZ)<br/>1000 -> 500 item cap | Viewport-protected cuts"]
-    TransportMux["App-Server Transport Multiplexer (evZ)<br/>stdio | ssh | wsl | remote-control | durable-cloud-ws"]
-    Workers["Worker Threads<br/>worker.js | git-worker.js | visualize-cache-worker.js"]
-    SQLiteMain["Desktop SQLite Catalog (~/.codex/sqlite/codex.db)<br/>local_thread_catalog | thread_timeline_ledger | automations"]
-  end
+    subgraph Main["Electron Main Process (.vite/build/early-bootstrap-*.js)"]
+        IPCRouter["MessageHandler & AppView Services\n(19 total codex_desktop:* channels in bundle)"]
+        HostRegistry["AppServerConnectionRegistry & ExecutionHostRegistry\n(local | ssh | durable cloud | remote-control)"]
+        TPPLocalExec["Local Work Executor (tpp-local-executor)\nSpawns: codex exec-server --remote ... --environment-id ..."]
+        CatalogDB["LocalThreadCatalog Service\n(better-sqlite3 -> local_thread_catalog.sqlite)"]
+        GitWorker["Worker Thread (.vite/build/worker.js)\n(Git metadata/diff, ripgrep, Sentry)"]
+        DeviceKey["native/remote-control-device-key.node\n(OS Keyring / Secret Service)"]
+    end
 
-  subgraph Sidecars["Native Sidecars & Bundled Plugins (/opt/codex-desktop/resources/)"]
-    CodexBin["Stock codex CLI / app-server<br/>(0.167.0-alpha.3.2, 85.4 MB Rust binary)"]
-    CodeMode["codex-code-mode-host<br/>(Local Executor / REPL Host)"]
-    CuaNode["cua_node<br/>(Computer-Use Agent Native Helper)"]
-    Tectonic["tectonic (0.17.0)<br/>(Shared LaTeX Engine)"]
-    DeviceKey["remote-control-device-key.node<br/>(OS-Protected Non-Extractable Keypair)"]
-    BundledPlugins["plugins/openai-bundled/<br/>codex-app-tools | browser | chrome | unified-computer-use<br/>deep-research | visualize | latex"]
-  end
+    subgraph LocalRuntimes["Local Stock Codex Processes (/opt/codex-desktop/resources/codex)"]
+        AppServer["codex app-server\n(stdio JSON-RPC 2.0, 105 stable + 74 exp ClientRequests)"]
+        ExecServer["codex exec-server\n(Noise rendezvous tunnel for Work mode)"]
+        StateDB[("~/.codex/state_5.sqlite\n~/.codex/logs_2.sqlite")]
+    end
 
-  subgraph Cloud["OpenAI Cloud Surfaces (chatgpt.com / codex-cloud-backend.chatgpt.com)"]
-    BackendAPI["/backend-api/*<br/>conversations | f/conversation | models | estuary | gizmos | aip"]
-    WhamAPI["/backend-api/wham/* (146 endpoints)<br/>tasks | environments | usage | remote/control"]
-    DurableWS["wss://codex-cloud-backend.chatgpt.com/<br/>Durable Cloud App-Server (codex & aeon SKUs)"]
-    RemoteWS["wss://chatgpt.com/backend-api/wham/remote/control/server<br/>Device-Key Authenticated Remote Control Relay"]
-  end
+    subgraph CloudServices["OpenAI Cloud & Web Surfaces"]
+        ConvAPI["ChatGPT Web Session API\n(/backend-api/f/conversation, /conversations)"]
+        FloraAPI["Work Executor Registry\n(/flora/cca/executor, /cloud/environment/:id/status)"]
+        AeonWS["Durable Cloud Host\n(wss://codex-cloud-backend.chatgpt.com/)"]
+        WhamRelay["Remote Control Relay & WHAM APIs\n(wss://chatgpt.com/backend-api/wham/remote/control/server)"]
+    end
 
-  Shell --> MainPreload
-  Sidebar --> MainPreload
-  Composer --> MainPreload
-  Transcript --> MainPreload
-  ChatStore --> MainPreload
-  MainPreload <--> IPC
-  IPC --> CatalogSync
-  IPC --> IslandMgr
-  IPC --> TransportMux
-  CatalogSync --> SQLiteMain
-  CatalogSync --> BackendAPI
-  TransportMux --> CodexBin
-  TransportMux --> DurableWS
-  TransportMux --> RemoteWS
-  TransportMux --> DeviceKey
-  CodexBin --> BundledPlugins
-  CodexBin --> CodeMode
-  CodexBin --> CuaNode
-  CodexBin --> Tectonic
-  ChatStore --> BackendAPI
+    Router --> ModeSwitch
+    Router --> ChatDAG
+    Router --> CodexStore
+    Router --> Skybridge
+    Renderer <-->|"contextBridge"| ElectronBridge
+    ElectronBridge <-->|"Electron IPC"| IPCRouter
+    IPCRouter --> HostRegistry
+    IPCRouter --> TPPLocalExec
+    IPCRouter --> CatalogDB
+    IPCRouter --> GitWorker
+    HostRegistry --> DeviceKey
+    HostRegistry <-->|"stdio JSONL"| AppServer
+    AppServer --> StateDB
+    TPPLocalExec -->|"child_process"| ExecServer
+    TPPLocalExec -->|"HTTPS"| FloraAPI
+    ExecServer <-->|"Noise Rendezvous"| CloudServices
+    HostRegistry <-->|"WSS (thread/startAeon)"| AeonWS
+    HostRegistry <-->|"WSS Relay"| WhamRelay
+    ChatDAG <-->|"codex_desktop:fetch-from-main"| ConvAPI
 ```
 
 ---
 
-## 3. Process, Worker, and Sidecar Inventory
+## 2. Deep-Dive: How Chat, Work, and Codex Actually Relate
 
-### 3.1 Main Process & Worker Bundles (`.vite/build/` inside `app.asar`)
+### 2.1 Why `STEPS_PROSE` Does Not Mean Stock `app-server` Is the Cloud Chat Backend
+A critical correction to earlier analysis (`ADR-031` -> superseded by `ADR-032`):
+In `.vite/build/early-bootstrap.js @271830` and `.vite/build/early-bootstrap-920-a204a41244c4b913.js @2190585, @4400493`:
+- `conversationDetailMode` is a setting with enum `["STEPS_PROSE", "STEPS_COMMANDS", "STEPS_EXECUTION"]` (default `"STEPS_COMMANDS"`).
+- When an account's `workModeAccessByAccount` policy is `"everyday"` (or the user selects `"STEPS_PROSE"`), `conversationDetailMode.effective` evaluates to `"STEPS_PROSE"`.
+- In `.vite/build/early-bootstrap-920 @4400493` and `.vite/build/early-bootstrap-339 @780000..792000`, `c = ("STEPS_PROSE" === a.effective)` sets `includeProseDetailLevelInstructions: true`.
+- Function `a7` (`early-bootstrap-339 @787500`) uses `includeProseDetailLevelInstructions` to inject constant `a2` (`### Non-technical UI`) into the `<app-context>...</app-context>` block passed as `developerInstructions` to Codex/Work agent threads:
+  - It instructs the Codex/Work agent: *"The user has requested a non-technical UI. The app will take care of aspects of this, such as hiding bash tool outputs and similar. Prefer non-technical language when conversing with the user... When writing code to perform non-coding tasks--such as writing and running python to build slide artifacts--avoid mentioning or citing these intermediate code items. Just focus on outputs."*
+- **Architectural Consequence**:
+  1. `STEPS_PROSE` is a **Work/Codex agent presentation & developer-instruction detail mode**, **not** proof that stock `codex app-server` is the backend for standard ChatGPT Cloud Chat (`/backend-api/f/conversation`).
+  2. Standard ChatGPT Cloud Chat (`/chat/:conversationId`) uses the `MrGp` conversation tree DAG and `/backend-api/f/conversation`.
+  3. Per `AGENTS.md` Rule #1 (*"Do not copy or fork Codex system prompts into the client"*), `Codex-Native-Unoffical` must **not** copy the proprietary `a2` (`### Non-technical UI`) prompt into the client.
 
-| File | Size | Architectural Role | Classification |
-| :--- | ---: | :--- | :--- |
-| `.vite/build/early-bootstrap.js` | 1.9 KB | Entry point (`package.json` `"main"`). Configures crash reporter, V8 flags, and loads the main bootstrap chunks. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/early-bootstrap-920-C1369sJ4.js` | 4.86 MB | Core main-process orchestrator: `ThreadCatalogSyncManager` (`ehf`), SQLite (`codex.db`) migrations & queries, `app-server` transport multiplexer (`evZ`), canonical turn history & active eviction (`yV`/`yZ`), window lifecycle, native menus, deep links (`codex://`, `chatgpt://`), and cloud REST proxy. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/early-bootstrap-B6a536G_.js` | 699 KB | Secondary bootstrap module: OS integration, tray/menu bar, global hotkey window, updater, and authentication session management. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/main-DY03G_5y.js` | 29.8 KB | Application window creation and Owl browser-session wiring. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/worker.js` | 309 KB | Background utility worker thread for CPU-bound JSON/search/indexing tasks off the main Electron event loop. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/git-worker-Bt1_yQbN.js` + `git-worker.js` | 1.48 MB | Dedicated Git worker thread (`git-worker`) that runs `git status`, `git diff`, worktree inspection, branch/PR status checks (`x-codex-git-source`), and hunk parsing without blocking main or renderer threads. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/visualize-cache-worker.js` | 4.1 KB | Worker that caches and validates `visualize` chart/widget assets. | `LOCAL_IMPLEMENTATION_DETAIL` |
+### 2.2 The Four Execution Paths of Work Mode (`STATIC_BUNDLE`, `PUBLIC_SOURCE`)
+Reverse analysis of `early-bootstrap-920` (`@732731`, `@1168648`, `@1644000..1666500`, `@4400493`, `@4477500`) proves that **Work Mode** is not simply `"Chat + app-server"`, nor is it a single runtime. It orchestrates four distinct paths:
 
-### 3.2 Preload Bridges (`.vite/build/`)
-
-| File | Size | Exposed Surface & Security Role | Classification |
-| :--- | ---: | :--- | :--- |
-| `.vite/build/preload.js` | 14.3 KB | Exposes `window.electronBridge` (`contextIsolation: true`) over 22 `codex_desktop:*` IPC channels, plus `getInitialSidebarBootstrap()` (synchronous IPC for 0-ms first-frame sidebar rendering) and `getSentryInitOptions()`. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/sandbox-preload.js` | 1.4 KB | Minimal preload for `codex-sandbox://` skybridge iframes; bridges only postMessage / `MessagePort` channels for sandboxed widgets and MCP apps. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/browser-page-preload.js` | 3.5 KB | Injected into in-app browser (`persist:codex-browser-app`) tabs to support element picking, accessibility snapshots, and Sign-in-with-ChatGPT (`siwc`) detection. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `.vite/build/mcp-annotation-runtime.js` | 65.5 KB | Visual DOM/region annotation overlay runtime injected into browser/preview surfaces (`Kwny`: `diff`, `browser`, `pdf`, `artifact_annotation`, `artifact_comment`). | `LOCAL_IMPLEMENTATION_DETAIL` |
-
-### 3.3 Native Sidecar Binaries & Node Addons (`resources/` & `app.asar.unpacked/`)
-
-| Binary / Addon | Size | Role & Invocation Mechanism | Classification |
-| :--- | ---: | :--- | :--- |
-| `resources/codex` | 85.4 MB | Stock Rust `codex` CLI & `codex app-server` (`codex-linux-x64 0.167.0-alpha.3.2`). Spawned via `codex app-server --analytics-default-enabled` over stdio JSONL. | `PUBLIC_SUPPORTED` |
-| `resources/codex-code-mode-host` | 5.2 MB | Native sidecar host for Code Mode / `node_repl` / local execution (`CODEX_CODE_MODE_HOST`). | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `resources/cua_node` | 6.8 MB | Computer-Use Agent native helper binary (`unified-computer-use` plugin / screen & input automation). | `PLATFORM_NATIVE` |
-| `resources/rg` | 4.6 MB | Bundled `ripgrep` binary injected into `PATH` for fast workspace search. | `PUBLIC_SUPPORTED` |
-| `resources/tectonic` | 42.3 MB | Bundled Tectonic `0.17.0` TeX engine exposed via `CODEX_TECTONIC_PATH` to the `latex` plugin and built-in PDF/LaTeX previewer. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `resources/artifact-template-picker` | 4.5 MB | Native helper for office/document artifact template selection (`$documents` / `$presentations`). | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `resources/dictation-ducking` | 21 KB | Audio ducking helper during push-to-talk / realtime voice dictation. | `PLATFORM_NATIVE` |
-| `resources/native/remote-control-device-key.node` | 150 KB | Native N-API addon that generates and signs with an OS-protected non-extractable hardware keypair (`createDeviceKey("allow_os_protected_nonextractable")`) for `remote-control` WebSocket authentication. | `PRIVATE_COMPATIBILITY` |
-| `resources/native/hid-topology-watcher.node` + `@worklouder/wl-device-kit` | 112 KB + prebuilds | Native USB/HID watcher for physical macro pad / rotary encoder hardware (`ACT06`–`ACT12` keycaps: `FAST`, `APPR`, `REJ`, `SPLIT`, `MIC`, `CODEX`, `YOLO`, `YEET`). | `PLATFORM_NATIVE` |
-| `better-sqlite3/build/Release/better_sqlite3.node` | 1.98 MB | Synchronous native SQLite driver used in the main process for `~/.codex/sqlite/codex.db`. | `LOCAL_IMPLEMENTATION_DETAIL` |
-| `node-pty/build/Release/pty.node` | 39 KB | Native pseudo-terminal addon used for integrated terminal drawer sessions (`terminal-create`, `terminal-write`, `terminal-resize`). | `PLATFORM_NATIVE` |
-| `@parcel/watcher-linux-x64-glibc/watcher.node` | 523 KB | Native filesystem watcher for live project tree and diff invalidation. | `PLATFORM_NATIVE` |
+1. **Local Work Agent Threads (`hostId = "local"`, `codex app-server`)**:
+   - Uses local `codex app-server` with `conversationDetailMode = "STEPS_PROSE"`, `writing_blocks` feature gate, `openai_artifact_template_picker` MCP server (`artifact-template-picker/server.mjs`), and `mcp__codex_app__load_workspace_dependencies`.
+2. **Durable Cloud Work Agent Threads (`hostId = "durable"`, `wss://codex-cloud-backend.chatgpt.com/`)**:
+   - Connects over WebSocket to `wss://codex-cloud-backend.chatgpt.com/` (`X-OpenAI-Product-Sku: "aeon"`).
+   - Starts threads using the **cloud-only** RPC `"thread/startAeon"` (`early-bootstrap-920 @1168648`: `method: "durable" === k && "aeon" === E ? "thread/startAeon" : "thread/start"`).
+   - Lists cloud threads with originators `["codex_cloud", "codex_work_cca"]` (`@4402650`).
+3. **Local Work Executor (`tpp-local-executor` -> `codex exec-server`)**:
+   - Implemented by `class kj` (`logger = "tpp-local-executor"`, `early-bootstrap-920 @1644018..1666262`).
+   - Persists an installation UUID in `.codex-tpp-local-executor-installation-id` (`@1645522`).
+   - Registers the desktop computer with OpenAI Cloud via `POST /flora/cca/executor` (`DELETE /flora/cca/executor` to clear) and polls readiness via `GET /cloud/environment/{environmentId}/status` (`@1645600..1653400`).
+   - Spawns `/opt/codex-desktop/resources/codex exec-server --concurrent-requests 32 --remote <url> --environment-id <environmentId>` with `CODEX_INTERNAL_ORIGINATOR_OVERRIDE="codex_work_desktop"` (`@1658200`), which establishes an outbound Noise-protocol rendezvous tunnel (`noise_event="rendezvous_connection"`).
+   - Notifies the Durable Cloud Host that the local environment and its plugin capability roots are ready via the cloud-extension RPC `thread/environmentReady` (`@1647000`).
+4. **Cloud ChatGPT Conversations with `conversation_origin === "tpp"`**:
+   - Stored on `/backend-api/f/conversation` (`source_kind = "chatgpt"`) with `conversation_origin = "tpp"`.
+   - Indexed in `local_thread_catalog.sqlite` where SQL queries explicitly filter `"tpp" === e.conversationOrigin ? "AND conversation_origin = 'tpp'" : "AND conversation_origin IS NOT 'tpp'"` (`@732731`) to separate Work (`tpp`) conversations from regular Chat (`non-tpp`) conversations in the sidebar.
+   - Bridges local function/browser execution back to ChatGPT via `submitChatGPTLocalFunctionResult`.
 
 ---
 
-## 4. Renderer <-> Main Process IPC Architecture
+## 3. Process Topology & IPC Inventory (`DISCOVERED` vs `PRELOAD_EXPOSED`)
 
-### 4.1 Complete `codex_desktop:*` IPC Channel Inventory (26 Channels)
+ Running `python3 tools/reverse/inspect_chatgpt_desktop.py --evidence-report` establishes the exact boundary between preload-exposed renderer IPC channels and internal main/worker IPC channels:
 
-| IPC Channel | Direction | Sync/Async | Purpose |
-| :--- | :--- | :--- | :--- |
-| `codex_desktop:get-initial-sidebar-bootstrap` | Renderer -> Main | **Sync (`sendSync`)** | Returns cached sidebar project/thread bootstrap synchronously before first React paint so the sidebar never flashes empty on startup. |
-| `codex_desktop:message-from-view` | Renderer -> Main | Async (`invoke`/`send`) | Primary multiplexed command/RPC envelope from renderer to main process (`1,595` message `case` types). |
-| `codex_desktop:message-for-view` | Main -> Renderer | Async (`webContents.send`) | Primary multiplexed state/event push from main process to renderer (`changes`, `thread-stream-state-changed`, `inbox-items-changed`, etc.). |
-| `codex_desktop:HostToWebViewChunkedMessage` | Main -> Renderer | Async | Chunked transport envelope (`codex-host-chunked-message-v1`) for payloads exceeding 256 KiB. |
-| `codex_desktop:fetch` | Renderer -> Main | Async | Proxies authenticated REST requests (`/backend-api/*`, `/wham/*`) through main process with account/device headers. |
-| `codex_desktop:CancelFetch` | Renderer -> Main | Async | Aborts an in-flight `codex_desktop:fetch` request by `requestId`. |
-| `codex_desktop:fetch-stream` | Renderer -> Main | Async | Initiates an SSE or newline-delimited JSON stream (`/backend-api/f/conversation`, etc.) proxied via main process. |
-| `codex_desktop:CancelFetchStream` | Renderer -> Main | Async | Cancels an active `codex_desktop:fetch-stream`. |
-| `codex_desktop:FetchStreamEvent` | Main -> Renderer | Async | Pushes incremental SSE/stream chunks to the renderer. |
-| `codex_desktop:FetchStreamComplete` | Main -> Renderer | Async | Signals normal completion of a `fetch-stream`. |
-| `codex_desktop:FetchStreamError` | Main -> Renderer | Async | Signals error termination of a `fetch-stream`. |
-| `codex_desktop:FileAttachmentRead` | Renderer -> Main | Async | Reads local file bytes/metadata for composer attachment upload. |
-| `codex_desktop:show-context-menu` | Renderer -> Main | Async | Opens native OS context menu at cursor coordinates. |
-| `codex_desktop:trigger-sentry-test` | Renderer -> Main | Async | Triggers test crash/error report for diagnostics. |
-| `codex_desktop:get-sentry-init-options` | Renderer -> Main | **Sync (`sendSync`)** | Returns build metadata and telemetry configuration at startup. |
-| `codex_desktop:copy- diagnostics` / `log-*` | Renderer -> Main | Async | Structured logging and diagnostic bundle export. |
-
-### 4.2 Tokenized Chunked JSON Framing (`codex-host-chunked-message-v1`)
-
-To prevent large state snapshots or diffs from stalling Chromium's structured-clone IPC serializer, the main process implements a two-stage optimization in `early-bootstrap-920`:
-
-1. **String-Table Tokenization (`tokenizeStrings`)**:
-   - Repeated strings (file paths, thread IDs, item types, status enums) in `changes` payloads are deduplicated into a compact string table before serialization.
-2. **256 KiB Chunked Envelope (`codex-host-chunked-message-v1`)**:
-   - When a serialized JSON message exceeds **262,144 bytes (`256 KiB`)**, the sender splits the UTF-8 string into `256 KiB` chunks and transmits them over `codex_desktop:HostToWebViewChunkedMessage` with `{ __codexChunkedMessage: "codex-host-chunked-message-v1", messageId, chunkIndex, totalChunks, chunk }`.
-   - The receiver reassembles chunks in a bounded map (`maxActiveMessages = 32`, `maxTotalBufferedChars = 64 MiB`) and parses the JSON only after the final chunk arrives.
+| IPC Category | Count | Channels | Evidence & Classification |
+|---|---|---|---|
+| **Preload-Exposed Renderer Channels** (`.vite/build/preload.js`) | **10** | `codex_desktop:message-for-view`<br>`codex_desktop:message-from-view`<br>`codex_desktop:get-initial-state`<br>`codex_desktop:get-sentry-init-options`<br>`codex_desktop:get-app-session-id`<br>`codex_desktop:get-build-flavor`<br>`codex_desktop:is-mas-build`<br>`codex_desktop:fetch-from-main`<br>`codex_desktop:cancel-fetch-from-main`<br>`codex_desktop:show-context-menu` | `STATIC_BUNDLE`, `LIVE_OBSERVED` / `INTERNAL_ELECTRON_IPC` |
+| **Main/Internal-Only IPC Strings** (`.vite/build/early-bootstrap-*.js`, `main.js`, `worker.js`) | **9** | `codex_desktop:Broadcast-state`<br>`codex_desktop:clear-Sentry-user`<br>`codex_desktop:get-custom-cli-executable`<br>`codex_desktop:get-locale-info`<br>`codex_desktop:log-from-view`<br>`codex_desktop: open-dev-tools`<br>`codex_desktop:report- fatal-error`<br>`codex_desktop: send-feedback`<br>`codex_desktop:set- telemetry-user` | `STATIC_BUNDLE` / `INTERNAL_ELECTRON_IPC` |
+| **Total Static `codex_desktop:*` Strings** | **19** | All 19 channels above | `STATIC_BUNDLE` |
 
 ---
 
-## 5. How Chat, Work, and Codex Share & Specialize the Platform
+## 4. Stock `codex app-server` Schema vs Desktop Bundle RPC Surface
 
-| Dimension | Chat ("Everyday") | Work ("Everyday + Executor") | Codex ("Coding") |
-| :--- | :--- | :--- | :--- |
-| **Product Mode (`sidebarProductMode`)** | `"work"` | `"work"` | `"codex"` |
-| **Conversation Origin (`conversation_origin`)** | `"chatgpt"` | `"work"` or `"tpp"` (Third-Party/Local Executor) | `null` (App-Server native) or `"aeon"` |
-| **Detail Mode (`conversationDetailMode`)** | `"STEPS_PROSE"` | `"STEPS_PROSE"` (toggleable to `"STEPS_COMMANDS"`) | `"STEPS_COMMANDS"` (toggleable to `"STEPS_PROSE"` or `"STEPS_EXECUTION"`) |
-| **Primary Runtime** | Cloud `/backend-api/f/conversation` | Cloud `/backend-api/f/conversation` + Local Executor (`codex-code-mode-host` / `cua_node` / `browser`) OR Durable Cloud `thread/startAeon` | Local/Remote `codex app-server` (`stdio`, `ssh`, `wsl`, `remote-control`, or Durable Cloud `wss://codex-cloud-backend.chatgpt.com/`) |
-| **Catalog Storage** | `local_thread_catalog` (`host_kind = "chatgpt"`) | `local_thread_catalog` (`host_kind = "chatgpt"` or `"local"`) | `local_thread_catalog` (`host_kind = "local" | "ssh" | "wsl" | "remote-control"`) |
-| **Project Model** | Cloud Gizmo Projects (`g-p-*`) synced with local projects via `codex_unified_projects` | Shared Unified Projects (`local` root + `chatGptBacking.projectId`) | Workspace root directories (`state_5.sqlite` `projects` + `project_roots`) optionally backed by `g-p-*` |
-| **Right-Hand Panels** | Artifacts / Writing Blocks / Canvas / Citations | In-App Browser (`persist:codex-browser-app`), Deliverables, Office/PDF Preview | Git Diff Inspector, Review Drawer, Integrated Terminal (`node-pty`), Command Output |
+Cross-checking the bundled `/opt/codex-desktop/resources/codex app-server generate-json-schema` (`codex-cli 0.167.0-alpha.3.2`, `PUBLIC_SOURCE`) against static RPC strings in `app.asar` (`STATIC_BUNDLE`):
+
+| Protocol Direction / Surface | Stock Stable Schema (`PUBLIC_SOURCE`) | Stock `--experimental` Only (`PUBLIC_SOURCE`) | Total Stock Schema (`0.167.0-alpha.3.2`) | Matched in Desktop ASAR (`STATIC_BUNDLE`) | ASAR-Only (Not in Local Stock Schema) |
+|---|---|---|---|---|---|
+| `ClientRequest` (Client -> Server) | **105** | **74** | **179** | **113** (`67` stable + `46` experimental) | **7** (`thread/startAeon`, `thread/environmentReady`, `thread/rollback` [legacy], `thread/stop`, `turn/addUserMessage`, `item/plan/requestImplementation`, `item/tool/requestOptionPicker`, `item/tool/requestSetupCodexContextPicker`) |
+| `ServerRequest` (Server -> Client) | **9** | **2** | **11** | **9** (`8` stable + `1` experimental) | Included above |
+| `ServerNotification` (Server -> Client) | **82** | **0** | **82** | **14** (matched by prefix regex; others dispatched via generic notification router) | `0` |
+| `ClientNotification` (Client -> Server) | **1** (`initialized`) | **0** | **1** | **1** (`initialized`) | `0` |
 
 ---
 
-## 6. Key Architectural Takeaways for `Codex-Native-Unoffical`
+## 5. Companion Reverse-Analysis Documents
 
-1. **Do Not Split into Separate Apps**: Official ChatGPT Desktop proves that Chat, Work, and Codex belong in a **single application shell** with a shared sidebar catalog, shared composer, and shared conversation viewport, parameterized by **Experience Mode** (`Everyday/Prose` vs `Coding/Commands`) and **Conversation Backend Adapter** (`AppServerAdapter` vs `ChatGptCloudAdapter`).
-2. **Synchronous/Instant Sidebar Bootstrap**: The official app avoids startup layout shift by reading a lightweight SQLite catalog (`local_thread_catalog`) before first paint (`getInitialSidebarBootstrap`), then running background sync (`ThreadCatalogSyncManager`).
-3. **Host-Owned Canonical History Islands + Viewport-Protected Eviction**: The main process (`codex-native-host` in our stack) should own canonical turn/item islands and evict active history above 1,000 items down to 500 items **only above the renderer's reported viewport boundary (`oldestProtectedTurnId`, `firstProtectedItemId`)**.
+1. **[`UI_REFERENCE.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/UI_REFERENCE.md)** — Design tokens, CSS layer cascade, typography, layout dimensions, and component anatomy with evidence tags and current `Codex-Native-Unoffical` comparison.
+2. **[`DATA_FLOW.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/DATA_FLOW.md)** — State stores, all history hydration paths (`limit: 5`, `limit: 2`, `limit: 28/30/100`, `limit: 500`, `1000 -> 500` gated eviction, `10`-thread LRU), Chat `MrGp` DAG, and Work multi-runtime data flows.
+3. **[`LOCAL_STORAGE_MAP.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/LOCAL_STORAGE_MAP.md)** — Read-only SQLite DDL schemas (`state_5.sqlite`, `logs_2.sqlite`, `local_thread_catalog.sqlite`, `codex_dev.db`), populated vs schema-only tables, and storage ownership boundaries.
+4. **[`NETWORK_SURFACES.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/NETWORK_SURFACES.md)** — `DISCOVERED` vs `LIVE` vs `FEATURE_GATED` classification of `/backend-api/*`, `/wham/*`, `/flora/cca/executor`, Durable Cloud WebSocket, and Remote Control relay.
+5. **[`CHATGPT_COMPATIBILITY.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/CHATGPT_COMPATIBILITY.md)** — Honest comparison of Route A (`OpenAIResponsesBackend`), Route B (`ChatGPTCompatibilityBackend`), and Route C (`CodexBackend` prose agent).
+6. **[`PLUGIN_HOST_MAP.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/PLUGIN_HOST_MAP.md)** — Marketplace schema, 17 bundled plugins, 33 skills, MCP servers, and Skybridge (`ui://` iframe host) with evidence tags.
+7. **[`CODEX_INTEGRATION_MAP.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/CODEX_INTEGRATION_MAP.md)** — Stock `codex app-server` schema vs ASAR RPC surface, `thread/startAeon` cloud isolation, and the 8-layer stratification of Official Remote Control vs Direct Host.
+8. **[`ADOPTION_MATRIX.md`](file:///home/axiaobo/%E6%96%87%E6%A1%A3/flutter%20projects/Codex-Native-Unoffical/docs/reverse/ADOPTION_MATRIX.md)** — Calibrated 8-column comparison against actual `Codex-Native-Unoffical` `HEAD`, 6 adoption categories (`ADOPT_PATTERN`, `ADAPT_NATIVE`, `COPY_MEASURED_BEHAVIOR`, `KEEP_OUR_ADVANTAGE`, `DO_NOT_ADOPT`, `RESEARCH_MORE`), current code-review debt items, and the formal `PREVIOUS CLAIM -> NEW FINDING` correction table.

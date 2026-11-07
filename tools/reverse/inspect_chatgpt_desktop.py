@@ -14,6 +14,7 @@ Usage:
   python3 tools/reverse/inspect_chatgpt_desktop.py --sqlite-schemas
   python3 tools/reverse/inspect_chatgpt_desktop.py --css-tokens
   python3 tools/reverse/inspect_chatgpt_desktop.py --plugins
+  python3 tools/reverse/inspect_chatgpt_desktop.py --evidence-report
 """
 
 from __future__ import annotations
@@ -23,9 +24,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -144,17 +148,17 @@ def iter_renderer_js(archive: AsarArchive):
             yield rel, archive.read_text(rel)
 
 
+RPC_METHOD_REGEX = re.compile(
+    r'"((?:thread|turn|item|skills|plugin|mcpServer|mcpServerStatus|account|config|configRequirements|fuzzyFileSearch|command|review|experimentalFeature|externalAgentConfig|windowsSandbox|remoteControl|model|collaborationMode|apps|fs|marketplace)/[A-Za-z0-9_/]+)"'
+)
+
+
 def cmd_ipc(archive: AsarArchive) -> dict[str, Any]:
     channels: set[str] = set()
     rpc_methods: set[str] = set()
     for _, text in iter_main_js(archive):
         channels.update(re.findall(r'"(codex_desktop:[^"]+)"', text))
-        rpc_methods.update(
-            re.findall(
-                r'"((?:thread|turn|item|skills|plugin|mcpServer|account|config|fuzzyFileSearch|command|review|experimentalFeature|externalAgentConfig|windowsSandbox)/[A-Za-z0-9_/]+)"',
-                text,
-            )
-        )
+        rpc_methods.update(RPC_METHOD_REGEX.findall(text))
     preload_text = archive.read_text(".vite/build/preload.js")
     preload_channels = sorted(set(re.findall(r'"(codex_desktop:[^"]+)"', preload_text)))
     return {
@@ -169,9 +173,9 @@ def cmd_endpoints(archive: AsarArchive) -> dict[str, Any]:
     wham_paths: set[str] = set()
     routes: set[str] = set()
     for _, text in list(iter_main_js(archive)) + list(iter_renderer_js(archive)):
-        for m in re.findall(r'["\'](/backend-api/[A-Za-z0-9_./-${}:?=&]+)["\']', text):
+        for m in re.findall(r'["\'](/backend-api/[A-Za-z0-9_./${}:?=&-]+)["\']', text):
             backend_api.add(re.sub(r"\$\{[^}]+\}", ":param", m))
-        for m in re.findall(r'["\'](/wham/[A-Za-z0-9_./-${}:?=&]+)["\']', text):
+        for m in re.findall(r'["\'](/wham/[A-Za-z0-9_./${}:?=&-]+)["\']', text):
             wham_paths.add(re.sub(r"\$\{[^}]+\}", ":param", m))
         for m in re.findall(
             r'path:\s*"(/[A-Za-z0-9_/:*-]+)"',
@@ -182,6 +186,297 @@ def cmd_endpoints(archive: AsarArchive) -> dict[str, Any]:
         "backend_api_paths": sorted(backend_api),
         "wham_paths": sorted(wham_paths),
         "router_paths": sorted(routes),
+    }
+
+
+def load_stock_app_server_schema(archive: AsarArchive) -> dict[str, Any]:
+    candidates = [
+        archive.path.parent / "codex",
+        Path("/opt/codex-desktop/resources/codex"),
+    ]
+    which_codex = shutil.which("codex")
+    if which_codex:
+        candidates.append(Path(which_codex))
+
+    codex_bin = next((c for c in candidates if c.is_file() and os.access(c, os.X_OK)), None)
+    if codex_bin is None:
+        return {"available": False}
+
+    def extract_methods(schema_file: Path) -> set[str]:
+        if not schema_file.is_file():
+            return set()
+        data = json.loads(schema_file.read_text(encoding="utf-8"))
+        out: set[str] = set()
+        for variant in data.get("oneOf", []):
+            props = variant.get("properties", {})
+            method_prop = props.get("method", {})
+            for val in method_prop.get("enum", []):
+                out.add(val)
+            if "const" in method_prop:
+                out.add(method_prop["const"])
+        return out
+
+    with tempfile.TemporaryDirectory(prefix="codex_schema_ro_") as tmp:
+        stable_dir = Path(tmp) / "stable"
+        exp_dir = Path(tmp) / "exp"
+        subprocess.run(
+            [str(codex_bin), "app-server", "generate-json-schema", "--out", str(stable_dir)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            [
+                str(codex_bin),
+                "app-server",
+                "generate-json-schema",
+                "--experimental",
+                "--out",
+                str(exp_dir),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        ver_proc = subprocess.run(
+            [str(codex_bin), "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        stable_client = extract_methods(stable_dir / "ClientRequest.json")
+        exp_client = extract_methods(exp_dir / "ClientRequest.json")
+        stable_server_req = extract_methods(stable_dir / "ServerRequest.json")
+        exp_server_req = extract_methods(exp_dir / "ServerRequest.json")
+        stable_notif = extract_methods(stable_dir / "ServerNotification.json")
+        exp_notif = extract_methods(exp_dir / "ServerNotification.json")
+        client_notif = extract_methods(exp_dir / "ClientNotification.json")
+
+    return {
+        "available": True,
+        "codex_binary": str(codex_bin),
+        "codex_version": ver_proc.stdout.strip(),
+        "counts": {
+            "client_request_stable": len(stable_client),
+            "client_request_experimental_only": len(exp_client - stable_client),
+            "client_request_total": len(exp_client),
+            "server_request_stable": len(stable_server_req),
+            "server_request_experimental_only": len(exp_server_req - stable_server_req),
+            "server_request_total": len(exp_server_req),
+            "server_notification_stable": len(stable_notif),
+            "server_notification_experimental_only": len(exp_notif - stable_notif),
+            "server_notification_total": len(exp_notif),
+            "client_notification_total": len(client_notif),
+        },
+        "sets": {
+            "stable_client": stable_client,
+            "exp_only_client": exp_client - stable_client,
+            "stable_server_req": stable_server_req,
+            "exp_only_server_req": exp_server_req - stable_server_req,
+            "stable_notif": stable_notif,
+            "exp_only_notif": exp_notif - stable_notif,
+        },
+    }
+
+
+def cmd_evidence_report(archive: AsarArchive) -> dict[str, Any]:
+    preload_text = archive.read_text(".vite/build/preload.js")
+    preload_channels = set(re.findall(r'"(codex_desktop:[^"]+)"', preload_text))
+
+    bundle_texts: list[tuple[str, str]] = (
+        list(iter_main_js(archive)) + list(iter_renderer_js(archive))
+    )
+
+    schema_info = load_stock_app_server_schema(archive)
+    sets = schema_info.get("sets", {})
+    stable_client: set[str] = sets.get("stable_client", set())
+    exp_only_client: set[str] = sets.get("exp_only_client", set())
+    stable_server_req: set[str] = sets.get("stable_server_req", set())
+    exp_only_server_req: set[str] = sets.get("exp_only_server_req", set())
+    stable_notif: set[str] = sets.get("stable_notif", set())
+    exp_only_notif: set[str] = sets.get("exp_only_notif", set())
+
+    # 1. IPC channel provenance
+    ipc_stats: dict[str, dict[str, Any]] = {}
+    for rel, text in bundle_texts:
+        for ch in re.findall(r'"(codex_desktop:[^"]+)"', text):
+            entry = ipc_stats.setdefault(
+                ch,
+                {
+                    "bundles": [],
+                    "static_occurrences": 0,
+                    "in_preload_bridge": ch in preload_channels,
+                    "evidence_tags": ["STATIC_BUNDLE"],
+                    "support_classification": "INTERNAL_ELECTRON_IPC",
+                },
+            )
+            entry["static_occurrences"] += 1
+            if rel not in entry["bundles"]:
+                entry["bundles"].append(rel)
+
+    # 2. App-server RPC method provenance & schema cross-reference
+    rpc_stats: dict[str, dict[str, Any]] = {}
+    for rel, text in bundle_texts:
+        for m in RPC_METHOD_REGEX.findall(text):
+            entry = rpc_stats.setdefault(
+                m,
+                {
+                    "bundles": [],
+                    "static_occurrences": 0,
+                    "in_preload_bridge": m in preload_text,
+                },
+            )
+            entry["static_occurrences"] += 1
+            if rel not in entry["bundles"]:
+                entry["bundles"].append(rel)
+
+    for m, entry in rpc_stats.items():
+        if m in stable_client:
+            schema_status = "client_request_stable"
+            tags = ["PUBLIC_SOURCE", "STATIC_BUNDLE"]
+            support = "PUBLIC_SUPPORTED"
+        elif m in exp_only_client:
+            schema_status = "client_request_experimental_only"
+            tags = ["PUBLIC_SOURCE", "STATIC_BUNDLE"]
+            support = "EXPERIMENTAL_STOCK_SCHEMA"
+        elif m in stable_server_req:
+            schema_status = "server_request_stable"
+            tags = ["PUBLIC_SOURCE", "STATIC_BUNDLE"]
+            support = "PUBLIC_SUPPORTED"
+        elif m in exp_only_server_req:
+            schema_status = "server_request_experimental_only"
+            tags = ["PUBLIC_SOURCE", "STATIC_BUNDLE"]
+            support = "EXPERIMENTAL_STOCK_SCHEMA"
+        elif m in stable_notif or m in exp_only_notif:
+            schema_status = "server_notification"
+            tags = ["PUBLIC_SOURCE", "STATIC_BUNDLE"]
+            support = "PUBLIC_SUPPORTED"
+        else:
+            schema_status = "not_in_local_stock_schema"
+            tags = ["STATIC_BUNDLE"]
+            support = "PRIVATE_INTERNAL_SERVICE"
+        entry["in_stock_app_server_schema"] = schema_status
+        entry["evidence_tags"] = tags
+        entry["support_classification"] = support
+
+    # 3. Key architectural symbol provenance
+    tracked_symbols = (
+        "STEPS_PROSE",
+        "STEPS_COMMANDS",
+        "STEPS_EXECUTION",
+        "includeProseDetailLevelInstructions",
+        "writing_blocks",
+        "thread/startAeon",
+        "thread/environmentReady",
+        "tpp-local-executor",
+        "CODEX_TPP_LOCAL_EXECUTOR_ENABLED",
+        "submitChatGPTLocalFunctionResult",
+        "remoteControl/enable",
+        "remote-control-device-key.node",
+        "codex_app_active_history_eviction_v1",
+        "codex-app-thread-timeline-history",
+        "codex-app-bounded-cloud-history",
+    )
+    symbol_report: dict[str, dict[str, Any]] = {}
+    for sym in tracked_symbols:
+        bundles: list[str] = []
+        count = 0
+        for rel, text in bundle_texts:
+            c = text.count(sym)
+            if c > 0:
+                count += c
+                bundles.append(rel)
+        in_schema = (
+            sym in stable_client
+            or sym in exp_only_client
+            or sym in stable_server_req
+            or sym in exp_only_server_req
+            or sym in stable_notif
+        )
+        symbol_report[sym] = {
+            "bundles": bundles,
+            "static_occurrences": count,
+            "in_preload_bridge": sym in preload_text,
+            "in_stock_app_server_schema": in_schema,
+            "evidence_tags": (
+                ["PUBLIC_SOURCE", "STATIC_BUNDLE"] if in_schema else ["STATIC_BUNDLE"]
+            ),
+        }
+
+    # 4. Network endpoint provenance (/backend-api/* and /wham/*)
+    endpoint_stats: dict[str, dict[str, Any]] = {}
+    for rel, text in bundle_texts:
+        for pat in (
+            r'["\'](/backend-api/[A-Za-z0-9_./${}:?=&-]+)["\']',
+            r'["\'](/wham/[A-Za-z0-9_./${}:?=&-]+)["\']',
+        ):
+            for raw in re.findall(pat, text):
+                ep = re.sub(r"\$\{[^}]+\}", ":param", raw)
+                is_wham = ep.startswith("/wham/") or "/wham/" in ep or "/codex/remote/" in ep
+                entry = endpoint_stats.setdefault(
+                    ep,
+                    {
+                        "bundles": [],
+                        "static_occurrences": 0,
+                        "in_preload_bridge": ep in preload_text,
+                        "in_stock_app_server_schema": False,
+                        "evidence_tags": ["STATIC_BUNDLE"],
+                        "support_classification": (
+                            "PRIVATE_INTERNAL_SERVICE"
+                            if is_wham
+                            else "PRIVATE_WEB_SESSION"
+                        ),
+                    },
+                )
+                entry["static_occurrences"] += 1
+                if rel not in entry["bundles"]:
+                    entry["bundles"].append(rel)
+
+    schema_summary = {
+        k: v for k, v in schema_info.items() if k != "sets"
+    }
+    not_in_stock_schema = sorted(
+        m
+        for m, e in rpc_stats.items()
+        if e["in_stock_app_server_schema"] == "not_in_local_stock_schema"
+    )
+    return {
+        "stock_app_server_schema": schema_summary,
+        "ipc_channel_counts": {
+            "preload_exposed": len(preload_channels),
+            "total_static_ipc_channels": len(ipc_stats),
+        },
+        "rpc_method_summary": {
+            "total_asar_matched_rpc_strings": len(rpc_stats),
+            "in_stock_stable_client_request": sorted(
+                m
+                for m, e in rpc_stats.items()
+                if e["in_stock_app_server_schema"] == "client_request_stable"
+            ),
+            "in_stock_experimental_client_request": sorted(
+                m
+                for m, e in rpc_stats.items()
+                if e["in_stock_app_server_schema"] == "client_request_experimental_only"
+            ),
+            "in_stock_server_request": sorted(
+                m
+                for m, e in rpc_stats.items()
+                if e["in_stock_app_server_schema"].startswith("server_request_")
+            ),
+            "in_stock_server_notification": sorted(
+                m
+                for m, e in rpc_stats.items()
+                if e["in_stock_app_server_schema"] == "server_notification"
+            ),
+            "not_in_local_stock_schema": not_in_stock_schema,
+        },
+        "endpoint_counts": {
+            "total_discovered_endpoints": len(endpoint_stats),
+        },
+        "key_symbols": symbol_report,
+        "ipc_channels": dict(sorted(ipc_stats.items())),
+        "rpc_methods": dict(sorted(rpc_stats.items())),
+        "endpoints": dict(sorted(endpoint_stats.items())),
     }
 
 
@@ -313,6 +608,11 @@ def main() -> int:
         action="store_true",
         help="Print ~/.codex SQLite DDL schemas (no row data)",
     )
+    parser.add_argument(
+        "--evidence-report",
+        action="store_true",
+        help="Print provenance, static counts, preload exposure, stock app-server schema cross-check, and evidence tags",
+    )
     args = parser.parse_args()
 
     run_all = not any(
@@ -323,12 +623,20 @@ def main() -> int:
             args.css_tokens,
             args.plugins,
             args.sqlite_schemas,
+            args.evidence_report,
         ]
     )
 
     output: dict[str, Any] = {}
     if run_all or any(
-        [args.summary, args.ipc, args.endpoints, args.css_tokens, args.plugins]
+        [
+            args.summary,
+            args.ipc,
+            args.endpoints,
+            args.css_tokens,
+            args.plugins,
+            args.evidence_report,
+        ]
     ):
         archive = AsarArchive(find_asar(args.asar))
         if run_all or args.summary:
@@ -341,6 +649,8 @@ def main() -> int:
             output["css_tokens"] = cmd_css_tokens(archive)
         if run_all or args.plugins:
             output["plugins"] = cmd_plugins(archive)
+        if run_all or args.evidence_report:
+            output["evidence_report"] = cmd_evidence_report(archive)
 
     if run_all or args.sqlite_schemas:
         output["sqlite_schemas"] = cmd_sqlite_schemas(
@@ -354,3 +664,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
