@@ -1391,4 +1391,72 @@ separating `MACHINE VERIFIED`, `HUMAN REVIEWED`, and `NOT YET HUMAN VERIFIED`.
   updated desktop build; automated tests and agent-captured live Linux window
   walks do not substitute for the user's sign-off.
 
+---
+
+## ADR-030 — Use explicit SELF_ITERATION and HUMAN_REVIEW operating modes
+
+**Status:** Accepted
+
+**Date:** 2026-11-07
+
+### Decision
+
+Every active project phase must name one operating mode in `PROJECT_STATUS.md`:
+`SELF_ITERATION` or `HUMAN_REVIEW`. The durable behavior of both modes lives
+in `AGENTS.md` and applies to every agent/model that works in this repository.
+
+`SELF_ITERATION` is the default inside an explicitly authorized phase. The
+agent should autonomously research, implement/refine, validate, exercise the
+real path when practical, repair regressions, update project memory, make
+coherent commits, and continue to the next in-scope task. A commit, green test,
+document, CI result, or local milestone is not by itself a stop condition.
+Self-iteration does not expand the authorized product phase or permit
+destructive, release/signing, production private-API, or unrelated work.
+
+`HUMAN_REVIEW` is reserved for material questions that machine evidence cannot
+settle reliably: subjective visual/interaction quality, unavailable physical
+device/platform behavior, high-impact or irreversible decisions, product
+tradeoffs whose deciding constraint is user preference, or an explicit user
+request to pause. Before entering Human review, reasonable machine-actionable
+work in scope must be exhausted.
+
+A Human-reported defect or rejection supersedes conflicting machine completion
+evidence. Unless the user explicitly asks to remain paused, that feedback
+returns the affected authorized phase to `SELF_ITERATION` for diagnosis,
+repair, regression validation, real-path exercise, and updated project memory.
+
+Status reports must distinguish `MACHINE VERIFIED`, `AGENT REAL-USE VERIFIED`,
+`HUMAN REVIEWED`, and `NOT YET HUMAN VERIFIED`. A machine/agent result must
+not be promoted to an unqualified Human acceptance/completion claim.
+
+For the current authorization, set `Mode: SELF_ITERATION` and research the
+current ChatGPT Desktop as a full-stack reference implementation—UI and product
+logic together—to map future shared Native Chat/Work/Codex architecture. This
+research authorization does not itself authorize implementation of Chat, Work,
+mobile, or a production dependency on discovered private/internal APIs.
+
+### Why
+
+- The previous Desktop UI phase demonstrated that green widget tests and agent
+  live runs can still miss immediate Human real-use defects.
+- Agents also lose productivity when every coherent commit becomes an implicit
+  request for permission to continue even though the surrounding phase already
+  authorizes the next machine-actionable step.
+- Explicit modes make the stop/continue contract durable across Gemini, Codex,
+  future models, and Human contributors without weakening scope control.
+- Separating evidence classes prevents "machine complete" from being mistaken
+  for "Human accepted".
+
+### Consequence
+
+- `PROJECT_STATUS.md` is the source of truth for the current operating mode and
+  authorized phase; `AGENTS.md` defines the mode semantics.
+- Old completion markers remain historical evidence and may be superseded rather
+  than rewritten when stronger Human evidence arrives.
+- Agents should stop for a genuine Human gate, but should not manufacture one to
+  avoid finishing machine-actionable work.
+- Self-iteration remains bounded by the explicitly authorized phase and the
+  repository's existing security, memory, protocol, licensing, and clean-room
+  constraints.
+
 

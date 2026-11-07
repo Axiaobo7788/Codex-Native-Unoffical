@@ -15,6 +15,85 @@ Before finishing any task that materially changes the repository:
 - Keep status factual. Do not mark work complete unless it is implemented and, where applicable, tested.
 - Include the relevant commit/test result in the status entry when useful.
 
+## Operating modes
+
+Every non-trivial task operates in exactly one explicit project mode. Read the
+current mode from `PROJECT_STATUS.md` before starting. If the status file does
+not name a mode, do not guess from an old completion marker; treat the latest
+explicit user instruction as authoritative and update the status file.
+
+### `SELF_ITERATION`
+
+This is the default mode inside an already authorized phase.
+
+In `SELF_ITERATION`, continue autonomously through the highest-value work that
+is still inside the authorized phase:
+
+1. inspect the current repository and upstream/reference evidence;
+2. research unknowns that materially affect the task;
+3. implement or refine the scoped work;
+4. run the strongest practical machine validation;
+5. exercise the real product/runtime when that is locally possible;
+6. fix regressions found by those checks;
+7. update durable project memory and ADRs when needed;
+8. commit coherent slices normally; then continue to the next scoped item.
+
+Do **not** stop merely because one commit, issue, test suite, document, CI run,
+or local milestone is complete. Do not repeatedly ask whether to continue when
+the next action is implied by the authorized phase and can be answered from
+source, tests, experiments, benchmarks, live inspection, repository history, or
+public/reference evidence.
+
+`SELF_ITERATION` is not permission to expand scope indefinitely. It does not
+authorize a new product phase, destructive user-data action, release/signing
+decision, production/private-API dependency, or unrelated infrastructure work.
+
+### `HUMAN_REVIEW`
+
+Enter `HUMAN_REVIEW` only when the remaining material question cannot be
+reliably resolved by machine/agent evidence, including:
+
+- subjective product quality, visual fidelity, interaction feel, or long-session
+  usability that genuinely requires a person;
+- physical-device/platform behavior unavailable to the current environment;
+- a high-impact or irreversible choice that requires explicit user approval;
+- multiple technically valid product directions where user preference is the
+  deciding constraint;
+- an explicit user instruction to stop for review.
+
+Before switching from `SELF_ITERATION` to `HUMAN_REVIEW`, exhaust the
+reasonable machine-actionable work within scope. "It would be nice for the user
+to look at this" is not by itself a stop condition.
+
+Human feedback is new high-priority evidence. Unless the user explicitly asks
+to remain paused, a reported defect/rejection automatically returns the affected
+authorized phase to `SELF_ITERATION`: diagnose, fix, regression-test, exercise
+the real path, update project memory, and continue until a genuine Human gate is
+reached again.
+
+### Evidence labels and completion claims
+
+Keep these evidence classes distinct:
+
+- **MACHINE VERIFIED** — static analysis, unit/widget/integration tests,
+  benchmarks, builds, automated protocol/screenshot checks.
+- **AGENT REAL-USE VERIFIED** — the real application/runtime was launched and
+  exercised against realistic data by the agent. This is stronger than a
+  synthetic test but is still not Human acceptance.
+- **HUMAN REVIEWED** — the user actually inspected or used the relevant result
+  and supplied feedback/acceptance.
+- **NOT YET HUMAN VERIFIED** — the relevant Human gate has not occurred.
+
+Never promote `MACHINE VERIFIED` or `AGENT REAL-USE VERIFIED` to a generic
+"UI complete", "done", or "accepted" claim when Human review is still required.
+Prefer precise markers such as
+`IMPLEMENTATION_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`.
+
+If Human real-use evidence contradicts an earlier machine completion marker,
+preserve the old record as history but immediately supersede it in
+`PROJECT_STATUS.md` and, when durable, in an ADR.
+
+
 ## Project intent
 
 Build an unofficial native-first client for OpenAI Codex. The client must reuse the stock `codex app-server` and preserve the Codex harness rather than reimplementing an agent.
