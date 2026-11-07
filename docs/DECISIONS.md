@@ -1459,4 +1459,105 @@ mobile, or a production dependency on discovered private/internal APIs.
   repository's existing security, memory, protocol, licensing, and clean-room
   constraints.
 
+---
+
+## ADR-031 — Unified Native Chat + Work + Codex platform architecture from ChatGPT Desktop 26.1103.32239 reverse analysis
+
+**Status:** Accepted
+
+**Date:** 2026-11-07
+
+### Decision
+
+Adopt a unified Native **Chat + Work + Codex** platform architecture informed by
+the clean-room full-stack reverse analysis of ChatGPT Desktop `26.1103.32239`
+(`docs/reverse/*.md`), while preserving `Codex owns intelligence; client owns
+presentation`, strict bounded-memory rules, and public/private API separation:
+
+1. **One Unified App Shell with Shared Mode-Switch Architecture**:
+   - Do not build separate apps or separate widget trees for Chat, Work, and
+     Codex. Use one shared App Shell (`264 px` collapsible sidebar + inset
+     rounded main canvas + bottom-anchored conversation timeline + floating
+     composer) parameterized by `FollowUpTurnBehavior` (`STEPS_PROSE` for
+     Everyday/Work mode, collapsing intermediate steps behind `Worked for Xm Ys`;
+     `STEPS_COMMANDS` for Code/Codex mode, showing inline command/diff/terminal
+     controls).
+   - Keep `ThreadRuntimeStatus.notLoaded` silent in the sidebar (active/error
+     status indicators only).
+2. **Tiered Local Persistence (`codex_native_catalog.sqlite` + Untouched Stock Runtime DBs)**:
+   - Never open or mutate `~/.codex/state_5.sqlite`, `thread_history_1.sqlite`,
+     `queue_1.sqlite`, `goals_1.sqlite`, `memories_1.sqlite`,
+     `memories_v2_1.sqlite`, `logs_2.sqlite`, or `~/.codex/sqlite/codex.db`
+     directly from Flutter or `codex-native-host` (to prevent SQLite lock
+     contention with stock `codex app-server` and the official Electron app).
+   - Introduce a client-owned SQLite catalog (`codex_native_catalog.sqlite`,
+     WAL mode) in `codex-native-host` mirroring the official `local_thread_catalog`
+     schema (`(host_id, thread_id)` composite key, `remote_conversation_id`,
+     `workspace_root_path`, `pinned_at`, `archived`, `unread_turn_completed_at`)
+     for sub-10ms cold-start sidebar bootstrap before `codex app-server`
+     finishes spawning.
+3. **Canonical Turn Islands, Opening-User-Message Anchoring, and Viewport-Protected Active Eviction**:
+   - Adopt the official canonical turn-island history model (`olderCursor` /
+     `newerCursor`, tail hydration of the newest 15 turns, opening `userMessage`
+     anchoring when `olderCursor != null`, and viewport-protected active-turn
+     eviction `1000 -> 500` items that preserves both the opening `userMessage`
+     and the currently visible viewport slice) while keeping our stronger
+     `codex-native-host` byte-level `aggregatedOutput` spool.
+   - Adopt fine-grained per-item and per-slot `ValueNotifier` subscriptions so
+     streaming updates rebuild only the active item leaf widget, paired with a
+     10-thread LRU cache for inactive hydrated thread controllers.
+4. **Tiered Chat Backend Strategy (`PUBLIC_SUPPORTED` Default, Opt-In Cloud Sync)**:
+   - Default Phase 1 Native Chat & Work to **`PUBLIC_SUPPORTED`** paths: stock
+     `codex app-server` (`conversation/create`, `sendUserTurn`, `thread/start`,
+     `turn/start` in `STEPS_PROSE` mode) using `account/login/start` OAuth or
+     OpenAI Responses API (`/v1/responses`), plus offline import of official
+     ChatGPT Data Export (`conversations.json`) with full `MrGp` DAG branch
+     navigation (`< 2 / 3 >`).
+   - Treat `/backend-api/conversations` and `/backend-api/f/conversation` as
+     **`PRIVATE_WEB_SESSION`** (Cloudflare/Sentinel-protected) and isolate any
+     future live ChatGPT web-history sync behind an explicit experimental
+     opt-in adapter. Never depend on **`PRIVATE_INTERNAL_SERVICE`** endpoints
+     (`/wham/*`, `wss://codex-cloud-backend.chatgpt.com/`).
+5. **Three-Tier Shared Capability Host (Native First, Sandboxed WebView Only for Skybridge)**:
+   - Implement Tier 1 (protocol-native Skills, MCP servers, Apps/Connectors via
+     stock `codex app-server` RPCs) and Tier 2 (high-value native Flutter renderers
+     for `visualize` `show_widget`, `latex` math/TikZ, and diff/plan artifacts)
+     without any WebView.
+   - Reserve Tier 3 (isolated system WebView with strict CSP and a 19-channel
+     `MessagePort` bridge modeled on `codex-sandbox://`) strictly for third-party
+     MCP Skybridge (`ui://widget/*`) HTML resources on demand.
+6. **Direct Host (`codex-native-host`) as Primary Mobile/Remote Architecture**:
+   - Keep `codex-native-host` Direct Host WSS + QR pairing as the primary
+     Mobile/Remote transport. Do not depend on the proprietary
+     `wss://chatgpt.com/backend-api/wham/remote/control/server` relay or its
+     hardware-enclave attestation (`remote-control-device-key.node` + MFA
+     `step_up_token`). Optionally add an SSH transport adapter (`ssh -T
+     <host> codex app-server`) as a zero-install developer remote option.
+
+### Why
+
+- ChatGPT Desktop `26.1103.32239` proves that Everyday Chat, Work, and Codex are
+  three presentation/tool configurations of a single conversation engine and shell
+  rather than three separate applications.
+- Directly sharing `~/.codex/sqlite/codex.db` or `state_5.sqlite` would race
+  with stock `codex app-server` and official ChatGPT Desktop migrations; an
+  isolated `codex_native_catalog.sqlite` achieves the same instant cold-start UX
+  safely.
+- Combining our byte-bounded `codex-native-host` output spool with the official
+  canonical turn-island + opening-user-message + viewport-protected eviction
+  model gives both constant-RAM safety against 300 MiB tool outputs and
+  rock-solid multi-hundred-turn navigation.
+- Separating `PUBLIC_SUPPORTED` APIs from `PRIVATE_WEB_SESSION` and
+  `PRIVATE_INTERNAL_SERVICE` endpoints protects the core client from Cloudflare
+  bot challenges, Sentinel PoW rotation, and hardware-key attestation breakage.
+
+### Consequence
+
+- This ADR establishes the durable architecture map for the unified Native
+  Chat + Work + Codex client and closes the authorized reverse-analysis phase.
+- Per `ADR-030`, the project now transitions to `Mode: HUMAN_REVIEW`
+  (`REVERSE_ANALYSIS_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`) so the user can
+  review both the updated Desktop UI build and the 9-document reverse-analysis
+  architecture blueprint before authorizing the next implementation phase.
+
 
