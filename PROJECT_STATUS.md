@@ -4,6 +4,26 @@ _Last updated: 2026-11-07_
 
 This file is the repository's durable project memory. Update it whenever a task materially changes implementation status, milestones, known blockers, or the next recommended step.
 
+## Operating mode
+
+**Mode: `SELF_ITERATION`**
+
+- Current authorized direction: perform a full-stack reverse analysis of the
+  currently installed/latest ChatGPT Desktop as a reference implementation for
+  the future native client, covering UI/design system, state/routing, local
+  persistence, IPC/native bridges, network/API/streaming surfaces, Chat, Work,
+  Codex, Plugins/Skills/MCP/Apps, account/workspace/auth, and shared-platform
+  boundaries.
+- This authorization is **research and architecture mapping first**. It does not
+  authorize immediate Chat/Work/mobile implementation or production reliance on
+  private/internal APIs discovered during analysis.
+- Continue autonomously inside that scope until the machine-actionable research
+  is reasonably exhausted, then switch to `HUMAN_REVIEW` with explicit
+  evidence and recommendations.
+- A Human-reported defect or rejection in an already authorized phase is itself
+  authorization to return that phase to `SELF_ITERATION`, unless the user
+  explicitly asks to remain paused.
+
 ## Current phase
 
 **Phase 1 — Flutter + Codex app-server vertical slice: IMPLEMENTED, VERIFIED, COMMITTED (`5089320`)**
@@ -16,7 +36,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Prior Desktop UI phase marker (`7f220d5`, preserved history): `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH` — superseded by Human real-use review on 2026-11-07 because machine-only widget tests missed real-use scroll positioning, history anchor preservation, user attachment envelope presentation, and desktop product-completeness defects.**
 
-**Current sole phase — Reopened Desktop UI productization & UX fidelity: MACHINE-VERIFIED AND LIVE-LINUX-WALKED, STOPPED FOR USER REVIEW (`DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW`).**
+**Desktop UI productization checkpoint — MACHINE-VERIFIED AND LIVE-LINUX-WALKED; Human acceptance remains pending. The prior marker `DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW` is preserved as checkpoint history, not as a global stop after the user's new research authorization.**
+
+**Current authorized phase — ChatGPT Desktop full-stack reverse analysis and future Native shared-platform mapping: `SELF_ITERATION`. Research UI and logic together; classify public/private/local/server-only boundaries; do not begin Chat/Work/mobile implementation until a subsequent implementation phase is explicitly authorized.**
 
 ## Current repository state
 
