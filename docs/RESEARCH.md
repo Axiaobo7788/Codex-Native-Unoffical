@@ -2736,3 +2736,113 @@ _Reviewed: 2026-11-06_
 - This review makes no code change and does not prove that future Flutter or
   Xcode versions retain the same behavior. Re-audit the pinned template and open
   issue when either toolchain is upgraded.
+
+## Current official Codex Desktop UX and reopened real-use review
+
+_Reviewed: 2026-11-07_
+
+### Sources and live evidence reviewed
+
+- Installed official ChatGPT/Codex Desktop application on this Linux host
+  (`/opt/codex-desktop`, bundling stock `codex` `0.166.0-alpha.5.1`), inspected
+  live via its Chromium DevTools endpoint (`http://127.0.0.1:9333`) and window
+  captures across real local workspaces (`Codex-Native-Unoffical`,
+  `fura-project`, `starlight-material-design-theme`, `libreoffice_modern`,
+  `Seal-Desktop`, and `minecraft`).
+- Official OpenAI Codex Desktop documentation
+  ([Codex app](https://developers.openai.com/codex/app),
+  [Codex app features](https://developers.openai.com/codex/app/features), and
+  [Using the Codex app](https://help.openai.com/en/articles/20001053-using-the-codex-app))
+  covering project-grouped sidebars, collapsible navigation, thread switching,
+  diff review, and composer controls.
+- Stock `codex app-server` v2 protocol schema (`UserInput` union: `text`,
+  `image`, `localImage`, `skill`, `mention`) and real persisted `userMessage`
+  history payloads returned by `thread/turns/list` and `thread/items/list`.
+- Human real-use review of `codex_native_unofficial` at `7f220d5` on Linux,
+  which demonstrated that passing widget tests and synthetic smokes had missed
+  immediate daily-use defects when opening real multi-turn project threads.
+
+### Real-use defects identified against the official desktop experience
+
+1. **Initial conversation scroll position and history anchor model (P0)**:
+   - The previous `ListView.builder` timeline only called
+     `animateTo(maxScrollExtent)` when `distanceFromEnd <= 160`. Because a
+     standard top-anchored `ListView` starts at `offset == 0.0` (the oldest
+     loaded turn at the top of the page), `distanceFromEnd` on first open was
+     tens of thousands of pixels (`~24,696 px` on `Build Codex desktop vertical
+     slice`), leaving the user stranded at the top of historical turns on every
+     thread open or switch.
+   - Prepending older turns via `Load older turns` inserted items at index `0`
+     of a top-anchored list, shifting the user's current reading position down.
+2. **User message envelope and attachment presentation**:
+   - Official Codex Desktop and IDE integrations wrap pasted files, mentioned
+     files, and IDE context into structured markdown headers inside the
+     `userMessage` text item (`# Files pasted by the user:`,
+     `# Files mentioned by the user:`, `# Context from my IDE setup:`, followed
+     by `## My request:` or `## My request for Codex:`).
+   - Rendering the raw protocol text exposed temporary file paths (such as
+     `/home/.../.codex/.tmp/pasted-files/.../已粘贴的文本.txt`) and internal
+     scaffolding (`Pasted text contains the user's request.`) directly inside the
+     user bubble, and also polluted unnamed thread titles in the sidebar when
+     `thread.preview` began with `# Files pasted by the user:`.
+   - User bubbles in `7f220d5` used a high-contrast dark fill (`#1F211F` in
+     light mode) rather than the official Codex Desktop's soft neutral pill
+     surface (`#F0F0EC` light / `#2A2B29` dark with primary text).
+3. **Desktop shell, window identity, and sidebar noise**:
+   - Native Linux, Windows, and macOS window chrome still displayed the package
+     identifier `codex_native_unofficial` instead of `Codex Native`.
+   - Inactive persisted threads returned by `thread/list` have status
+     `ThreadRuntimeStatus.notLoaded` until resumed. Rendering an amber warning
+     dot for `notLoaded` marked every historical thread in the sidebar as if it
+     were in a warning state.
+   - Sidebar thread timestamps formatted every date as `HH:mm`, making weeks-old
+     threads indistinguishable from today's turns.
+   - The desktop workspace lacked a collapsible sidebar toggle (`Ctrl+B` /
+     `Cmd+B`), collapsible project groups, and inline thread filtering
+     (`Ctrl+K` / `Cmd+K`).
+   - Selecting a `notLoaded` thread in the sidebar kept `readThread` read-only,
+     but submitting a new prompt in the composer did not automatically invoke
+     `resumeThread` before `startTurn`.
+
+### Adopted product architecture and boundaries
+
+- **Bottom-anchored reverse-sliver conversation viewport**:
+  - `_ConversationScrollView` uses a `CustomScrollView` with `anchor: 1.0`, a
+    zero-height `center` sliver at the bottom of the timeline, and a single
+    reverse-growing `SliverList.builder` placed before `center` (`reverseIndex
+    0` = newest item at `scrollOffset == 0.0`, growing into negative scroll
+    offsets for older items).
+  - A custom `_RenderConversationViewport` overrides `performLayout()` so that
+    when total content height is smaller than the viewport (`totalExtent <
+    size.height`), children are shifted upward to top-align short threads while
+    keeping `minScrollExtent == 0.0` and `maxScrollExtent == 0.0`.
+  - Consequently, opening any long thread lands immediately at the latest turn on
+    Frame 1 (`pixels == 0.0 == maxScrollExtent`) without measuring offscreen
+    items or animating across the timeline. Prepending older turns appends to
+    higher reverse indices (more negative `minScrollExtent`), preserving the
+    visual position of the item currently on screen to within `< 1 px`.
+  - Live streaming updates auto-follow only when within `160 px` of latest
+    (`offset >= -160`); when scrolled up (`offset < -160`), streaming never
+    yanks the viewport and a compact floating `Jump to latest` pill is shown.
+  - Per-thread scroll offsets are remembered in a bounded in-memory map capped
+    at `32` threads.
+- **Structured user message envelope & attachment presentation**:
+  - `parseUserMessagePresentation` parses pasted-file, mentioned-file, and
+    IDE-context envelopes at presentation/domain projection time without
+    modifying prompts sent to Codex. Extracted file references and non-text
+    `userMessage.content` items (`localImage`, `image`, `skill`, `mention`)
+    render as compact attachment chips above a clean neutral user bubble, with
+    `Show full message` / `Show less` disclosure for long prompts and normalized
+    fallback titles for unnamed threads.
+- **Timeline, sidebar, and composer product refinements**:
+  - Completed assistant fenced code blocks include a header bar with the
+    language label and a `Copy` action. Reasoning items render as quiet
+    left-bordered rows, and command rows expose inline output actions without
+    raw protocol status strings.
+  - Native desktop shells set the window title to `Codex Native`. The sidebar
+    supports `Ctrl+B`/`Cmd+B` collapse, collapsible project folders with quick
+    `+` new-thread creation, `Ctrl+K`/`Cmd+K` inline filtering, relative date
+    labels (`HH:mm`, `Nd`, `MM/dd`), status dots restricted to active/error
+    states, and automatic `ensureSelectedThreadLoaded()` resume on composer
+    submit.
+

@@ -1,6 +1,6 @@
 # Project Status
 
-_Last updated: 2026-11-06_
+_Last updated: 2026-11-07_
 
 This file is the repository's durable project memory. Update it whenever a task materially changes implementation status, milestones, known blockers, or the next recommended step.
 
@@ -14,11 +14,13 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 4 — Android Remote: PAUSED BY EXPLICIT PRIORITY OVERRIDE — the existing bounded read-only transport/onboarding/admin work remains intact, but writes, approvals, full conversation integration, headless Host work, relay migration, and mobile architecture work must not advance during the Desktop UI phase**
 
-**Current sole phase — Desktop UI fidelity: MACHINE-COMPLETE AND STOPPED — the researched Codex-inspired native Flutter workspace, responsive interactions, unified component language, bounded-memory regressions, Linux native run, and real stock-app-server smokes are complete. Cross-platform and Human visual acceptance remain explicitly unrun evidence, not hidden claims. `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH`; no mobile/Remote or adjacent autonomous phase may begin without a new user instruction.**
+**Prior Desktop UI phase marker (`7f220d5`, preserved history): `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH` — superseded by Human real-use review on 2026-11-07 because machine-only widget tests missed real-use scroll positioning, history anchor preservation, user attachment envelope presentation, and desktop product-completeness defects.**
+
+**Current sole phase — Reopened Desktop UI productization & UX fidelity: MACHINE-VERIFIED AND LIVE-LINUX-WALKED, STOPPED FOR USER REVIEW (`DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW`).**
 
 ## Current repository state
 
-- Flutter application shells exist for Linux, Windows, macOS, and Android under the Dart package `codex_native_unofficial`.
+- Flutter application shells exist for Linux, Windows, macOS, and Android under the Dart package `codex_native_unofficial`, with native desktop window titles set to `Codex Native`.
 - Desktop runtime flow is real, not mocked:
   - locate `codex` through `CODEX_EXECUTABLE` or `PATH`;
   - spawn stock `codex app-server --listen stdio://`;
@@ -35,21 +37,34 @@ This file is the repository's durable project memory. Update it whenever a task 
   this stack from platform secure storage and exposes its explicit lifecycle
   states plus bounded read-only metadata, without enabling unsupported gateways.
 - Typed thread operations now cover bounded `thread/list`, `thread/start`, metadata-only `thread/read`, history-excluding `thread/resume`, and exact-ID delete for smoke-test cleanup.
-- The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, and exposes select/resume actions. It does not retain turns or raw protocol JSON.
+- The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, exposes select/resume actions, and automatically resumes a selected `notLoaded` thread when the user submits a turn from the composer (`ensureSelectedThreadLoaded()`). It does not retain turns or raw protocol JSON.
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
 - The conversation projection retains at most 200 recent entries and 64 KiB per entry, coalesces streaming updates on a 50 ms cadence, and never retains command output payloads.
 - Command/file-change approvals support explicit approve-once and reject responses. Unknown and unsupported server requests fail closed and cannot expose an approve action. The real reject path is verified; approve-once is currently unit-tested but not Human-validated.
 - `model/list` drives typed visible-model and reasoning-effort controls. Model, effort, approval, and sandbox overrides are omitted by default; `never` approval and `danger-full-access` require an explicit UI confirmation.
 - Turn diff notifications are converted immediately into a bounded typed projection: at most 2 MiB processed input, 100 files, 512 KiB retained total, 128 KiB and 4,000 lines per file, and 2,000 characters per retained line. Only the selected file's rows are built by the diff view.
-- The desktop UI is now a full-window Codex-inspired product workspace rather
-  than a centered engineering card: a 264 px project/thread sidebar, 52 px
-  low-chrome headers, a maximum-760 px reading/composer column, compact typed
-  activity rows, user bubbles, inline approvals, selected-file diff, and a dark
-  bounded output viewer share one project-owned visual language. Wide mode uses
-  independently virtualized sidebar/timeline surfaces; below 760 px an explicit
-  thread/conversation mode switch avoids nested page scrolling. Selecting a
-  thread enters the conversation, Escape closes the narrow sidebar, Enter
-  sends, and Shift+Enter inserts a newline.
+- The desktop UI is a full-window Codex-inspired product workspace: a
+  collapsible 264 px project/thread sidebar (`Ctrl+B` / `Cmd+B`), collapsible
+  project groups with quick `+` new-thread actions, inline thread search
+  (`Ctrl+K` / `Cmd+K`), `Ctrl+N` / `Cmd+N` new thread shortcut, relative thread
+  timestamps (`HH:mm`, `Nd`, `MM/dd`) without false warning dots on `notLoaded`
+  threads, a quiet footer status indicator, 52 px low-chrome headers, a
+  maximum-760 px reading/composer column, compact typed activity rows, quiet
+  reasoning rows, fenced code block headers with `Copy` buttons, neutral user
+  bubbles (`#F0F0EC` light / `#2A2B29` dark) with structured attachment chips
+  for pasted/mentioned/IDE-context envelopes and `Show full message` /
+  `Show less` disclosure, inline approvals, selected-file diff, and a dark
+  bounded output viewer.
+- The conversation timeline uses a bottom-anchored `CustomScrollView`
+  (`anchor: 1.0`, `center` key at the bottom, and a reverse-growing
+  `SliverList.builder` before `center`) with a custom
+  `_RenderConversationViewport` that top-aligns short conversations when total
+  content height is smaller than the viewport. Opening or switching to a long
+  thread lands immediately at the latest turn (`scrollOffset == 0.0`) on Frame
+  1, prepending older turns (`Load older turns`) preserves the user's current
+  visual anchor, live streaming follows only within `160 px` of latest, a
+  floating `Jump to latest` pill appears when scrolled up, and at most `32`
+  per-thread scroll offsets are retained in memory.
 - Explicit `CodexPalette` light/dark theme extensions now own neutral,
   semantic, diff, code, focus, hover, selected, typography, radius, border, and
   density tokens. System brightness selects the first default theme;
@@ -195,6 +210,79 @@ This file is the repository's durable project memory. Update it whenever a task 
   stored or provisioned by the repository.
 
 ## Completed
+
+### 2026-11-07 — Reopened Desktop UI real-use review, productization, and stop
+
+- Human real-use review on Linux reopened Desktop UI fidelity/polish after
+  `7f220d5` (`ADR-029` supersedes `ADR-028`'s machine-only closure marker
+  without deleting history). Real-use inspection against both `codex_native_unofficial`
+  and the installed official Codex Desktop (`0.166.0-alpha.5.1`) identified and
+  fixed four product-critical gaps:
+  1. **Bottom-anchored conversation scroll model (`4d63e57`)**: Replaced the
+     top-anchored `ListView.builder` timeline with `_ConversationScrollView`
+     (`CustomScrollView` with `anchor: 1.0`, `center` key at the bottom, and a
+     reverse-growing `SliverList.builder` before `center`) plus a custom
+     `_RenderConversationViewport` that top-aligns short conversations when
+     `totalExtent < size.height`. Opening or switching to a multi-turn thread
+     now lands at the latest turn on Frame 1 (`pixels == 0.0 == maxScrollExtent`)
+     instead of stranding the user at the top of history. Prepending older turn
+     pages via `Load older turns` preserves the current visual reading anchor
+     without jumping. Live streaming auto-follows only within `160 px` of
+     latest, scrolling up reveals a floating `Jump to latest` pill without
+     streaming yank, and up to `32` per-thread scroll offsets are retained in
+     memory.
+  2. **User message envelope & timeline item presentation (`9756949`)**: Added
+     `UserAttachment`, `UserMessagePresentation`, and
+     `parseUserMessagePresentation` to normalize `# Files pasted by the user:`,
+     `# Files mentioned by the user:`, `# Context from my IDE setup:`, and
+     `## My request:` / `## My request for Codex:` scaffolding plus non-text
+     `userMessage.content` items (`localImage`, `image`, `skill`, `mention`)
+     into compact attachment chips above a clean request body without altering
+     outbound prompts sent to Codex. Normalized `ThreadSummary.displayTitle`
+     for unnamed threads whose preview starts with a pasted-file header.
+     Aligned `CodexPalette` user bubbles with official Codex Desktop neutral
+     pills (`#F0F0EC` light / `#2A2B29` dark), added `Show full message` /
+     `Show less` disclosure for long user messages, added fenced code block
+     header bars with language labels and `Copy` buttons in `AssistantMarkdown`,
+     separated quiet reasoning rows, and integrated command output actions
+     inline without raw `completed` protocol status strings.
+  3. **Desktop workspace, window identity, sidebar, header, and composer polish
+     (`6079016`)**: Updated native Linux, Windows, and macOS window titles from
+     `codex_native_unofficial` to `Codex Native`. Added collapsible desktop
+     sidebar (`Ctrl+B` / `Cmd+B`), collapsible project groups with hover `+`
+     new-thread-in-project action, inline thread search filter (`Ctrl+K` /
+     `Cmd+K`), `Ctrl+N` / `Cmd+N` new thread shortcut, relative thread timestamps
+     (`HH:mm`, `Nd`, `MM/dd`), removal of false warning dots on
+     `ThreadRuntimeStatus.notLoaded` threads, quiet connected footer status,
+     project context badges in header/composer, and automatic `resumeThread` on
+     composer submit when the selected thread is still `notLoaded`
+     (`ensureSelectedThreadLoaded()`).
+  4. **Regression coverage (`faa6875`)**: Added unit and widget regression tests
+     in `test/protocol/history_protocol_test.dart`,
+     `test/app/bounded_timeline_test.dart`, and
+     `test/app/product_controls_test.dart` covering initial latest scroll
+     positioning, `Jump to latest`, no streaming yank while scrolled up, visual
+     anchor preservation across `Load older turns`, sidebar collapse/search, and
+     pasted-file user message presentation.
+- Verification evidence:
+  - `dart analyze`: PASS (0 issues).
+  - `flutter analyze --no-pub` via ASCII copy `/tmp/codex_native_ascii_copy`:
+    PASS (0 issues in 8.9s; direct Unicode-path `flutter analyze` still hits the
+    known Flutter 3.47.1 UTF-8 `Content-Length` bug and is preserved as negative
+    toolchain evidence).
+  - `flutter test`: PASS (186/186 tests).
+  - `cargo test --workspace`: PASS (98/98 tests: 26 lib + 68 bin + 4
+    integration).
+  - `flutter build linux --debug`: PASS
+    (`build/linux/x64/debug/bundle/codex_native_unofficial`).
+  - Live Linux desktop run against `/opt/codex-desktop/resources/codex`
+    (`0.166.0-alpha.5.1`) verified with real window captures: native window
+    title `Codex Native`, project-grouped sidebar without false warning dots,
+    selecting `Build Codex desktop vertical slice` and `进入人工回归测试模式`
+    landing immediately at `pixels: 0.0` (bottom/latest turn), scrolling up
+    showing `Jump to latest` and rendering pasted-file envelopes as `Pasted ·
+    已粘贴的文本.txt` chip + clean user bubble, collapsible sidebar, inline
+    thread search, and clean process shutdown (`ALL_CLEAN`).
 
 ### 2026-11-06 — Desktop UI fidelity implementation, validation, and stop
 
@@ -1899,21 +1987,17 @@ specific evidence boundaries.
 
 ## Next action
 
-`DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH`.
+`DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW`.
 
-Do not perform further autonomous implementation. Await a new explicit user
-instruction. If development is resumed for the next intended phase, begin with
-fresh research into the then-current official ChatGPT/Codex Android and iOS
-clients, official Remote relay/controller protocol and source, and current
-community implementations. Re-evaluate whether official mobile is still only a
-Remote control plane, whether a third-party client can interoperate, whether
-OpenAI Remote plus Direct Host is still a sound dual-backend model, and which
-parts of `codex-native-host` should remain only a Direct/Self-hosted fallback.
-Do not begin that research or modify Android/Remote until the user explicitly
-resumes the project.
+- **MACHINE VERIFIED**:
+  - `dart analyze` (0 issues), `flutter analyze --no-pub` via ASCII workspace copy (0 issues), all 186 Flutter tests, all 98 Rust `codex-native-host` tests, and `flutter build linux --debug`.
+  - Live Linux desktop walkthrough against `/opt/codex-desktop/resources/codex` (`0.166.0-alpha.5.1`) with real window captures verifying: native window title `Codex Native`, Frame-1 latest-message positioning (`pixels: 0.0`) on multi-turn threads (`Build Codex desktop vertical slice`, `进入人工回归测试模式`), `Jump to latest` floating control when scrolled up, visual anchor preservation across `Load older turns`, attachment chip + clean user bubble rendering for `# Files pasted by the user:` envelopes, collapsible sidebar (`Ctrl+B`), collapsible project groups, inline thread search (`Ctrl+K`), relative thread dates, no false warning dots on `notLoaded` threads, and clean child shutdown.
+- **HUMAN REVIEWED**:
+  - Prior revision `7f220d5` was reviewed by the user on Linux and found to open existing threads at the top of history, expose raw pasted-file protocol scaffolding inside user bubbles, and lack desktop product completeness (reopening this phase under `ADR-029`).
+- **NOT YET HUMAN VERIFIED**:
+  - Interactive user sign-off on the updated desktop build (`4d63e57`..`HEAD`) across daily-use workflows, dark-mode and high-DPR visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
 
-The earlier Android, signing/notarization, installed-volume, hosted-CI, and
-Human visual gates remain recorded but are not current autonomous work.
+Do not perform further autonomous implementation or begin mobile/Remote research until the user reviews this desktop build and issues a new instruction.
 
 ## Milestone outline
 

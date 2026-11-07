@@ -1294,3 +1294,87 @@ split, or `codex-native-host` product role is still correct.
   signing, CI-hardening, and ACL/TLS edge work remains intact but inactive.
 - The next recommended activity is research only after explicit authorization;
   no implementation or protocol migration begins from this decision.
+
+---
+
+## ADR-029 — Reopen Desktop UI fidelity after Human real-use review and adopt a bottom-anchored conversation viewport
+
+**Status:** Accepted (supersedes ADR-028's `DESKTOP_UI_PHASE_COMPLETE` closure marker)
+
+**Date:** 2026-11-07
+
+### Decision
+
+Reopen Desktop UI fidelity and productization because Human real-use review of
+`7f220d5` demonstrated that machine-only widget tests had missed significant
+navigation, scroll restoration, user-message presentation, and product-completeness
+defects. Preserve `ADR-028` and the prior `PROJECT_STATUS.md` history intact,
+recording that Human real-use evidence supersedes the earlier machine-only
+completion claim.
+
+Replace the top-anchored `ListView.builder` conversation timeline with a
+bottom-anchored `CustomScrollView` (`anchor: 1.0`, a zero-height `center` sliver
+at the bottom, and a reverse-growing `SliverList.builder` before `center`) backed
+by a custom `_RenderConversationViewport` that top-aligns content when total
+sliver extent is smaller than the viewport height. Opening or resuming an
+existing thread lands immediately at `scrollOffset == 0.0` (`maxScrollExtent`) on
+the first frame without measuring offscreen turns or animating from the top.
+Prepending older turn pages extends negative scroll offsets without shifting the
+user's visual reading anchor. Live streaming follows only when within `160 px`
+of latest (`offset >= -160`); when scrolled up, streaming does not yank the
+viewport and a compact `Jump to latest` control is shown. Retain at most `32`
+per-thread scroll offsets in memory.
+
+Normalize persisted and live `userMessage` items for presentation only: parse
+`# Files pasted by the user:`, `# Files mentioned by the user:`,
+`# Context from my IDE setup:`, and `## My request:` / `## My request for Codex:`
+envelopes plus non-text `userMessage.content` items (`localImage`, `image`,
+`skill`, `mention`) into structured `UserAttachment` chips and a clean user
+request body, without modifying outbound prompts sent to `codex app-server`.
+Align user bubble tokens with the official Codex Desktop neutral surface
+(`#F0F0EC` light / `#2A2B29` dark), add `Show full message` / `Show less`
+disclosure for long user messages, add fenced code block headers with `Copy`
+actions, separate quiet reasoning rows, and remove raw protocol status text from
+command activity rows.
+
+Align the desktop workspace shell with current official Codex Desktop behavior:
+set the native window title to `Codex Native` across Linux, Windows, and macOS;
+add collapsible sidebar (`Ctrl+B` / `Cmd+B`), collapsible project groups with
+quick new-thread creation, and inline thread search (`Ctrl+K` / `Cmd+K`); show
+relative date labels (`HH:mm`, `Nd`, `MM/dd`) and omit false warning dots on
+`ThreadRuntimeStatus.notLoaded` threads; and automatically resume a selected
+`notLoaded` thread when the user submits a turn from the composer.
+
+Stop after live Linux desktop verification and emit
+`DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW`, explicitly
+separating `MACHINE VERIFIED`, `HUMAN REVIEWED`, and `NOT YET HUMAN VERIFIED`.
+
+### Why
+
+- A top-anchored `ListView` starts at `offset == 0.0` (the oldest loaded turn).
+  Checking `distanceFromEnd <= 160` therefore never triggered on initial load of
+  a multi-turn thread, stranding the user at the top of history and causing
+  upward pagination (`Load older turns`) to shift the visible viewport.
+- A bottom-anchored reverse sliver list places the newest item at `0.0` from the
+  very first layout pass while preserving lazy `SliverList.builder`
+  virtualization and all Phase 3 bounded-memory invariants.
+- Stock Codex and IDE integrations embed pasted-file and workspace context
+  scaffolding inside the protocol `userMessage` text item. Parsing that envelope
+  in the presentation projection matches official Codex Desktop's attachment
+  chip UX while keeping `Codex owns intelligence; client owns presentation`.
+- `ThreadRuntimeStatus.notLoaded` is the normal cold state of persisted threads
+  in `thread/list`; treating it as a warning state created false visual noise
+  across every historical thread in the sidebar.
+
+### Consequence
+
+- All bounded-memory, pagination, virtualization, 50 ms streaming coalescing,
+  16 KiB Markdown cap, 64 KiB output window, bounded diff, and Host spool
+  invariants remain intact.
+- Selecting a thread in the sidebar remains read-only (`readThread`), while
+  submitting a prompt in the composer transparently calls `resumeThread` if the
+  selected thread is still `notLoaded`.
+- Final product acceptance requires the user's own interactive review of the
+  updated desktop build; automated tests and agent-captured live Linux window
+  walks do not substitute for the user's sign-off.
+
