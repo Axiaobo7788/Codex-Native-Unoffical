@@ -2834,15 +2834,45 @@ _Reviewed: 2026-11-07_
     render as compact attachment chips above a clean neutral user bubble, with
     `Show full message` / `Show less` disclosure for long prompts and normalized
     fallback titles for unnamed threads.
-- **Timeline, sidebar, and composer product refinements**:
-  - Completed assistant fenced code blocks include a header bar with the
-    language label and a `Copy` action. Reasoning items render as quiet
-    left-bordered rows, and command rows expose inline output actions without
-    raw protocol status strings.
+- **Timeline, sidebar, header, empty state, and composer product refinements**:
+  - `ThreadListController.refresh()` deduplicates `thread/list` entries by
+    `thread.id` (preserving newest order) and fetches up to two continuation
+    pages when duplicate rollout entries reduce the unique count below
+    `pageSize`, ensuring active projects (such as `fura-project` and
+    `libreoffice_modern`) appear on initial load just like official Codex
+    Desktop.
+  - `HistoryTurn` computes `workDuration` and `formattedWorkDuration`
+    (`Worked for 15s`, `Worked for 3m 58s`, `Worked for 16m 20s`) from
+    `startedAt` and `completedAt` in `thread/turns/list`. `_HistoryEntryView`
+    renders a centered `_TurnWorkDivider` (`─── Worked for 3m 58s › ───`) above
+    the first non-user item of each turn; clicking it expands or collapses that
+    turn's full `thread/items/list` activity items (`loadTurnItems(turnId)` /
+    `collapseTurnItems()`).
+  - `parseUserMessagePresentation` also strips escaped markdown/HTML space
+    entities (`&#x20;\` and `&#x20;`) from persisted user messages.
+  - Completed assistant messages render a subtle copy action
+    (`assistant-copy-<id>`) below the markdown body, and fenced code blocks
+    include a header bar with the language label and a `Copy` action. Reasoning
+    items render as quiet left-bordered rows, and command rows expose inline
+    output actions without raw protocol status strings.
+  - Both the unselected workspace state and an empty newly started thread render
+    the official Codex Desktop `Let’s build` landing view (`>_` terminal emblem,
+    `Let’s build` heading, and active project name) with the composer enabled:
+    submitting a prompt when no thread is selected automatically calls
+    `startThread` for the active project directory and then `submit`.
+  - The conversation header uses a single horizontal title row
+    (`<Thread Title>  <Project Name>` on the left, `[Changes N] [Stop]` on the
+    right), and the timeline uses `EdgeInsets.fromLTRB(16, 28, 16, 36)` padding
+    so the top and bottom turns never crowd the header or composer borders.
   - Native desktop shells set the window title to `Codex Native`. The sidebar
-    supports `Ctrl+B`/`Cmd+B` collapse, collapsible project folders with quick
-    `+` new-thread creation, `Ctrl+K`/`Cmd+K` inline filtering, relative date
-    labels (`HH:mm`, `Nd`, `MM/dd`), status dots restricted to active/error
-    states, and automatic `ensureSelectedThreadLoaded()` resume on composer
-    submit.
+    replaces the solid-filled button with a lightweight `[edit_square] New
+    thread` action row, uses a single leading icon on project headings
+    (`folder_outlined` by default, swapping to `keyboard_arrow_down_rounded` on
+    hover or `keyboard_arrow_right_rounded` when collapsed), formats relative
+    thread timestamps in compact units (`now`, `15m`, `2h`, `1d`, `2w`, `1mo`,
+    `1y`), supports `Ctrl+B`/`Cmd+B` collapse and `Ctrl+K`/`Cmd+K` inline
+    filtering, restricts status dots to active/error states, and pins the
+    composer model/effort summary pill (`<Model> · <Effort> ⌄`) and Send button
+    (`↑`) flush right.
+
 

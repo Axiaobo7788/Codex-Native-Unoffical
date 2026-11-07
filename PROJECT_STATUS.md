@@ -37,24 +37,30 @@ This file is the repository's durable project memory. Update it whenever a task 
   this stack from platform secure storage and exposes its explicit lifecycle
   states plus bounded read-only metadata, without enabling unsupported gateways.
 - Typed thread operations now cover bounded `thread/list`, `thread/start`, metadata-only `thread/read`, history-excluding `thread/resume`, and exact-ID delete for smoke-test cleanup.
-- The desktop UI lists at most 100 thread metadata rows, paginates with opaque server cursors, accepts a working directory for new threads, exposes select/resume actions, and automatically resumes a selected `notLoaded` thread when the user submits a turn from the composer (`ensureSelectedThreadLoaded()`). It does not retain turns or raw protocol JSON.
+- The desktop UI lists at most 100 thread metadata rows, deduplicates `thread/list` rows by `thread.id` with bounded continuation top-up (up to 2 extra pages on `refresh()`) when duplicate rollout entries reduce the initial unique count below `pageSize`, paginates with opaque server cursors, accepts a working directory for new threads, exposes select/resume actions, automatically creates a new thread when submitting from the unselected `Let’s build` landing state, and automatically resumes a selected `notLoaded` thread when the user submits a turn from the composer (`ensureSelectedThreadLoaded()`). It does not retain turns or raw protocol JSON.
 - Typed turn operations cover `turn/start`, `turn/interrupt`, lifecycle, assistant text, bounded activity summaries, terminal errors, and completion states without client prompt rewriting.
 - The conversation projection retains at most 200 recent entries and 64 KiB per entry, coalesces streaming updates on a 50 ms cadence, and never retains command output payloads.
 - Command/file-change approvals support explicit approve-once and reject responses. Unknown and unsupported server requests fail closed and cannot expose an approve action. The real reject path is verified; approve-once is currently unit-tested but not Human-validated.
 - `model/list` drives typed visible-model and reasoning-effort controls. Model, effort, approval, and sandbox overrides are omitted by default; `never` approval and `danger-full-access` require an explicit UI confirmation.
 - Turn diff notifications are converted immediately into a bounded typed projection: at most 2 MiB processed input, 100 files, 512 KiB retained total, 128 KiB and 4,000 lines per file, and 2,000 characters per retained line. Only the selected file's rows are built by the diff view.
 - The desktop UI is a full-window Codex-inspired product workspace: a
-  collapsible 264 px project/thread sidebar (`Ctrl+B` / `Cmd+B`), collapsible
-  project groups with quick `+` new-thread actions, inline thread search
-  (`Ctrl+K` / `Cmd+K`), `Ctrl+N` / `Cmd+N` new thread shortcut, relative thread
-  timestamps (`HH:mm`, `Nd`, `MM/dd`) without false warning dots on `notLoaded`
-  threads, a quiet footer status indicator, 52 px low-chrome headers, a
-  maximum-760 px reading/composer column, compact typed activity rows, quiet
-  reasoning rows, fenced code block headers with `Copy` buttons, neutral user
-  bubbles (`#F0F0EC` light / `#2A2B29` dark) with structured attachment chips
-  for pasted/mentioned/IDE-context envelopes and `Show full message` /
-  `Show less` disclosure, inline approvals, selected-file diff, and a dark
-  bounded output viewer.
+  collapsible 264 px project/thread sidebar (`Ctrl+B` / `Cmd+B`), lightweight
+  `[edit_square] New thread` action row, collapsible project groups with single
+  leading icon (`folder_outlined` / hover chevron) and quick `+` new-thread
+  actions, inline thread search (`Ctrl+K` / `Cmd+K`), `Ctrl+N` / `Cmd+N` new
+  thread shortcut, compact relative thread timestamps (`now`, `15m`, `2h`, `1d`,
+  `2w`, `1mo`, `1y`) without false warning dots on `notLoaded` threads, a quiet
+  footer status indicator, a single-line `<Thread Title>  <Project Name>`
+  conversation header, a `>_` `Let’s build` landing state with active composer,
+  a maximum-760 px reading/composer column, clickable `Worked for Xm Ys ›` / `⌄`
+  turn work-duration dividers that expand/collapse `thread/items/list` activity
+  on demand, compact typed activity rows, quiet reasoning rows, completed
+  assistant copy buttons (`assistant-copy-<id>`), fenced code block headers with
+  `Copy` buttons, neutral user bubbles (`#F0F0EC` light / `#2A2B29` dark) with
+  `&#x20;\` cleanup, structured attachment chips for pasted/mentioned/IDE-context
+  envelopes, and `Show full message` / `Show less` disclosure, inline approvals,
+  selected-file diff, a dark bounded output viewer, and a right-aligned
+  `<Model> · <Effort> ⌄` summary pill + Send button in the composer.
 - The conversation timeline uses a bottom-anchored `CustomScrollView`
   (`anchor: 1.0`, `center` key at the bottom, and a reverse-growing
   `SliverList.builder` before `center`) with a custom
@@ -211,13 +217,13 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Completed
 
-### 2026-11-07 — Reopened Desktop UI real-use review, productization, and stop
+### 2026-11-07 — Reopened Desktop UI real-use review, side-by-side self-audit, productization, and stop
 
 - Human real-use review on Linux reopened Desktop UI fidelity/polish after
   `7f220d5` (`ADR-029` supersedes `ADR-028`'s machine-only closure marker
-  without deleting history). Real-use inspection against both `codex_native_unofficial`
-  and the installed official Codex Desktop (`0.166.0-alpha.5.1`) identified and
-  fixed four product-critical gaps:
+  without deleting history). Real-use inspection and a subsequent pixel-by-pixel
+  side-by-side self-audit against the installed official Codex Desktop
+  (`0.166.0-alpha.5.1`) identified and fixed the following product-critical gaps:
   1. **Bottom-anchored conversation scroll model (`4d63e57`)**: Replaced the
      top-anchored `ListView.builder` timeline with `_ConversationScrollView`
      (`CustomScrollView` with `anchor: 1.0`, `center` key at the bottom, and a
@@ -231,58 +237,78 @@ This file is the repository's durable project memory. Update it whenever a task 
      latest, scrolling up reveals a floating `Jump to latest` pill without
      streaming yank, and up to `32` per-thread scroll offsets are retained in
      memory.
-  2. **User message envelope & timeline item presentation (`9756949`)**: Added
+  2. **User message envelope, `&#x20;\` cleanup, `Worked for ...` turn divider,
+     and assistant copy actions (`9756949` + `7070e08`)**: Added
      `UserAttachment`, `UserMessagePresentation`, and
      `parseUserMessagePresentation` to normalize `# Files pasted by the user:`,
      `# Files mentioned by the user:`, `# Context from my IDE setup:`, and
      `## My request:` / `## My request for Codex:` scaffolding plus non-text
      `userMessage.content` items (`localImage`, `image`, `skill`, `mention`)
      into compact attachment chips above a clean request body without altering
-     outbound prompts sent to Codex. Normalized `ThreadSummary.displayTitle`
-     for unnamed threads whose preview starts with a pasted-file header.
-     Aligned `CodexPalette` user bubbles with official Codex Desktop neutral
-     pills (`#F0F0EC` light / `#2A2B29` dark), added `Show full message` /
-     `Show less` disclosure for long user messages, added fenced code block
-     header bars with language labels and `Copy` buttons in `AssistantMarkdown`,
-     separated quiet reasoning rows, and integrated command output actions
-     inline without raw `completed` protocol status strings.
-  3. **Desktop workspace, window identity, sidebar, header, and composer polish
-     (`6079016`)**: Updated native Linux, Windows, and macOS window titles from
-     `codex_native_unofficial` to `Codex Native`. Added collapsible desktop
-     sidebar (`Ctrl+B` / `Cmd+B`), collapsible project groups with hover `+`
-     new-thread-in-project action, inline thread search filter (`Ctrl+K` /
-     `Cmd+K`), `Ctrl+N` / `Cmd+N` new thread shortcut, relative thread timestamps
-     (`HH:mm`, `Nd`, `MM/dd`), removal of false warning dots on
-     `ThreadRuntimeStatus.notLoaded` threads, quiet connected footer status,
-     project context badges in header/composer, and automatic `resumeThread` on
-     composer submit when the selected thread is still `notLoaded`
-     (`ensureSelectedThreadLoaded()`).
-  4. **Regression coverage (`faa6875`)**: Added unit and widget regression tests
-     in `test/protocol/history_protocol_test.dart`,
+     outbound prompts sent to Codex, while stripping `&#x20;\` and `&#x20;`
+     HTML space entities. Added `HistoryTurn.formattedWorkDuration`
+     (`Worked for 3m 58s`, `Worked for 16m 20s`) from `startedAt`..`completedAt`
+     and rendered a clickable `_TurnWorkDivider` (`─── Worked for 3m 58s › ───`)
+     above each turn's assistant/activity block to expand or collapse
+     `thread/items/list` on demand (`loadTurnItems` / `collapseTurnItems`).
+     Added a copy button (`assistant-copy-<id>`) below completed assistant
+     messages, fenced code block header bars with language labels and `Copy`
+     buttons in `AssistantMarkdown`, quiet reasoning rows, and inline command
+     output actions without raw `completed` protocol status strings.
+  3. **Desktop workspace, `thread/list` deduplication, `Let’s build` landing
+     state, sidebar, header, and composer polish (`6079016` + `7070e08`)**:
+     Updated native Linux, Windows, and macOS window titles from
+     `codex_native_unofficial` to `Codex Native`. Updated
+     `ThreadListController.refresh()` to deduplicate threads by `thread.id` and
+     fetch up to 2 continuation pages so duplicate rollout rows do not hide
+     projects (`fura-project`, `libreoffice_modern`). Replaced the solid-filled
+     sidebar `New thread` button with a lightweight `[edit_square] New thread`
+     action row, consolidated project headings to a single leading icon
+     (`folder_outlined` swapping to chevron on hover/collapse), updated thread
+     timestamps to compact relative units (`now`, `15m`, `2h`, `1d`, `2w`,
+     `1mo`, `1y`), removed false warning dots on
+     `ThreadRuntimeStatus.notLoaded` threads, added a single-line
+     `<Thread Title>  <Project Name>` conversation header, rendered the `>_`
+     `Let’s build` landing view with an active composer that auto-starts a
+     thread on first submit when no thread is selected, automatically resumed
+     `notLoaded` threads on submit (`ensureSelectedThreadLoaded()`), and pinned
+     the `<Model> · <Effort> ⌄` summary pill and Send button (`↑`) flush right
+     in the composer.
+  4. **Regression coverage (`faa6875` + `7070e08`)**: Added unit and widget
+     regression tests in `test/protocol/history_protocol_test.dart`,
+     `test/features/threads/thread_list_controller_test.dart`,
      `test/app/bounded_timeline_test.dart`, and
      `test/app/product_controls_test.dart` covering initial latest scroll
      positioning, `Jump to latest`, no streaming yank while scrolled up, visual
-     anchor preservation across `Load older turns`, sidebar collapse/search, and
-     pasted-file user message presentation.
+     anchor preservation across `Load older turns`, sidebar collapse/search,
+     thread deduplication/top-up, `Worked for ...` turn disclosure expand and
+     collapse, `&#x20;\` entity cleanup, unselected composer auto-start, model
+     summary pill, assistant copy action, and pasted-file user message
+     presentation.
 - Verification evidence:
   - `dart analyze`: PASS (0 issues).
   - `flutter analyze --no-pub` via ASCII copy `/tmp/codex_native_ascii_copy`:
-    PASS (0 issues in 8.9s; direct Unicode-path `flutter analyze` still hits the
-    known Flutter 3.47.1 UTF-8 `Content-Length` bug and is preserved as negative
+    PASS (0 issues; direct Unicode-path `flutter analyze` still hits the known
+    Flutter 3.47.1 UTF-8 `Content-Length` bug and is preserved as negative
     toolchain evidence).
-  - `flutter test`: PASS (186/186 tests).
+  - `flutter test`: PASS (188/188 tests).
   - `cargo test --workspace`: PASS (98/98 tests: 26 lib + 68 bin + 4
     integration).
   - `flutter build linux --debug`: PASS
     (`build/linux/x64/debug/bundle/codex_native_unofficial`).
   - Live Linux desktop run against `/opt/codex-desktop/resources/codex`
-    (`0.166.0-alpha.5.1`) verified with real window captures: native window
-    title `Codex Native`, project-grouped sidebar without false warning dots,
-    selecting `Build Codex desktop vertical slice` and `进入人工回归测试模式`
-    landing immediately at `pixels: 0.0` (bottom/latest turn), scrolling up
-    showing `Jump to latest` and rendering pasted-file envelopes as `Pasted ·
-    已粘贴的文本.txt` chip + clean user bubble, collapsible sidebar, inline
-    thread search, and clean process shutdown (`ALL_CLEAN`).
+    (`0.166.0-alpha.5.1`) verified with side-by-side real window captures
+    (`live_v2_01_landing.png` .. `live_v2_04_worked_expanded.png`): native
+    window title `Codex Native`, `>_` `Let’s build` landing state with active
+    composer and flush-right Send button, deduplicated project-grouped sidebar
+    including `fura-project` and `libreoffice_modern` with compact relative
+    timestamps (`15h`, `1d`, `2w`), selecting `Build Codex desktop vertical
+    slice` and `进入人工回归测试模式` landing immediately at `pixels: 0.0`
+    (bottom/latest turn) with single-line header and assistant copy icon,
+    `Worked for 3m 58s ›` turn divider expanding intermediate `Command:` and
+    `Thought` items on click, scrolling up showing `Jump to latest` and
+    rendering pasted-file envelopes as `Pasted · 已粘贴的文本.txt` chip + clean
+    user bubble without `&#x20;\`, and clean process shutdown.
 
 ### 2026-11-06 — Desktop UI fidelity implementation, validation, and stop
 
@@ -1990,8 +2016,8 @@ specific evidence boundaries.
 `DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW`.
 
 - **MACHINE VERIFIED**:
-  - `dart analyze` (0 issues), `flutter analyze --no-pub` via ASCII workspace copy (0 issues), all 186 Flutter tests, all 98 Rust `codex-native-host` tests, and `flutter build linux --debug`.
-  - Live Linux desktop walkthrough against `/opt/codex-desktop/resources/codex` (`0.166.0-alpha.5.1`) with real window captures verifying: native window title `Codex Native`, Frame-1 latest-message positioning (`pixels: 0.0`) on multi-turn threads (`Build Codex desktop vertical slice`, `进入人工回归测试模式`), `Jump to latest` floating control when scrolled up, visual anchor preservation across `Load older turns`, attachment chip + clean user bubble rendering for `# Files pasted by the user:` envelopes, collapsible sidebar (`Ctrl+B`), collapsible project groups, inline thread search (`Ctrl+K`), relative thread dates, no false warning dots on `notLoaded` threads, and clean child shutdown.
+  - `dart analyze` (0 issues), `flutter analyze --no-pub` via ASCII workspace copy (0 issues), all 188 Flutter tests, all 98 Rust `codex-native-host` tests, and `flutter build linux --debug`.
+  - Live Linux desktop walkthrough against `/opt/codex-desktop/resources/codex` (`0.166.0-alpha.5.1`) with side-by-side real window captures (`live_v2_01_landing.png` .. `live_v2_04_worked_expanded.png`) verifying: native window title `Codex Native`, `>_` `Let’s build` landing state with active composer and flush-right Send button, deduplicated project-grouped sidebar including `fura-project` and `libreoffice_modern` with compact relative timestamps (`15h`, `1d`, `2w`), Frame-1 latest-message positioning (`pixels: 0.0`) on multi-turn threads (`Build Codex desktop vertical slice`, `进入人工回归测试模式`), single-line header and assistant copy button, clickable `Worked for 3m 58s ›` turn divider expanding intermediate `Command:` and `Thought` items on demand, `Jump to latest` floating control when scrolled up, visual anchor preservation across `Load older turns`, attachment chip + clean user bubble rendering without `&#x20;\` for `# Files pasted by the user:` envelopes, collapsible sidebar (`Ctrl+B`), inline thread search (`Ctrl+K`), no false warning dots on `notLoaded` threads, and clean child shutdown.
 - **HUMAN REVIEWED**:
   - Prior revision `7f220d5` was reviewed by the user on Linux and found to open existing threads at the top of history, expose raw pasted-file protocol scaffolding inside user bubbles, and lack desktop product completeness (reopening this phase under `ADR-029`).
 - **NOT YET HUMAN VERIFIED**:

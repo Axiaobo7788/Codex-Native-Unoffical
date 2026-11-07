@@ -1339,11 +1339,19 @@ command activity rows.
 
 Align the desktop workspace shell with current official Codex Desktop behavior:
 set the native window title to `Codex Native` across Linux, Windows, and macOS;
-add collapsible sidebar (`Ctrl+B` / `Cmd+B`), collapsible project groups with
-quick new-thread creation, and inline thread search (`Ctrl+K` / `Cmd+K`); show
-relative date labels (`HH:mm`, `Nd`, `MM/dd`) and omit false warning dots on
-`ThreadRuntimeStatus.notLoaded` threads; and automatically resume a selected
-`notLoaded` thread when the user submits a turn from the composer.
+deduplicate `thread/list` rows by `thread.id` with bounded continuation top-up
+(up to 2 extra pages on `refresh()`) so duplicate rollout entries do not hide
+active projects; render a clickable `Worked for Xm Ys ›` / `⌄` turn duration
+divider above each historical turn's assistant/activity block to expand or
+collapse `thread/items/list` on demand; strip `&#x20;\` and `&#x20;` HTML space
+entities from user messages; add a copy button below completed assistant
+messages; use a lightweight `[edit_square] New thread` sidebar row, single-icon
+project headers, and compact relative timestamps (`now`, `15m`, `2h`, `1d`,
+`2w`, `1mo`, `1y`); render the `>_` `Let’s build` landing state with an active
+composer that auto-starts a thread on first submit when no thread is selected;
+use a single-line `<Thread Title>  <Project Name>` conversation header; and pin
+the `<Model> · <Effort> ⌄` summary pill and Send button (`↑`) flush right in the
+composer.
 
 Stop after live Linux desktop verification and emit
 `DESKTOP_PRODUCT_UX_REVIEW_COMPLETE — STOPPED FOR USER REVIEW`, explicitly
@@ -1362,6 +1370,10 @@ separating `MACHINE VERIFIED`, `HUMAN REVIEWED`, and `NOT YET HUMAN VERIFIED`.
   scaffolding inside the protocol `userMessage` text item. Parsing that envelope
   in the presentation projection matches official Codex Desktop's attachment
   chip UX while keeping `Codex owns intelligence; client owns presentation`.
+- Stock `codex app-server` `thread/list` can return multiple rollout rows with
+  the same `thread.id`, which previously consumed the initial 25-row page with
+  only 12 unique threads and hid projects visible in the official Codex Desktop
+  sidebar.
 - `ThreadRuntimeStatus.notLoaded` is the normal cold state of persisted threads
   in `thread/list`; treating it as a warning state created false visual noise
   across every historical thread in the sidebar.
@@ -1372,9 +1384,11 @@ separating `MACHINE VERIFIED`, `HUMAN REVIEWED`, and `NOT YET HUMAN VERIFIED`.
   16 KiB Markdown cap, 64 KiB output window, bounded diff, and Host spool
   invariants remain intact.
 - Selecting a thread in the sidebar remains read-only (`readThread`), while
-  submitting a prompt in the composer transparently calls `resumeThread` if the
-  selected thread is still `notLoaded`.
+  submitting a prompt in the composer transparently starts a new thread when
+  none is selected or calls `resumeThread` if the selected thread is still
+  `notLoaded`.
 - Final product acceptance requires the user's own interactive review of the
   updated desktop build; automated tests and agent-captured live Linux window
   walks do not substitute for the user's sign-off.
+
 
