@@ -32,15 +32,15 @@ class _ConversationPanel extends StatefulWidget {
 class _ThreadScrollBookmark {
   const _ThreadScrollBookmark({
     required this.scrollPixels,
-    this.anchorItemKey,
-    this.anchorTurnId,
-    this.anchorViewportTopDy,
+    required this.anchorItemKey,
+    required this.anchorTurnId,
+    required this.anchorViewportTopDy,
   });
 
   final double scrollPixels;
-  final String? anchorItemKey;
-  final String? anchorTurnId;
-  final double? anchorViewportTopDy;
+  final String anchorItemKey;
+  final String anchorTurnId;
+  final double anchorViewportTopDy;
 }
 
 class _VisibleAnchor {
@@ -72,6 +72,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   final Map<String, String> _mountedItemTurnIds = <String, String>{};
   List<String> _currentTimelineItemKeys = const [];
   _VisibleAnchor? _preLoadOlderAnchor;
+  _VisibleAnchor? _pendingStreamAnchor;
   String? _activeThreadId;
   var _lastMeasuredItemWidth = 0.0;
   var _pendingThreadRestore = false;
@@ -114,10 +115,21 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
     widget.controller.addListener(_handleConversationChanged);
     widget.historyController.addListener(_handleHistoryChanged);
+    widget.threadController?.addListener(_handleThreadListChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConversationPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.threadController, widget.threadController)) {
+      oldWidget.threadController?.removeListener(_handleThreadListChanged);
+      widget.threadController?.addListener(_handleThreadListChanged);
+    }
   }
 
   @override
   void dispose() {
+    widget.threadController?.removeListener(_handleThreadListChanged);
     widget.controller.removeListener(_handleConversationChanged);
     widget.historyController.removeListener(_handleHistoryChanged);
     _scrollController
@@ -713,11 +725,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
     }
 
-    if (nearestIndex != null &&
-        nearestBox != null &&
-        nearestViewport != null) {
-      final nearestTopDy =
-          nearestBox.localToGlobal(Offset.zero, ancestor: nearestViewport).dy;
+    if (nearestIndex != null && nearestBox != null && nearestViewport != null) {
+      final nearestTopDy = nearestBox
+          .localToGlobal(Offset.zero, ancestor: nearestViewport)
+          .dy;
       var estimatedTargetTopDy = nearestTopDy;
       if (targetReverseIndex > nearestIndex) {
         for (var i = nearestIndex + 1; i <= targetReverseIndex; i += 1) {
@@ -823,6 +834,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   void _captureThreadScrollBookmark(String threadId) {
     if (!_scrollController.hasClients ||
+        _pendingStreamAnchor != null ||
         SchedulerBinding.instance.schedulerPhase ==
             SchedulerPhase.persistentCallbacks) {
       return;
@@ -832,18 +844,41 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final windowShifted = widget.historyController.canReturnToNewest;
     if (distanceFromEnd > _followThresholdPixels || windowShifted) {
       final anchor = _captureVisibleAnchor();
+      if (anchor == null) {
+        return;
+      }
       _rememberThreadScrollBookmark(
         threadId,
         _ThreadScrollBookmark(
           scrollPixels: position.pixels,
-          anchorItemKey: anchor?.itemKey,
-          anchorTurnId: anchor?.turnId,
-          anchorViewportTopDy: anchor?.viewportTopDy,
+          anchorItemKey: anchor.itemKey,
+          anchorTurnId: anchor.turnId,
+          anchorViewportTopDy: anchor.viewportTopDy,
         ),
       );
-    } else if (distanceFromEnd <= 40) {
+    } else {
       _threadScrollBookmarks.remove(threadId);
     }
+  }
+
+  void _handleThreadListChanged() {
+    final threadController = widget.threadController;
+    if (threadController == null ||
+        !threadController.initialLoadStarted ||
+        threadController.loading ||
+        threadController.loadingMore ||
+        threadController.canLoadMore) {
+      return;
+    }
+    final retainedThreadIds = threadController.threads
+        .map((thread) => thread.id)
+        .toSet();
+    if (_activeThreadId case final activeId?) {
+      retainedThreadIds.add(activeId);
+    }
+    _threadScrollBookmarks.removeWhere(
+      (threadId, _) => !retainedThreadIds.contains(threadId),
+    );
   }
 
   void _handleScrollPositionChanged() {
@@ -904,6 +939,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _restorePagesLoaded = 0;
     _restoreAlignmentPasses = 0;
     _preLoadOlderAnchor = null;
+    _pendingStreamAnchor = null;
     _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
@@ -922,7 +958,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         !widget.historyController.loadingTurns) {
       _wasWindowShifted = false;
       _wasLoadingOlderTurns = false;
+      _pendingThreadRestore = false;
       _preLoadOlderAnchor = null;
+      _pendingStreamAnchor = null;
       _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
       if (_activeThreadId case final threadId?) {
         _threadScrollBookmarks.remove(threadId);
@@ -953,6 +991,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (widget.historyController.loadOlderVersion !=
         _lastHandledLoadOlderVersion) {
       _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+      for (final evictedId in widget.historyController.lastEvictedItemIds) {
+        _measuredItemHeights.remove('history-$evictedId');
+      }
       final anchor = _preLoadOlderAnchor ?? _captureVisibleAnchor();
       _preLoadOlderAnchor = null;
       if (anchor != null) {
@@ -992,6 +1033,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }) {
     _runAfterFrame(() {
       if (!_scrollController.hasClients || _pendingThreadRestore) {
+        _pendingStreamAnchor = null;
         return;
       }
       final result = _restoreAnchorItemPosition(
@@ -1004,6 +1046,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _schedulePostLoadAnchorAlignment(anchor, pass: pass + 1);
         return;
       }
+      _pendingStreamAnchor = null;
       _handleScrollPositionChanged();
     });
   }
@@ -1017,6 +1060,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           widget.controller.entries.isEmpty &&
           widget.historyController.timelineItems.isEmpty &&
           !widget.historyController.loadingTurns) {
+        _threadScrollBookmarks.remove(thread.id);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted &&
               widget.controller.thread?.id == thread.id &&
@@ -1034,8 +1078,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final distanceFromEnd =
         _scrollController.position.maxScrollExtent - _scrollController.offset;
     if (distanceFromEnd > _followThresholdPixels) {
-      final anchor = _captureVisibleAnchor();
+      final anchor = _pendingStreamAnchor ?? _captureVisibleAnchor();
       if (anchor != null) {
+        _pendingStreamAnchor = anchor;
         _schedulePostLoadAnchorAlignment(anchor, pass: 0);
       }
       return;
@@ -1077,6 +1122,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       if (!_scrollController.hasClients) {
         if (widget.historyController.timelineItems.isEmpty &&
             widget.controller.entries.isEmpty) {
+          _threadScrollBookmarks.remove(threadId);
           _pendingThreadRestore = false;
           if (!widget.controller.busy) {
             _composerFocusNode.requestFocus();
@@ -1096,8 +1142,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
 
       final targetTurnId = bookmark.anchorTurnId;
-      if (targetTurnId != null &&
-          targetTurnId.isNotEmpty &&
+      if (targetTurnId.isNotEmpty &&
           widget.historyController.turnForId(targetTurnId) == null &&
           widget.historyController.canLoadOlderTurns &&
           _restorePagesLoaded < _maxRestorePages) {
@@ -1108,11 +1153,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
       final anchorKey = bookmark.anchorItemKey;
       final anchorTopDy = bookmark.anchorViewportTopDy;
-      if (anchorKey != null &&
-          anchorTopDy != null &&
-          _currentTimelineItemKeys.contains(anchorKey)) {
+      final targetTurnLoaded =
+          targetTurnId.isEmpty ||
+          widget.historyController.turnForId(targetTurnId) != null;
+      if (targetTurnLoaded && _currentTimelineItemKeys.contains(anchorKey)) {
         if (_restoreAlignmentPasses == 0 &&
-            !_mountedItemBoxes.containsKey(anchorKey)) {
+            !_mountedItemBoxes.containsKey(anchorKey) &&
+            !widget.historyController.canReturnToNewest) {
           final position = _scrollController.position;
           final initialTarget = bookmark.scrollPixels.clamp(
             position.minScrollExtent,
@@ -1141,18 +1188,38 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           _scheduleThreadScrollRestore();
           return;
         }
+        _rememberThreadScrollBookmark(
+          threadId,
+          _ThreadScrollBookmark(
+            scrollPixels: _scrollController.position.pixels,
+            anchorItemKey: anchorKey,
+            anchorTurnId: targetTurnId,
+            anchorViewportTopDy: anchorTopDy,
+          ),
+        );
         _pendingThreadRestore = false;
         _handleScrollPositionChanged();
         return;
       }
 
+      // Scheme A: When the bookmarked content anchor is absent from the loaded
+      // window after bounded pagination (_maxRestorePages reached or no older
+      // turns remain), never fall back to raw scrollPixels on the wrong turn
+      // window. Discard the stale bookmark and reset deterministically to the
+      // newest boundary.
+      _threadScrollBookmarks.remove(threadId);
+      if (widget.historyController.canReturnToNewest) {
+        unawaited(widget.historyController.refresh());
+        return;
+      }
       final position = _scrollController.position;
-      final target = bookmark.scrollPixels.clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      if ((position.pixels - target).abs() > 0.5) {
-        _scrollController.jumpTo(target);
+      if ((position.pixels - position.maxScrollExtent).abs() > 0.5) {
+        _aligningScrollAnchor = true;
+        try {
+          _scrollController.jumpTo(position.maxScrollExtent);
+        } finally {
+          _aligningScrollAnchor = false;
+        }
       }
       _pendingThreadRestore = false;
       _handleScrollPositionChanged();
@@ -1423,12 +1490,7 @@ class _RenderConversationViewport extends RenderViewport {
     Axis? axis,
   }) {
     if (this.axis != Axis.vertical || center == null || !hasSize) {
-      return super.getOffsetToReveal(
-        target,
-        alignment,
-        rect: rect,
-        axis: axis,
-      );
+      return super.getOffsetToReveal(target, alignment, rect: rect, axis: axis);
     }
     rect ??= target.paintBounds;
     final transform = target.getTransformTo(this);

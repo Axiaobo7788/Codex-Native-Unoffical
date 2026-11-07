@@ -178,25 +178,25 @@ final class HistoryProtocolAdapter {
     if (content is! List<Object?>) {
       return const [];
     }
-    final attachments = <UserAttachment>[];
+    final candidates = <UserAttachment>[];
     for (final part in content.whereType<Map<String, Object?>>()) {
-      if (attachments.length >= maxUserAttachments) {
+      if (candidates.length >= maxUserAttachments * 4) {
         break;
       }
       final type = part['type'];
       switch (type) {
         case 'localImage':
-          final path = _optionalString(part, 'path') ?? '';
-          attachments.add(
+          final path = (_optionalString(part, 'path') ?? '').trim();
+          candidates.add(
             UserAttachment(
               kind: UserAttachmentKind.image,
-              label: path.isEmpty ? 'Local image' : _shortPath(path),
+              label: path.isEmpty ? 'Local image' : '',
               path: path.isEmpty ? null : path,
             ),
           );
         case 'image':
           final url = _optionalString(part, 'url');
-          attachments.add(
+          candidates.add(
             UserAttachment(
               kind: UserAttachmentKind.image,
               label: 'Image',
@@ -204,49 +204,38 @@ final class HistoryProtocolAdapter {
             ),
           );
         case 'file':
-          final path = _optionalString(part, 'path') ?? '';
-          final name = _optionalString(part, 'name') ?? '';
-          attachments.add(
+          final path = (_optionalString(part, 'path') ?? '').trim();
+          final name = (_optionalString(part, 'name') ?? '').trim();
+          candidates.add(
             UserAttachment(
               kind: UserAttachmentKind.file,
-              label: name.isNotEmpty
-                  ? name
-                  : (path.isEmpty ? 'File' : _shortPath(path)),
+              label: name,
               path: path.isEmpty ? null : path,
             ),
           );
         case 'skill':
-          final name = _optionalString(part, 'name') ?? 'Skill';
+          final name = (_optionalString(part, 'name') ?? '').trim();
           final path = _optionalString(part, 'path');
-          attachments.add(
+          candidates.add(
             UserAttachment(
               kind: UserAttachmentKind.skill,
-              label: name,
+              label: name.isEmpty ? 'Skill' : name,
               path: path,
             ),
           );
         case 'mention':
-          final name = _optionalString(part, 'name') ?? 'Mention';
+          final name = (_optionalString(part, 'name') ?? '').trim();
           final path = _optionalString(part, 'path');
-          attachments.add(
+          candidates.add(
             UserAttachment(
               kind: UserAttachmentKind.mention,
-              label: name,
+              label: name.isEmpty ? 'Mention' : name,
               path: path,
             ),
           );
       }
     }
-    return attachments.isEmpty ? const [] : List.unmodifiable(attachments);
-  }
-
-  static String _shortPath(String path) {
-    final normalized = path.trim().replaceAll(r'\', '/');
-    final segments = normalized
-        .split('/')
-        .where((segment) => segment.isNotEmpty)
-        .toList(growable: false);
-    return segments.isEmpty ? normalized : segments.last;
+    return normalizeUserAttachments(candidates);
   }
 
   String _bounded(String value) => value.length <= maxTextCharacters

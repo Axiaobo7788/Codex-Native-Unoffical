@@ -92,7 +92,10 @@ void main() {
       runtime.emitStreamingMessage('live-item-1', 'Streaming update while up');
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
-      expect(scrollableState.position.pixels, lessThanOrEqualTo(scrolledOffset));
+      expect(
+        scrollableState.position.pixels,
+        lessThanOrEqualTo(scrolledOffset),
+      );
       expect(
         tester.getTopLeft(scrolledAnchorRow).dy,
         closeTo(scrolledAnchorTopBefore, 1.0),
@@ -254,7 +257,84 @@ void main() {
   );
 
   testWidgets(
-    'short-thread viewport shift preserves hit-testing, semantics, focus ensureVisible, and dynamic resize',
+    'deep-history bookmark beyond _maxRestorePages does not fall back to raw pixels and resets deterministically to newest',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _MultiThreadLongHistoryRuntimeController(
+        threadATurnCount: 260,
+      );
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+      Future<void> scrollToTopOfLoadedWindow() async {
+        for (var step = 0; step < 6; step += 1) {
+          await tester.drag(timeline, const Offset(0, 2400));
+          await tester.pumpAndSettle();
+        }
+      }
+
+      // Load 11 older pages (Pages 2..12: turns 20..239), exceeding _maxRestorePages (10).
+      for (var page = 2; page <= 12; page += 1) {
+        await scrollToTopOfLoadedWindow();
+        expect(find.text('Load older turns'), findsOneWidget);
+        await tester.tap(find.text('Load older turns'));
+        await tester.pumpAndSettle();
+      }
+
+      // Position viewport inside Page 12 (turns 220..239) so an item beyond the 10-page
+      // restore budget (which only covers Pages 1..11 = turns 0..219) is the visible anchor
+      // at a non-zero negative scrollPixels offset.
+      await scrollToTopOfLoadedWindow();
+      await tester.drag(timeline, const Offset(0, -300));
+      await tester.pumpAndSettle();
+      final deepRow = find.byKey(const ValueKey('history-a-item-235'));
+      expect(deepRow, findsOneWidget);
+      final scrollableState = tester.state<ScrollableState>(
+        find.descendant(of: timeline, matching: find.byType(Scrollable)).first,
+      );
+      expect(scrollableState.position.pixels, lessThan(-200.0));
+
+      // Switch to Short thread B.
+      await tester.tap(find.text('Short thread B'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('history-b-item-0')), findsOneWidget);
+
+      // Return to Long thread A: restore attempts at most _maxRestorePages (10) older page loads,
+      // sees that a-turn-235 is still outside the loaded window, discards the stale bookmark
+      // instead of clamping old scrollPixels onto the wrong turn, and resets to newest (turn 0).
+      runtime.olderTurnPageCalls = 0;
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+
+      expect(runtime.olderTurnPageCalls, 10);
+      expect(find.byKey(const ValueKey('history-a-item-0')), findsOneWidget);
+      expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
+      expect(find.byKey(const ValueKey('jump-to-latest-button')), findsNothing);
+
+      // Switching away and returning again must not re-attempt the discarded deep bookmark.
+      await tester.tap(find.text('Short thread B'));
+      await tester.pumpAndSettle();
+      runtime.olderTurnPageCalls = 0;
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+      expect(runtime.olderTurnPageCalls, 0);
+      expect(find.byKey(const ValueKey('history-a-item-0')), findsOneWidget);
+      expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'short-thread viewport shift preserves hit-testing, semantics, selection, focus ensureVisible, and dynamic resize',
     (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
@@ -271,37 +351,62 @@ void main() {
       await tester.tap(find.text('Short thread B'));
       await tester.pumpAndSettle();
 
+      final userRow = find.byKey(const ValueKey('history-b-user-0'));
       final shortRow = find.byKey(const ValueKey('history-b-item-0'));
+      expect(userRow, findsOneWidget);
       expect(shortRow, findsOneWidget);
 
       // 1. Short thread content is top-aligned (not stuck near bottom at y ~ 800).
+      final userRect = tester.getRect(userRow);
       final rowRect = tester.getRect(shortRow);
-      expect(rowRect.top, lessThan(180));
+      expect(userRect.top, lessThan(140));
+      expect(rowRect.top, lessThan(260));
 
-      // 2. Semantics node bounds align with the painted shifted position.
+      // 2. Global transformed SemanticsNode bounds align with the painted shifted position.
       final semanticsNode = tester.getSemantics(shortRow);
-      expect(semanticsNode.rect.height, closeTo(rowRect.height, 1.0));
+      final globalSemRect = _globalSemanticsRect(semanticsNode);
+      expect(globalSemRect.top, closeTo(rowRect.top, 2.0));
+      expect(globalSemRect.left, closeTo(rowRect.left, 2.0));
+      expect(globalSemRect.height, closeTo(rowRect.height, 2.0));
 
       // 3. Hit-testing works accurately on interactive controls inside the shifted sliver.
-      final copyButton = find.byKey(
-        const ValueKey('assistant-copy-b-item-0'),
-      );
+      final copyButton = find.byKey(const ValueKey('assistant-copy-b-item-0'));
       expect(copyButton, findsOneWidget);
       await tester.tap(copyButton);
       await tester.pump(const Duration(milliseconds: 50));
       expect(tester.takeException(), isNull);
 
-      // 4. Focus / Scrollable.ensureVisible (getOffsetToReveal) does not yank a visible short-thread item.
+      // 4. Text selection / tap gesture on SelectableText inside the shifted short viewport
+      // resolves coordinates accurately and updates the EditableText selection.
+      final userSelectableText = find.descendant(
+        of: userRow,
+        matching: find.byType(SelectableText),
+      );
+      expect(userSelectableText, findsOneWidget);
+      await tester.tapAt(tester.getCenter(userSelectableText));
+      await tester.pump();
+      final editableState = tester.state<EditableTextState>(
+        find.descendant(
+          of: userSelectableText,
+          matching: find.byType(EditableText),
+        ),
+      );
+      final selection = editableState.renderEditable.selection;
+      expect(selection, isNotNull);
+      expect(selection!.isValid, isTrue);
+      expect(selection.baseOffset, greaterThan(0));
+
+      // 5. Focus / Scrollable.ensureVisible (getOffsetToReveal) does not yank a visible short-thread item.
       final timeline = find.byKey(const ValueKey('conversation-timeline'));
       final scrollableState = tester.state<ScrollableState>(
-        find.descendant(of: timeline, matching: find.byType(Scrollable)),
+        find.descendant(of: timeline, matching: find.byType(Scrollable)).first,
       );
       expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
       await Scrollable.ensureVisible(tester.element(shortRow));
       await tester.pumpAndSettle();
       expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
 
-      // 5. Dynamic resize: short -> compact -> short transitions cleanly.
+      // 6. Dynamic resize: short -> compact -> short transitions cleanly.
       tester.view.physicalSize = const Size(1400, 380);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -309,11 +414,24 @@ void main() {
       tester.view.physicalSize = const Size(1400, 900);
       await tester.pumpAndSettle();
       expect(scrollableState.position.pixels, closeTo(0.0, 0.5));
-      expect(tester.getRect(shortRow).top, lessThan(180));
+      expect(tester.getRect(shortRow).top, lessThan(260));
       expect(tester.takeException(), isNull);
       semanticsHandle.dispose();
     },
   );
+}
+
+Rect _globalSemanticsRect(Object semanticsNode) {
+  dynamic current = semanticsNode;
+  Rect rect = current.rect as Rect;
+  while (current != null) {
+    final transform = current.transform;
+    if (transform != null) {
+      rect = MatrixUtils.transformRect(transform, rect);
+    }
+    current = current.parent;
+  }
+  return rect;
 }
 
 class _StressRuntimeController extends RuntimeController {
@@ -563,6 +681,11 @@ class _PagedHistoryRuntimeController extends RuntimeController {
 }
 
 class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
+  _MultiThreadLongHistoryRuntimeController({this.threadATurnCount = 140});
+
+  final int threadATurnCount;
+  var olderTurnPageCalls = 0;
+
   final StreamController<TurnEvent> _turns =
       StreamController<TurnEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvals =
@@ -589,8 +712,6 @@ class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
     status: ThreadRuntimeStatus.idle,
     ephemeral: false,
   );
-
-  static const int _threadATurnCount = 140;
 
   @override
   RuntimeSnapshot get snapshot => const RuntimeSnapshot(
@@ -644,6 +765,12 @@ class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
             status: TurnRuntimeStatus.completed,
             items: [
               HistoryItem(
+                id: 'b-user-0',
+                turnId: 'b-turn-0',
+                kind: HistoryItemKind.user,
+                text: 'Short thread B user prompt text for selection testing.',
+              ),
+              HistoryItem(
                 id: 'b-item-0',
                 turnId: 'b-turn-0',
                 kind: HistoryItemKind.assistant,
@@ -656,8 +783,11 @@ class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
       );
     }
 
+    if (query.cursor != null) {
+      olderTurnPageCalls += 1;
+    }
     final start = query.cursor == null ? 0 : int.parse(query.cursor!);
-    final end = (start + query.limit).clamp(0, _threadATurnCount);
+    final end = (start + query.limit).clamp(0, threadATurnCount);
     return HistoryTurnPage(
       turns: [
         for (var i = start; i < end; i += 1)
@@ -677,7 +807,7 @@ class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
             ],
           ),
       ],
-      nextCursor: end < _threadATurnCount ? '$end' : null,
+      nextCursor: end < threadATurnCount ? '$end' : null,
     );
   }
 

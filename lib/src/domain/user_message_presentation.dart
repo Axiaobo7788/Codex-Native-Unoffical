@@ -35,15 +35,58 @@ class UserMessagePresentation {
 final _envelopePrefixPattern = RegExp(
   r'^# (?:Files pasted by the user|Files mentioned by the user|Context from my IDE setup):[ \t]*(?:\r?\n|$)',
 );
-final _requestDelimiterPattern = RegExp(
-  r'^## My request(?: for Codex)?:[ \t]*$',
-  multiLine: true,
-);
-final _quotedPastedPattern = RegExp(r'##\s+"([\s\S]*?)":\s*([^\r\n]+)');
-final _namedEntryPattern = RegExp(
-  r'^##\s+([^"\r\n][^:\r\n]*):\s*([^\r\n]+)$',
-  multiLine: true,
-);
+final _namedEntryPattern = RegExp(r'^##\s+([^"\r\n][^:\r\n]*):\s*([^\r\n]+)$');
+
+UserAttachment normalizeUserAttachment(UserAttachment attachment) {
+  final rawPath = attachment.path?.trim();
+  final normalizedPath = (rawPath == null || rawPath.isEmpty)
+      ? null
+      : _truncate(rawPath, maxAttachmentPathLength);
+  final rawPreview = attachment.preview?.trim();
+  final normalizedPreview = (rawPreview == null || rawPreview.isEmpty)
+      ? null
+      : _truncate(rawPreview, maxAttachmentPreviewLength);
+  final rawLabel = attachment.label.trim();
+  final fallbackSourcePath = (rawPath == null || rawPath.isEmpty)
+      ? null
+      : _truncate(rawPath, 4096);
+  final fallbackLabel = fallbackSourcePath != null
+      ? _basename(fallbackSourcePath)
+      : _defaultAttachmentLabel(attachment.kind);
+  final effectiveLabel = rawLabel.isEmpty ? fallbackLabel : rawLabel;
+  return UserAttachment(
+    kind: attachment.kind,
+    label: _truncate(
+      effectiveLabel.isEmpty
+          ? _defaultAttachmentLabel(attachment.kind)
+          : effectiveLabel,
+      maxAttachmentLabelLength,
+    ),
+    path: normalizedPath,
+    preview: normalizedPreview,
+  );
+}
+
+List<UserAttachment> normalizeUserAttachments(
+  Iterable<UserAttachment> attachments,
+) {
+  final result = <UserAttachment>[];
+  final seenAttachmentKeys = <String>{};
+  for (final candidate in attachments) {
+    if (result.length >= maxUserAttachments) {
+      break;
+    }
+    final normalized = normalizeUserAttachment(candidate);
+    final dedupPath = _dedupPathFor(candidate.path);
+    final dedupKey = dedupPath != null
+        ? '${normalized.kind.name}|path:$dedupPath'
+        : '${normalized.kind.name}|label:${normalized.label.toLowerCase()}';
+    if (seenAttachmentKeys.add(dedupKey)) {
+      result.add(normalized);
+    }
+  }
+  return result.isEmpty ? const [] : List.unmodifiable(result);
+}
 
 UserMessagePresentation parseUserMessagePresentation(
   String rawText, {
@@ -60,11 +103,8 @@ UserMessagePresentation parseUserMessagePresentation(
     if (resultAttachments.length >= maxUserAttachments) {
       return;
     }
-    final normalized = _normalizeAttachment(candidate);
-    final rawPath = candidate.path?.trim();
-    final dedupPath = (rawPath == null || rawPath.isEmpty)
-        ? null
-        : _canonicalPath(_truncate(rawPath, 4096));
+    final normalized = normalizeUserAttachment(candidate);
+    final dedupPath = _dedupPathFor(candidate.path);
     final normalizedLabel = normalized.label.toLowerCase();
 
     if (!isStructured &&
@@ -98,106 +138,8 @@ UserMessagePresentation parseUserMessagePresentation(
     );
   }
 
-  final delimiterMatch = _requestDelimiterPattern.firstMatch(trimmed);
-  final rawHeaderSection = delimiterMatch == null
-      ? trimmed
-      : trimmed.substring(0, delimiterMatch.start);
-  final boundedHeaderSection =
-      rawHeaderSection.length <= maxEnvelopeHeaderScanCharacters
-      ? rawHeaderSection
-      : rawHeaderSection.substring(0, maxEnvelopeHeaderScanCharacters);
-  final requestText = delimiterMatch == null
-      ? ''
-      : trimmed.substring(delimiterMatch.end).trim();
-
-  final extractedFromEnvelope = <UserAttachment>[];
-  final pastedPreviews = <String>[];
-
-  final sectionBlocks = _splitEnvelopeSections(boundedHeaderSection);
-  for (final section in sectionBlocks) {
-    switch (section.kind) {
-      case 'ide':
-        String? activeFile;
-        var openTabCount = 0;
-        for (final rawLine in section.body.split('\n')) {
-          final line = rawLine.trim();
-          if (line.startsWith('## Active file:')) {
-            final candidate = line.substring('## Active file:'.length).trim();
-            if (candidate.isNotEmpty && candidate.toLowerCase() != 'none') {
-              activeFile = candidate;
-            }
-          } else if (line.startsWith('- ')) {
-            openTabCount += 1;
-          }
-        }
-        if (activeFile != null) {
-          extractedFromEnvelope.add(
-            UserAttachment(
-              kind: UserAttachmentKind.ideContext,
-              label: _basename(activeFile),
-              path: activeFile,
-              preview: openTabCount > 0
-                  ? 'Active file: $activeFile\nOpen tabs: $openTabCount'
-                  : 'Active file: $activeFile',
-            ),
-          );
-        } else if (openTabCount > 0) {
-          extractedFromEnvelope.add(
-            UserAttachment(
-              kind: UserAttachmentKind.ideContext,
-              label: '$openTabCount IDE tab${openTabCount == 1 ? '' : 's'}',
-              preview: section.body.trim(),
-            ),
-          );
-        }
-      case 'pasted':
-        var matchedQuoted = false;
-        for (final match in _quotedPastedPattern.allMatches(section.body)) {
-          matchedQuoted = true;
-          final preview = (match.group(1) ?? '').trim();
-          final path = (match.group(2) ?? '').trim();
-          if (preview.isNotEmpty) {
-            pastedPreviews.add(_truncate(preview, maxAttachmentPreviewLength));
-          }
-          final fileName = _basename(path);
-          extractedFromEnvelope.add(
-            UserAttachment(
-              kind: UserAttachmentKind.pastedText,
-              label: fileName.isEmpty ? 'Pasted text' : 'Pasted · $fileName',
-              path: path.isEmpty ? null : path,
-              preview: preview.isEmpty ? null : preview,
-            ),
-          );
-        }
-        if (!matchedQuoted) {
-          for (final match in _namedEntryPattern.allMatches(section.body)) {
-            final label = (match.group(1) ?? '').trim();
-            final path = (match.group(2) ?? '').trim();
-            extractedFromEnvelope.add(
-              UserAttachment(
-                kind: UserAttachmentKind.pastedText,
-                label: label.isEmpty ? _basename(path) : label,
-                path: path.isEmpty ? null : path,
-              ),
-            );
-          }
-        }
-      case 'mentioned':
-        for (final match in _namedEntryPattern.allMatches(section.body)) {
-          final label = (match.group(1) ?? '').trim();
-          final path = (match.group(2) ?? '').trim();
-          extractedFromEnvelope.add(
-            UserAttachment(
-              kind: UserAttachmentKind.file,
-              label: label.isEmpty ? _basename(path) : label,
-              path: path.isEmpty ? null : path,
-            ),
-          );
-        }
-    }
-  }
-
-  if (delimiterMatch == null && extractedFromEnvelope.isEmpty) {
+  final parsedEnvelope = _parseLegacyEnvelope(trimmed);
+  if (parsedEnvelope == null) {
     return UserMessagePresentation(
       bodyText: _cleanUserMessageText(rawText),
       attachments: List.unmodifiable(resultAttachments),
@@ -205,21 +147,20 @@ UserMessagePresentation parseUserMessagePresentation(
     );
   }
 
-  for (final attachment in extractedFromEnvelope) {
+  for (final attachment in parsedEnvelope.attachments) {
     addNormalizedAttachment(attachment, isStructured: false);
   }
 
-  var bodyText = requestText;
-  if (bodyText.isEmpty && pastedPreviews.isNotEmpty) {
-    bodyText = pastedPreviews.join('\n\n');
+  var bodyText = parsedEnvelope.requestText;
+  if (bodyText.isEmpty && parsedEnvelope.pastedPreviews.isNotEmpty) {
+    bodyText = parsedEnvelope.pastedPreviews.join('\n\n');
   }
-  if (bodyText.isEmpty && extractedFromEnvelope.isNotEmpty) {
-    final first = _normalizeAttachment(extractedFromEnvelope.first);
+  if (bodyText.isEmpty && parsedEnvelope.attachments.isNotEmpty) {
+    final first = normalizeUserAttachment(parsedEnvelope.attachments.first);
     bodyText = first.preview ?? first.label;
   }
   if (bodyText.isEmpty && resultAttachments.isNotEmpty) {
-    bodyText =
-        resultAttachments.first.preview ?? resultAttachments.first.label;
+    bodyText = resultAttachments.first.preview ?? resultAttachments.first.label;
   }
 
   return UserMessagePresentation(
@@ -229,31 +170,343 @@ UserMessagePresentation parseUserMessagePresentation(
   );
 }
 
-UserAttachment _normalizeAttachment(UserAttachment attachment) {
-  final rawPath = attachment.path?.trim();
-  final normalizedPath = (rawPath == null || rawPath.isEmpty)
-      ? null
-      : _truncate(rawPath, maxAttachmentPathLength);
-  final rawPreview = attachment.preview?.trim();
-  final normalizedPreview = (rawPreview == null || rawPreview.isEmpty)
-      ? null
-      : _truncate(rawPreview, maxAttachmentPreviewLength);
-  final rawLabel = attachment.label.trim();
-  final fallbackLabel = normalizedPath != null
-      ? _basename(normalizedPath)
-      : _defaultAttachmentLabel(attachment.kind);
-  final effectiveLabel = rawLabel.isEmpty ? fallbackLabel : rawLabel;
-  return UserAttachment(
-    kind: attachment.kind,
-    label: _truncate(
-      effectiveLabel.isEmpty
-          ? _defaultAttachmentLabel(attachment.kind)
-          : effectiveLabel,
-      maxAttachmentLabelLength,
-    ),
-    path: normalizedPath,
-    preview: normalizedPreview,
+class _ParsedLegacyEnvelope {
+  const _ParsedLegacyEnvelope({
+    required this.attachments,
+    required this.pastedPreviews,
+    required this.requestText,
+  });
+
+  final List<UserAttachment> attachments;
+  final List<String> pastedPreviews;
+  final String requestText;
+}
+
+_ParsedLegacyEnvelope? _parseLegacyEnvelope(String trimmed) {
+  final scanLimit = trimmed.length <= maxEnvelopeHeaderScanCharacters
+      ? trimmed.length
+      : maxEnvelopeHeaderScanCharacters;
+  final extractedFromEnvelope = <UserAttachment>[];
+  final pastedPreviews = <String>[];
+
+  String? currentSection;
+  String? ideActiveFile;
+  var ideOpenTabCount = 0;
+  final ideTabLines = <String>[];
+  int? delimiterEnd;
+
+  void flushIdeSection() {
+    if (currentSection != 'ide') {
+      return;
+    }
+    if (ideActiveFile != null) {
+      extractedFromEnvelope.add(
+        UserAttachment(
+          kind: UserAttachmentKind.ideContext,
+          label: _basename(ideActiveFile!),
+          path: ideActiveFile,
+          preview: ideOpenTabCount > 0
+              ? 'Active file: $ideActiveFile\nOpen tabs: $ideOpenTabCount'
+              : 'Active file: $ideActiveFile',
+        ),
+      );
+    } else if (ideOpenTabCount > 0) {
+      extractedFromEnvelope.add(
+        UserAttachment(
+          kind: UserAttachmentKind.ideContext,
+          label: '$ideOpenTabCount IDE tab${ideOpenTabCount == 1 ? '' : 's'}',
+          preview: ideTabLines.join('\n'),
+        ),
+      );
+    }
+    ideActiveFile = null;
+    ideOpenTabCount = 0;
+    ideTabLines.clear();
+  }
+
+  var offset = 0;
+  var reachedScanLimitWithValidEntries = false;
+  while (offset < scanLimit) {
+    final rawLineEnd = trimmed.indexOf('\n', offset);
+    final lineEnd = rawLineEnd == -1 ? trimmed.length : rawLineEnd;
+    if (lineEnd > scanLimit && rawLineEnd != -1) {
+      reachedScanLimitWithValidEntries = extractedFromEnvelope.isNotEmpty;
+      break;
+    }
+    final effectiveLineEnd = lineEnd <= scanLimit ? lineEnd : scanLimit;
+    final line = trimmed
+        .substring(offset, effectiveLineEnd)
+        .replaceAll('\r', '');
+    final trimmedLine = line.trim();
+    final rightTrimmedLine = line.trimRight();
+
+    if (trimmedLine.isEmpty) {
+      offset = effectiveLineEnd + 1;
+      continue;
+    }
+
+    if (rightTrimmedLine == '# Context from my IDE setup:') {
+      flushIdeSection();
+      currentSection = 'ide';
+      offset = effectiveLineEnd + 1;
+      continue;
+    }
+    if (rightTrimmedLine == '# Files pasted by the user:') {
+      flushIdeSection();
+      currentSection = 'pasted';
+      offset = effectiveLineEnd + 1;
+      continue;
+    }
+    if (rightTrimmedLine == '# Files mentioned by the user:') {
+      flushIdeSection();
+      currentSection = 'mentioned';
+      offset = effectiveLineEnd + 1;
+      continue;
+    }
+
+    if (rightTrimmedLine == '## My request:' ||
+        rightTrimmedLine == '## My request for Codex:') {
+      flushIdeSection();
+      delimiterEnd = effectiveLineEnd < trimmed.length
+          ? effectiveLineEnd + 1
+          : trimmed.length;
+      break;
+    }
+
+    if (currentSection == null) {
+      return null;
+    }
+
+    if (currentSection == 'ide') {
+      if (trimmedLine.startsWith('## Active file:')) {
+        final candidate = trimmedLine
+            .substring('## Active file:'.length)
+            .trim();
+        if (candidate.isNotEmpty && candidate.toLowerCase() != 'none') {
+          ideActiveFile = candidate;
+        }
+        offset = effectiveLineEnd + 1;
+        continue;
+      }
+      if (trimmedLine == '## Open tabs:' ||
+          trimmedLine.startsWith('## Open tabs:')) {
+        offset = effectiveLineEnd + 1;
+        continue;
+      }
+      if (trimmedLine.startsWith('- ')) {
+        final tab = trimmedLine.substring(2).trim();
+        if (tab.isNotEmpty) {
+          ideOpenTabCount += 1;
+          ideTabLines.add(trimmedLine);
+          offset = effectiveLineEnd + 1;
+          continue;
+        }
+      }
+      return null;
+    }
+
+    if (currentSection == 'pasted') {
+      if (trimmedLine == "Pasted text contains the user's request.") {
+        offset = effectiveLineEnd + 1;
+        continue;
+      }
+      if (line.startsWith('## "')) {
+        final quoted = _consumeQuotedPastedEntry(
+          trimmed,
+          startOffset: offset,
+          scanLimit: scanLimit,
+        );
+        if (quoted == null) {
+          return null;
+        }
+        if (quoted.preview.isNotEmpty) {
+          pastedPreviews.add(
+            _truncate(quoted.preview, maxAttachmentPreviewLength),
+          );
+        }
+        final fileName = _basename(quoted.path);
+        extractedFromEnvelope.add(
+          UserAttachment(
+            kind: UserAttachmentKind.pastedText,
+            label: fileName.isEmpty ? 'Pasted text' : 'Pasted · $fileName',
+            path: quoted.path.isEmpty ? null : quoted.path,
+            preview: quoted.preview.isEmpty ? null : quoted.preview,
+          ),
+        );
+        offset = quoted.nextOffset;
+        continue;
+      }
+      final match = _namedEntryPattern.firstMatch(line);
+      if (match != null) {
+        final label = (match.group(1) ?? '').trim();
+        final path = (match.group(2) ?? '').trim();
+        if (label.isEmpty || path.isEmpty) {
+          return null;
+        }
+        extractedFromEnvelope.add(
+          UserAttachment(
+            kind: UserAttachmentKind.pastedText,
+            label: label,
+            path: path,
+          ),
+        );
+        offset = effectiveLineEnd + 1;
+        continue;
+      }
+      return null;
+    }
+
+    if (currentSection == 'mentioned') {
+      final match = _namedEntryPattern.firstMatch(line);
+      if (match != null) {
+        final label = (match.group(1) ?? '').trim();
+        final path = (match.group(2) ?? '').trim();
+        if (label.isEmpty || path.isEmpty) {
+          return null;
+        }
+        extractedFromEnvelope.add(
+          UserAttachment(
+            kind: UserAttachmentKind.file,
+            label: label,
+            path: path,
+          ),
+        );
+        offset = effectiveLineEnd + 1;
+        continue;
+      }
+      return null;
+    }
+
+    return null;
+  }
+
+  flushIdeSection();
+  if (delimiterEnd == null &&
+      (offset >= scanLimit || reachedScanLimitWithValidEntries) &&
+      extractedFromEnvelope.isNotEmpty) {
+    delimiterEnd = _findTopLevelRequestDelimiterEnd(
+      trimmed,
+      startOffset: offset,
+    );
+  }
+  if (delimiterEnd == null || extractedFromEnvelope.isEmpty) {
+    return null;
+  }
+
+  return _ParsedLegacyEnvelope(
+    attachments: extractedFromEnvelope,
+    pastedPreviews: pastedPreviews,
+    requestText: trimmed.substring(delimiterEnd).trim(),
   );
+}
+
+int? _findTopLevelRequestDelimiterEnd(String text, {required int startOffset}) {
+  const maxDelimiterSearchChars = 128 * 1024;
+  final limit = text.length <= maxDelimiterSearchChars
+      ? text.length
+      : maxDelimiterSearchChars;
+  var cursor = startOffset;
+  if (cursor > 0 && text[cursor - 1] != '\n') {
+    final nextNewline = text.indexOf('\n', cursor);
+    if (nextNewline == -1 || nextNewline >= limit) {
+      return null;
+    }
+    cursor = nextNewline + 1;
+  }
+  while (cursor < limit) {
+    final rawLineEnd = text.indexOf('\n', cursor);
+    final lineEnd = rawLineEnd == -1 ? text.length : rawLineEnd;
+    if (lineEnd > limit && rawLineEnd != -1) {
+      return null;
+    }
+    final effectiveLineEnd = lineEnd <= limit ? lineEnd : limit;
+    final line = text.substring(cursor, effectiveLineEnd).replaceAll('\r', '');
+    final trimmedLine = line.trim();
+    final rightTrimmed = line.trimRight();
+    if (trimmedLine.isEmpty ||
+        trimmedLine == "Pasted text contains the user's request." ||
+        rightTrimmed == '# Context from my IDE setup:' ||
+        rightTrimmed == '# Files pasted by the user:' ||
+        rightTrimmed == '# Files mentioned by the user:' ||
+        trimmedLine.startsWith('- ')) {
+      cursor = effectiveLineEnd + 1;
+      continue;
+    }
+    if (rightTrimmed == '## My request:' ||
+        rightTrimmed == '## My request for Codex:') {
+      return effectiveLineEnd < text.length
+          ? effectiveLineEnd + 1
+          : text.length;
+    }
+    if (!line.startsWith('## ')) {
+      return null;
+    }
+    cursor = effectiveLineEnd + 1;
+  }
+  return null;
+}
+
+({String preview, String path, int nextOffset})? _consumeQuotedPastedEntry(
+  String text, {
+  required int startOffset,
+  required int scanLimit,
+}) {
+  final previewStart = startOffset + 4; // after `## "`
+  var searchFrom = previewStart;
+  while (searchFrom < scanLimit) {
+    final closeQuote = text.indexOf('": ', searchFrom);
+    if (closeQuote == -1 || closeQuote >= scanLimit) {
+      return null;
+    }
+    final rawLineEnd = text.indexOf('\n', closeQuote + 3);
+    final lineEnd = rawLineEnd == -1 ? text.length : rawLineEnd;
+    if (lineEnd <= scanLimit) {
+      final path = text
+          .substring(closeQuote + 3, lineEnd)
+          .replaceAll('\r', '')
+          .trim();
+      final nextOffset = lineEnd < text.length ? lineEnd + 1 : text.length;
+      if (path.isNotEmpty &&
+          _isFollowedByEnvelopeBoundary(
+            text,
+            offset: nextOffset,
+            scanLimit: scanLimit,
+          )) {
+        final preview = text.substring(previewStart, closeQuote).trim();
+        return (preview: preview, path: path, nextOffset: nextOffset);
+      }
+    }
+    searchFrom = closeQuote + 3;
+  }
+  return null;
+}
+
+bool _isFollowedByEnvelopeBoundary(
+  String text, {
+  required int offset,
+  required int scanLimit,
+}) {
+  var cursor = offset;
+  while (cursor < scanLimit) {
+    final rawLineEnd = text.indexOf('\n', cursor);
+    final lineEnd = rawLineEnd == -1 ? text.length : rawLineEnd;
+    final effectiveLineEnd = lineEnd <= scanLimit ? lineEnd : scanLimit;
+    final line = text.substring(cursor, effectiveLineEnd).replaceAll('\r', '');
+    final trimmedLine = line.trim();
+    final rightTrimmed = line.trimRight();
+    if (trimmedLine.isEmpty) {
+      cursor = effectiveLineEnd + 1;
+      continue;
+    }
+    return trimmedLine == "Pasted text contains the user's request." ||
+        rightTrimmed == '## My request:' ||
+        rightTrimmed == '## My request for Codex:' ||
+        rightTrimmed == '# Context from my IDE setup:' ||
+        rightTrimmed == '# Files pasted by the user:' ||
+        rightTrimmed == '# Files mentioned by the user:' ||
+        line.startsWith('## ');
+  }
+  return false;
 }
 
 String _defaultAttachmentLabel(UserAttachmentKind kind) => switch (kind) {
@@ -264,6 +517,14 @@ String _defaultAttachmentLabel(UserAttachmentKind kind) => switch (kind) {
   UserAttachmentKind.skill => 'Skill',
   UserAttachmentKind.mention => 'Mention',
 };
+
+String? _dedupPathFor(String? rawPath) {
+  final trimmed = rawPath?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
+  }
+  return _canonicalPath(_truncate(trimmed, 4096));
+}
 
 String? _canonicalPath(String? path) {
   if (path == null) {
@@ -280,7 +541,9 @@ final _htmlSpaceContinuationPattern = RegExp(
   r'^[ \t]*&#x20;\\?[ \t]*$',
   multiLine: true,
 );
-final _trailingHtmlSpaceEscapePattern = RegExp(r'[ \t]*&#x20;\\[ \t]*(?=\n|$)');
+final _trailingHtmlSpaceEscapePattern = RegExp(
+  r'[ \t]*&#x20;\\[ \t]*(?=\r?\n|$)',
+);
 
 String _cleanUserMessageText(String text) {
   if (!text.contains('&#x20;')) {
@@ -288,40 +551,7 @@ String _cleanUserMessageText(String text) {
   }
   return text
       .replaceAll(_htmlSpaceContinuationPattern, '')
-      .replaceAll(_trailingHtmlSpaceEscapePattern, '')
-      .replaceAll('&#x20;', ' ');
-}
-
-List<({String kind, String body})> _splitEnvelopeSections(String header) {
-  final lines = header.split('\n');
-  final sections = <({String kind, String body})>[];
-  String? currentKind;
-  final buffer = StringBuffer();
-
-  void flush() {
-    if (currentKind != null) {
-      sections.add((kind: currentKind, body: buffer.toString()));
-      buffer.clear();
-    }
-  }
-
-  for (final line in lines) {
-    final trimmed = line.trim();
-    if (trimmed == '# Context from my IDE setup:') {
-      flush();
-      currentKind = 'ide';
-    } else if (trimmed == '# Files pasted by the user:') {
-      flush();
-      currentKind = 'pasted';
-    } else if (trimmed == '# Files mentioned by the user:') {
-      flush();
-      currentKind = 'mentioned';
-    } else if (currentKind != null) {
-      buffer.writeln(line);
-    }
-  }
-  flush();
-  return sections;
+      .replaceAll(_trailingHtmlSpaceEscapePattern, '');
 }
 
 String _basename(String path) {

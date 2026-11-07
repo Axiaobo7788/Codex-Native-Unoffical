@@ -92,53 +92,50 @@ void main() {
     expect(controller.timelineItems, hasLength(2));
   });
 
-  test(
-    'tracks evicted item IDs and clears expanded turn when crossing >100-turn boundary',
-    () async {
-      final gateway = _HistoryGateway(turnCount: 140, itemsPerTurn: 3);
-      final controller = HistoryController(
-        gateway: gateway,
-        turnPageSize: 20,
-        itemPageSize: 3,
-        maxRetainedTurns: 100,
-        maxRetainedItems: 10,
-      );
-      addTearDown(controller.dispose);
+  test('tracks evicted item IDs and clears expanded turn when crossing >100-turn boundary', () async {
+    final gateway = _HistoryGateway(turnCount: 140, itemsPerTurn: 3);
+    final controller = HistoryController(
+      gateway: gateway,
+      turnPageSize: 20,
+      itemPageSize: 3,
+      maxRetainedTurns: 100,
+      maxRetainedItems: 10,
+    );
+    addTearDown(controller.dispose);
 
-      await controller.bindThread(_thread('thread-1'));
-      await controller.loadTurnItems('turn-0');
-      expect(controller.selectedTurnId, 'turn-0');
+    await controller.bindThread(_thread('thread-1'));
+    await controller.loadTurnItems('turn-0');
+    expect(controller.selectedTurnId, 'turn-0');
+    expect(controller.evictionVersion, 0);
+    expect(controller.lastEvictedItemIds, isEmpty);
+
+    // Load pages 2..5 (turns 20..99): total 100 turns, no eviction yet.
+    for (var page = 2; page <= 5; page += 1) {
+      await controller.loadOlderTurns();
       expect(controller.evictionVersion, 0);
       expect(controller.lastEvictedItemIds, isEmpty);
-
-      // Load pages 2..5 (turns 20..99): total 100 turns, no eviction yet.
-      for (var page = 2; page <= 5; page += 1) {
-        await controller.loadOlderTurns();
-        expect(controller.evictionVersion, 0);
-        expect(controller.lastEvictedItemIds, isEmpty);
-        expect(controller.canReturnToNewest, isFalse);
-      }
-      expect(controller.turns, hasLength(100));
-
-      // Load page 6 (turns 100..119): evicts turns 0..19 (including expanded turn-0).
-      await controller.loadOlderTurns();
-      expect(controller.turns, hasLength(100));
-      expect(controller.turns.first.id, 'turn-20');
-      expect(controller.turns.last.id, 'turn-119');
-      expect(controller.evictionVersion, 1);
-      expect(controller.canReturnToNewest, isTrue);
-      expect(controller.selectedTurnId, isNull);
-      // 19 summary turns (turn-1..turn-19) + 3 expanded items of turn-0 = 22 evicted items.
-      expect(controller.lastEvictedItemIds, hasLength(22));
-      expect(controller.lastEvictedItemIds, contains('item-0'));
-      expect(controller.lastEvictedItemIds, contains('summary-19'));
-
-      await controller.refresh();
       expect(controller.canReturnToNewest, isFalse);
-      expect(controller.lastEvictedItemIds, isEmpty);
-      expect(controller.turns.first.id, 'turn-0');
-    },
-  );
+    }
+    expect(controller.turns, hasLength(100));
+
+    // Load page 6 (turns 100..119): evicts turns 0..19 (including expanded turn-0).
+    await controller.loadOlderTurns();
+    expect(controller.turns, hasLength(100));
+    expect(controller.turns.first.id, 'turn-20');
+    expect(controller.turns.last.id, 'turn-119');
+    expect(controller.evictionVersion, 1);
+    expect(controller.canReturnToNewest, isTrue);
+    expect(controller.selectedTurnId, isNull);
+    // 19 summary turns (turn-1..turn-19) + 3 expanded items of turn-0 = 22 evicted items.
+    expect(controller.lastEvictedItemIds, hasLength(22));
+    expect(controller.lastEvictedItemIds, contains('item-0'));
+    expect(controller.lastEvictedItemIds, contains('summary-19'));
+
+    await controller.refresh();
+    expect(controller.canReturnToNewest, isFalse);
+    expect(controller.lastEvictedItemIds, isEmpty);
+    expect(controller.turns.first.id, 'turn-0');
+  });
 }
 
 class _HistoryGateway implements HistoryGateway {
