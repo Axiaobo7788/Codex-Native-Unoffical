@@ -1,5 +1,6 @@
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/history_protocol.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -208,6 +209,30 @@ Pasted text contains the user's request.
       ephemeral: false,
     );
     expect(summary.displayTitle, 'Codex Native (Unofficial) — Handoff Prompt');
+
+    final escapedHtmlSpace = parseUserMessagePresentation(
+      'source: missing file \\\n&#x20;\\\nnext line&#x20;here',
+    );
+    expect(escapedHtmlSpace.bodyText, isNot(contains('&#x20;')));
+    expect(escapedHtmlSpace.bodyText, contains('next line here'));
+
+    final shortTurn = HistoryTurn(
+      id: 't-1',
+      status: TurnRuntimeStatus.completed,
+      items: const [],
+      startedAt: DateTime.utc(2026, 1, 1, 0, 0, 0),
+      completedAt: DateTime.utc(2026, 1, 1, 0, 0, 15),
+    );
+    expect(shortTurn.formattedWorkDuration, 'Worked for 15s');
+
+    final multiMinuteTurn = HistoryTurn(
+      id: 't-2',
+      status: TurnRuntimeStatus.completed,
+      items: const [],
+      startedAt: DateTime.utc(2026, 1, 1, 0, 0, 0),
+      completedAt: DateTime.utc(2026, 1, 1, 0, 3, 58),
+    );
+    expect(multiMinuteTurn.formattedWorkDuration, 'Worked for 3m 58s');
   });
 }
 

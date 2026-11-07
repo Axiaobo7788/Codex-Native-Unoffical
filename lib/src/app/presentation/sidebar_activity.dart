@@ -96,25 +96,57 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               children: [
                 _brandHeader(context),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(8, 2, 6, 4),
                   child: Row(
                     children: [
                       Expanded(
-                        child: FilledButton.icon(
+                        child: TextButton.icon(
                           key: const ValueKey('new-thread-button'),
                           onPressed: controller.mutating ? null : _startThread,
-                          icon: const Icon(Icons.edit_square, size: 16),
-                          label: const Text('New thread'),
+                          style: TextButton.styleFrom(
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 9,
+                            ),
+                            foregroundColor: palette.textPrimary,
+                            backgroundColor: palette.surface.withValues(
+                              alpha: 0.65,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              side: BorderSide(color: palette.border),
+                              borderRadius: BorderRadius.circular(
+                                ThemeTokens.radiusSmall,
+                              ),
+                            ),
+                          ),
+                          icon: Icon(
+                            Icons.edit_square,
+                            size: 15,
+                            color: palette.textSecondary,
+                          ),
+                          label: Text(
+                            'New thread',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: palette.textPrimary,
+                                ),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: ThemeTokens.space1),
+                      const SizedBox(width: 4),
                       IconButton(
                         key: const ValueKey('thread-directory-button'),
                         tooltip: 'New thread location',
                         onPressed: controller.mutating
                             ? null
                             : _chooseDirectory,
-                        icon: const Icon(Icons.folder_outlined, size: 18),
+                        icon: const Icon(
+                          Icons.create_new_folder_outlined,
+                          size: 17,
+                        ),
                       ),
                     ],
                   ),
@@ -480,6 +512,11 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final heading = widget.heading;
+    final leadingIcon = heading.collapsed
+        ? Icons.keyboard_arrow_right_rounded
+        : _hovered
+        ? Icons.keyboard_arrow_down_rounded
+        : Icons.folder_outlined;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -489,23 +526,11 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
           borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
           onTap: widget.onToggleCollapse,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 9, 6, 4),
+            padding: const EdgeInsets.fromLTRB(8, 9, 6, 4),
             child: Row(
               children: [
-                Icon(
-                  heading.collapsed
-                      ? Icons.keyboard_arrow_right_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  size: 15,
-                  color: palette.textMuted,
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.folder_outlined,
-                  size: 14,
-                  color: palette.textSecondary,
-                ),
-                const SizedBox(width: 6),
+                Icon(leadingIcon, size: 15, color: palette.textSecondary),
+                const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     _projectName(heading.directory),
@@ -618,7 +643,7 @@ class _ThreadRowState extends State<_ThreadRow> {
               onTap: widget.enabled ? widget.onSelect : null,
               child: Padding(
                 padding: EdgeInsets.only(
-                  left: statusColor != null ? 10 : 22,
+                  left: statusColor != null ? 8 : 18,
                   right: 6,
                 ),
                 child: Row(
@@ -650,6 +675,7 @@ class _ThreadRowState extends State<_ThreadRow> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
                     if (_hovered &&
                         widget.thread.status == ThreadRuntimeStatus.notLoaded)
                       IconButton(
@@ -658,12 +684,10 @@ class _ThreadRowState extends State<_ThreadRow> {
                         icon: const Icon(Icons.play_arrow_rounded, size: 16),
                       )
                     else
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          _shortTime(widget.thread.updatedAt),
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
+                      Text(
+                        _shortTime(widget.thread.updatedAt),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(fontSize: 11, color: palette.textMuted),
                       ),
                   ],
                 ),
@@ -741,23 +765,25 @@ String _projectName(String directory) {
 }
 
 String _shortTime(DateTime time) {
-  final local = time.toLocal();
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final date = DateTime(local.year, local.month, local.day);
-  final days = today.difference(date).inDays;
-  if (days <= 0) {
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
+  final diff = DateTime.now().difference(time);
+  if (diff.inMinutes < 1) {
+    return 'now';
   }
+  if (diff.inMinutes < 60) {
+    return '${diff.inMinutes}m';
+  }
+  if (diff.inHours < 24) {
+    return '${diff.inHours}h';
+  }
+  final days = diff.inDays;
   if (days < 7) {
     return '${days}d';
   }
-  final month = local.month.toString().padLeft(2, '0');
-  final day = local.day.toString().padLeft(2, '0');
-  if (local.year == now.year) {
-    return '$month/$day';
+  if (days < 30) {
+    return '${(days / 7).floor()}w';
   }
-  return '${local.year}/$month';
+  if (days < 365) {
+    return '${(days / 30).floor()}mo';
+  }
+  return '${(days / 365).floor()}y';
 }

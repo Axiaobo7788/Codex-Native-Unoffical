@@ -339,6 +339,96 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'unselected composer starts a thread on submit and history turns toggle Worked-for details',
+    (tester) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController()
+        ..historyTurns = [
+          HistoryTurn(
+            id: 'turn-history-1',
+            status: TurnRuntimeStatus.completed,
+            startedAt: DateTime.utc(2026, 1, 1, 0, 0, 0),
+            completedAt: DateTime.utc(2026, 1, 1, 0, 3, 58),
+            items: const [
+              HistoryItem(
+                id: 'hist-user-1',
+                turnId: 'turn-history-1',
+                kind: HistoryItemKind.user,
+                text: 'Run verification',
+              ),
+              HistoryItem(
+                id: 'hist-assistant-1',
+                turnId: 'turn-history-1',
+                kind: HistoryItemKind.assistant,
+                text: 'Verification complete.',
+              ),
+            ],
+          ),
+        ]
+        ..expandedTurnItems = const [
+          HistoryItem(
+            id: 'hist-user-1',
+            turnId: 'turn-history-1',
+            kind: HistoryItemKind.user,
+            text: 'Run verification',
+          ),
+          HistoryItem(
+            id: 'hist-cmd-1',
+            turnId: 'turn-history-1',
+            kind: HistoryItemKind.activity,
+            text: 'Command: flutter test',
+            isCommand: true,
+          ),
+          HistoryItem(
+            id: 'hist-assistant-1',
+            turnId: 'turn-history-1',
+            kind: HistoryItemKind.assistant,
+            text: 'Verification complete.',
+          ),
+        ];
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      // Unselected state shows Let's build hero, model pill, and active composer.
+      expect(find.text('Let’s build'), findsOneWidget);
+      expect(find.text('Default model · Medium'), findsOneWidget);
+      await _send(tester, 'Start directly from landing page');
+      expect(runtime.startedThreadCwds, hasLength(1));
+      expect(runtime.turnOptions, hasLength(1));
+      expect(
+        runtime.turnOptions.single.text,
+        'Start directly from landing page',
+      );
+
+      // Select existing thread with history turn duration and assistant copy action.
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(find.text('Worked for 3m 58s'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('assistant-copy-hist-assistant-1')),
+        findsOneWidget,
+      );
+      expect(find.text('Command: flutter test'), findsNothing);
+
+      // Expand turn details via Worked for 3m 58s disclosure row.
+      await tester.tap(find.byKey(const ValueKey('turn-work-turn-history-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Command: flutter test'), findsOneWidget);
+
+      // Collapse turn details again.
+      await tester.tap(find.byKey(const ValueKey('turn-work-turn-history-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Command: flutter test'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<_ProductRuntimeController> _pumpSelectedApp(WidgetTester tester) async {
@@ -383,6 +473,9 @@ class _ProductRuntimeController extends RuntimeController {
   final StreamController<ApprovalEvent> _approvals =
       StreamController<ApprovalEvent>.broadcast(sync: true);
   final List<TurnStartOptions> turnOptions = [];
+  final List<String> startedThreadCwds = [];
+  List<HistoryTurn> historyTurns = const [];
+  List<HistoryItem> expandedTurnItems = const [];
   final List<({Object requestId, ApprovalDecision decision})>
   approvalDecisions = [];
   final ThreadSummary thread = ThreadSummary(
@@ -426,7 +519,19 @@ class _ProductRuntimeController extends RuntimeController {
   Future<ThreadSummary> resumeThread(String threadId) async => thread;
 
   @override
-  Future<ThreadSummary> startThread(ThreadStartOptions options) async => thread;
+  Future<ThreadSummary> startThread(ThreadStartOptions options) async {
+    startedThreadCwds.add(options.cwd);
+    return ThreadSummary(
+      id: 'started-thread-${startedThreadCwds.length}',
+      sessionId: 'started-session-${startedThreadCwds.length}',
+      preview: 'New thread',
+      cwd: options.cwd,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      status: ThreadRuntimeStatus.idle,
+      ephemeral: false,
+    );
+  }
 
   @override
   Future<void> deleteThread(String threadId) async {}
@@ -451,11 +556,11 @@ class _ProductRuntimeController extends RuntimeController {
 
   @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) async =>
-      const HistoryTurnPage(turns: [], nextCursor: null);
+      HistoryTurnPage(turns: historyTurns, nextCursor: null);
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async =>
-      const HistoryItemPage(items: [], nextCursor: null);
+      HistoryItemPage(items: expandedTurnItems, nextCursor: null);
 
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) async {

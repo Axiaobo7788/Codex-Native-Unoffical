@@ -9,6 +9,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.settingsController,
     required this.diffController,
     required this.outputGateway,
+    this.defaultWorkingDirectory = '',
     this.sidebarCollapsed = false,
     this.onToggleSidebar,
   });
@@ -20,6 +21,7 @@ class _ConversationPanel extends StatefulWidget {
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final OutputGateway outputGateway;
+  final String defaultWorkingDirectory;
   final bool sidebarCollapsed;
   final VoidCallback? onToggleSidebar;
 
@@ -39,6 +41,21 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _pendingThreadRestore = false;
   var _showJumpToLatest = false;
   var _showChanges = false;
+
+  String get _activeProjectDirectory {
+    final selectedCwd = widget.controller.thread?.cwd;
+    if (selectedCwd != null && selectedCwd.trim().isNotEmpty) {
+      return selectedCwd.trim();
+    }
+    if (widget.defaultWorkingDirectory.trim().isNotEmpty) {
+      return widget.defaultWorkingDirectory.trim();
+    }
+    final threads = widget.threadController?.threads;
+    if (threads != null && threads.isNotEmpty) {
+      return threads.first.cwd.trim();
+    }
+    return '';
+  }
 
   @override
   void initState() {
@@ -73,6 +90,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       child: AnimatedBuilder(
         animation: Listenable.merge([
           widget.controller,
+          if (widget.threadController != null) widget.threadController!,
           widget.diffController,
           widget.historyController,
         ]),
@@ -99,6 +117,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   Widget _conversationHeader(ConversationController controller) {
     final palette = ThemeTokens.of(context);
     final thread = controller.thread;
+    final projectCwd = thread?.cwd ?? _activeProjectDirectory;
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
@@ -118,36 +137,31 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             const SizedBox(width: ThemeTokens.space2),
           ],
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  thread?.displayTitle ?? 'Conversation',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (thread != null)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.folder_outlined,
-                        size: 12,
-                        color: palette.textMuted,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          _projectName(thread.cwd),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ),
-                    ],
+                Flexible(
+                  child: Text(
+                    thread?.displayTitle ?? 'New thread',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
+                ),
+                if (projectCwd.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Tooltip(
+                      message: projectCwd,
+                      child: Text(
+                        _projectName(projectCwd),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -182,7 +196,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Widget _timeline(ConversationController controller) {
     if (controller.thread == null) {
-      return const _ConversationEmptyState();
+      return _ConversationEmptyState(workingDirectory: _activeProjectDirectory);
     }
     final liveIds = controller.entries.map((entry) => entry.id).toSet();
     final historyItems = widget.historyController.timelineItems
@@ -218,7 +232,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           child: _ConversationScrollView(
             key: const ValueKey('conversation-timeline'),
             controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 18),
+            padding: const EdgeInsets.fromLTRB(16, 28, 16, 36),
             itemCount: totalCount,
             itemBuilder: (context, reverseIndex) {
               if (reverseIndex == messageCount) {
@@ -260,7 +274,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   Widget _composer(ConversationController controller) {
     final palette = ThemeTokens.of(context);
     final thread = controller.thread;
-    final enabled = thread != null && !controller.busy;
+    final projectCwd = thread?.cwd ?? _activeProjectDirectory;
+    final canCreateOnSend =
+        thread == null &&
+        widget.threadController != null &&
+        projectCwd.isNotEmpty &&
+        !(widget.threadController?.mutating ?? false);
+    final enabled = (thread != null || canCreateOnSend) && !controller.busy;
     return Container(
       color: palette.canvas,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
@@ -307,7 +327,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       maxLines: 6,
                       textInputAction: TextInputAction.newline,
                       decoration: InputDecoration(
-                        hintText: thread == null
+                        hintText: thread == null && !canCreateOnSend
                             ? 'Select or create a thread'
                             : 'Send a message to Codex',
                         filled: false,
@@ -319,76 +339,94 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       ),
                     ),
                   ),
-                  Row(
-                    children: [
-                      _ExecutionSettingsButton(
-                        controller: widget.settingsController,
-                      ),
-                      if (thread != null) ...[
-                        const SizedBox(width: 4),
-                        Tooltip(
-                          message: thread.cwd,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: palette.surfaceRaised,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.folder_outlined,
-                                  size: 13,
-                                  color: palette.textMuted,
+                  LayoutBuilder(
+                    builder: (context, rowConstraints) {
+                      final compactComposer = rowConstraints.maxWidth < 560;
+                      final showModelPill = rowConstraints.maxWidth >= 340;
+                      final maxModelLabelWidth =
+                          (rowConstraints.maxWidth -
+                                  (compactComposer ? 210 : 370))
+                              .clamp(72.0, 190.0);
+                      return Row(
+                        children: [
+                          _ExecutionSettingsButton(
+                            controller: widget.settingsController,
+                          ),
+                          if (projectCwd.isNotEmpty && !compactComposer) ...[
+                            const SizedBox(width: 4),
+                            Tooltip(
+                              message: projectCwd,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
-                                const SizedBox(width: 4),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 160,
-                                  ),
-                                  child: Text(
-                                    _projectName(thread.cwd),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall,
-                                  ),
+                                decoration: BoxDecoration(
+                                  color: palette.surfaceRaised,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.folder_outlined,
+                                      size: 13,
+                                      color: palette.textMuted,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 140,
+                                      ),
+                                      child: Text(
+                                        _projectName(projectCwd),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          if (showModelPill)
+                            _ComposerModelSummaryButton(
+                              controller: widget.settingsController,
+                              maxLabelWidth: maxModelLabelWidth,
+                            ),
+                          if (controller.busy)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Text(
+                                'Working…',
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ),
+                          IconButton.filled(
+                            key: const ValueKey('composer-send-button'),
+                            tooltip: 'Send (Enter)',
+                            style: IconButton.styleFrom(
+                              shape: const CircleBorder(),
+                              minimumSize: const Size.square(34),
+                              maximumSize: const Size.square(34),
+                              backgroundColor: palette.textPrimary,
+                              foregroundColor: palette.canvas,
+                              disabledBackgroundColor: palette.border,
+                              disabledForegroundColor: palette.textMuted,
+                            ),
+                            onPressed: enabled ? _send : null,
+                            icon: const Icon(
+                              Icons.arrow_upward_rounded,
+                              size: 18,
                             ),
                           ),
-                        ),
-                      ],
-                      const Spacer(),
-                      if (controller.busy)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Text(
-                            'Working…',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ),
-                      IconButton.filled(
-                        key: const ValueKey('composer-send-button'),
-                        tooltip: 'Send (Enter)',
-                        style: IconButton.styleFrom(
-                          shape: const CircleBorder(),
-                          minimumSize: const Size.square(34),
-                          maximumSize: const Size.square(34),
-                          backgroundColor: palette.textPrimary,
-                          foregroundColor: palette.canvas,
-                          disabledBackgroundColor: palette.border,
-                          disabledForegroundColor: palette.textMuted,
-                        ),
-                        onPressed: enabled ? _send : null,
-                        icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -405,9 +443,22 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return;
     }
     if (widget.threadController case final threadController?) {
-      final ready = await threadController.ensureSelectedThreadLoaded();
-      if (!ready) {
-        return;
+      if (widget.controller.thread == null) {
+        final cwd = _activeProjectDirectory;
+        if (cwd.isEmpty) {
+          return;
+        }
+        final created = await threadController.startThread(
+          widget.settingsController.threadOptions(cwd),
+        );
+        if (created == null) {
+          return;
+        }
+      } else {
+        final ready = await threadController.ensureSelectedThreadLoaded();
+        if (!ready) {
+          return;
+        }
       }
     }
     if (_activeThreadId case final threadId?) {
@@ -751,6 +802,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.attachments = const [],
     this.isReasoning = false,
     this.isCommand = false,
+    this.leadingHeader,
     this.trailingAction,
   });
 
@@ -758,6 +810,7 @@ class _ConversationEntryView extends StatelessWidget {
   final List<UserAttachment> attachments;
   final bool isReasoning;
   final bool isCommand;
+  final Widget? leadingHeader;
   final Widget? trailingAction;
 
   @override
@@ -778,86 +831,154 @@ class _ConversationEntryView extends StatelessWidget {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
-          child: _ReasoningEntryView(entry: entry),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ?leadingHeader,
+              _ReasoningEntryView(entry: entry),
+            ],
+          ),
         ),
       );
     }
 
     final isActivity = entry.kind == ConversationEntryKind.activity;
     final isError = entry.kind == ConversationEntryKind.error;
+    final showAssistantCopy =
+        entry.kind == ConversationEntryKind.assistant &&
+        entry.completed &&
+        entry.text.trim().isNotEmpty;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: double.infinity,
-            margin: EdgeInsets.only(
-              bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
-            ),
-            padding: isActivity || isError
-                ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-                : EdgeInsets.zero,
-            decoration: BoxDecoration(
-              color: isError
-                  ? palette.danger.withValues(alpha: 0.08)
-                  : isActivity
-                  ? palette.surfaceRaised
-                  : Colors.transparent,
-              border: isActivity || isError
-                  ? Border.all(
-                      color: isError
-                          ? palette.danger.withValues(alpha: 0.3)
-                          : palette.border,
-                    )
-                  : null,
-              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
-            ),
-            child: isActivity
-                ? _ActivityContent(
-                    entry: entry,
-                    isCommand: isCommand,
-                    trailingAction: trailingAction,
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_nonNominalStatus(entry.status)
-                          case final statusLabel?) ...[
-                        Text(
-                          statusLabel,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        const SizedBox(height: ThemeTokens.space1),
-                      ],
-                      if (entry.kind == ConversationEntryKind.assistant)
-                        AssistantMarkdown(
-                          data: entry.text,
-                          completed: entry.completed,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ?leadingHeader,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: double.infinity,
+                margin: EdgeInsets.only(
+                  bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
+                ),
+                padding: isActivity || isError
+                    ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+                    : EdgeInsets.zero,
+                decoration: BoxDecoration(
+                  color: isError
+                      ? palette.danger.withValues(alpha: 0.08)
+                      : isActivity
+                      ? palette.surfaceRaised
+                      : Colors.transparent,
+                  border: isActivity || isError
+                      ? Border.all(
+                          color: isError
+                              ? palette.danger.withValues(alpha: 0.3)
+                              : palette.border,
                         )
-                      else
-                        SelectableText(
-                          entry.text,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: isError
-                                    ? palette.danger
-                                    : palette.textPrimary,
+                      : null,
+                  borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+                ),
+                child: isActivity
+                    ? _ActivityContent(
+                        entry: entry,
+                        isCommand: isCommand,
+                        trailingAction: trailingAction,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_nonNominalStatus(entry.status)
+                              case final statusLabel?) ...[
+                            Text(
+                              statusLabel,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                            const SizedBox(height: ThemeTokens.space1),
+                          ],
+                          if (entry.kind == ConversationEntryKind.assistant)
+                            AssistantMarkdown(
+                              data: entry.text,
+                              completed: entry.completed,
+                            )
+                          else
+                            SelectableText(
+                              entry.text,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: isError
+                                        ? palette.danger
+                                        : palette.textPrimary,
+                                  ),
+                            ),
+                          if (showAssistantCopy) ...[
+                            const SizedBox(height: 6),
+                            _AssistantCopyButton(
+                              key: ValueKey('assistant-copy-${entry.id}'),
+                              text: entry.text,
+                            ),
+                          ],
+                          if (!entry.completed) ...[
+                            const SizedBox(height: ThemeTokens.space2),
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: palette.accent,
                               ),
-                        ),
-                      if (!entry.completed) ...[
-                        const SizedBox(height: ThemeTokens.space2),
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: palette.accent,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                            ),
+                          ],
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistantCopyButton extends StatefulWidget {
+  const _AssistantCopyButton({super.key, required this.text});
+
+  final String text;
+
+  @override
+  State<_AssistantCopyButton> createState() => _AssistantCopyButtonState();
+}
+
+class _AssistantCopyButtonState extends State<_AssistantCopyButton> {
+  var _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) {
+      return;
+    }
+    setState(() => _copied = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) {
+      setState(() => _copied = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Tooltip(
+      message: _copied ? 'Copied' : 'Copy response',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: _copy,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            _copied ? Icons.check_rounded : Icons.content_copy_rounded,
+            size: 14,
+            color: _copied ? palette.success : palette.textMuted,
           ),
         ),
       ),
@@ -1205,29 +1326,55 @@ class _ActivityContent extends StatelessWidget {
 }
 
 class _ConversationEmptyState extends StatelessWidget {
-  const _ConversationEmptyState();
+  const _ConversationEmptyState({this.workingDirectory = ''});
+
+  final String workingDirectory;
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final projectLabel = workingDirectory.trim().isEmpty
+        ? null
+        : _projectName(workingDirectory);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(ThemeTokens.space8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.code_rounded,
-              size: 28,
-              color: ThemeTokens.of(context).textMuted,
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                border: Border.all(color: palette.border),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                Icons.terminal_rounded,
+                size: 22,
+                color: palette.textPrimary,
+              ),
             ),
-            const SizedBox(height: ThemeTokens.space3),
+            const SizedBox(height: ThemeTokens.space4),
             Text(
-              'Choose a thread',
+              'Let’s build',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
+            if (projectLabel != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                projectLabel,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: palette.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
             const SizedBox(height: ThemeTokens.space2),
             Text(
-              'Select existing work from the sidebar or start a new task.',
+              'Select existing work from the sidebar or type below to start a new thread.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -1245,12 +1392,28 @@ class _ThreadEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(ThemeTokens.space8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                border: Border.all(color: palette.border),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                Icons.terminal_rounded,
+                size: 22,
+                color: palette.textPrimary,
+              ),
+            ),
+            const SizedBox(height: ThemeTokens.space4),
             Text(
               'Let’s build ${_projectName(thread.cwd)}',
               textAlign: TextAlign.center,
@@ -1357,12 +1520,14 @@ class _ExecutionSettingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        final selected = controller.selectedModelId == null
-            ? 'Defaults'
-            : controller.effectiveModel?.displayName ?? 'Model';
+        final fullAccess =
+            controller.sandbox == SandboxModeOverride.dangerFullAccess;
+        final label = fullAccess ? 'Full access' : 'Defaults';
+        final color = fullAccess ? palette.warning : palette.textSecondary;
         return TextButton.icon(
           onPressed: controller.loading
               ? null
@@ -1371,16 +1536,112 @@ class _ExecutionSettingsButton extends StatelessWidget {
                   builder: (_) =>
                       _ExecutionSettingsDialog(controller: controller),
                 ),
+          style: TextButton.styleFrom(
+            foregroundColor: color,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
           icon: controller.loading
               ? const SizedBox.square(
                   dimension: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.tune, size: 18),
-          label: Text(selected),
+              : Icon(
+                  fullAccess ? Icons.shield_outlined : Icons.tune_rounded,
+                  size: 15,
+                  color: color,
+                ),
+          label: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(color: color),
+          ),
         );
       },
     );
+  }
+}
+
+class _ComposerModelSummaryButton extends StatelessWidget {
+  const _ComposerModelSummaryButton({
+    required this.controller,
+    this.maxLabelWidth = 190,
+  });
+
+  final ExecutionSettingsController controller;
+  final double maxLabelWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final model = controller.effectiveModel;
+        if (model == null) {
+          return const SizedBox.shrink();
+        }
+        final rawEffort =
+            controller.selectedReasoningEffort ?? model.defaultReasoningEffort;
+        final effortLabel = _formatEffortLabel(rawEffort);
+        final summary = effortLabel == null
+            ? model.displayName
+            : '${model.displayName} · $effortLabel';
+        return Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: TextButton(
+            key: const ValueKey('composer-model-pill'),
+            onPressed: controller.loading
+                ? null
+                : () => showDialog<void>(
+                    context: context,
+                    builder: (_) =>
+                        _ExecutionSettingsDialog(controller: controller),
+                  ),
+            style: TextButton.styleFrom(
+              foregroundColor: palette.textSecondary,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
+                  child: Text(
+                    summary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: palette.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 14,
+                  color: palette.textMuted,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static String? _formatEffortLabel(String? effort) {
+    if (effort == null || effort.trim().isEmpty) {
+      return null;
+    }
+    return switch (effort.trim().toLowerCase()) {
+      'low' => 'Low',
+      'medium' => 'Medium',
+      'high' => 'High',
+      'xhigh' => 'Extra high',
+      'minimal' => 'Minimal',
+      final other => '${other[0].toUpperCase()}${other.substring(1)}',
+    };
   }
 }
 

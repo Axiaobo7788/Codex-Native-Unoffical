@@ -50,10 +50,44 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      final seenIds = <String>{};
+      final uniqueThreads = <ThreadSummary>[];
+      var hadDuplicates = false;
+      for (final thread in page.threads) {
+        if (seenIds.add(thread.id)) {
+          if (uniqueThreads.length < maxRetainedThreads) {
+            uniqueThreads.add(thread);
+          }
+        } else {
+          hadDuplicates = true;
+        }
+      }
+      var cursor = page.nextCursor;
+      var extraPages = 0;
+      while (hadDuplicates &&
+          extraPages < 2 &&
+          cursor != null &&
+          uniqueThreads.length < pageSize &&
+          uniqueThreads.length < maxRetainedThreads) {
+        extraPages += 1;
+        final nextPage = await gateway.listThreads(
+          ThreadListQuery(cursor: cursor, limit: pageSize),
+        );
+        if (_disposed) {
+          return;
+        }
+        for (final thread in nextPage.threads) {
+          if (seenIds.add(thread.id) &&
+              uniqueThreads.length < maxRetainedThreads) {
+            uniqueThreads.add(thread);
+          }
+        }
+        cursor = nextPage.nextCursor;
+      }
       _threads
         ..clear()
-        ..addAll(page.threads.take(maxRetainedThreads));
-      _nextCursor = page.nextCursor;
+        ..addAll(uniqueThreads);
+      _nextCursor = cursor;
       _synchronizeSelection();
     } catch (error) {
       _errorMessage = error.toString();

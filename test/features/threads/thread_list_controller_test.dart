@@ -55,6 +55,42 @@ void main() {
     expect(gateway.resumeIds, ['1']);
     expect(controller.selectedThread?.status, ThreadRuntimeStatus.idle);
   });
+
+  test(
+    'refresh deduplicates duplicate thread IDs and tops up initial page',
+    () async {
+      final gateway = _FakeThreadGateway()
+        ..pages.addAll([
+          ThreadPage(
+            threads: [_thread('1'), _thread('1'), _thread('2'), _thread('1')],
+            nextCursor: 'cursor-2',
+          ),
+          ThreadPage(
+            threads: [_thread('2'), _thread('3'), _thread('4')],
+            nextCursor: null,
+          ),
+        ]);
+      final controller = ThreadListController(
+        gateway: gateway,
+        pageSize: 4,
+        maxRetainedThreads: 10,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.refresh();
+
+      expect(controller.threads.map((thread) => thread.id), [
+        '1',
+        '2',
+        '3',
+        '4',
+      ]);
+      expect(gateway.queries, hasLength(2));
+      expect(gateway.queries[0].cursor, isNull);
+      expect(gateway.queries[1].cursor, 'cursor-2');
+      expect(controller.canLoadMore, isFalse);
+    },
+  );
 }
 
 class _FakeThreadGateway implements ThreadGateway {

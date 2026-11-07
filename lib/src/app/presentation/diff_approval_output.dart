@@ -248,6 +248,12 @@ class _HistoryEntryView extends StatelessWidget {
       HistoryItemKind.reasoning ||
       HistoryItemKind.unknown => ConversationEntryKind.activity,
     };
+    final turn = historyController.turnForId(item.turnId);
+    final durationLabel = turn?.formattedWorkDuration;
+    final showWorkDivider =
+        durationLabel != null &&
+        historyController.isFirstNonUserItemInTurn(item);
+    final expanded = historyController.selectedTurnId == item.turnId;
     return _ConversationEntryView(
       entry: ConversationEntry(
         id: item.id,
@@ -259,6 +265,23 @@ class _HistoryEntryView extends StatelessWidget {
       attachments: item.attachments,
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
+      leadingHeader: showWorkDivider
+          ? _TurnWorkDivider(
+              key: ValueKey('turn-work-${item.turnId}'),
+              label: durationLabel,
+              expanded: expanded,
+              loading: expanded && historyController.loadingItems,
+              onTap: historyController.loadingItems
+                  ? null
+                  : () {
+                      if (expanded) {
+                        historyController.collapseTurnItems();
+                      } else {
+                        unawaited(historyController.loadTurnItems(item.turnId));
+                      }
+                    },
+            )
+          : null,
       trailingAction: item.isCommand ? _commandOutputAction(context) : null,
     );
   }
@@ -301,6 +324,73 @@ class _HistoryEntryView extends StatelessWidget {
       );
     }
     return null;
+  }
+}
+
+class _TurnWorkDivider extends StatelessWidget {
+  const _TurnWorkDivider({
+    super.key,
+    required this.label,
+    required this.expanded,
+    required this.loading,
+    this.onTap,
+  });
+
+  final String label;
+  final bool expanded;
+  final bool loading;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ThemeTokens.space3),
+      child: Row(
+        children: [
+          Expanded(child: Divider(height: 1, color: palette.border)),
+          const SizedBox(width: ThemeTokens.space2),
+          InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: palette.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  if (loading)
+                    SizedBox.square(
+                      dimension: 11,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: palette.textSecondary,
+                      ),
+                    )
+                  else
+                    Icon(
+                      expanded
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.chevron_right_rounded,
+                      size: 14,
+                      color: palette.textSecondary,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: ThemeTokens.space2),
+          Expanded(child: Divider(height: 1, color: palette.border)),
+        ],
+      ),
+    );
   }
 }
 

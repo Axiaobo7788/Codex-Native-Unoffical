@@ -31,7 +31,8 @@ class ExecutionSettingsController extends ChangeNotifier {
     if (selected != null) {
       return _models.where((model) => model.id == selected).firstOrNull;
     }
-    return _models.where((model) => model.isDefault).firstOrNull;
+    return _models.where((model) => model.isDefault).firstOrNull ??
+        _models.firstOrNull;
   }
 
   List<ReasoningEffortOption> get availableReasoningEfforts =>

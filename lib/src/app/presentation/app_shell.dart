@@ -55,6 +55,7 @@ class RuntimeStatusScreen extends StatelessWidget {
               settingsController: settingsController,
               diffController: diffController,
               outputGateway: controller,
+              defaultWorkingDirectory: defaultWorkingDirectory,
             );
             return _CompactWorkspace(
               key: const ValueKey('compact-workspace'),
@@ -165,6 +166,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
               settingsController: widget.settingsController,
               diffController: widget.diffController,
               outputGateway: widget.runtimeController,
+              defaultWorkingDirectory: widget.defaultWorkingDirectory,
               sidebarCollapsed: _sidebarCollapsed,
               onToggleSidebar: _toggleSidebar,
             ),

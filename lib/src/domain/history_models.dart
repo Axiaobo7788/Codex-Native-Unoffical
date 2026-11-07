@@ -77,7 +77,7 @@ UserMessagePresentation parseUserMessagePresentation(
       trimmed.startsWith('# Context from my IDE setup:');
   if (!hasEnvelopePrefix) {
     return UserMessagePresentation(
-      bodyText: rawText,
+      bodyText: _cleanUserMessageText(rawText),
       attachments: attachments,
       hadStructuredEnvelope: false,
     );
@@ -187,10 +187,26 @@ UserMessagePresentation parseUserMessagePresentation(
   }
 
   return UserMessagePresentation(
-    bodyText: bodyText,
+    bodyText: _cleanUserMessageText(bodyText),
     attachments: List.unmodifiable(extracted),
     hadStructuredEnvelope: true,
   );
+}
+
+final _htmlSpaceContinuationPattern = RegExp(
+  r'^[ \t]*&#x20;\\?[ \t]*$',
+  multiLine: true,
+);
+final _trailingHtmlSpaceEscapePattern = RegExp(r'[ \t]*&#x20;\\[ \t]*(?=\n|$)');
+
+String _cleanUserMessageText(String text) {
+  if (!text.contains('&#x20;')) {
+    return text;
+  }
+  return text
+      .replaceAll(_htmlSpaceContinuationPattern, '')
+      .replaceAll(_trailingHtmlSpaceEscapePattern, '')
+      .replaceAll('&#x20;', ' ');
 }
 
 List<({String kind, String body})> _splitEnvelopeSections(String header) {
@@ -251,6 +267,41 @@ class HistoryTurn {
   final List<HistoryItem> items;
   final DateTime? startedAt;
   final DateTime? completedAt;
+
+  Duration? get workDuration {
+    final start = startedAt;
+    final end = completedAt;
+    if (start == null || end == null || !end.isAfter(start)) {
+      return null;
+    }
+    return end.difference(start);
+  }
+
+  String? get formattedWorkDuration {
+    final duration = workDuration;
+    if (duration == null) {
+      return null;
+    }
+    final totalSeconds = duration.inSeconds;
+    if (totalSeconds <= 0) {
+      return null;
+    }
+    if (totalSeconds < 60) {
+      return 'Worked for ${totalSeconds}s';
+    }
+    final totalMinutes = duration.inMinutes;
+    final seconds = totalSeconds % 60;
+    if (totalMinutes < 60) {
+      return seconds == 0
+          ? 'Worked for ${totalMinutes}m'
+          : 'Worked for ${totalMinutes}m ${seconds}s';
+    }
+    final hours = duration.inHours;
+    final minutes = totalMinutes % 60;
+    return minutes == 0
+        ? 'Worked for ${hours}h'
+        : 'Worked for ${hours}h ${minutes}m';
+  }
 }
 
 class HistoryTurnPage {

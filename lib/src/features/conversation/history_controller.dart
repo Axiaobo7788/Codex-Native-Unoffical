@@ -44,6 +44,41 @@ class HistoryController extends ChangeNotifier {
   bool get canLoadMoreItems =>
       _itemCursor != null && _selectedTurnItems.length < maxRetainedItems;
 
+  HistoryTurn? turnForId(String turnId) {
+    for (final turn in _turns) {
+      if (turn.id == turnId) {
+        return turn;
+      }
+    }
+    return null;
+  }
+
+  bool isFirstNonUserItemInTurn(HistoryItem candidate) {
+    final turn = turnForId(candidate.turnId);
+    if (turn == null) {
+      return false;
+    }
+    final source = turn.id == _selectedTurnId && _selectedTurnItems.isNotEmpty
+        ? _selectedTurnItems
+        : turn.items;
+    for (final item in source) {
+      if (item.kind != HistoryItemKind.user) {
+        return item.id == candidate.id;
+      }
+    }
+    return false;
+  }
+
+  void collapseTurnItems() {
+    if (_selectedTurnId == null && _selectedTurnItems.isEmpty) {
+      return;
+    }
+    _selectedTurnId = null;
+    _selectedTurnItems.clear();
+    _itemCursor = null;
+    _notify();
+  }
+
   List<HistoryItem> get timelineItems {
     final items = <HistoryItem>[];
     final seen = <String>{};
