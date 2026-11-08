@@ -65,6 +65,50 @@ These are defaults, not hard ownership boundaries.
 Route to whichever agent already has the strongest *current* context. Avoid
 moving a slice just because another model has quota available.
 
+## 2.1 Live peer interaction channel: official `agy` TUI only
+
+Codex↔Gemini live collaboration must use Google's official Antigravity CLI TUI.
+
+The intended flow is:
+
+```text
+Codex terminal
+→ launch official agy TUI
+→ converse with Gemini as a peer
+→ Gemini inspects/researches/implements within its owned scope
+→ repository commits / compact HANDOFF
+→ either peer continues
+```
+
+This is a communication path, **not a hierarchy**. The fact that Codex launches
+the TUI does not make Gemini a subagent or reviewer-only tool.
+
+Do not use:
+
+- third-party `ask-antigravity`-style wrappers;
+- unofficial API adapters or reverse-engineered RPC control;
+- browser automation as a substitute for the CLI;
+- quota/proxy bridges;
+- any external tool that turns Antigravity into a hidden API.
+
+If the official TUI pauses too often, fix the official CLI configuration rather
+than routing around it. Prefer `/config` or `/settings`; when the user's
+chosen risk posture is full access, configure the official tool/permission mode
+and artifact review policy to always proceed/Turbo-equivalent behavior. If
+alt-screen rendering is the only obstacle to Codex driving the interactive
+terminal, use the documented CLI rendering setting (including
+`altScreenMode=never` when necessary) while continuing to use the TUI.
+
+The documented CLI settings file
+`~/.gemini/antigravity-cli/settings.json` may be edited only for official CLI
+configuration. Never copy credentials or unrelated account state from it into
+the repository or prompts.
+
+If TUI integration still fails after reasonable configuration work, record the
+failure precisely and continue independent repository work; do not replace the
+channel with a third-party integration.
+
+
 ## 3. Task packet
 
 Before substantial parallel work, define a small task packet. It may live in the

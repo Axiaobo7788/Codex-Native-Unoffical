@@ -185,6 +185,37 @@ evidence. For a safe reversible choice where evidence is still tied, choose a
 reasonable option, record the rationale, and continue rather than blocking the
 program.
 
+### Official Antigravity interaction channel
+
+When Codex needs live interaction with Antigravity/Gemini, the **only approved
+interactive channel is the official `agy` TUI**.
+
+- Launch the official `agy` executable directly in an interactive terminal/PTY.
+- Do not use third-party wrappers, proxy bridges, reverse-engineered RPCs,
+  browser automation, unofficial quota relays, or tools that expose
+  Antigravity/Gemini as a surrogate API.
+- Repository commits, task packets, and handoff documents remain the durable
+  shared memory, but any live Codex↔Gemini conversation must occur inside the
+  official `agy` TUI.
+- If the TUI is blocked by permissions or review policy, first adjust the
+  official Antigravity CLI configuration (prefer `/config` or `/settings`)
+  instead of bypassing the TUI. For unattended project work, use the appropriate
+  official always-proceed/Turbo-style permission and artifact-review settings
+  when the user has authorized that risk level.
+- If terminal rendering makes the full-screen TUI hard to drive, adjust the
+  official rendering configuration (for example `altScreenMode`) rather than
+  switching to a non-TUI integration.
+- Editing `~/.gemini/antigravity-cli/settings.json` is permitted only as the
+  CLI's own documented configuration mechanism; never read, print, commit, or
+  exfiltrate credentials/tokens from Antigravity state.
+- Failure of one TUI attempt is a configuration/debugging problem to solve when
+  practical, not a reason to demote Gemini to a subordinate/read-only role.
+
+The relationship remains peer-to-peer: using `agy` from a Codex-owned terminal
+does not make Codex the manager of Gemini. Codex may ask Gemini for an
+independent opinion, evidence gathering, or a jointly scoped slice; Gemini's
+answer is peer input and is judged by the same evidence rules as Codex's work.
+
 ### Evidence labels and completion claims
 
 Keep these evidence classes distinct:
