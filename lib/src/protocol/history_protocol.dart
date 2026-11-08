@@ -213,6 +213,16 @@ final class HistoryProtocolAdapter {
         text: 'Context compacted',
         status: _optionalString(value, 'status'),
       ),
+      'enteredReviewMode' || 'exitedReviewMode' => HistoryItem(
+        id: id,
+        turnId: turnId,
+        kind: HistoryItemKind.review,
+        text: _bounded(
+          '${type == 'enteredReviewMode' ? 'Review started' : 'Review completed'}: '
+          '${_requiredString(value, 'review').trim()}',
+        ),
+        status: type == 'enteredReviewMode' ? 'inProgress' : 'completed',
+      ),
       _ => HistoryItem(
         id: id,
         turnId: turnId,

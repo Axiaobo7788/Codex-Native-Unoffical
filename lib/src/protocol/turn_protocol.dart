@@ -16,6 +16,7 @@ final class TurnProtocolAdapter {
   static const _maxRerouteReasonLength = 160;
   static const _maxToolIdentifierLength = 80;
   static const _maxWarningMessageLength = 320;
+  static const _maxReviewDescriptionLength = 512;
 
   TurnProtocolAdapter({
     required this.request,
@@ -51,6 +52,24 @@ final class TurnProtocolAdapter {
       'input': _serializeUserInput(options.text, options.attachments),
     });
     return _requiredString(response, 'turnId');
+  }
+
+  Future<ReviewHandle> startReview(ReviewStartOptions options) async {
+    final response = await request('review/start', {
+      'threadId': options.threadId,
+      'target': _serializeReviewTarget(options.target),
+    });
+    final reviewThreadId = _requiredString(response, 'reviewThreadId');
+    if (reviewThreadId != options.threadId) {
+      throw const ProtocolViolation(
+        'review/start response reviewThreadId must match the requested thread.',
+      );
+    }
+    final turn = _requiredObject(response, 'turn', 'review/start response');
+    return ReviewHandle(
+      reviewThreadId: reviewThreadId,
+      turn: _parseTurnHandle(turn),
+    );
   }
 
   Future<void> interruptTurn({
@@ -104,6 +123,37 @@ final class TurnProtocolAdapter {
       }
     }
     return items;
+  }
+
+  static JsonObject _serializeReviewTarget(ReviewTarget target) =>
+      switch (target) {
+        UncommittedChangesReviewTarget() => const {
+          'type': 'uncommittedChanges',
+        },
+        BaseBranchReviewTarget(:final branch) => {
+          'type': 'baseBranch',
+          'branch': _requiredReviewInput(branch, 'branch'),
+        },
+        CommitReviewTarget(:final sha, :final title) => {
+          'type': 'commit',
+          'sha': _requiredReviewInput(sha, 'sha'),
+          'title': ?title,
+        },
+        CustomReviewTarget(:final instructions) => {
+          'type': 'custom',
+          'instructions': _requiredReviewInput(instructions, 'instructions'),
+        },
+      };
+
+  static String _requiredReviewInput(String value, String field) {
+    if (value.trim().isEmpty) {
+      throw ArgumentError.value(
+        value,
+        field,
+        'Review input must not be empty.',
+      );
+    }
+    return value;
   }
 
   static bool _isUrlOrDataUri(String value) =>
@@ -416,6 +466,23 @@ final class TurnProtocolAdapter {
         turnId: turnId,
         itemId: itemId,
         text: _requiredString(item, 'text'),
+        completed: completed,
+      );
+    }
+    if (type == 'enteredReviewMode' || type == 'exitedReviewMode') {
+      final review = _truncate(
+        _requiredString(item, 'review').trim(),
+        _maxReviewDescriptionLength,
+      );
+      return ReviewModeEvent(
+        threadId: threadId,
+        turnId: turnId,
+        itemId: itemId,
+        phase: type == 'enteredReviewMode'
+            ? ReviewModePhase.entered
+            : ReviewModePhase.exited,
+        review: review,
+        status: _activityStatus(item, completed),
         completed: completed,
       );
     }

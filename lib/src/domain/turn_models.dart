@@ -40,6 +40,70 @@ class TurnSteerOptions {
   final List<UserAttachment> attachments;
 }
 
+sealed class ReviewTarget {
+  const ReviewTarget();
+
+  String get displayLabel;
+}
+
+class UncommittedChangesReviewTarget extends ReviewTarget {
+  const UncommittedChangesReviewTarget();
+
+  @override
+  String get displayLabel => 'Uncommitted changes';
+}
+
+class BaseBranchReviewTarget extends ReviewTarget {
+  const BaseBranchReviewTarget(this.branch);
+
+  final String branch;
+
+  @override
+  String get displayLabel => 'Changes against $branch';
+}
+
+class CommitReviewTarget extends ReviewTarget {
+  const CommitReviewTarget({required this.sha, this.title});
+
+  final String sha;
+  final String? title;
+
+  @override
+  String get displayLabel {
+    final normalizedTitle = title?.trim();
+    return normalizedTitle == null || normalizedTitle.isEmpty
+        ? 'Commit $sha'
+        : normalizedTitle;
+  }
+}
+
+class CustomReviewTarget extends ReviewTarget {
+  const CustomReviewTarget(this.instructions);
+
+  final String instructions;
+
+  @override
+  String get displayLabel => 'Custom review';
+}
+
+class ReviewStartOptions {
+  const ReviewStartOptions({required this.threadId, required this.target});
+
+  final String threadId;
+  final ReviewTarget target;
+}
+
+class ReviewHandle {
+  const ReviewHandle({required this.reviewThreadId, required this.turn});
+
+  final String reviewThreadId;
+  final TurnHandle turn;
+}
+
+typedef ReviewStarter = Future<ReviewHandle> Function(
+  ReviewStartOptions options,
+);
+
 class TurnHandle {
   const TurnHandle({required this.id, required this.status});
 
@@ -110,6 +174,27 @@ class ActivityEvent extends TurnEvent {
   final String summary;
   final String status;
   final bool completed;
+}
+
+enum ReviewModePhase { entered, exited }
+
+class ReviewModeEvent extends ActivityEvent {
+  const ReviewModeEvent({
+    required super.threadId,
+    required super.turnId,
+    required super.itemId,
+    required this.phase,
+    required this.review,
+    required super.status,
+    required super.completed,
+  }) : super(
+         summary: phase == ReviewModePhase.entered
+             ? 'Review started: $review'
+             : 'Review completed: $review',
+       );
+
+  final ReviewModePhase phase;
+  final String review;
 }
 
 class TurnErrorEvent extends TurnEvent {

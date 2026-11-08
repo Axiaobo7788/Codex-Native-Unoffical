@@ -62,6 +62,79 @@ void main() {
     });
   });
 
+  test(
+    'starts typed inline reviews without rewriting review targets',
+    () async {
+      responses['review/start'] = {
+        'reviewThreadId': 'thread-1',
+        'turn': {'id': 'review-turn-1', 'status': 'inProgress'},
+      };
+
+      final targets = <(ReviewTarget, JsonObject)>[
+        (
+          const UncommittedChangesReviewTarget(),
+          const {'type': 'uncommittedChanges'},
+        ),
+        (
+          const BaseBranchReviewTarget('origin/main'),
+          const {'type': 'baseBranch', 'branch': 'origin/main'},
+        ),
+        (
+          const CommitReviewTarget(sha: 'abc123', title: 'Fix race'),
+          const {'type': 'commit', 'sha': 'abc123', 'title': 'Fix race'},
+        ),
+        (
+          const CustomReviewTarget('Focus on shutdown races.'),
+          const {'type': 'custom', 'instructions': 'Focus on shutdown races.'},
+        ),
+      ];
+
+      for (final (target, expectedTarget) in targets) {
+        final handle = await adapter.startReview(
+          ReviewStartOptions(threadId: 'thread-1', target: target),
+        );
+        expect(handle.reviewThreadId, 'thread-1');
+        expect(handle.turn.id, 'review-turn-1');
+        expect(handle.turn.status, TurnRuntimeStatus.inProgress);
+        expect(requests.last.method, 'review/start');
+        expect(requests.last.params, {
+          'threadId': 'thread-1',
+          'target': expectedTarget,
+        });
+        expect(requests.last.params, isNot(contains('delivery')));
+      }
+    },
+  );
+
+  test(
+    'rejects invalid review input and mismatched review thread IDs',
+    () async {
+      await expectLater(
+        adapter.startReview(
+          const ReviewStartOptions(
+            threadId: 'thread-1',
+            target: BaseBranchReviewTarget('  '),
+          ),
+        ),
+        throwsArgumentError,
+      );
+
+      responses['review/start'] = {
+        'reviewThreadId': 'thread-other',
+        'turn': {'id': 'review-turn-1', 'status': 'inProgress'},
+      };
+      await expectLater(
+        adapter.startReview(
+          const ReviewStartOptions(
+            threadId: 'thread-1',
+            target: UncommittedChangesReviewTarget(),
+          ),
+        ),
+        throwsA(isA<ProtocolViolation>()),
+      );
+    },
+  );
+
   test('serializes only explicit execution overrides', () async {
     responses['turn/start'] = {
       'turn': {'id': 'turn-2', 'status': 'inProgress'},
@@ -273,6 +346,53 @@ void main() {
     expect(event.summary, 'Command: flutter test');
     expect(event.summary, isNot(contains('MULTI_MEGABYTE')));
     expect(event.status, 'completed');
+  });
+
+  test('projects bounded review-mode lifecycle items', () async {
+    final events = <TurnEvent>[];
+    final subscription = adapter.events.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    notifications
+      ..add(
+        CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'review-turn-1',
+            'item': {
+              'id': 'review-entered',
+              'type': 'enteredReviewMode',
+              'review': 'r' * 1000,
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'review-turn-1',
+            'item': {
+              'id': 'review-exited',
+              'type': 'exitedReviewMode',
+              'review': 'Uncommitted changes',
+            },
+          },
+        ),
+      );
+    await pumpEventQueue();
+
+    expect(events, hasLength(2));
+    final entered = events.first as ReviewModeEvent;
+    expect(entered.phase, ReviewModePhase.entered);
+    expect(entered.review, hasLength(513));
+    expect(entered.review, endsWith('…'));
+    expect(entered.summary, startsWith('Review started:'));
+    final exited = events.last as ReviewModeEvent;
+    expect(exited.phase, ReviewModePhase.exited);
+    expect(exited.summary, 'Review completed: Uncommitted changes');
   });
 
   test('projects turn diff updates into bounded typed files', () async {

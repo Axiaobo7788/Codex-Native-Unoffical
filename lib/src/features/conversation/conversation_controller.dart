@@ -8,7 +8,7 @@ import '../../domain/turn_gateway.dart';
 import '../../domain/turn_models.dart';
 import '../settings/execution_settings_controller.dart';
 
-enum ConversationEntryKind { user, assistant, activity, error }
+enum ConversationEntryKind { user, assistant, activity, review, error }
 
 class ConversationEntry {
   const ConversationEntry({
@@ -50,6 +50,7 @@ class ConversationController extends ChangeNotifier {
   ConversationController({
     required this.gateway,
     required this.settings,
+    this.reviewStarter,
     this.maxEntries = 200,
     this.maxEntryCharacters = 64 * 1024,
     this.maxPendingDeltaItems = 16,
@@ -76,6 +77,7 @@ class ConversationController extends ChangeNotifier {
 
   final TurnGateway gateway;
   final ExecutionSettingsController settings;
+  final ReviewStarter? reviewStarter;
   final int maxEntries;
   final int maxEntryCharacters;
   final int maxPendingDeltaItems;
@@ -95,8 +97,10 @@ class ConversationController extends ChangeNotifier {
   ModelReroutedEvent? _latestModelReroute;
   String? _processWarning;
   String? _latestWarning;
+  String? _activeReviewDescription;
   var _busy = false;
   var _steering = false;
+  var _startingReview = false;
   var _interruptReady = false;
   var _disposed = false;
   var _localEntrySequence = 0;
@@ -108,10 +112,14 @@ class ConversationController extends ChangeNotifier {
   ThreadTokenUsageSnapshot? get tokenUsage => _tokenUsage;
   ModelReroutedEvent? get latestModelReroute => _latestModelReroute;
   String? get latestWarning => _latestWarning;
+  String? get activeReviewDescription => _activeReviewDescription;
+  bool get reviewModeActive => _activeReviewDescription != null;
   bool get busy => _busy;
   bool get canInterrupt => _busy && _interruptReady;
   bool get canSteer =>
       _busy && _interruptReady && _activeTurnId != null && !_steering;
+  bool get canStartReview =>
+      reviewStarter != null && _thread != null && !_busy && !_startingReview;
 
   void dismissTelemetryNotice() {
     if (_latestWarning == null && _latestModelReroute == null) {
@@ -156,8 +164,10 @@ class ConversationController extends ChangeNotifier {
     _tokenUsage = null;
     _latestModelReroute = null;
     _latestWarning = _processWarning;
+    _activeReviewDescription = null;
     _busy = false;
     _steering = false;
+    _startingReview = false;
     _interruptReady = false;
     _notify();
   }
@@ -175,7 +185,9 @@ class ConversationController extends ChangeNotifier {
         _latestTurnPlan == null &&
         _tokenUsage == null &&
         _latestModelReroute == null &&
-        _latestWarning == null) {
+        _latestWarning == null &&
+        _activeReviewDescription == null &&
+        !_startingReview) {
       return;
     }
     _entries.clear();
@@ -184,8 +196,10 @@ class ConversationController extends ChangeNotifier {
     _tokenUsage = null;
     _latestModelReroute = null;
     _latestWarning = _processWarning;
+    _activeReviewDescription = null;
     _busy = false;
     _steering = false;
+    _startingReview = false;
     _interruptReady = false;
     _notify();
   }
@@ -306,6 +320,55 @@ class ConversationController extends ChangeNotifier {
     }
   }
 
+  Future<bool> startReview(
+    ReviewTarget target, {
+    ReviewStarter? starter,
+  }) async {
+    final currentThread = _thread;
+    final effectiveStarter = starter ?? reviewStarter;
+    if (currentThread == null ||
+        effectiveStarter == null ||
+        _busy ||
+        _startingReview) {
+      return false;
+    }
+
+    _startingReview = true;
+    _busy = true;
+    _notify();
+    try {
+      final handle = await effectiveStarter(
+        ReviewStartOptions(threadId: currentThread.id, target: target),
+      );
+      if (_disposed || _thread?.id != currentThread.id) {
+        return true;
+      }
+      // Do not resurrect an already-completed review if its lifecycle raced
+      // ahead of the response.
+      if (_busy) {
+        _activeTurnId ??= handle.turn.id;
+        _busy = handle.turn.status == TurnRuntimeStatus.inProgress;
+      }
+      _notify();
+      return true;
+    } catch (error) {
+      if (!_disposed && _thread?.id == currentThread.id) {
+        _busy = false;
+        _interruptReady = false;
+        _activeTurnId = null;
+        _activeReviewDescription = null;
+        _appendError(error.toString());
+        _notify();
+      }
+      return false;
+    } finally {
+      if (!_disposed) {
+        _startingReview = false;
+        _notify();
+      }
+    }
+  }
+
   Future<void> interrupt() async {
     final currentThread = _thread;
     final turnId = _activeTurnId;
@@ -375,6 +438,7 @@ class ConversationController extends ChangeNotifier {
         _busy = false;
         _steering = false;
         _interruptReady = false;
+        _activeReviewDescription = null;
         if (event.errorMessage case final message?) {
           _appendError(
             message,
@@ -506,6 +570,21 @@ class ConversationController extends ChangeNotifier {
         _notify();
       case TurnWarningEvent():
         _latestWarning = _truncate(event.message.trim(), _maxWarningChars);
+        _notify();
+      case ReviewModeEvent():
+        _activeReviewDescription = event.phase == ReviewModePhase.entered
+            ? _truncate(event.review, _maxWarningChars)
+            : null;
+        _upsert(
+          ConversationEntry(
+            id: event.itemId,
+            kind: ConversationEntryKind.review,
+            text: _bounded(event.summary),
+            completed: event.completed,
+            turnId: event.turnId,
+            status: event.status,
+          ),
+        );
         _notify();
       case ActivityEvent():
         final bufferedReasoning = _reasoningDeltaBuffers.remove(event.itemId);

@@ -366,6 +366,7 @@ class _HistoryEntryView extends StatelessWidget {
     final kind = switch (item.kind) {
       HistoryItemKind.user => ConversationEntryKind.user,
       HistoryItemKind.assistant => ConversationEntryKind.assistant,
+      HistoryItemKind.review => ConversationEntryKind.review,
       HistoryItemKind.activity ||
       HistoryItemKind.reasoning ||
       HistoryItemKind.unknown => ConversationEntryKind.activity,
