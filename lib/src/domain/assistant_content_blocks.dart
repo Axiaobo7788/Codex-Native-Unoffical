@@ -83,12 +83,17 @@ final _bracketCitationPattern = RegExp(
 );
 
 final _inlineCiteLinkPattern = RegExp(
-  r'\[(?:cite|citation|source):\s*([^\]]{1,240})\]\((https?:\/\/[^\s)]+)\)',
+  r'\[(?:cite|citation|source):\s*([^\]]{1,240})\](?:\(([^\s)]+)\))?',
   caseSensitive: false,
 );
 
 final _footnoteDefinitionPattern = RegExp(
   r'^\[\^?(\d+)\]:\s*(https?:\/\/\S+)(?:[ \t]+"([^"\n]+)"|[ \t]+([^\n]+))?$',
+  multiLine: true,
+);
+
+final _standardFencedCodeBlockPattern = RegExp(
+  r'^```(?!(?:artifact|writing)\b)[^\n`]*\r?\n[\s\S]*?^```[ \t]*$',
   multiLine: true,
 );
 
@@ -105,9 +110,10 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
     required String? rawAttributes,
     required String? inlineTitle,
     required String body,
+    required String originalMatch,
   }) {
     if (artifacts.length >= maxAssistantArtifacts) {
-      return body;
+      return originalMatch;
     }
     final attrs = _parseAttributes(rawAttributes ?? '');
     final titleCandidate =
@@ -159,6 +165,32 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
     return '';
   }
 
+  if (working.contains('```artifact') || working.contains('```writing')) {
+    working = working.replaceAllMapped(_fencedArtifactPattern, (match) {
+      final kindHint = match.group(1) ?? 'artifact';
+      final inlineTitle = match.group(2);
+      final body = match.group(3) ?? '';
+      return extractArtifact(
+        kindHint: kindHint,
+        rawAttributes: null,
+        inlineTitle: inlineTitle,
+        body: body,
+        originalMatch: match.group(0) ?? body,
+      );
+    });
+  }
+
+  final protectedCodeBlocks = <String>[];
+  if (working.contains('```')) {
+    working = working.replaceAllMapped(_standardFencedCodeBlockPattern, (
+      match,
+    ) {
+      final index = protectedCodeBlocks.length;
+      protectedCodeBlocks.add(match.group(0) ?? '');
+      return '\u0000CODEX_CODE_BLOCK_$index\u0000';
+    });
+  }
+
   if (working.contains(':::')) {
     working = working.replaceAllMapped(_directiveArtifactPattern, (match) {
       final kindHint = match.group(1) ?? 'artifact';
@@ -170,6 +202,7 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
         rawAttributes: braceAttrs,
         inlineTitle: inlineTitle,
         body: body,
+        originalMatch: match.group(0) ?? body,
       );
     });
   }
@@ -183,20 +216,7 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
         rawAttributes: rawAttrs,
         inlineTitle: null,
         body: body,
-      );
-    });
-  }
-
-  if (working.contains('```artifact') || working.contains('```writing')) {
-    working = working.replaceAllMapped(_fencedArtifactPattern, (match) {
-      final kindHint = match.group(1) ?? 'artifact';
-      final inlineTitle = match.group(2);
-      final body = match.group(3) ?? '';
-      return extractArtifact(
-        kindHint: kindHint,
-        rawAttributes: null,
-        inlineTitle: inlineTitle,
-        body: body,
+        originalMatch: match.group(0) ?? body,
       );
     });
   }
@@ -204,7 +224,10 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
   final citations = <AssistantCitation>[];
   final seenCitationKeys = <String>{};
 
-  int registerCitation(String label, String? url) {
+  ({int? index, String? normalizedUrl}) registerCitation(
+    String label,
+    String? url,
+  ) {
     final normalizedLabel = _boundString(
       label.trim().isEmpty ? 'Source' : label.trim(),
       maxAssistantCitationLabelLength,
@@ -215,10 +238,13 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
       (c) => '${c.label.toLowerCase()}|${c.url ?? ''}' == dedupKey,
     );
     if (existingIndex != -1) {
-      return citations[existingIndex].index;
+      return (
+        index: citations[existingIndex].index,
+        normalizedUrl: citations[existingIndex].url,
+      );
     }
     if (citations.length >= maxAssistantCitations) {
-      return citations.length;
+      return (index: null, normalizedUrl: normalizedUrl);
     }
     seenCitationKeys.add(dedupKey);
     final nextIndex = citations.length + 1;
@@ -229,15 +255,20 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
         url: normalizedUrl,
       ),
     );
-    return nextIndex;
+    return (index: nextIndex, normalizedUrl: normalizedUrl);
   }
 
   if (working.contains('【')) {
     working = working.replaceAllMapped(_bracketCitationPattern, (match) {
-      final rawLabel = match.group(2) ?? 'Source';
+      final rawLabel = (match.group(2) ?? 'Source').trim();
       final rawUrl = match.group(3);
-      final index = registerCitation(rawLabel, rawUrl);
-      return rawUrl != null ? '[[$index]]($rawUrl)' : '[$index]';
+      final registered = registerCitation(rawLabel, rawUrl);
+      final index = registered.index;
+      final url = registered.normalizedUrl;
+      if (index == null) {
+        return url != null ? '[$rawLabel]($url)' : '[$rawLabel]';
+      }
+      return url != null ? '[[$index]]($url)' : '[$index]';
     });
   }
 
@@ -246,10 +277,15 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
       working.contains('[citation') ||
       working.contains('[source:')) {
     working = working.replaceAllMapped(_inlineCiteLinkPattern, (match) {
-      final rawLabel = match.group(1) ?? 'Source';
+      final rawLabel = (match.group(1) ?? 'Source').trim();
       final rawUrl = match.group(2);
-      final index = registerCitation(rawLabel, rawUrl);
-      return rawUrl != null ? '[[$index]]($rawUrl)' : '[$index]';
+      final registered = registerCitation(rawLabel, rawUrl);
+      final index = registered.index;
+      final url = registered.normalizedUrl;
+      if (index == null) {
+        return url != null ? '[$rawLabel]($url)' : '[$rawLabel]';
+      }
+      return url != null ? '[[$index]]($url)' : '[$index]';
     });
   }
 
@@ -259,9 +295,21 @@ AssistantContentPresentation parseAssistantContentPresentation(String rawText) {
       final quotedTitle = match.group(3);
       final trailingTitle = match.group(4);
       final label = (quotedTitle ?? trailingTitle ?? rawUrl ?? 'Source').trim();
-      registerCitation(label, rawUrl);
+      final registered = registerCitation(label, rawUrl);
+      if (registered.index == null) {
+        return match.group(0) ?? '';
+      }
       return '';
     });
+  }
+
+  if (protectedCodeBlocks.isNotEmpty) {
+    for (var i = 0; i < protectedCodeBlocks.length; i++) {
+      working = working.replaceAll(
+        '\u0000CODEX_CODE_BLOCK_$i\u0000',
+        protectedCodeBlocks[i],
+      );
+    }
   }
 
   if (artifacts.isEmpty && citations.isEmpty) {

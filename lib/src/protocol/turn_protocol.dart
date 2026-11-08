@@ -205,14 +205,14 @@ final class TurnProtocolAdapter {
   ) => switch (type) {
     'commandExecution' =>
       'Command: ${_truncate(_requiredString(item, 'command'), 240)}',
-    'fileChange' => 'File changes: ${_listLength(item, 'changes')} update(s)',
+    'fileChange' => _fileChangeSummary(item['changes']),
     'mcpToolCall' =>
       'MCP: ${_requiredString(item, 'server')}/${_requiredString(item, 'tool')}',
     'dynamicToolCall' => 'Tool: ${_requiredString(item, 'tool')}',
     'collabAgentToolCall' => 'Collaboration: ${_requiredString(item, 'tool')}',
     'subAgentActivity' => 'Sub-agent activity',
     'functionCallOutput' => 'Function output: ${_requiredString(item, 'name')}',
-    'plan' => _planSummary(item),
+    'plan' || 'todo' || 'todoList' => _planSummary(item),
     'reasoning' => 'Reasoning',
     'webSearch' => () {
       final query = item['query'];
@@ -227,14 +227,64 @@ final class TurnProtocolAdapter {
     _ => _humanize(type),
   };
 
+  static String _fileChangeSummary(Object? rawChanges) {
+    final count = rawChanges is List<Object?> ? rawChanges.length : 0;
+    if (rawChanges is! List<Object?>) {
+      return 'File changes: $count update(s)';
+    }
+    var additions = 0;
+    var deletions = 0;
+    for (final entry in rawChanges.whereType<Map<String, Object?>>()) {
+      final entryAdditions = entry['additions'];
+      final entryDeletions = entry['deletions'];
+      if (entryAdditions is int && entryAdditions >= 0) {
+        additions += entryAdditions;
+      }
+      if (entryDeletions is int && entryDeletions >= 0) {
+        deletions += entryDeletions;
+      }
+      if (entryAdditions is! int && entryDeletions is! int) {
+        final diff = entry['diff'];
+        if (diff is String && diff.isNotEmpty) {
+          for (final line in diff.split('\n')) {
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+              additions += 1;
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+              deletions += 1;
+            }
+          }
+        }
+      }
+    }
+    if (additions == 0 && deletions == 0) {
+      return 'File changes: $count update(s)';
+    }
+    return 'File changes: $count update(s) (+$additions -$deletions)';
+  }
+
   static String _planSummary(JsonObject item) {
     final text = item['text'];
     if (text is String && text.trim().isNotEmpty) {
       final firstLine = text.trim().split('\n').first.trim();
       return 'Plan: ${_truncate(firstLine, 160)}';
     }
-    final steps = item['steps'] ?? item['items'];
+    final steps = item['steps'] ?? item['items'] ?? item['todos'];
     if (steps is List<Object?> && steps.isNotEmpty) {
+      var hasCompletionState = false;
+      var completedCount = 0;
+      for (final step in steps.whereType<Map<String, Object?>>()) {
+        if (step.containsKey('completed') || step.containsKey('status')) {
+          hasCompletionState = true;
+          final status = step['status'];
+          if (step['completed'] == true ||
+              (status is String && status.toLowerCase() == 'completed')) {
+            completedCount += 1;
+          }
+        }
+      }
+      if (hasCompletionState) {
+        return 'Plan updated ($completedCount/${steps.length} completed)';
+      }
       return 'Plan updated (${steps.length} step(s))';
     }
     return 'Plan updated';
@@ -243,11 +293,6 @@ final class TurnProtocolAdapter {
   static String _activityStatus(JsonObject item, bool completed) {
     final status = item['status'];
     return status is String ? status : (completed ? 'completed' : 'inProgress');
-  }
-
-  static int _listLength(JsonObject object, String key) {
-    final value = object[key];
-    return value is List<Object?> ? value.length : 0;
   }
 
   static JsonObject _requiredObject(

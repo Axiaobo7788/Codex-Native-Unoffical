@@ -38,43 +38,33 @@ This document establishes the capability matrix across all supported and potenti
 All conversation and agentic execution transports implement the pure domain interfaces in `lib/src/domain/conversation_backend.dart` (implemented by `CodexTransport` and `RuntimeController`, with mode-aware capability projection via `resolveEffectiveCapabilities` in `lib/src/domain/product_mode.dart`):
 
 ```dart
-abstract interface class ConversationBackend {
-  Stream<ThreadLifecycleEvent> get threads;
-  Stream<TurnStreamEvent> get turns;
-  Future<ThreadPage> listThreads(ThreadListQuery query);
-  Future<ThreadSummary> readThread(String threadId);
-  Future<ThreadSummary> startThread(ThreadStartOptions options);
-  Future<ThreadSummary> resumeThread(ThreadResumeOptions options);
-  Future<void> renameThread({required String threadId, required String name});
-  Future<void> archiveThread(String threadId);
-  Future<ThreadSummary> unarchiveThread(String threadId);
-  Future<ThreadSummary> forkThread(ThreadForkOptions options);
-  Future<ThreadSummary> revertThread({
-    required String threadId,
-    required String beforeTurnId,
-  });
-  Future<void> compactThread(String threadId);
-  Future<void> deleteThread(String threadId);
-  Future<ModelPage> listModels(ModelListQuery query);
-  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query);
-  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query);
-  Future<HistoryItemPage> readHistoryItems(HistoryItemReadQuery query);
-  Future<TurnHandle> startTurn(TurnStartOptions options);
-  Future<String> steerTurn(TurnSteerOptions options);
-  Future<void> interruptTurn({required String threadId, required String turnId});
+abstract interface class ConversationBackend
+    implements ThreadGateway, ModelGateway, HistoryGateway, TurnGateway {
+  BackendCapabilities get capabilities;
 }
 
-abstract interface class ExecutionBackend implements ConversationBackend, OutputGateway {
-  Stream<ApprovalStreamEvent> get approvals;
-  Future<void> decideApproval({
-    required Object requestId,
-    required ApprovalDecision decision,
-  });
-  Future<List<SkillMetadata>> listSkills({List<String> cwds = const []});
-  Future<bool> setSkillEnabled({required String path, required bool enabled});
-  Future<List<PluginMarketplaceSummary>> listPlugins({List<String> cwds = const []});
-  Future<List<McpServerStatusSummary>> listMcpServers();
+abstract interface class ExecutionBackend
+    implements
+        ConversationBackend,
+        ApprovalGateway,
+        OutputGateway,
+        EcosystemGateway {
+  @override
+  BackendCapabilities get capabilities;
 }
+
+// Inherited gateway contracts:
+// - ThreadGateway: threads, listThreads, readThread, startThread, resumeThread,
+//   renameThread, archiveThread, unarchiveThread, forkThread, revertThread,
+//   compactThread, deleteThread
+// - ModelGateway: listModels
+// - HistoryGateway: listHistoryTurns, listHistoryItems, readHistoryItems
+// - TurnGateway: turns, startTurn, steerTurn, interruptTurn
+// - ApprovalGateway: approvals, decideApproval
+// - OutputGateway: readOutputRange
+// - EcosystemGateway: listSkills (List<SkillSummary>), setSkillEnabled,
+//   listPlugins (List<PluginMarketplaceSummary>),
+//   listMcpServerStatus (List<McpServerStatusSummary>)
 ```
 
 ---

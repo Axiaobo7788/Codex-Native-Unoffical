@@ -191,7 +191,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _openConversationSearch() {
-    if (widget.controller.thread == null) {
+    if (widget.controller.thread == null ||
+        !_activeCapabilities.supportsInConversationSearch) {
       return;
     }
     if (!_searchOpen) {
@@ -577,13 +578,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   popoverBuilder: (context, close) {
                     final pinned = threadController.isPinned(thread.id);
                     final archived = threadController.showArchived;
+                    final capabilities = _activeCapabilities;
                     return CodexMenu<String>(
                       items: [
-                        const CodexMenuItem(
-                          value: 'search',
-                          label: 'Find in conversation',
-                          icon: Icon(Icons.search_rounded),
-                        ),
+                        if (capabilities.supportsInConversationSearch)
+                          const CodexMenuItem(
+                            value: 'search',
+                            label: 'Find in conversation',
+                            icon: Icon(Icons.search_rounded),
+                          ),
                         CodexMenuItem(
                           value: 'pin',
                           label: pinned ? 'Unpin thread' : 'Pin thread',
@@ -598,16 +601,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           label: 'Rename thread',
                           icon: Icon(Icons.drive_file_rename_outline_rounded),
                         ),
-                        const CodexMenuItem(
-                          value: 'fork',
-                          label: 'Fork thread',
-                          icon: Icon(Icons.call_split_rounded),
-                        ),
-                        const CodexMenuItem(
-                          value: 'compact',
-                          label: 'Compact context',
-                          icon: Icon(Icons.compress_rounded),
-                        ),
+                        if (capabilities.supportsThreadFork)
+                          const CodexMenuItem(
+                            value: 'fork',
+                            label: 'Fork thread',
+                            icon: Icon(Icons.call_split_rounded),
+                          ),
+                        if (capabilities.supportsThreadCompact)
+                          const CodexMenuItem(
+                            value: 'compact',
+                            label: 'Compact context',
+                            icon: Icon(Icons.compress_rounded),
+                          ),
                         CodexMenuItem(
                           value: 'archive',
                           label: archived
@@ -737,7 +742,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     String? assistantText,
   }) async {
     final threadController = widget.threadController;
-    if (threadController == null || widget.controller.busy) {
+    if (threadController == null ||
+        widget.controller.busy ||
+        !_activeCapabilities.supportsThreadRevert) {
       return;
     }
     final presentation = parseUserMessagePresentation(
@@ -748,18 +755,30 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final normalizedAttachments = normalizeUserAttachments(
       presentation.attachments,
     );
-    _pendingBranchEdit = _PendingTurnBranchEdit(
-      threadId: threadId,
-      turnId: turnId,
-      userText: bodyText,
-      attachments: normalizedAttachments,
-      assistantText: assistantText,
-    );
+    if (assistantText != null &&
+        assistantText.trim().isNotEmpty &&
+        _threadChatDags[threadId] != null) {
+      _rememberThreadDag(
+        threadId,
+        _threadChatDags[threadId]!.updateTurnAssistantText(
+          turnId: turnId,
+          assistantText: assistantText,
+        ),
+      );
+    }
+    _pendingBranchEdit = null;
     final reverted = await threadController.revertThread(
       threadId: threadId,
       beforeTurnId: turnId,
     );
     if (reverted != null && mounted) {
+      _pendingBranchEdit = _PendingTurnBranchEdit(
+        threadId: threadId,
+        turnId: turnId,
+        userText: bodyText,
+        attachments: normalizedAttachments,
+        assistantText: assistantText,
+      );
       widget.controller.clearEntries();
       _threadScrollBookmarks.remove(threadId);
       await widget.historyController.refresh();
@@ -787,7 +806,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     String? assistantText,
   }) async {
     final threadController = widget.threadController;
-    if (threadController == null || widget.controller.busy) {
+    if (threadController == null ||
+        widget.controller.busy ||
+        !_activeCapabilities.supportsThreadRevert) {
       return;
     }
     final presentation = parseUserMessagePresentation(
@@ -801,6 +822,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (bodyText.isEmpty && normalizedAttachments.isEmpty) {
       return;
     }
+    if (assistantText != null &&
+        assistantText.trim().isNotEmpty &&
+        _threadChatDags[threadId] != null) {
+      _rememberThreadDag(
+        threadId,
+        _threadChatDags[threadId]!.updateTurnAssistantText(
+          turnId: turnId,
+          assistantText: assistantText,
+        ),
+      );
+    }
+    _pendingBranchEdit = null;
     final reverted = await threadController.revertThread(
       threadId: threadId,
       beforeTurnId: turnId,
@@ -1054,7 +1087,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
       for (final entry in rawLiveEntries) {
         if (entry.kind == ConversationEntryKind.assistant &&
-            entry.completed &&
             (entry.turnId?.isNotEmpty ?? false) &&
             entry.text.trim().isNotEmpty) {
           dag = dag.updateTurnAssistantText(
@@ -1065,6 +1097,60 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
       _threadChatDags[activeThreadId] = dag;
     }
+    final activeDag = _threadChatDags[activeThreadId];
+
+    String effectiveHistoryText(HistoryItem item) {
+      if (!_activeCapabilities.supportsBranchNavigation ||
+          item.turnId.isEmpty ||
+          activeDag == null) {
+        return item.text;
+      }
+      final activeSibling = activeDag.activeSiblingForTurn(item.turnId);
+      if (activeSibling == null) {
+        return item.text;
+      }
+      final siblingInfo = activeDag.siblingInfoFor(activeSibling.id);
+      if (siblingInfo == null || !siblingInfo.hasMultipleBranches) {
+        return item.text;
+      }
+      if (item.kind == HistoryItemKind.user) {
+        return activeSibling.text;
+      }
+      if (item.kind == HistoryItemKind.assistant) {
+        final asstNode = activeDag.assistantChildFor(activeSibling.id);
+        if (asstNode != null && asstNode.text.isNotEmpty) {
+          return asstNode.text;
+        }
+      }
+      return item.text;
+    }
+
+    String effectiveLiveText(ConversationEntry entry) {
+      final liveTurnId = entry.turnId ?? '';
+      if (!_activeCapabilities.supportsBranchNavigation ||
+          liveTurnId.isEmpty ||
+          activeDag == null) {
+        return entry.text;
+      }
+      final activeSibling = activeDag.activeSiblingForTurn(liveTurnId);
+      if (activeSibling == null) {
+        return entry.text;
+      }
+      final siblingInfo = activeDag.siblingInfoFor(activeSibling.id);
+      if (siblingInfo == null || !siblingInfo.hasMultipleBranches) {
+        return entry.text;
+      }
+      if (entry.kind == ConversationEntryKind.user) {
+        return activeSibling.text;
+      }
+      if (entry.kind == ConversationEntryKind.assistant) {
+        final asstNode = activeDag.assistantChildFor(activeSibling.id);
+        if (asstNode != null && asstNode.text.isNotEmpty) {
+          return asstNode.text;
+        }
+      }
+      return entry.text;
+    }
 
     final searchQuery = _searchOpen
         ? _searchController.text.trim().toLowerCase()
@@ -1074,12 +1160,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     } else {
       final matches = <String>[];
       for (final item in historyItems) {
-        if (item.text.toLowerCase().contains(searchQuery)) {
+        if (effectiveHistoryText(item).toLowerCase().contains(searchQuery)) {
           matches.add('history-${item.id}');
         }
       }
       for (final entry in liveEntries) {
-        if (entry.text.toLowerCase().contains(searchQuery)) {
+        if (effectiveLiveText(entry).toLowerCase().contains(searchQuery)) {
           matches.add('live-${entry.id}');
         }
       }
@@ -1155,6 +1241,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final chronologicalIndex = messageCount - 1 - reverseIndex;
                   final activeThread = controller.thread;
                   final threadController = widget.threadController;
+                  final capabilities = _activeCapabilities;
                   final dag = activeThread == null
                       ? null
                       : _threadChatDags[activeThread.id];
@@ -1179,7 +1266,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       }
                     }
                     final activeSibling =
-                        _activeCapabilities.supportsBranchNavigation &&
+                        capabilities.supportsBranchNavigation &&
                             item.turnId.isNotEmpty
                         ? dag?.activeSiblingForTurn(item.turnId)
                         : null;
@@ -1190,19 +1277,21 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         siblingInfo != null && siblingInfo.hasMultipleBranches;
                     String? overrideText;
                     List<UserAttachment>? overrideAttachments;
+                    String? activeBranchAssistantText;
                     if (hasMultipleBranches && activeSibling != null) {
+                      final asstNode = dag?.assistantChildFor(activeSibling.id);
+                      if (asstNode != null && asstNode.text.isNotEmpty) {
+                        activeBranchAssistantText = asstNode.text;
+                      }
                       if (item.kind == HistoryItemKind.user) {
                         overrideText = activeSibling.text;
                         overrideAttachments = activeSibling.attachments;
                       } else if (item.kind == HistoryItemKind.assistant) {
-                        final asstNode = dag?.assistantChildFor(
-                          activeSibling.id,
-                        );
-                        if (asstNode != null && asstNode.text.isNotEmpty) {
-                          overrideText = asstNode.text;
-                        }
+                        overrideText = activeBranchAssistantText;
                       }
                     }
+                    final effectiveAssistantTextForTurn =
+                        activeBranchAssistantText ?? assistantTextForTurn;
                     final isLastInTurn =
                         chronologicalIndex + 1 >= historyItems.length ||
                         historyItems[chronologicalIndex + 1].turnId !=
@@ -1218,6 +1307,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         isLastInTurn &&
                         historyTurn?.status == TurnRuntimeStatus.failed &&
                         activeThread != null &&
+                        capabilities.supportsThreadRevert &&
                         !controller.busy;
                     return _MeasuredTimelineItem(
                       key: ValueKey('measured-$itemKey'),
@@ -1251,7 +1341,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             : null,
                         isSearchMatch: _searchMatchItemKeys.contains(itemKey),
                         isActiveSearchMatch: activeMatchKey == itemKey,
-                        onEditFromTurn: canMutateTurn
+                        onEditFromTurn:
+                            canMutateTurn && capabilities.supportsThreadRevert
                             ? () => unawaited(
                                 _editTurn(
                                   threadId: activeThread.id,
@@ -1259,11 +1350,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                   rawText: overrideText ?? item.text,
                                   attachments:
                                       overrideAttachments ?? item.attachments,
-                                  assistantText: assistantTextForTurn,
+                                  assistantText: effectiveAssistantTextForTurn,
                                 ),
                               )
                             : null,
-                        onRegenerateFromTurn: canMutateTurn
+                        onRegenerateFromTurn:
+                            canMutateTurn && capabilities.supportsThreadRevert
                             ? () => unawaited(
                                 _regenerateTurn(
                                   threadId: activeThread.id,
@@ -1271,7 +1363,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                   rawText: overrideText ?? item.text,
                                   attachments:
                                       overrideAttachments ?? item.attachments,
-                                  assistantText: assistantTextForTurn,
+                                  assistantText: effectiveAssistantTextForTurn,
                                 ),
                               )
                             : null,
@@ -1287,7 +1379,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 ),
                               )
                             : null,
-                        onForkFromTurn: canMutateTurn
+                        onForkFromTurn:
+                            canMutateTurn && capabilities.supportsThreadFork
                             ? () => unawaited(
                                 threadController.forkThread(
                                   ThreadForkOptions(
@@ -1298,8 +1391,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 ),
                               )
                             : null,
-                        onRevertFromTurn: canMutateTurn
+                        onRevertFromTurn:
+                            canMutateTurn && capabilities.supportsThreadRevert
                             ? () async {
+                                _pendingBranchEdit = null;
                                 final reverted = await threadController
                                     .revertThread(
                                       threadId: activeThread.id,
@@ -1339,7 +1434,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     }
                   }
                   final activeSibling =
-                      _activeCapabilities.supportsBranchNavigation &&
+                      capabilities.supportsBranchNavigation &&
                           liveTurnId.isNotEmpty
                       ? dag?.activeSiblingForTurn(liveTurnId)
                       : null;
@@ -1350,20 +1445,27 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       siblingInfo != null && siblingInfo.hasMultipleBranches;
                   var effectiveEntry = entry;
                   var effectiveAttachments = entry.attachments;
+                  String? activeBranchLiveAssistantText;
                   if (hasMultipleBranches && activeSibling != null) {
+                    final asstNode = dag?.assistantChildFor(activeSibling.id);
+                    if (asstNode != null && asstNode.text.isNotEmpty) {
+                      activeBranchLiveAssistantText = asstNode.text;
+                    }
                     if (entry.kind == ConversationEntryKind.user) {
                       effectiveEntry = entry.copyWith(
                         text: activeSibling.text,
                         attachments: activeSibling.attachments,
                       );
                       effectiveAttachments = activeSibling.attachments;
-                    } else if (entry.kind == ConversationEntryKind.assistant) {
-                      final asstNode = dag?.assistantChildFor(activeSibling.id);
-                      if (asstNode != null && asstNode.text.isNotEmpty) {
-                        effectiveEntry = entry.copyWith(text: asstNode.text);
-                      }
+                    } else if (entry.kind == ConversationEntryKind.assistant &&
+                        activeBranchLiveAssistantText != null) {
+                      effectiveEntry = entry.copyWith(
+                        text: activeBranchLiveAssistantText,
+                      );
                     }
                   }
+                  final effectiveAssistantTextForLiveTurn =
+                      activeBranchLiveAssistantText ?? assistantTextForLiveTurn;
                   final showLiveContinue =
                       entry.kind == ConversationEntryKind.error &&
                       entry.status == 'interrupted' &&
@@ -1402,25 +1504,29 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           : null,
                       isSearchMatch: _searchMatchItemKeys.contains(itemKey),
                       isActiveSearchMatch: activeMatchKey == itemKey,
-                      onEditFromTurn: canMutateLiveTurn
+                      onEditFromTurn:
+                          canMutateLiveTurn && capabilities.supportsThreadRevert
                           ? () => unawaited(
                               _editTurn(
                                 threadId: activeThread.id,
                                 turnId: liveTurnId,
                                 rawText: effectiveEntry.text,
                                 attachments: effectiveAttachments,
-                                assistantText: assistantTextForLiveTurn,
+                                assistantText:
+                                    effectiveAssistantTextForLiveTurn,
                               ),
                             )
                           : null,
-                      onRegenerateFromTurn: canMutateLiveTurn
+                      onRegenerateFromTurn:
+                          canMutateLiveTurn && capabilities.supportsThreadRevert
                           ? () => unawaited(
                               _regenerateTurn(
                                 threadId: activeThread.id,
                                 turnId: liveTurnId,
                                 rawText: effectiveEntry.text,
                                 attachments: effectiveAttachments,
-                                assistantText: assistantTextForLiveTurn,
+                                assistantText:
+                                    effectiveAssistantTextForLiveTurn,
                               ),
                             )
                           : null,
@@ -1436,7 +1542,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               ),
                             )
                           : null,
-                      onForkFromTurn: canMutateLiveTurn
+                      onForkFromTurn:
+                          canMutateLiveTurn && capabilities.supportsThreadFork
                           ? () => unawaited(
                               threadController.forkThread(
                                 ThreadForkOptions(
@@ -1447,8 +1554,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               ),
                             )
                           : null,
-                      onRevertFromTurn: canMutateLiveTurn
+                      onRevertFromTurn:
+                          canMutateLiveTurn && capabilities.supportsThreadRevert
                           ? () async {
+                              _pendingBranchEdit = null;
                               final reverted = await threadController
                                   .revertThread(
                                     threadId: activeThread.id,
@@ -2180,6 +2289,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _restoreAlignmentPasses = 0;
     _preLoadOlderAnchor = null;
     _pendingStreamAnchor = null;
+    _pendingBranchEdit = null;
     _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;

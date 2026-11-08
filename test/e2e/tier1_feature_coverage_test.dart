@@ -1477,7 +1477,7 @@ void main() {
         expect(find.text('2/2'), findsOneWidget);
         expect(find.text('Edited prompt v2'), findsOneWidget);
 
-        // 4. Regenerate turn-1 -> reverts and automatically resubmits
+        // 4. Regenerate turn-1 -> reverts and automatically resubmits (3rd branch: 3/3)
         await tester.tap(find.byKey(const ValueKey('turn-regenerate-turn-1')));
         await tester.pump();
         expect(harness.revertedThreads.last, (
@@ -1487,11 +1487,48 @@ void main() {
         expect(harness.startedTurns, hasLength(2));
         expect(harness.startedTurns.last.text, 'Edited prompt v2');
 
-        // 5. Complete turn-2 as interrupted -> Continue action appears
+        harness.emitAssistantMessage(
+          'asst-turn-2',
+          'Regenerated response v3',
+          turnId: 'turn-2',
+          threadId: 'branch-thread',
+        );
+        // 5. Complete turn-2 as interrupted -> Continue action appears and < 3/3 > is navigable
         harness.emitTurnCompleted(
           'turn-2',
           status: TurnRuntimeStatus.interrupted,
           threadId: 'branch-thread',
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('3/3'), findsOneWidget);
+        expect(find.text('Regenerated response v3'), findsOneWidget);
+
+        // Step back to 2/3 -> verify Edited response v2 was preserved!
+        await tester.tap(find.byKey(const ValueKey('branch-prev-turn-2')));
+        await tester.pumpAndSettle();
+        expect(find.text('2/3'), findsOneWidget);
+        expect(find.text('Edited response v2'), findsOneWidget);
+
+        // Step back to 1/3 -> verify Original prompt v1 & Original response v1, and test search on active branch
+        await tester.tap(find.byKey(const ValueKey('branch-prev-turn-2')));
+        await tester.pumpAndSettle();
+        expect(find.text('1/3'), findsOneWidget);
+        expect(find.text('Original prompt v1'), findsOneWidget);
+        expect(find.text('Original response v1'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('conversation-search-toggle')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('conversation-search-field')),
+          'Original prompt v1',
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('1 of 1'), findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('conversation-search-close')),
         );
         await tester.pumpAndSettle();
 

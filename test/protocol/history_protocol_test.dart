@@ -585,8 +585,19 @@ Outer actual user request after envelope.
                 'id': 'plan-1',
                 'type': 'plan',
                 'steps': [
-                  {'step': '1'},
-                  {'step': '2'},
+                  {'step': '1', 'status': 'completed'},
+                  {'step': '2', 'status': 'inProgress'},
+                ],
+                'status': 'completed',
+              },
+              {
+                'id': 'file-1',
+                'type': 'fileChange',
+                'changes': [
+                  {
+                    'path': 'lib/main.dart',
+                    'diff': '--- a/lib/main.dart\n+++ b/lib/main.dart\n@@ -1 +1,2 @@\n-old\n+new1\n+new2\n',
+                  },
                 ],
                 'status': 'completed',
               },
@@ -606,14 +617,15 @@ Outer actual user request after envelope.
       const HistoryTurnQuery(threadId: 'thread-rich'),
     );
     final items = page.turns.single.items;
-    expect(items, hasLength(6));
+    expect(items, hasLength(7));
     expect(items[0].kind, HistoryItemKind.activity);
     expect(items[0].text, 'MCP: filesystem/read_file');
     expect(items[1].text, 'Tool: run_linter');
     expect(items[2].text, 'Collaboration: spawn_worker');
     expect(items[3].text, 'Web search: flutter custom scroll view');
-    expect(items[4].text, 'Plan updated (2 step(s))');
-    expect(items[5].text, 'Context compacted');
+    expect(items[4].text, 'Plan updated (1/2 completed)');
+    expect(items[5].text, 'File changes: 1 update(s) (+2 -1)');
+    expect(items[6].text, 'Context compacted');
   });
 
   test('parses ChatGPT conversations.json mapping DAG with cycle protection and sibling branch switching', () {
@@ -701,6 +713,59 @@ Outer actual user request after envelope.
       'Edited question',
       'Edited answer',
     ]);
+  });
+
+  test('isolates sibling branch groups per turn and preserves assistant replies across 3+ chained branches', () {
+    var dag = const ChatConversationDag.empty();
+
+    // Branch Turn 1 -> 1b -> 1c (3 branches on Turn 1)
+    dag = dag.recordTurnBranch(
+      turnId: 'turn-1',
+      originalUserText: 'Turn 1 v1',
+      originalAssistantText: 'Reply 1 v1',
+      nextTurnId: 'turn-1b',
+      nextUserText: 'Turn 1 v2',
+    );
+    dag = dag.recordTurnBranch(
+      turnId: 'turn-1b',
+      originalUserText: 'Turn 1 v2',
+      originalAssistantText: 'Reply 1 v2',
+      nextTurnId: 'turn-1c',
+      nextUserText: 'Turn 1 v3',
+      nextAssistantText: 'Reply 1 v3',
+    );
+
+    // Branch Turn 2 -> 2b in the same conversation DAG
+    dag = dag.recordTurnBranch(
+      turnId: 'turn-2',
+      originalUserText: 'Turn 2 v1',
+      originalAssistantText: 'Reply 2 v1',
+      nextTurnId: 'turn-2b',
+      nextUserText: 'Turn 2 v2',
+      nextAssistantText: 'Reply 2 v2',
+    );
+
+    // Turn 1 has 3 siblings (3/3) and Turn 2 has 2 siblings (2/2), never merged into 5!
+    final activeTurn1 = dag.activeSiblingForTurn('turn-1c')!;
+    final infoTurn1 = dag.siblingInfoFor(activeTurn1.id)!;
+    expect(infoTurn1.displayLabel, '3/3');
+    expect(dag.assistantChildFor(activeTurn1.id)?.text, 'Reply 1 v3');
+
+    final activeTurn2 = dag.activeSiblingForTurn('turn-2b')!;
+    final infoTurn2 = dag.siblingInfoFor(activeTurn2.id)!;
+    expect(infoTurn2.displayLabel, '2/2');
+    expect(dag.assistantChildFor(activeTurn2.id)?.text, 'Reply 2 v2');
+
+    // Step Turn 1 back to 2/3 and verify Reply 1 v2 is preserved while Turn 2 stays at 2/2
+    dag = dag.selectSiblingBranch(nodeId: activeTurn1.id, offset: -1);
+    final turn1Branch2 = dag.activeSiblingForTurn('turn-1c')!;
+    expect(dag.siblingInfoFor(turn1Branch2.id)!.displayLabel, '2/3');
+    expect(turn1Branch2.text, 'Turn 1 v2');
+    expect(dag.assistantChildFor(turn1Branch2.id)?.text, 'Reply 1 v2');
+    expect(
+      dag.siblingInfoFor(dag.activeSiblingForTurn('turn-2b')!.id)!.displayLabel,
+      '2/2',
+    );
   });
 
   test('resolves mode-aware BackendCapabilities across Codex, Work, and Chat modes', () {

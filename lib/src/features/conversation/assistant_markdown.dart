@@ -318,35 +318,38 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
                   ),
                 ),
                 const Spacer(),
-                InkWell(
-                  borderRadius: BorderRadius.circular(6),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: _copyCode,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _copied ? Icons.check_rounded : Icons.copy_rounded,
-                          size: 13,
-                          color: _copied
-                              ? palette.success
-                              : palette.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _copied ? 'Copied' : 'Copy',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: _copied
-                                    ? palette.success
-                                    : palette.textSecondary,
-                              ),
-                        ),
-                      ],
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _copied ? Icons.check_rounded : Icons.copy_rounded,
+                            size: 13,
+                            color: _copied
+                                ? palette.success
+                                : palette.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _copied ? 'Copied' : 'Copy',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: _copied
+                                      ? palette.success
+                                      : palette.textSecondary,
+                                ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -402,7 +405,7 @@ class _AssistantArtifactCardState extends State<_AssistantArtifactCard> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final isWriting = widget.block.kind == AssistantArtifactKind.writing;
-    final kindLabel = isWriting ? 'Writing' : 'Artifact';
+    final kindLabel = widget.block.kind.badgeLabel;
     final langSuffix = widget.block.language == null
         ? ''
         : ' · ${widget.block.language}';
@@ -446,52 +449,58 @@ class _AssistantArtifactCardState extends State<_AssistantArtifactCard> {
                     ),
                   ),
                 ),
-                InkWell(
+                GestureDetector(
                   key: ValueKey('assistant-artifact-copy-${widget.index}'),
-                  borderRadius: BorderRadius.circular(6),
+                  behavior: HitTestBehavior.opaque,
                   onTap: _copyContent,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _copied ? Icons.check_rounded : Icons.copy_rounded,
-                          size: 13,
-                          color: _copied
-                              ? palette.success
-                              : palette.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _copied ? 'Copied' : 'Copy',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: _copied
-                                    ? palette.success
-                                    : palette.textSecondary,
-                              ),
-                        ),
-                      ],
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _copied ? Icons.check_rounded : Icons.copy_rounded,
+                            size: 13,
+                            color: _copied
+                                ? palette.success
+                                : palette.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _copied ? 'Copied' : 'Copy',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: _copied
+                                      ? palette.success
+                                      : palette.textSecondary,
+                                ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 4),
-                InkWell(
+                GestureDetector(
                   key: ValueKey('assistant-artifact-toggle-${widget.index}'),
-                  borderRadius: BorderRadius.circular(6),
+                  behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _expanded = !_expanded),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      _expanded
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
-                      size: 16,
-                      color: palette.textSecondary,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        _expanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 16,
+                        color: palette.textSecondary,
+                      ),
                     ),
                   ),
                 ),
@@ -562,10 +571,10 @@ class _AssistantCitationChip extends StatelessWidget {
     if (onTapUrl == null) {
       return chip;
     }
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTapUrl,
-      child: chip,
+      child: MouseRegion(cursor: SystemMouseCursors.click, child: chip),
     );
   }
 }

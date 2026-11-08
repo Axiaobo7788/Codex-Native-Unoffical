@@ -276,6 +276,9 @@ class ChatConversationDag {
     return null;
   }
 
+  static String _selectedSiblingKey(String? parentId) =>
+      'selected-sibling:${parentId ?? '__root__'}';
+
   /// Switches the active branch at `nodeId` by `offset` (`-1` for previous
   /// sibling, `+1` for next sibling) and resolves `currentNodeId` to the
   /// preferred or deepest leaf of the selected sibling subtree.
@@ -296,6 +299,7 @@ class ChatConversationDag {
     if (currentNodeId != null) {
       nextPreferred[nodeId] = currentNodeId!;
     }
+    nextPreferred[_selectedSiblingKey(info.parentId)] = targetSiblingId;
     final rememberedLeaf = nextPreferred[targetSiblingId];
     final resolvedLeaf =
         rememberedLeaf != null &&
@@ -328,14 +332,51 @@ class ChatConversationDag {
     String? parentTurnId,
   }) {
     final nextMap = LinkedHashMap<String, ChatDagNode>.from(mapping);
+    final nextPreferred = Map<String, String>.from(_preferredLeafByNodeId);
 
-    String? parentNodeId;
-    if (parentTurnId != null && parentTurnId.isNotEmpty) {
-      final parentNode = nodeForTurnId(parentTurnId);
-      parentNodeId = parentNode?.id;
+    final matchedOriginal = nodeForTurnId(turnId);
+    final existingOriginal = matchedOriginal == null
+        ? null
+        : (matchedOriginal.role == ChatDagRole.user
+              ? matchedOriginal
+              : (matchedOriginal.parentId != null
+                    ? nextMap[matchedOriginal.parentId!]
+                    : null));
+
+    String? parentNodeId = existingOriginal?.parentId;
+    if (parentNodeId == null || !nextMap.containsKey(parentNodeId)) {
+      if (parentTurnId != null && parentTurnId.isNotEmpty) {
+        final parentNode = nodeForTurnId(parentTurnId);
+        if (parentNode != null) {
+          final parentAsst = parentNode.role == ChatDagRole.user
+              ? assistantChildFor(parentNode.id)
+              : null;
+          parentNodeId = (parentAsst ?? parentNode).id;
+        } else {
+          parentNodeId = 'slot-parent-$parentTurnId';
+          nextMap.putIfAbsent(
+            parentNodeId,
+            () => ChatDagNode(
+              id: parentNodeId!,
+              role: ChatDagRole.system,
+              text: '',
+              turnId: parentTurnId,
+            ),
+          );
+        }
+      } else {
+        parentNodeId = 'slot-$turnId';
+        nextMap.putIfAbsent(
+          parentNodeId,
+          () => ChatDagNode(
+            id: parentNodeId!,
+            role: ChatDagRole.system,
+            text: '',
+          ),
+        );
+      }
     }
 
-    final existingOriginal = nodeForTurnId(turnId);
     final originalUserId = existingOriginal?.id ?? 'user-$turnId';
     if (!nextMap.containsKey(originalUserId)) {
       final origAsstId =
@@ -360,7 +401,7 @@ class ChatConversationDag {
           turnId: turnId,
         );
       }
-      if (parentNodeId != null && nextMap.containsKey(parentNodeId)) {
+      if (nextMap.containsKey(parentNodeId)) {
         final parent = nextMap[parentNodeId]!;
         if (!parent.childrenIds.contains(originalUserId)) {
           nextMap[parentNodeId] = parent.copyWith(
@@ -368,9 +409,40 @@ class ChatConversationDag {
           );
         }
       }
+    } else {
+      final existingUser = nextMap[originalUserId]!;
+      if (existingUser.parentId == null && nextMap.containsKey(parentNodeId)) {
+        nextMap[originalUserId] = existingUser.copyWith(parentId: parentNodeId);
+        final parent = nextMap[parentNodeId]!;
+        if (!parent.childrenIds.contains(originalUserId)) {
+          nextMap[parentNodeId] = parent.copyWith(
+            childrenIds: [...parent.childrenIds, originalUserId],
+          );
+        }
+      }
+      if (originalAssistantText != null && originalAssistantText.isNotEmpty) {
+        final currentUser = nextMap[originalUserId]!;
+        final hasAssistantChild = currentUser.childrenIds.any(
+          (id) => nextMap[id]?.role == ChatDagRole.assistant,
+        );
+        if (!hasAssistantChild) {
+          final origTurnKey = currentUser.turnId ?? turnId;
+          final origAsstId = 'assistant-$origTurnKey';
+          nextMap[origAsstId] = ChatDagNode(
+            id: origAsstId,
+            parentId: originalUserId,
+            role: ChatDagRole.assistant,
+            text: _boundText(originalAssistantText),
+            turnId: origTurnKey,
+          );
+          nextMap[originalUserId] = currentUser.copyWith(
+            childrenIds: [...currentUser.childrenIds, origAsstId],
+          );
+        }
+      }
     }
 
-    final effectiveParentId = nextMap[originalUserId]?.parentId;
+    final effectiveParentId = nextMap[originalUserId]?.parentId ?? parentNodeId;
     final nextUserId = 'user-$nextTurnId';
     final nextAsstId = nextAssistantText != null && nextAssistantText.isNotEmpty
         ? 'assistant-$nextTurnId'
@@ -393,7 +465,7 @@ class ChatConversationDag {
         turnId: nextTurnId,
       );
     }
-    if (effectiveParentId != null && nextMap.containsKey(effectiveParentId)) {
+    if (nextMap.containsKey(effectiveParentId)) {
       final parent = nextMap[effectiveParentId]!;
       if (!parent.childrenIds.contains(nextUserId)) {
         nextMap[effectiveParentId] = parent.copyWith(
@@ -401,6 +473,7 @@ class ChatConversationDag {
         );
       }
     }
+    nextPreferred[_selectedSiblingKey(effectiveParentId)] = nextUserId;
 
     while (nextMap.length > maxChatDagNodes) {
       nextMap.remove(nextMap.keys.first);
@@ -409,7 +482,7 @@ class ChatConversationDag {
     return ChatConversationDag(
       mapping: nextMap,
       currentNodeId: nextAsstId ?? nextUserId,
-      preferredLeafByNodeId: _preferredLeafByNodeId,
+      preferredLeafByNodeId: nextPreferred,
     );
   }
 
@@ -435,6 +508,13 @@ class ChatConversationDag {
       if (activeIds.contains(siblingId)) {
         return mapping[siblingId];
       }
+    }
+    final preferredId =
+        _preferredLeafByNodeId[_selectedSiblingKey(siblings.parentId)];
+    if (preferredId != null &&
+        siblings.siblingNodeIds.contains(preferredId) &&
+        mapping.containsKey(preferredId)) {
+      return mapping[preferredId];
     }
     return userNode;
   }

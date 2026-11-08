@@ -365,6 +365,41 @@ void main() {
             'threadId': 'thread-1',
             'turnId': 'turn-1',
             'item': {
+              'type': 'todoList',
+              'id': 'todo-1',
+              'steps': [
+                {'step': 'Audit', 'completed': true},
+                {'step': 'Fix', 'completed': false},
+              ],
+              'status': 'completed',
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
+              'type': 'fileChange',
+              'id': 'fc-1',
+              'changes': [
+                {'path': 'src/lib.rs', 'additions': 5, 'deletions': 2},
+              ],
+              'status': 'completed',
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
               'type': 'contextCompaction',
               'id': 'compact-1',
               'status': 'completed',
@@ -374,12 +409,14 @@ void main() {
       );
     await pumpEventQueue();
 
-    expect(events, hasLength(4));
+    expect(events, hasLength(6));
     expect(events[0].summary, 'MCP: github/list_issues');
     expect(events[0].completed, isFalse);
     expect(events[1].summary, 'Web search: rust tokio select');
     expect(events[2].summary, 'Plan: Inspect transport layer');
-    expect(events[3].summary, 'Context compacted');
+    expect(events[3].summary, 'Plan updated (1/2 completed)');
+    expect(events[4].summary, 'File changes: 1 update(s) (+5 -2)');
+    expect(events[5].summary, 'Context compacted');
   });
 }
 

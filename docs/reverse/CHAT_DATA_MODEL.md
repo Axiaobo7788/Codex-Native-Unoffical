@@ -40,10 +40,10 @@ Codex App-Server Linear Turns:
 | Dimension | Web / Electron DAG (`MrGp`) | Stock Codex App-Server | Codex-Native-Unoffical Domain |
 |---|---|---|---|
 | **Root Entity** | `conversation_id` | `thread_id` | `ThreadSummary` + `ChatConversationDag` (`lib/src/domain/chat_conversation_dag.dart`) |
-| **Node Structure** | Flat `mapping: { [id]: MessageNode }` with `parent` and `children: []` | Ordered list of `Turn` objects | `HistoryTurn` (`HistoryItem`s) + bounded `ChatMessageNode` DAG (`maxRetainedNodes = 256`, `maxSiblingsPerTurn = 16`) |
+| **Node Structure** | Flat `mapping: { [id]: MessageNode }` with `parent` and `children: []` | Ordered list of `Turn` objects | `HistoryTurn` (`HistoryItem`s) + bounded `ChatDagNode` DAG (`maxChatDagNodes = 500`, per-turn synthetic slot parents `slot-<turnId>`) |
 | **Branching** | Arbitrary branching supported via node pointer tree | Linear timeline (`thread/fork`, `thread/revert`) | Both: `thread/fork` / `thread/revert` on server + `< 1/2 >` sibling branch switcher (`ChatSiblingBranchInfo`) in `ChatConversationDag` |
-| **Turn Sub-items** | Single monolithic message content per node | Granular items: command, tool, file patch, reasoning | Typed `HistoryItemKind` + `AssistantContentSegment` (`assistant_content_blocks.dart`) |
-| **Memory Footprint** | Hydrates entire tree into browser memory | Paged `turn/list` and on-demand `thread/items/list` | Bounded sliding window (`100` turns max in memory, `256` DAG nodes max) |
+| **Turn Sub-items** | Single monolithic message content per node | Granular items: command, tool, file patch, reasoning | Typed `HistoryItemKind` + `AssistantContentPresentation` / `AssistantArtifactBlock` (`assistant_content_blocks.dart`, `maxAssistantArtifacts = 8`, `maxAssistantCitations = 16`) |
+| **Memory Footprint** | Hydrates entire tree into browser memory | Paged `turn/list` and on-demand `thread/items/list` | Bounded sliding window (`100` turns max in memory, `500` DAG nodes max) |
 
 ---
 

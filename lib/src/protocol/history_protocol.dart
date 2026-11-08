@@ -149,7 +149,7 @@ final class HistoryProtocolAdapter {
         id: id,
         turnId: turnId,
         kind: HistoryItemKind.activity,
-        text: 'File changes: ${_listLength(value['changes'])} update(s)',
+        text: _fileChangeSummary(value['changes']),
         status: _optionalString(value, 'status'),
       ),
       'mcpToolCall' => HistoryItem(
@@ -188,7 +188,7 @@ final class HistoryProtocolAdapter {
           status: _optionalString(value, 'status'),
         );
       }(),
-      'plan' => HistoryItem(
+      'plan' || 'todo' || 'todoList' => HistoryItem(
         id: id,
         turnId: turnId,
         kind: HistoryItemKind.activity,
@@ -212,14 +212,69 @@ final class HistoryProtocolAdapter {
     };
   }
 
+  static String _fileChangeSummary(Object? rawChanges) {
+    final count = _listLength(rawChanges);
+    final stats = _diffLineStats(rawChanges);
+    if (stats.additions == 0 && stats.deletions == 0) {
+      return 'File changes: $count update(s)';
+    }
+    return 'File changes: $count update(s) (+${stats.additions} -${stats.deletions})';
+  }
+
+  static ({int additions, int deletions}) _diffLineStats(Object? rawChanges) {
+    if (rawChanges is! List<Object?>) {
+      return (additions: 0, deletions: 0);
+    }
+    var additions = 0;
+    var deletions = 0;
+    for (final entry in rawChanges.whereType<Map<String, Object?>>()) {
+      final entryAdditions = entry['additions'];
+      final entryDeletions = entry['deletions'];
+      if (entryAdditions is int && entryAdditions >= 0) {
+        additions += entryAdditions;
+      }
+      if (entryDeletions is int && entryDeletions >= 0) {
+        deletions += entryDeletions;
+      }
+      if (entryAdditions is! int && entryDeletions is! int) {
+        final diff = entry['diff'];
+        if (diff is String && diff.isNotEmpty) {
+          for (final line in diff.split('\n')) {
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+              additions += 1;
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+              deletions += 1;
+            }
+          }
+        }
+      }
+    }
+    return (additions: additions, deletions: deletions);
+  }
+
   static String _planSummary(JsonObject value) {
     final text = (_optionalString(value, 'text') ?? '').trim();
     if (text.isNotEmpty) {
       final firstLine = text.split('\n').first.trim();
       return 'Plan: $firstLine';
     }
-    final steps = value['steps'] ?? value['items'];
+    final steps = value['steps'] ?? value['items'] ?? value['todos'];
     if (steps is List<Object?> && steps.isNotEmpty) {
+      var hasCompletionState = false;
+      var completedCount = 0;
+      for (final step in steps.whereType<Map<String, Object?>>()) {
+        if (step.containsKey('completed') || step.containsKey('status')) {
+          hasCompletionState = true;
+          final status = step['status'];
+          if (step['completed'] == true ||
+              (status is String && status.toLowerCase() == 'completed')) {
+            completedCount += 1;
+          }
+        }
+      }
+      if (hasCompletionState) {
+        return 'Plan updated ($completedCount/${steps.length} completed)';
+      }
       return 'Plan updated (${steps.length} step(s))';
     }
     return 'Plan updated';

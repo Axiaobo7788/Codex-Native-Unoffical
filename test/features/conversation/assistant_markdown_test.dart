@@ -187,6 +187,58 @@ All checks green.
       expect(launched, [Uri.parse('https://example.com/guide')]);
     },
   );
+
+  testWidgets(
+    'preserves artifact/citation syntax inside normal fenced code blocks and renders Code badgeLabel',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          SingleChildScrollView(
+            child: AssistantMarkdown(
+              data: '''
+Example syntax in a standard code fence:
+
+```html
+<artifact title="ShouldStayInCodeFence">
+  <div>Literal code example 【1†NotACitation】</div>
+</artifact>
+```
+
+Actual code artifact outside fence:
+
+<artifact type="code" title="lib.rs" language="rust">
+pub fn add(a: i32, b: i32) -> i32 { a + b }
+</artifact>
+
+Invalid scheme citation [cite: Unsafe](javascript:void).
+''',
+              completed: true,
+              externalLinkLauncher: (_) async => true,
+            ),
+          ),
+        ),
+      );
+
+      // Only 1 artifact card should be extracted (the one outside the ```html fence)
+      expect(
+        find.byKey(const ValueKey('assistant-artifact-0')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('assistant-artifact-1')), findsNothing);
+      expect(find.textContaining('lib.rs (Code · rust)'), findsOneWidget);
+      // Literal <artifact> inside ```html fence remains in the code block
+      expect(
+        find.textContaining('ShouldStayInCodeFence', findRichText: true),
+        findsOneWidget,
+      );
+      // Only 1 citation extracted (Unsafe, with null url), not 【1†NotACitation】
+      expect(
+        find.byKey(const ValueKey('assistant-citation-1')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('assistant-citation-2')), findsNothing);
+    },
+  );
 }
 
 Widget _app(Widget child) => MaterialApp(home: Scaffold(body: child));
