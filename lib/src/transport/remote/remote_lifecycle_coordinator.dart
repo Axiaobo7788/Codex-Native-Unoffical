@@ -544,6 +544,7 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
       // already delivered to this queue before the session entered resync.
       return;
     }
+    final eventResyncGeneration = session.resyncGeneration;
     _appliedCursor = null;
     var outcome = RemoteProjectionApplyOutcome.applied;
     final applied = await _mutateProjection(
@@ -555,7 +556,9 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
       },
     );
     if (!applied ||
-        !_isCurrentConnection(generation, connectionGeneration, session)) {
+        !_isCurrentConnection(generation, connectionGeneration, session) ||
+        session.requiresResync ||
+        session.resyncGeneration != eventResyncGeneration) {
       return;
     }
     if (outcome ==
@@ -571,7 +574,12 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
       sequence: event.sequence,
     );
     await _cursorStore.save(deviceId: record.deviceId, cursor: cursor);
-    if (_isCurrentConnection(generation, connectionGeneration, session)) {
+    if (_isCurrentConnection(generation, connectionGeneration, session) &&
+        !session.requiresResync &&
+        session.resyncGeneration == eventResyncGeneration &&
+        (_appliedCursor == null ||
+            (_appliedCursor!.sessionId == cursor.sessionId &&
+                _appliedCursor!.sequence <= cursor.sequence))) {
       _appliedCursor = cursor;
       _setState(_state);
     }

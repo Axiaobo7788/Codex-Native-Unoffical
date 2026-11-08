@@ -530,6 +530,74 @@ void main() {
     });
 
     test(
+      'drops an in-flight event cursor after a newer resync generation',
+      () async {
+        final order = <String>[];
+        final backend = _pairedBackend(order: order);
+        final projection = _DelayedApplyProjection();
+        final session = _FakeRemoteSession(
+          sessionId: 'host-1',
+          serverSequence: 0,
+          threadPage: ThreadPage(
+            threads: [_thread('thread-1')],
+            nextCursor: null,
+          ),
+        );
+        final connector = _Connector()..sessions.add(session);
+        final coordinator = _coordinator(
+          backend,
+          projection: projection,
+          connector: connector.call,
+        );
+
+        await coordinator.start();
+        await _waitFor(
+          () => coordinator.state.phase == RemoteLifecyclePhase.ready,
+        );
+        session.emit(
+          const RemoteSequencedNotification(
+            sessionId: 'host-1',
+            sequence: 1,
+            notification: CodexNotification(
+              method: 'turn/started',
+              params: {'threadId': 'thread-1'},
+            ),
+          ),
+        );
+        await projection.applyEntered.future;
+        session.emit(
+          const RemoteSequencedNotification(
+            sessionId: 'host-1',
+            sequence: 2,
+            notification: CodexNotification(
+              method: 'thread/name/updated',
+              params: {
+                'threadId': 'thread-1',
+                'threadName': 'Authoritative name',
+              },
+            ),
+          ),
+        );
+        session.invalidateResync();
+        projection.releaseApply.complete();
+
+        await _waitFor(
+          () =>
+              coordinator.state.phase == RemoteLifecyclePhase.ready &&
+              coordinator.projection!.appliedSequence == 2,
+        );
+
+        expect(order, contains('cursor:2'));
+        expect(order, isNot(contains('cursor:1')));
+        expect(
+          backend.values[RemoteAppliedCursorStore.storageKey],
+          contains('"sequence":2'),
+        );
+        await coordinator.stop();
+      },
+    );
+
+    test(
       'discards an invalidated hydration and retries its new generation',
       () async {
         final backend = _pairedBackend();
