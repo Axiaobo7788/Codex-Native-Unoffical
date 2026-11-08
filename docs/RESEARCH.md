@@ -3181,3 +3181,85 @@ _Reviewed: 2026-11-09_
   controller, widget, and E2E fixtures. A natural stock session did not emit
   every method during this round; no claim of full live notification observation
   is made. MCP and telemetry presentation remains `HUMAN_REVIEW_PENDING`.
+
+## Peer Round 5: Bounded Local Runtime Diagnostics and Thread Metadata/Notices
+
+_Reviewed: 2026-11-09_
+
+The next official `agy` peer round re-anchored on installed stock
+`codex app-server 0.167.0-alpha.3.2` and selected two independent writable
+surfaces: Gemini owned stable local diagnostics (`F11`), while Codex owned
+thread metadata and notice projection (`F12`). The branches shared no files and
+were integrated through ordinary merge commits after targeted peer audit.
+
+### F11 evidence and implementation boundary
+
+- The stable schema and a de-identified live stock probe support seven useful
+  read-only local RPCs: `account/read`, `account/rateLimits/read`,
+  `permissionProfile/list`, `config/read`, `configRequirements/read`,
+  `modelProvider/capabilities/read`, and `hooks/list`.
+- `account/updated` and `account/rateLimits/updated` provide live refresh signals.
+  The implementation subscribes only while Runtime details is mounted and
+  fails closed for Remote/unsupported transports.
+- Raw config values/origins and raw command-hook strings are deliberately not
+  retained. A command hook is reduced to `Command handler`; identifiers,
+  collections, previews, and errors are bounded. UI errors are bounded per
+  section and in aggregate, stream errors are handled, successful targeted
+  refresh clears only the matching stale error, and labels say `shown` where
+  truncation makes totals unknowable.
+- The peer audit found five concrete issues in the first implementation:
+  command-hook secret retention, unbounded error text/aggregation, an unhandled
+  stream-error path, stale targeted errors, and count labels that implied full
+  totals. Gemini fixed all five in `bcb8078`; Codex independently reproduced a
+  clean analysis and focused `13/13` pass.
+
+### F12 evidence and implementation boundary
+
+- Stock thread payloads expose bounded Git metadata, while stable notifications
+  expose `thread/goal/updated`, `thread/goal/cleared`, and process/thread warning
+  surfaces for guardian/config/deprecation notices.
+- The implementation projects those values through typed domain/protocol and
+  bounded controller state. Credential-bearing origins fail closed, and the
+  final hardening rejects overlong raw origins before parsing so percent
+  encoding cannot expand a truncated value beyond the intended bound.
+- Warnings without a usable thread binding are process-global. They survive
+  later thread materialization, switching, and `clearEntries`; only explicit
+  dismissal removes them. This closes the pre-bind warning-loss issue found by
+  Gemini's audit.
+- This is not full goal parity: `thread/goal/get`, `thread/goal/set`, and
+  `thread/goal/clear` are not implemented, and `gitInfo` is not yet rendered in
+  the sidebar. Natural goal/warning notification emission was not observed in
+  this round, so tests—not a claimed live event—are the evidence for those paths.
+
+### Rebuilt queue after F11/F12
+
+The installed schema still exposes at least two high-value stable candidates
+that are independent if ownership is chosen carefully:
+
+1. thread sections: `threadSection/list|create|update|delete`,
+   `thread/section/move`, and `thread/section/changed`, with list-summary section
+   metadata suitable for official-style sidebar organization;
+2. native code review start: stable `review/start`, supporting uncommitted
+   changes, base branch, commit, and custom targets and returning a review
+   thread/turn.
+
+The remaining stable goal lifecycle is also actionable, but it overlaps the
+thread-model/protocol/controller surface required by thread sections. It must
+not be assigned concurrently to another writer. Experimental account-session,
+collaboration, realtime, and private cloud paths remain research-only. This
+queue is provisional until the post-integration official `agy` peer negotiation
+assigns exact ownership.
+
+### Integrated validation and real-use boundary
+
+- Shared `main` passed `git diff --check`, formatting (`168` files, `0`
+  changed), direct `dart analyze`, all `377` Flutter tests, all `98` Rust tests,
+  the bounded history benchmark, and a Linux debug build.
+- The benchmark retained `100` of `1,000` source turns and discarded ten 3 MiB
+  heavy outputs with `RSS_TURN_DELTA=1716224` and
+  `RSS_HEAVY_OUTPUT_DELTA=32108544`.
+- The Linux bundle kept Flutter, the packaged Host, and stock app-server alive
+  together and removed all three on Ctrl-C. The runtime also emitted an ATK
+  embedding critical and a cursor-theme warning; those environment-level
+  warnings did not crash the app but remain negative evidence. This lifecycle
+  check is not Human visual acceptance of Runtime details or notice density.

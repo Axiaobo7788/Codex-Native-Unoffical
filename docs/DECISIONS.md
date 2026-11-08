@@ -2026,3 +2026,68 @@ the read-only Remote backend.
   share/reconcile, and private cloud services are not implied by this decision.
 - Closing and validating F8/F10 triggers a fresh living-backlog audit and the
   next peer round; it is not a program stop.
+
+## ADR-039 — Runtime Diagnostics and Thread Metadata Remain Bounded Local Projections
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+### Context
+
+The stable stock app-server exposes useful local runtime/account/configuration
+diagnostics and thread metadata/notice notifications. Directly retaining raw
+configuration, command-hook strings, arbitrary RPC errors, or unbounded Git
+origin data would violate the bounded-projection and credential-safety rules.
+Conversely, treating notification-only goal support as a full goal lifecycle or
+exposing local diagnostics through Track A Remote would overstate the supported
+contract.
+
+### Decision
+
+1. **Local-process-only runtime diagnostics**:
+   - Support stable `account/read`, `account/rateLimits/read`,
+     `permissionProfile/list`, `config/read`, `configRequirements/read`,
+     `modelProvider/capabilities/read`, and `hooks/list` through typed bounded
+     models and a lazy Runtime details presentation.
+   - Subscribe to `account/updated` and `account/rateLimits/updated` only while
+     the dialog is mounted. Track A Remote and unsupported transports fail
+     closed without dispatching local diagnostic RPCs.
+
+2. **Privacy and error retention are enforced at ingress/presentation bounds**:
+   - Never retain raw configuration values or origin objects. Validate command
+     hook payload shape and discard the raw command, retaining only the coarse
+     `Command handler` label; bounded MCP tool identifiers may remain visible.
+   - Bound every retained diagnostic collection/string and normalize/bound
+     errors per section and in aggregate. Handle stream errors explicitly,
+     clear only the successfully refreshed section's stale error, and label
+     retained counts as shown counts rather than upstream totals.
+
+3. **Thread metadata and notices are projections, not a new source of truth**:
+   - Project bounded `Thread.gitInfo`, `thread/goal/updated`,
+     `thread/goal/cleared`, and guardian/config/deprecation warning
+     notifications through typed models/controllers.
+   - Reject credential-bearing or overlong Git origin strings before URL
+     parsing. Preserve bounded process-global warnings that arrive before a
+     thread is materialized across binding, thread switching, and live-entry
+     clearing until explicit dismissal.
+   - Do not infer `thread/goal/get`, `thread/goal/set`, or `thread/goal/clear`
+     support from notifications. Do not claim sidebar Git presentation until a
+     separate UI slice renders it.
+
+4. **Evidence remains granular**:
+   - A de-identified live probe of the seven read-only diagnostics RPCs proves
+     local method/shape compatibility, not account correctness or Remote parity.
+   - Natural emission of goal/guardian/config/deprecation notifications remains
+     unobserved; schema/protocol/controller tests are the current evidence.
+   - Runtime-details density and notice presentation remain
+     `HUMAN_REVIEW_PENDING`.
+
+### Consequences
+
+- F11 adds useful stable diagnostics without placing raw secrets, configuration,
+  large error payloads, or hook commands in retained Flutter state.
+- F12 preserves thread metadata and actionable notices across lifecycle edges
+  without making Flutter the source of truth or inventing missing goal RPCs.
+- Stable thread-section organization, `review/start`, and the remaining goal
+  lifecycle require fresh ownership negotiation. Closing F11/F12 is a peer
+  checkpoint and does not stop `SELF_ITERATION`.
