@@ -20,16 +20,16 @@ This document establishes the capability matrix across all supported and potenti
 
 | Feature / Capability | Public OpenAI REST (`/v1/*`) | Stock Local `codex app-server` | Direct Host Remote (`codex-native-host`) | Isolated Compatibility (`/backend-api/*`) |
 |---|---|---|---|---|
-| **Standard Prose Chat** | Full Support (`/v1/chat/completions`) | Full Support (`turn/start`) | Full Support (Replayed stream) | Full Support (Session SSE) |
-| **Token-by-Token Streaming** | Full Support (SSE) | Full Support (`thread/token/delta`) | Full Support (Coalesced WebSocket) | Full Support (Web SSE) |
-| **Local Command Execution** | Unsupported (Cloud API only) | Full Support (Child process bash) | Full Support (Host execution) | Unsupported (Cloud sandbox only) |
-| **Interactive Tool Approvals**| Unsupported (Client-side manual) | Full Support (`ServerRequest` approval) | Full Support (Remote approval RPC) | Unsupported (No host terminal) |
-| **Git Diff Generation** | Unsupported | Full Support (`turn/diff/updated`) | Full Support (Host git diff stream) | Unsupported |
-| **Workspace File Ingestion** | Multipart upload (`/v1/files`) | Direct local path referencing | Streaming file fetch from Host | Web upload pipeline |
+| **Standard Prose Chat** | Full Support (`/v1/chat/completions`) | Full Support (`turn/start`) | Read-Only History Projection (`thread/turns/list`, `thread/items/list`, `thread/items/read`; `turn/start` fails closed) | Full Support (Session SSE) |
+| **Token-by-Token Streaming** | Full Support (SSE) | Full Support (`item/agentMessage/delta`) | Lifecycle Notifications Only (`turn/started`, `turn/completed`, `item/started`, `item/completed`, `thread/*`; token deltas unrouted) | Full Support (Web SSE) |
+| **Local Command Execution** | Unsupported (Cloud API only) | Full Support (Child process bash) | Read-Only Activity Summary (writes & host output-range reads fail closed) | Unsupported (Cloud sandbox only) |
+| **Interactive Tool Approvals**| Unsupported (Client-side manual) | Full Support (`ServerRequest` approval) | Unsupported in Read-Only Mode (`serverRequests` empty; `decideApproval` fails closed) | Unsupported (No host terminal) |
+| **Git Diff Generation** | Unsupported | Full Support (`turn/diff/updated`) | Unsupported in Read-Only Mode (`turn/diff/updated` unrouted) | Unsupported |
+| **Workspace File Ingestion** | Multipart upload (`/v1/files`) | Direct local path referencing | Read-Only Attachment Metadata (`turn/start` & file upload fail closed) | Web upload pipeline |
 | **Detail-Mode Filtering** | Supported (UI projection filter) | Supported (UI projection filter) | Supported (UI projection filter) | Supported (UI projection filter) |
-| **Multi-Turn Memory Cap** | Server-side window / truncation | Client-enforced 100-turn window | Host-enforced 100-turn window | Server-enforced cloud history |
-| **Credential Requirement** | Developer API Key (`sk-...`) | Local user login via CLI | Scoped ephemeral pairing token | Cloud web session cookie |
-| **Support Classification** | **PUBLIC_SUPPORTED** | **PUBLIC_SUPPORTED** | **PUBLIC_SUPPORTED** | **PRIVATE_OPTIONAL_ONLY** |
+| **Multi-Turn Memory Cap** | Server-side window / truncation | Client-enforced 100-turn window | Client/Host-enforced 100-turn & 100-item page caps (`MAX_PAGE_SIZE = 100`) | Server-enforced cloud history |
+| **Credential Requirement** | Developer API Key (`sk-...`) | Local user login via CLI | Scoped ephemeral pairing token (`readOnlyCodex`) | Cloud web session cookie |
+| **Support Classification** | **PUBLIC_SUPPORTED** | **PUBLIC_SUPPORTED** | **PUBLIC_SUPPORTED** (`READ_ONLY`) | **PRIVATE_OPTIONAL_ONLY** |
 
 ---
 

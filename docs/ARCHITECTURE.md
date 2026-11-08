@@ -152,18 +152,23 @@ tickets, requires a scoped bearer token and protocol subprotocol, enforces
 explicit body/frame/message/write-buffer/connection limits, negotiates before
 RPC, sends heartbeat pings, checks live revocation, and broadcasts a bounded
 protocol close before Host shutdown. It currently exposes only the
-read-only `host/remote/status`, `model/list`, bounded `thread/list`, and
-metadata-only `thread/read` methods. Codex responses reuse the same Host output
-sanitizer, are correlated through a per-process reserved namespace, and are
-delivered through a per-connection count-and-byte-bounded queue without leaking
-the internal response to desktop stdout. The same sanitizer now publishes only
-`turn/started`, `turn/completed`, `item/started`, `item/completed`,
-`thread/status/changed`, and `error` notifications to the existing 512-event,
-8 MiB journal. A socket subscribes before negotiation, skips the journal
-baseline already represented by `hello_ack`, then accepts only the exact next
-sequence. Same-session retained suffixes replay; an evicted cursor, receiver
-lag, or live sequence gap requires authoritative resync. Token deltas, diffs,
-server requests, approvals, and all writes remain deliberately unrouted.
+read-only `host/remote/status` Host method plus stock app-server `model/list`,
+bounded `thread/list`, metadata-only `thread/read`, and bounded history-read
+methods (`thread/turns/list`, `thread/items/list`, and experimental
+`thread/items/read`, each capped at `MAX_PAGE_SIZE = 100`). Codex responses
+reuse the same Host output sanitizer, are correlated through a per-process
+reserved namespace, and are delivered through a per-connection
+count-and-byte-bounded queue without leaking the internal response to desktop
+stdout. The same sanitizer now publishes `turn/started`, `turn/completed`,
+`item/started`, `item/completed`, `thread/status/changed`,
+`thread/name/updated`, `thread/archived`, `thread/unarchived`,
+`thread/reverted`, and `error` notifications to the existing 512-event, 8 MiB
+journal. A socket subscribes before negotiation, skips the journal baseline
+already represented by `hello_ack`, then accepts only the exact next sequence.
+Same-session retained suffixes replay; an evicted cursor, receiver lag, or live
+sequence gap requires authoritative resync. Token deltas, diffs, server
+requests, approvals, command-output range reads, and all writes remain
+deliberately unrouted.
 
 Host-owned Windows state does not rely on ambient cache/config inheritance. The
 output-spool root and sessions receive a protected, inheritable DACL whose only
@@ -207,13 +212,21 @@ The Dart `RemoteTransport` now implements that read-only envelope without
 changing feature schemas. It requires WSS by default (with an explicit literal-
 loopback-only development exception), validates the negotiated subprotocol,
 versions and capabilities, correlates at most 64 RPCs, accepts only the exact
-next event sequence, ACKs accepted events, and reuses the typed model/thread/turn
-adapters. A fresh or invalid resume always enters authoritative-resync state.
-Incremental events are held behind the snapshot, and resync generations prevent
-stale asynchronous reads from claiming a newer invalidation. The held suffix is
-bounded to 512 events and 8 MiB. History/output, writes, approvals, and server
-requests fail locally because the Host has not made those semantics remotely
-safe.
+next event sequence across the 10 allowlisted app-server notifications plus
+`host/resyncRequired`, ACKs accepted events, and reuses the typed
+model/thread/turn/history adapters (`listModels`, `listThreads`, `readThread`,
+`listHistoryTurns`, `listHistoryItems`, and `readHistoryItems`). A fresh or
+invalid resume always enters authoritative-resync state. Incremental events are
+held behind the snapshot, and resync generations prevent stale asynchronous
+reads from claiming a newer invalidation. The held suffix is bounded to 512
+events and 8 MiB. Command-output range reads (`statOutput`, `readOutputRange`,
+`readOutputTail`), thread/turn writes, approvals, and server requests fail
+closed locally because the Host has not made those semantics remotely safe.
+Note that while `RemoteTransport` and the Rust Host allowlist and sequence
+`thread/name/updated`, `thread/archived`, `thread/unarchived`, and
+`thread/reverted`, `BoundedRemoteProjection.apply()` currently folds only
+`turn/started`, `turn/completed`, `thread/status/changed`, `item/started`,
+`item/completed`, and `error` into the cached metadata snapshot.
 
 The Android client now has a platform-backed owner for one versioned WSS device
 record. Version 2 stores endpoint, bearer, bounded device metadata, and either

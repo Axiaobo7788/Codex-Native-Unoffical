@@ -80,12 +80,35 @@ A critical correction to `ADR-031` is that **"Official Remote Control" is not a 
 | **Layer 5: Controller Enrollment API** | `POST /backend-api/codex/remote/control/client/enroll/start` & `/complete` | `STATIC_BUNDLE` | No | **`PRIVATE_INTERNAL_SERVICE`** | Private ChatGPT backend endpoint |
 | **Layer 6: Controller Credential Refresh** | `POST /backend-api/codex/remote/control/client/refresh` | `STATIC_BUNDLE` | No | **`PRIVATE_INTERNAL_SERVICE`** | Private ChatGPT backend endpoint |
 | **Layer 7: Cloud WebSocket Relay** | `wss://chatgpt.com/backend-api/wham/remote/control/server` | `STATIC_BUNDLE` | No (Host connects outbound when `remoteControl/enable` is active) | **`PRIVATE_INTERNAL_SERVICE`** | Cloud relay owned by OpenAI |
-| **Layer 8: Mobile/Controller Host Discovery** | `/wham/*` environment & remote host discovery on Android / iOS / Desktop controller | `STATIC_BUNDLE` (Desktop), `UNKNOWN` (Android mobile internals) | No | **`RESEARCH_MORE`** | Do not assume Android controller compatibility is either impossible or trivial |
+| **Layer 8: Mobile/Controller Host Discovery & Pairing** | `/wham/remote/control/mfa_requirement`, `/wham/remote/control/client/pair`, `/wham/remote/control/clients`, `/wham/remote/control/clients/{client_id}`, plus `/wham/environments` & `/wham/environments/search` | `STATIC_BUNDLE` (`webview/assets/async/182735.d3d917f28d.js`), `STATIC_APK` | No | **`PRIVATE_INTERNAL_SERVICE`** (`RESEARCH_EXHAUSTED` for `0.167.0-alpha.3.2`) | Controller-side discovery and pairing rely entirely on private `/wham/remote/control/*` endpoints and first-party session auth; no public controller discovery API exists in stock `codex app-server` |
 
 ### Architectural Consequence: Keep `RemoteBackend` Dual-Track (`ADR-032`)
 Instead of `ADR-031`'s premature decision to permanently lock in `Direct Host` as the sole primary Remote architecture and dismiss official Remote compatibility, `ADR-032` establishes a **dual-track `RemoteBackend` abstraction**:
 1. **Track A — `DirectHostRemoteBackend` (`PUBLIC_SUPPORTED` / Self-Hosted Primary for Unofficial Android-to-Desktop)**:
-   - Uses our Rust `codex-native-host` resumable WebSocket bridge (sequence/ack replay, pairing, `512 MiB/item` & `2 GiB/session` large-output spool) or SSH/Tailscale tunnel to stock `codex app-server`. Zero dependency on OpenAI's private `/wham/` relay or `step_up_token`.
-2. **Track B — `OfficialRemoteControlHostAdapter` (`EXPERIMENTAL_STOCK_SCHEMA` on Desktop Host / `RESEARCH_MORE` on Controller)**:
-   - On Desktop, we can optionally expose stock `codex app-server`'s `remoteControl/status/read`, `remoteControl/enable`, `remoteControl/pairing/start`, and `remoteControl/client/list` (`PUBLIC_SOURCE` `--experimental`) so users who use the official ChatGPT mobile/desktop controller can pair with their local `app-server` right from our UI!
-   - Controller-side cloud relay connection remains `RESEARCH_MORE` until/unless public controller enrollment exists.
+   - Uses our Rust `codex-native-host` resumable WebSocket bridge (sequence/ack replay, pairing, `512 MiB/item` & `2 GiB/session` large-output spool) or SSH/Tailscale tunnel to stock `codex app-server`. Zero dependency on OpenAI's private `/wham/` relay or `step_up_token`. Currently implements bounded read-only metadata, turn/item history (`thread/turns/list`, `thread/items/list`, `thread/items/read`), and 10 sequenced lifecycle notifications (`readOnlyCodex`).
+2. **Track B — `OfficialRemoteControlHostAdapter` (`EXPERIMENTAL_STOCK_SCHEMA` on Desktop Host / `PRIVATE_INTERNAL_SERVICE` on Controller)**:
+   - On Desktop, we expose stock `codex app-server`'s `remoteControl/status/read`, `remoteControl/enable`, `remoteControl/disable`, `remoteControl/pairing/start`, `remoteControl/client/list`, and `remoteControl/client/revoke` (`PUBLIC_SOURCE` `--experimental`, implemented in Slice F3 `1084ba6`) so users who use the official ChatGPT mobile/desktop controller can pair with their local `app-server` right from our UI.
+   - Controller-side discovery and cloud relay (`Layers 3–8`, including `/wham/remote/control/mfa_requirement`, `/wham/remote/control/client/pair`, `/wham/remote/control/clients/{client_id}`) are confirmed `PRIVATE_INTERNAL_SERVICE` (`RESEARCH_EXHAUSTED` for `0.167.0-alpha.3.2`) and excluded from our Android client.
+
+---
+
+## 4. `thread/realtime/*` Voice & Realtime Session Stratification (`PUBLIC_SOURCE` `--experimental` + `STATIC_BUNDLE`)
+
+Cross-referencing the generated `0.167.0-alpha.3.2` `--experimental` schemas (`v2/ThreadRealtime*.json`) with the Desktop ASAR bundle (`webview/assets/async/366057.b32c7c19c0.js`, `early-bootstrap.js`, and unpacked `dictation-ducking` native sidecar) establishes the exact boundary for `thread/realtime/*`:
+
+1. **Experimental `ClientRequest` Surface (`6` methods in `EXPERIMENTAL_STOCK_SCHEMA`)**:
+   - `thread/realtime/start` (`ThreadRealtimeStartParams`): requires `threadId` and `outputModality` (`"text" | "audio"`). Accepts optional `version` (`"v1" | "v2" | "v3"` Frameless Bidi), `voice` (`35` enum values including `alloy`, `ash`, `ballad`, `cedar`, `coral`, `echo`, `marin`, `sage`, `shimmer`, `sol`, `verse`), `model`, `prompt`, `initialItems` (V3 only, capped at `128` items and `8,192` tokens), `codexResponseHandoffMode` (`"thinking" | "commentary" | "bemTags"`), and `transport` (`ThreadRealtimeStartTransport` union):
+     - `{ "type": "websocket" }`: app-server-managed realtime WebSocket session;
+     - `{ "type": "webrtc", "sdp": "<SDP offer>" }`: client-created `RTCPeerConnection` SDP offer (paired with `thread/realtime/sdp` server notification);
+     - `{ "type": "existingCall", "callId": "<id>" }`: attaches to a call pre-negotiated by the client.
+   - `thread/realtime/appendAudio` (`ThreadRealtimeAppendAudioParams`): requires `threadId` and `audio: { data: string, numChannels: uint16, sampleRate: uint32, samplesPerChannel?: uint32, itemId?: string }`.
+   - `thread/realtime/appendSpeech` (`ThreadRealtimeAppendSpeechParams`): requires `threadId`, `text`.
+   - `thread/realtime/appendText` (`ThreadRealtimeAppendTextParams`): requires `threadId`, `text`, optional `role` (`"user" | "developer" | "assistant"`).
+   - `thread/realtime/listVoices` (`ThreadRealtimeListVoicesParams` -> `ThreadRealtimeListVoicesResponse`).
+   - `thread/realtime/stop` (`ThreadRealtimeStopParams`: `threadId`).
+2. **`ServerNotification` Surface (`11` methods in `ServerNotification.json`)**:
+   - Session lifecycle & transport: `thread/realtime/started` (`threadId`, `version`, `realtimeSessionId?`), `thread/realtime/sdp` (`threadId`, `sdp`), `thread/realtime/error` (`threadId`, `message`), `thread/realtime/closed` (`threadId`, `reason?`).
+   - Item & transcript streaming: `thread/realtime/itemAdded`, `thread/realtime/item/started`, `thread/realtime/item/completed`, `thread/realtime/item/transcript/delta`, `thread/realtime/transcript/delta`, `thread/realtime/transcript/done`, `thread/realtime/outputAudio/delta`.
+3. **Desktop Private Call Broker vs Stock App-Server Boundary**:
+   - In the official Desktop renderer (`366057.b32c7c19c0.js`, `972499.b9f8eb2bc4.js`), WebRTC/`existingCall` voice sessions are brokered through `/wham/realtime/calls?intent=quicksilver&architecture=avas` (`PRIVATE_INTERNAL_SERVICE`) and `/backend-api/pages/realtime-broker/u0s/ws` (`PRIVATE_WEB_SESSION`), plus OS audio ducking via the native `dictation-ducking` sidecar.
+   - Consequently, `existingCall` / `/wham/realtime/calls` is `PRIVATE_ONLY`, while stock `thread/realtime/*` (`websocket` / `appendAudio` / `appendText`) is classified as `EXPERIMENTAL_STOCK_SCHEMA` (`RESEARCH_EXHAUSTED` for `0.167.0-alpha.3.2`, deferred until cross-platform PCM audio capture and V3 Frameless Bidi schemas stabilize).

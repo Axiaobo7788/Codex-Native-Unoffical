@@ -10,12 +10,12 @@
 
 | Capability / Surface | Evidence Tags | Stock `app-server` Schema Status (`0.167.0-alpha.3.2`) | Support Classification |
 |---|---|---|---|
-| **Plugin Management RPCs** (`plugin/list`, `plugin/read`, `plugin/install`, `plugin/uninstall`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable `ClientRequest` (`PUBLIC_SOURCE`) | **`PUBLIC_SUPPORTED`** |
-| **Skills Management RPCs** (`skills/list`, `skills/config/write`, `skills/remote/list`, `skills/remote/export`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`skills/list`, `skills/config/write`) + Experimental (`skills/remote/*`) | **`PUBLIC_SUPPORTED`** (local) / **`EXPERIMENTAL_STOCK_SCHEMA`** (remote) |
-| **MCP Server RPCs** (`config/mcpServer/reload`, `mcpServer/oauth/login`, `mcpServerStatus/list`, `mcpServer/resource/read`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`reload`, `oauth/login`, `mcpServerStatus/list`) + Experimental (`mcpServer/resource/read`) | **`PUBLIC_SUPPORTED`** / **`EXPERIMENTAL_STOCK_SCHEMA`** |
-| **Apps / Connectors RPCs** (`apps/list`, ` apps/install`, `apps/uninstall`, `apps/getInfo`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`apps/list`) + Experimental (`install`, `uninstall`, `getInfo`) | **`PUBLIC_SUPPORTED`** / **`EXPERIMENTAL_STOCK_SCHEMA`** |
+| **Plugin Management RPCs** (`plugin/list`, `plugin/read`, `plugin/install`, `plugin/installed`, `plugin/uninstall`, `plugin/reconcile`, `plugin/skill/read`, `plugin/share/*`, `plugin/search`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`12` methods including `list`, `read`, `install`, `uninstall`, `reconcile`, `skill/read`, `share/*`) + Experimental-only (`plugin/search`) | **`PUBLIC_SUPPORTED`** (core) / **`EXPERIMENTAL_STOCK_SCHEMA`** (`plugin/search`) |
+| **Skills Management RPCs** (`skills/list`, `skills/config/write`, `skills/extraRoots/set` + notification `skills/changed`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | All `3` `ClientRequest` methods + `skills/changed` notification are **Stable** in `0.167.0-alpha.3.2` (legacy `skills/remote/*` removed from stock schema) | **`PUBLIC_SUPPORTED`** |
+| **MCP Server RPCs** (`config/mcpServer/reload`, `mcpServer/oauth/login`, `mcpServerStatus/list`, `mcpServer/resource/read`, `mcpServer/tool/call`, `mcpServer/elicitation/request`, `mcpServer/event/stream/*`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | Stable (`reload`, `oauth/login`, `mcpServerStatus/list`, `resource/read`, `tool/call`, plus stable `ServerRequest` `elicitation/request`) + Experimental-only (`event/stream/start`, `event/stream/stop`) | **`PUBLIC_SUPPORTED`** (all core & resource/elicitation RPCs) / **`EXPERIMENTAL_STOCK_SCHEMA`** (`event/stream/*`) |
+| **Apps / Connectors RPCs** (`app/list`, `app/installed`, `app/read`) | `PUBLIC_SOURCE`, `STATIC_BUNDLE` | All `3` singular `app/*` `ClientRequest` methods are **Stable** in `0.167.0-alpha.3.2` | **`PUBLIC_SUPPORTED`** |
 | **Desktop Internal MCP Servers** (`openai_artifact_template_picker`, `codex_app` thread/sidebar/worktree tools) | `STATIC_BUNDLE` (`early-bootstrap-920 @2193000..2201500`) | Injected by Desktop Main Process via `buildMcpCodexConfig` | **`PRIVATE_INTERNAL_SERVICE`** (Desktop-specific MCP sidecar) |
-| **Skybridge (`ui://` MCP Apps Iframe Bridge)** | `STATIC_BUNDLE` (`webview/assets/async/182735.d3d917f28d.js`), `PUBLIC_SOURCE` (`mcpServer/resource/read`) | Renderer-hosted sandboxed iframe consuming `ui://` MCP resources | **`ADOPT_PATTERN`** (Optional WebView host when needed, per `AGENTS.md` Rule #5) |
+| **Skybridge (`ui://` MCP Apps Iframe Bridge)** | `STATIC_BUNDLE` (`webview/assets/async/182735.d3d917f28d.js`), `PUBLIC_SOURCE` (`mcpServer/resource/read`) | Stock `mcpServer/resource/read` is **Stable** (`PUBLIC_SUPPORTED`); renderer `ui://` postMessage iframe is a client UI host layer | **`ADOPT_PATTERN`** (Optional WebView host only when required, per `AGENTS.md` Rule #5) |
 
 ---
 
@@ -48,17 +48,25 @@ In `.vite/build/early-bootstrap-920-a204a41244c4b913.js`, `_o.buildMcpCodexConfi
 
 ---
 
-## 3. Skybridge (`ui://` MCP Apps Iframe Protocol — `STATIC_BUNDLE`)
+## 3. Skybridge (`ui://` MCP Apps Iframe Protocol — `STATIC_BUNDLE` + `PUBLIC_SOURCE`)
 
-When an MCP tool returns a resource URI with scheme `ui://` (fetched via experimental `mcpServer/resource/read` + `mcpServer/elicitation/request`), ChatGPT Desktop renders a sandboxed iframe (`Skybridge`) that communicates via JSON-RPC 2.0 over `window.postMessage`:
+When an MCP tool returns a resource URI with scheme `ui://`, the protocol boundary separates into two distinct layers:
 
-- **Initialization & Lifecycle**: `ui/initialize`, `ui/notifications/initialized`, `ui/notifications/size-changed`, `ui/notifications/tool-input`, `ui/notifications/tool-result`, `ui/notifications/host-context-changed`, `ui/resource-teardown`.
-- **Host Capability Methods (`openai/*` / `tools/call`)**:
-  - `tools/call` (invoke an MCP tool from the widget)
-  - `openai/sendFollowUpMessage` (insert/send a follow-up prompt)
-  - `openai/uploadFile` & `openai/getFileDownloadUrl`
-  - `openai/requestDisplayMode` (`inline | pip | fullscreen`)
-  - `openai/setWidgetState` (persist bounded widget state on the turn item)
-  - `openai/requestModal` & `openai/requestClose`
-  - `openai/openExternal` (`ui/open-link`)
-- **Policy for `Codex-Native-Unoffical`**: Per `AGENTS.md` Rule #5 (*"Optional plugin web UI may use a system/embedded WebView later, only when required"*), Skybridge is documented here as `ADOPT_PATTERN` for future optional MCP App WebView hosting, with zero requirement on the core client today.
+1. **Layer A — Stock `codex app-server` Resource & Tool RPCs (`PUBLIC_SUPPORTED` Stable in `0.167.0-alpha.3.2`)**:
+   - `mcpServer/resource/read`: Stable `ClientRequest` (`McpResourceReadParams`: required `server: string`, `uri: string`; optional `threadId`, `connectorId`, `originCallId`, `target: { connectorId: string, linkId: string | null }`). Returns `McpResourceReadResponse` (`contents: Array<{ uri: string, mimeType?: string | null, text: string } | { uri: string, mimeType?: string | null, blob: string }>`, optional `originCallId`).
+   - `mcpServer/tool/call`: Stable `ClientRequest` (`McpServerToolCallParams`: `server`, `tool`, `arguments`).
+   - `mcpServer/elicitation/request`: Stable `ServerRequest` (`McpServerElicitationRequestParams` -> `McpServerElicitationRequestResponse`).
+2. **Layer B — Renderer Sandboxed Iframe Bridge (`Skybridge`, `STATIC_BUNDLE`)**:
+   - ChatGPT Desktop renders a sandboxed iframe (`Skybridge` in `webview/assets/async/182735.d3d917f28d.js`) that communicates via JSON-RPC 2.0 over `window.postMessage`:
+   - **Initialization & Lifecycle**: `ui/initialize`, `ui/notifications/initialized`, `ui/notifications/size-changed`, `ui/notifications/tool-input`, `ui/notifications/tool-result`, `ui/notifications/host-context-changed`, `ui/resource-teardown`.
+   - **Host Capability Methods (`openai/*` / `tools/call`)**:
+     - `tools/call` (invoke an MCP tool from the widget via `mcpServer/tool/call`)
+     - `openai/sendFollowUpMessage` (insert/send a follow-up prompt)
+     - `openai/uploadFile` & `openai/getFileDownloadUrl`
+     - `openai/requestDisplayMode` (`inline | pip | fullscreen`)
+     - `openai/setWidgetState` (persist bounded widget state on the turn item)
+     - `openai/requestModal` & `openai/requestClose`
+     - `openai/openExternal` (`ui/open-link`)
+- **Policy & Reclassification for `Codex-Native-Unoffical`**:
+  - Layer A (`mcpServer/resource/read`, `mcpServer/tool/call`, `mcpServer/elicitation/request`) is `PUBLIC_SUPPORTED` stable schema.
+  - Layer B (`ui://` WebView host) is classified as `RESEARCH_EXHAUSTED` / `DEFERRED_OPTIONAL_WEBVIEW` per `AGENTS.md` Rule #5 (*"No Electron or Node requirement for the core client. Optional plugin web UI may use a system/embedded WebView later, only when required"*). Core client needs no WebView until a user-configured third-party MCP server actively emits `ui://` interactive widget resources.
