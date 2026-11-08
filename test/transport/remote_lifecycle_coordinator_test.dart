@@ -173,6 +173,92 @@ void main() {
       await coordinator.stop();
     });
 
+    test(
+      'does not publish ready before released buffered events are applied',
+      () async {
+        final backend = _pairedBackend();
+        final secondHydration = Completer<ThreadPage>();
+        var threadLoad = 0;
+        final session = _FakeRemoteSession(
+          sessionId: 'host-1',
+          serverSequence: 0,
+          threadsLoader: () {
+            threadLoad += 1;
+            return switch (threadLoad) {
+              1 => Future.value(
+                ThreadPage(threads: [_thread('thread-1')], nextCursor: null),
+              ),
+              2 => secondHydration.future,
+              _ => Future.value(
+                ThreadPage(threads: [_thread('thread-2')], nextCursor: null),
+              ),
+            };
+          },
+        );
+        final connector = _Connector()..sessions.add(session);
+        final coordinator = _coordinator(backend, connector: connector.call);
+        final phases = <RemoteLifecyclePhase>[];
+        final subscription = coordinator.states.listen(
+          (state) => phases.add(state.phase),
+        );
+        addTearDown(subscription.cancel);
+
+        await coordinator.start();
+        await _waitFor(
+          () => coordinator.state.phase == RemoteLifecyclePhase.ready,
+        );
+        phases.clear();
+
+        session.emit(
+          const RemoteSequencedNotification(
+            sessionId: 'host-1',
+            sequence: 1,
+            notification: CodexNotification(
+              method: 'thread/unarchived',
+              params: {'threadId': 'thread-2'},
+            ),
+          ),
+        );
+        await _waitFor(
+          () =>
+              threadLoad == 2 &&
+              coordinator.state.phase == RemoteLifecyclePhase.hydrating,
+        );
+
+        // This later metadata-incomplete event is buffered by the session
+        // while the sequence-1 authoritative read is still in flight.
+        session.emit(
+          const RemoteSequencedNotification(
+            sessionId: 'host-1',
+            sequence: 2,
+            notification: CodexNotification(
+              method: 'thread/reverted',
+              params: {'threadId': 'thread-2'},
+            ),
+          ),
+        );
+        secondHydration.complete(
+          ThreadPage(threads: [_thread('thread-2')], nextCursor: null),
+        );
+
+        await _waitFor(
+          () =>
+              threadLoad >= 3 &&
+              coordinator.state.phase == RemoteLifecyclePhase.ready &&
+              coordinator.projection!.appliedSequence == 2,
+        );
+        expect(
+          phases.where((phase) => phase == RemoteLifecyclePhase.ready),
+          hasLength(1),
+        );
+        expect(session.authoritativeResyncReasons, [
+          'thread/unarchived requires authoritative hydration.',
+          'thread/reverted requires authoritative hydration.',
+        ]);
+        await coordinator.stop();
+      },
+    );
+
     test('resumes only with an exactly retained applied projection', () async {
       final backend = _pairedBackend();
       final first = _FakeRemoteSession(sessionId: 'host-1', serverSequence: 4);
@@ -660,6 +746,7 @@ final class _FakeRemoteSession implements RemoteSession {
       StreamController<RemoteResyncRequired>.broadcast(sync: true);
   final StreamController<RemoteSequencedNotification> _events =
       StreamController<RemoteSequencedNotification>.broadcast(sync: true);
+  final List<RemoteSequencedNotification> _bufferedEvents = [];
   final Completer<RemoteTransportClose> _closed = Completer();
   bool _requiresResync;
   int _resyncGeneration;
@@ -741,11 +828,20 @@ final class _FakeRemoteSession implements RemoteSession {
       throw StateError('stale generation');
     }
     _requiresResync = false;
+    final buffered = List<RemoteSequencedNotification>.of(_bufferedEvents);
+    _bufferedEvents.clear();
+    for (final event in buffered) {
+      _events.add(event);
+    }
   }
 
   void emit(RemoteSequencedNotification event) {
     currentSequence = event.sequence;
-    _events.add(event);
+    if (_requiresResync) {
+      _bufferedEvents.add(event);
+    } else {
+      _events.add(event);
+    }
   }
 
   void invalidateResync() {

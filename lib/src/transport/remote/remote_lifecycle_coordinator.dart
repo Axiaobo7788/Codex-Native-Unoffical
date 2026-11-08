@@ -385,6 +385,7 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
           connectionGeneration: connectionGeneration,
           record: record,
           session: session,
+          waitForDeliveredEvents: () => eventTail,
         );
       } else {
         final snapshot = _projection.snapshot;
@@ -415,6 +416,7 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
                 connectionGeneration: connectionGeneration,
                 record: record,
                 session: session,
+                waitForDeliveredEvents: () => eventTail,
               ),
             )
             .catchError((Object error, StackTrace stackTrace) {
@@ -450,7 +452,9 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
     required int connectionGeneration,
     required RemoteCredentialRecord record,
     required RemoteSession session,
+    required Future<void> Function() waitForDeliveredEvents,
   }) async {
+    var completedHydration = false;
     while (session.requiresResync &&
         _isCurrentConnection(generation, connectionGeneration, session)) {
       final resyncGeneration = session.resyncGeneration;
@@ -501,9 +505,17 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
       }
       _appliedCursor = cursor;
       session.completeResync(generation: resyncGeneration);
+      // Completing a resync synchronously releases transport-buffered events
+      // to the session stream. Wait for the coordinator's serialized event
+      // tail before publishing ready or accepting this hydration as current.
+      // A released metadata-incomplete event may itself require a newer
+      // authoritative generation.
+      await waitForDeliveredEvents();
+      completedHydration = true;
     }
     if (_isCurrentConnection(generation, connectionGeneration, session) &&
-        !session.requiresResync) {
+        !session.requiresResync &&
+        (completedHydration || _state.phase != RemoteLifecyclePhase.ready)) {
       _setState(
         RemoteLifecycleState(
           phase: RemoteLifecyclePhase.ready,
