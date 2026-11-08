@@ -160,6 +160,8 @@ class E2ERuntimeHarness extends RuntimeController {
       StreamController<ThreadLifecycleEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvalsController =
       StreamController<ApprovalEvent>.broadcast(sync: true);
+  final StreamController<McpElicitationEvent> _mcpElicitationsController =
+      StreamController<McpElicitationEvent>.broadcast(sync: true);
 
   RuntimeSnapshot _snapshot;
   RemoteHostStatus _hostStatus;
@@ -178,6 +180,38 @@ class E2ERuntimeHarness extends RuntimeController {
   final Map<String, PluginDetailModel> pluginDetails = {};
   final List<PluginAppReferenceModel> installAuthApps = [];
   final List<McpServerStatusModel> mcpServers = [];
+  var mcpCapabilitiesSupported = true;
+  var mcpReloadCount = 0;
+  final List<McpResourceReadQuery> mcpResourceReadQueries = [];
+  final List<McpToolCallQuery> mcpToolCallQueries = [];
+  final List<
+    ({
+      Object requestId,
+      McpElicitationAction action,
+      Map<String, Object?> content,
+    })
+  >
+  mcpElicitationResponses = [];
+  McpResourceReadResultModel mcpResourceReadResult = McpResourceReadResultModel(
+    contents: const [
+      McpTextResourceContentModel(
+        uri: 'file:///workspace/README.md',
+        mimeType: 'text/markdown',
+        text: '# Test workspace',
+      ),
+    ],
+  );
+  McpToolCallResultModel mcpToolCallResult = McpToolCallResultModel(
+    content: const [
+      McpToolContentModel(
+        kind: 'text',
+        summary: 'Text',
+        text: 'Tool completed.',
+      ),
+    ],
+    isError: false,
+    structuredContentPreview: '{"changed":true}',
+  );
   var catalogSupported = true;
   int? catalogPageSizeOverride;
   Future<AppListPage> Function(AppListQuery query)? listAppsOverride;
@@ -250,6 +284,13 @@ class E2ERuntimeHarness extends RuntimeController {
 
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvalsController.stream;
+
+  @override
+  bool get supportsMcpCapabilities => mcpCapabilitiesSupported;
+
+  @override
+  Stream<McpElicitationEvent> get mcpElicitationEvents =>
+      _mcpElicitationsController.stream;
 
   @override
   Future<void> start() async {
@@ -748,6 +789,41 @@ class E2ERuntimeHarness extends RuntimeController {
   }
 
   @override
+  Future<void> reloadMcpServers() async {
+    mcpReloadCount++;
+  }
+
+  @override
+  Future<McpResourceReadResultModel> readMcpResource(
+    McpResourceReadQuery query,
+  ) async {
+    mcpResourceReadQueries.add(query);
+    return mcpResourceReadResult;
+  }
+
+  @override
+  Future<McpToolCallResultModel> callMcpTool(McpToolCallQuery query) async {
+    mcpToolCallQueries.add(query);
+    return mcpToolCallResult;
+  }
+
+  @override
+  Future<void> respondToMcpElicitation({
+    required Object requestId,
+    required McpElicitationAction action,
+    Map<String, Object?> content = const {},
+  }) async {
+    mcpElicitationResponses.add((
+      requestId: requestId,
+      action: action,
+      content: Map.unmodifiable(content),
+    ));
+    _mcpElicitationsController.add(
+      McpElicitationResolvedEvent(requestId: requestId),
+    );
+  }
+
+  @override
   Future<OfficialRemoteControlStatus> readOfficialRemoteControlStatus() async {
     return officialRemoteStatus;
   }
@@ -872,6 +948,12 @@ class E2ERuntimeHarness extends RuntimeController {
     _approvalsController.add(ApprovalRequestedEvent(request: request));
   }
 
+  void emitMcpElicitation(McpElicitationRequest request) {
+    _mcpElicitationsController.add(
+      McpElicitationRequestedEvent(request: request),
+    );
+  }
+
   void storeOutput(String reference, String content, {int? totalLength}) {
     final bytes = Uint8List.fromList(utf8.encode(content));
     outputStore[reference] = bytes;
@@ -889,6 +971,7 @@ class E2ERuntimeHarness extends RuntimeController {
     await _turnsController.close();
     await _threadsController.close();
     await _approvalsController.close();
+    await _mcpElicitationsController.close();
     dispose();
   }
 

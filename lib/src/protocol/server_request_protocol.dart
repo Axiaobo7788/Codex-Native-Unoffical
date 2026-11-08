@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import '../domain/approval_models.dart';
+import '../domain/ecosystem_models.dart';
 import '../domain/user_input_models.dart';
 import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
@@ -44,11 +45,16 @@ final class ServerRequestProtocolAdapter {
     this.maxPendingRequests = 32,
     this.maxQuestionsPerRequest = 3,
     this.maxOptionsPerQuestion = 20,
+    this.maxElicitationFields = 20,
   }) : assert(maxPendingRequests > 0),
        assert(maxQuestionsPerRequest > 0),
        assert(maxOptionsPerQuestion > 0),
+       assert(maxElicitationFields > 0),
        _clock = clock ?? DateTime.now {
-    _requestSubscription = serverRequests.listen(_handleRequest);
+    _requestSubscription = serverRequests.listen(
+      _handleRequest,
+      onDone: _resolveAllPending,
+    );
     _notificationSubscription = notifications
         .where(
           (notification) => notification.method == 'serverRequest/resolved',
@@ -64,30 +70,43 @@ final class ServerRequestProtocolAdapter {
   static const _maximumOptionLabelLength = 240;
   static const _maximumOptionDescriptionLength = 2000;
   static const _maximumAnswerLength = 4096;
+  static const _maximumElicitationMessageLength = 4000;
+  static const _maximumElicitationDescriptionLength = 2000;
+  static const _maximumElicitationUrlLength = 4096;
 
   final ProtocolResponse respond;
   final ProtocolErrorResponse respondError;
   final int maxPendingRequests;
   final int maxQuestionsPerRequest;
   final int maxOptionsPerQuestion;
+  final int maxElicitationFields;
   final ProtocolClock _clock;
   final LinkedHashMap<Object, _PendingApproval> _pendingApprovals =
       LinkedHashMap();
   final LinkedHashMap<Object, UserInputRequest> _pendingUserInputs =
+      LinkedHashMap();
+  final LinkedHashMap<Object, McpElicitationRequest> _pendingElicitations =
       LinkedHashMap();
   final Set<Object> _inFlightRequestIds = <Object>{};
   final StreamController<ApprovalEvent> _approvalEvents =
       StreamController<ApprovalEvent>.broadcast();
   final StreamController<UserInputEvent> _userInputEvents =
       StreamController<UserInputEvent>.broadcast();
+  final StreamController<McpElicitationEvent> _mcpElicitationEvents =
+      StreamController<McpElicitationEvent>.broadcast();
   late final StreamSubscription<CodexServerRequest> _requestSubscription;
   late final StreamSubscription<CodexNotification> _notificationSubscription;
   var _disposed = false;
 
   Stream<ApprovalEvent> get approvalEvents => _approvalEvents.stream;
   Stream<UserInputEvent> get userInputEvents => _userInputEvents.stream;
+  Stream<McpElicitationEvent> get mcpElicitationEvents =>
+      _mcpElicitationEvents.stream;
 
-  int get _pendingCount => _pendingApprovals.length + _pendingUserInputs.length;
+  int get _pendingCount =>
+      _pendingApprovals.length +
+      _pendingUserInputs.length +
+      _pendingElicitations.length;
 
   Future<void> decideApproval({
     required Object requestId,
@@ -181,6 +200,34 @@ final class ServerRequestProtocolAdapter {
     }
   }
 
+  Future<void> respondToMcpElicitation({
+    required Object requestId,
+    required McpElicitationAction action,
+    Map<String, Object?> content = const {},
+  }) async {
+    final request = _pendingElicitations[requestId];
+    if (request == null) {
+      throw StateError('MCP elicitation request is no longer pending.');
+    }
+    final normalized = action == McpElicitationAction.accept
+        ? _validateElicitationContent(request, content)
+        : const <String, Object?>{};
+    _beginResolution(requestId);
+    try {
+      await respond(requestId, {
+        'action': action.name,
+        if (action == McpElicitationAction.accept &&
+            request.mode == McpElicitationMode.form)
+          'content': normalized,
+      });
+      if (_pendingElicitations.remove(requestId) != null) {
+        _emitMcpElicitation(McpElicitationResolvedEvent(requestId: requestId));
+      }
+    } finally {
+      _inFlightRequestIds.remove(requestId);
+    }
+  }
+
   void _handleRequest(CodexServerRequest request) {
     if (_disposed) {
       return;
@@ -192,7 +239,8 @@ final class ServerRequestProtocolAdapter {
       return;
     }
     if (_pendingApprovals.containsKey(request.id) ||
-        _pendingUserInputs.containsKey(request.id)) {
+        _pendingUserInputs.containsKey(request.id) ||
+        _pendingElicitations.containsKey(request.id)) {
       _respondDetached(
         request.id,
         _invalidParamsErrorCode,
@@ -210,6 +258,8 @@ final class ServerRequestProtocolAdapter {
         _handleApprovalRequest(request);
       case 'item/tool/requestUserInput':
         _handleUserInputRequest(request);
+      case 'mcpServer/elicitation/request':
+        _handleMcpElicitationRequest(request);
       case 'currentTime/read':
         _handleCurrentTimeRequest(request);
       default:
@@ -265,6 +315,23 @@ final class ServerRequestProtocolAdapter {
         request.id,
         _invalidParamsErrorCode,
         'Invalid currentTime/read params: ${error.message}',
+      );
+    }
+  }
+
+  void _handleMcpElicitationRequest(CodexServerRequest request) {
+    if (!_reservePendingSlot(request.id)) {
+      return;
+    }
+    try {
+      final parsed = _parseMcpElicitationRequest(request);
+      _pendingElicitations[request.id] = parsed;
+      _emitMcpElicitation(McpElicitationRequestedEvent(request: parsed));
+    } on FormatException catch (error) {
+      _respondDetached(
+        request.id,
+        _invalidParamsErrorCode,
+        'Invalid mcpServer/elicitation/request params: ${error.message}',
       );
     }
   }
@@ -424,6 +491,476 @@ final class ServerRequestProtocolAdapter {
     );
   }
 
+  McpElicitationRequest _parseMcpElicitationRequest(
+    CodexServerRequest request,
+  ) {
+    final params = request.params;
+    final serverName = _requiredBoundedString(
+      params,
+      'serverName',
+      _maximumIdentifierLength,
+    );
+    final threadId = _requiredBoundedString(
+      params,
+      'threadId',
+      _maximumIdentifierLength,
+    );
+    final turnId = _optionalBoundedString(
+      params,
+      'turnId',
+      _maximumIdentifierLength,
+    );
+    final message = _requiredBoundedString(
+      params,
+      'message',
+      _maximumElicitationMessageLength,
+    );
+    final mode = _requiredBoundedString(params, 'mode', 32);
+    switch (mode) {
+      case 'form':
+        final rawSchema = params['requestedSchema'];
+        if (rawSchema is! Map<String, Object?>) {
+          throw const FormatException('requestedSchema must be an object.');
+        }
+        final schemaType = rawSchema['type'];
+        if (schemaType != 'object') {
+          throw const FormatException('requestedSchema.type must be object.');
+        }
+        final rawProperties = rawSchema['properties'];
+        if (rawProperties is! Map<String, Object?> ||
+            rawProperties.length > maxElicitationFields) {
+          throw FormatException(
+            'requestedSchema.properties must contain at most '
+            '$maxElicitationFields fields.',
+          );
+        }
+        final requiredIds = _parseRequiredElicitationIds(
+          rawSchema['required'],
+          rawProperties.keys,
+        );
+        final fields = <McpElicitationField>[];
+        for (final entry in rawProperties.entries) {
+          if (entry.key.isEmpty ||
+              entry.key.length > _maximumIdentifierLength) {
+            throw const FormatException(
+              'elicitation field ids must be non-empty bounded strings.',
+            );
+          }
+          if (entry.value is! Map<String, Object?>) {
+            throw FormatException(
+              'elicitation field ${entry.key} must be an object.',
+            );
+          }
+          fields.add(
+            _parseMcpElicitationField(
+              entry.key,
+              entry.value! as Map<String, Object?>,
+              required: requiredIds.contains(entry.key),
+            ),
+          );
+        }
+        return McpElicitationRequest(
+          requestId: request.id,
+          serverName: serverName,
+          threadId: threadId,
+          turnId: turnId,
+          message: message,
+          mode: McpElicitationMode.form,
+          fields: fields,
+        );
+      case 'url':
+        final elicitationId = _requiredBoundedString(
+          params,
+          'elicitationId',
+          _maximumIdentifierLength,
+        );
+        final rawUrl = _requiredBoundedString(
+          params,
+          'url',
+          _maximumElicitationUrlLength,
+        );
+        final url = Uri.tryParse(rawUrl);
+        if (url == null ||
+            !url.isAbsolute ||
+            (url.scheme != 'https' && url.scheme != 'http')) {
+          throw const FormatException(
+            'url must be an absolute HTTP or HTTPS URL.',
+          );
+        }
+        return McpElicitationRequest(
+          requestId: request.id,
+          serverName: serverName,
+          threadId: threadId,
+          turnId: turnId,
+          message: message,
+          mode: McpElicitationMode.url,
+          elicitationId: elicitationId,
+          url: url,
+        );
+      case 'openai/form':
+      case 'openaiForm':
+        if (!params.containsKey('requestedSchema')) {
+          throw const FormatException('requestedSchema is required.');
+        }
+        return McpElicitationRequest(
+          requestId: request.id,
+          serverName: serverName,
+          threadId: threadId,
+          turnId: turnId,
+          message: message,
+          mode: McpElicitationMode.openaiForm,
+        );
+      default:
+        throw FormatException('unsupported elicitation mode "$mode".');
+    }
+  }
+
+  Set<String> _parseRequiredElicitationIds(
+    Object? raw,
+    Iterable<String> propertyIds,
+  ) {
+    if (raw == null) {
+      return const {};
+    }
+    if (raw is! List<Object?> || raw.length > maxElicitationFields) {
+      throw FormatException(
+        'requestedSchema.required must contain at most '
+        '$maxElicitationFields field ids.',
+      );
+    }
+    final known = propertyIds.toSet();
+    final result = <String>{};
+    for (final value in raw) {
+      if (value is! String ||
+          value.isEmpty ||
+          value.length > _maximumIdentifierLength ||
+          !known.contains(value) ||
+          !result.add(value)) {
+        throw const FormatException(
+          'requestedSchema.required must contain unique known field ids.',
+        );
+      }
+    }
+    return result;
+  }
+
+  McpElicitationField _parseMcpElicitationField(
+    String id,
+    JsonObject schema, {
+    required bool required,
+  }) {
+    final type = _requiredBoundedString(schema, 'type', 32);
+    final title =
+        _optionalBoundedString(schema, 'title', _maximumHeaderLength) ?? id;
+    final description =
+        _optionalBoundedString(
+          schema,
+          'description',
+          _maximumElicitationDescriptionLength,
+        ) ??
+        '';
+    final minimum = _optionalFiniteNumber(schema, 'minimum');
+    final maximum = _optionalFiniteNumber(schema, 'maximum');
+    if (minimum != null && maximum != null && minimum > maximum) {
+      throw FormatException('field $id has minimum greater than maximum.');
+    }
+    switch (type) {
+      case 'string':
+        final options = _parseElicitationOptions(schema);
+        final minLength = _optionalNonNegativeInt(schema, 'minLength');
+        final maxLength = _optionalNonNegativeInt(schema, 'maxLength');
+        if (minLength != null && maxLength != null && minLength > maxLength) {
+          throw FormatException(
+            'field $id has minLength greater than maxLength.',
+          );
+        }
+        return McpElicitationField(
+          id: id,
+          title: title,
+          description: description,
+          kind: options.isEmpty
+              ? McpElicitationFieldKind.string
+              : McpElicitationFieldKind.singleSelect,
+          required: required,
+          defaultValue: _compatibleDefault(schema['default'], type, options),
+          minLength: minLength,
+          maxLength: maxLength?.clamp(0, _maximumAnswerLength),
+          options: options,
+        );
+      case 'number':
+      case 'integer':
+        return McpElicitationField(
+          id: id,
+          title: title,
+          description: description,
+          kind: type == 'integer'
+              ? McpElicitationFieldKind.integer
+              : McpElicitationFieldKind.number,
+          required: required,
+          defaultValue: _compatibleDefault(schema['default'], type, const []),
+          minimum: minimum,
+          maximum: maximum,
+        );
+      case 'boolean':
+        return McpElicitationField(
+          id: id,
+          title: title,
+          description: description,
+          kind: McpElicitationFieldKind.boolean,
+          required: required,
+          defaultValue: _compatibleDefault(schema['default'], type, const []),
+        );
+      case 'array':
+        final items = schema['items'];
+        if (items is! Map<String, Object?>) {
+          throw FormatException('field $id items must be an object.');
+        }
+        final options = _parseElicitationOptions(items);
+        if (options.isEmpty) {
+          throw FormatException(
+            'field $id array items must declare bounded enum options.',
+          );
+        }
+        final minItems = _optionalNonNegativeInt(schema, 'minItems');
+        final maxItems = _optionalNonNegativeInt(schema, 'maxItems');
+        if (minItems != null && maxItems != null && minItems > maxItems) {
+          throw FormatException(
+            'field $id has minItems greater than maxItems.',
+          );
+        }
+        return McpElicitationField(
+          id: id,
+          title: title,
+          description: description,
+          kind: McpElicitationFieldKind.multiSelect,
+          required: required,
+          defaultValue: _compatibleMultiDefault(schema['default'], options),
+          minItems: minItems,
+          maxItems: maxItems?.clamp(0, maxOptionsPerQuestion),
+          options: options,
+        );
+      default:
+        throw FormatException('field $id has unsupported type "$type".');
+    }
+  }
+
+  List<McpElicitationOption> _parseElicitationOptions(JsonObject schema) {
+    final titled = schema['oneOf'] ?? schema['anyOf'];
+    if (titled != null) {
+      if (titled is! List<Object?> || titled.length > maxOptionsPerQuestion) {
+        throw FormatException(
+          'elicitation options must contain at most '
+          '$maxOptionsPerQuestion entries.',
+        );
+      }
+      final options = <McpElicitationOption>[];
+      final seen = <String>{};
+      for (final raw in titled) {
+        if (raw is! Map<String, Object?>) {
+          throw const FormatException('titled enum option must be an object.');
+        }
+        final value = _requiredBoundedString(
+          raw,
+          'const',
+          _maximumOptionLabelLength,
+        );
+        final label = _requiredBoundedString(
+          raw,
+          'title',
+          _maximumOptionLabelLength,
+        );
+        if (!seen.add(value)) {
+          throw const FormatException(
+            'elicitation option values must be unique.',
+          );
+        }
+        options.add(McpElicitationOption(value: value, label: label));
+      }
+      return List.unmodifiable(options);
+    }
+    final rawEnum = schema['enum'];
+    if (rawEnum == null) {
+      return const [];
+    }
+    if (rawEnum is! List<Object?> || rawEnum.length > maxOptionsPerQuestion) {
+      throw FormatException(
+        'elicitation enum must contain at most '
+        '$maxOptionsPerQuestion entries.',
+      );
+    }
+    final rawNames = schema['enumNames'];
+    if (rawNames != null &&
+        (rawNames is! List<Object?> || rawNames.length != rawEnum.length)) {
+      throw const FormatException('enumNames must align with enum values.');
+    }
+    final names = rawNames is List<Object?> ? rawNames : null;
+    final seen = <String>{};
+    final options = <McpElicitationOption>[];
+    for (var index = 0; index < rawEnum.length; index++) {
+      final value = rawEnum[index];
+      if (value is! String ||
+          value.isEmpty ||
+          value.length > _maximumOptionLabelLength ||
+          !seen.add(value)) {
+        throw const FormatException(
+          'elicitation enum values must be unique bounded strings.',
+        );
+      }
+      final rawLabel = names?[index];
+      final label = rawLabel ?? value;
+      if (label is! String ||
+          label.isEmpty ||
+          label.length > _maximumOptionLabelLength) {
+        throw const FormatException('elicitation option labels are invalid.');
+      }
+      options.add(McpElicitationOption(value: value, label: label));
+    }
+    return List.unmodifiable(options);
+  }
+
+  Object? _compatibleDefault(
+    Object? value,
+    String type,
+    List<McpElicitationOption> options,
+  ) {
+    if (value == null) {
+      return null;
+    }
+    return switch (type) {
+      'string'
+          when value is String &&
+              value.length <= _maximumAnswerLength &&
+              (options.isEmpty || options.any((o) => o.value == value)) =>
+        value,
+      'number' when value is num && _isFinite(value) => value,
+      'integer' when value is int => value,
+      'boolean' when value is bool => value,
+      _ => null,
+    };
+  }
+
+  List<String>? _compatibleMultiDefault(
+    Object? value,
+    List<McpElicitationOption> options,
+  ) {
+    if (value is! List<Object?> || value.length > maxOptionsPerQuestion) {
+      return null;
+    }
+    final allowed = options.map((o) => o.value).toSet();
+    final selected = <String>[];
+    for (final raw in value) {
+      if (raw is! String || !allowed.contains(raw) || selected.contains(raw)) {
+        return null;
+      }
+      selected.add(raw);
+    }
+    return List.unmodifiable(selected);
+  }
+
+  Map<String, Object?> _validateElicitationContent(
+    McpElicitationRequest request,
+    Map<String, Object?> content,
+  ) {
+    if (request.mode == McpElicitationMode.openaiForm) {
+      throw UnsupportedError(
+        'This OpenAI form elicitation requires an official form renderer.',
+      );
+    }
+    if (request.mode == McpElicitationMode.url) {
+      if (content.isNotEmpty) {
+        throw ArgumentError(
+          'URL elicitation acceptance does not accept form content.',
+          'content',
+        );
+      }
+      return const {};
+    }
+    final fields = {for (final field in request.fields) field.id: field};
+    if (!fields.keys.toSet().containsAll(content.keys)) {
+      throw ArgumentError(
+        'Elicitation content contains undeclared fields.',
+        'content',
+      );
+    }
+    final normalized = <String, Object?>{};
+    for (final field in request.fields) {
+      if (!content.containsKey(field.id)) {
+        if (field.required) {
+          throw ArgumentError(
+            'Required elicitation field ${field.id} is missing.',
+            'content',
+          );
+        }
+        continue;
+      }
+      final value = content[field.id];
+      normalized[field.id] = _validateElicitationValue(field, value);
+    }
+    return Map.unmodifiable(normalized);
+  }
+
+  Object _validateElicitationValue(McpElicitationField field, Object? value) {
+    switch (field.kind) {
+      case McpElicitationFieldKind.string:
+        if (value is! String || value.length > _maximumAnswerLength) {
+          throw ArgumentError('Field ${field.id} requires bounded text.');
+        }
+        final minimum = field.minLength ?? (field.required ? 1 : 0);
+        final maximum = field.maxLength ?? _maximumAnswerLength;
+        if (value.length < minimum || value.length > maximum) {
+          throw ArgumentError('Field ${field.id} violates its length bounds.');
+        }
+        return value;
+      case McpElicitationFieldKind.singleSelect:
+        if (value is! String ||
+            !field.options.any((option) => option.value == value)) {
+          throw ArgumentError('Field ${field.id} requires a declared option.');
+        }
+        return value;
+      case McpElicitationFieldKind.number:
+      case McpElicitationFieldKind.integer:
+        if (value is! num ||
+            !_isFinite(value) ||
+            (field.kind == McpElicitationFieldKind.integer && value is! int)) {
+          throw ArgumentError('Field ${field.id} requires a valid number.');
+        }
+        if ((field.minimum != null && value < field.minimum!) ||
+            (field.maximum != null && value > field.maximum!)) {
+          throw ArgumentError('Field ${field.id} violates numeric bounds.');
+        }
+        return value;
+      case McpElicitationFieldKind.boolean:
+        if (value is! bool) {
+          throw ArgumentError('Field ${field.id} requires a boolean.');
+        }
+        return value;
+      case McpElicitationFieldKind.multiSelect:
+        if (value is! List<Object?> || value.length > maxOptionsPerQuestion) {
+          throw ArgumentError(
+            'Field ${field.id} requires a bounded option list.',
+          );
+        }
+        final allowed = field.options.map((option) => option.value).toSet();
+        final selected = <String>[];
+        for (final raw in value) {
+          if (raw is! String ||
+              !allowed.contains(raw) ||
+              selected.contains(raw)) {
+            throw ArgumentError(
+              'Field ${field.id} contains an invalid option.',
+            );
+          }
+          selected.add(raw);
+        }
+        final minimum = field.minItems ?? (field.required ? 1 : 0);
+        final maximum = field.maxItems ?? maxOptionsPerQuestion;
+        if (selected.length < minimum || selected.length > maximum) {
+          throw ArgumentError('Field ${field.id} violates selection bounds.');
+        }
+        return List<String>.unmodifiable(selected);
+    }
+  }
+
   List<UserInputOption> _parseOptions(Object? value) {
     if (value == null) {
       return const [];
@@ -521,6 +1058,9 @@ final class ServerRequestProtocolAdapter {
     if (_pendingUserInputs.remove(requestId) != null) {
       _emitUserInput(UserInputResolvedEvent(requestId: requestId));
     }
+    if (_pendingElicitations.remove(requestId) != null) {
+      _emitMcpElicitation(McpElicitationResolvedEvent(requestId: requestId));
+    }
   }
 
   void _emitApproval(ApprovalEvent event) {
@@ -533,6 +1073,28 @@ final class ServerRequestProtocolAdapter {
     if (!_userInputEvents.isClosed) {
       _userInputEvents.add(event);
     }
+  }
+
+  void _emitMcpElicitation(McpElicitationEvent event) {
+    if (!_mcpElicitationEvents.isClosed) {
+      _mcpElicitationEvents.add(event);
+    }
+  }
+
+  void _resolveAllPending() {
+    for (final requestId in _pendingApprovals.keys.toList(growable: false)) {
+      _emitApproval(ApprovalResolvedEvent(requestId: requestId));
+    }
+    for (final requestId in _pendingUserInputs.keys.toList(growable: false)) {
+      _emitUserInput(UserInputResolvedEvent(requestId: requestId));
+    }
+    for (final requestId in _pendingElicitations.keys.toList(growable: false)) {
+      _emitMcpElicitation(McpElicitationResolvedEvent(requestId: requestId));
+    }
+    _pendingApprovals.clear();
+    _pendingUserInputs.clear();
+    _pendingElicitations.clear();
+    _inFlightRequestIds.clear();
   }
 
   void _respondDetached(Object id, int code, String message) {
@@ -569,6 +1131,53 @@ final class ServerRequestProtocolAdapter {
     final value = object[key];
     return value is String ? value : null;
   }
+
+  static String? _optionalBoundedString(
+    JsonObject object,
+    String key,
+    int maximumLength,
+  ) {
+    final value = object[key];
+    if (value == null) {
+      return null;
+    }
+    if (value is! String || value.isEmpty || value.length > maximumLength) {
+      throw FormatException(
+        '$key must be a non-empty string no longer than '
+        '$maximumLength characters when present.',
+      );
+    }
+    return value;
+  }
+
+  static num? _optionalFiniteNumber(JsonObject object, String key) {
+    final value = object[key];
+    if (value == null) {
+      return null;
+    }
+    if (value is! num || !_isFinite(value)) {
+      throw FormatException('$key must be a finite number when present.');
+    }
+    return value;
+  }
+
+  static int? _optionalNonNegativeInt(JsonObject object, String key) {
+    final value = object[key];
+    if (value == null) {
+      return null;
+    }
+    if (value is! int || value < 0) {
+      throw FormatException(
+        '$key must be a non-negative integer when present.',
+      );
+    }
+    return value;
+  }
+
+  static bool _isFinite(num value) => switch (value) {
+    double() => value.isFinite,
+    _ => true,
+  };
 
   static String _requiredBoundedString(
     JsonObject object,
@@ -613,9 +1222,11 @@ final class ServerRequestProtocolAdapter {
     _disposed = true;
     await _requestSubscription.cancel();
     await _notificationSubscription.cancel();
-    _pendingApprovals.clear();
-    _pendingUserInputs.clear();
-    _inFlightRequestIds.clear();
-    await Future.wait([_approvalEvents.close(), _userInputEvents.close()]);
+    _resolveAllPending();
+    await Future.wait([
+      _approvalEvents.close(),
+      _userInputEvents.close(),
+      _mcpElicitationEvents.close(),
+    ]);
   }
 }

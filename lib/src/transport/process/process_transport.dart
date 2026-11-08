@@ -33,7 +33,8 @@ class ProcessExit {
   final String stderrTail;
 }
 
-class ProcessTransport implements CodexTransport, EcosystemCatalogGateway {
+class ProcessTransport
+    implements CodexTransport, EcosystemCatalogGateway, McpCapabilityGateway {
   ProcessTransport._({
     required this.executablePath,
     required ChildProcess process,
@@ -147,6 +148,13 @@ class ProcessTransport implements CodexTransport, EcosystemCatalogGateway {
   @override
   Stream<UserInputEvent> get userInputEvents =>
       _serverRequestProtocol.userInputEvents;
+
+  @override
+  bool get supportsMcpCapabilities => true;
+
+  @override
+  Stream<McpElicitationEvent> get mcpElicitationEvents =>
+      _serverRequestProtocol.mcpElicitationEvents;
 
   @override
   Future<InitializeResult> initialize(InitializeRequest request) async {
@@ -315,6 +323,29 @@ class ProcessTransport implements CodexTransport, EcosystemCatalogGateway {
   @override
   Future<void> cancelUserInput(Object requestId) =>
       _serverRequestProtocol.cancelUserInput(requestId);
+
+  @override
+  Future<void> reloadMcpServers() => _ecosystemProtocol.reloadMcpServers();
+
+  @override
+  Future<McpResourceReadResultModel> readMcpResource(
+    McpResourceReadQuery query,
+  ) => _ecosystemProtocol.readMcpResource(query);
+
+  @override
+  Future<McpToolCallResultModel> callMcpTool(McpToolCallQuery query) =>
+      _ecosystemProtocol.callMcpTool(query);
+
+  @override
+  Future<void> respondToMcpElicitation({
+    required Object requestId,
+    required McpElicitationAction action,
+    Map<String, Object?> content = const {},
+  }) => _serverRequestProtocol.respondToMcpElicitation(
+    requestId: requestId,
+    action: action,
+    content: content,
+  );
 
   Future<RemoteHostStatus> readRemoteAdminStatus() =>
       _remoteAdminProtocol.status();

@@ -136,6 +136,151 @@ void main() {
     },
   );
 
+  test(
+    'reloads MCP config and parses bounded resource and tool results',
+    () async {
+      final requests = <(String, JsonObject)>[];
+      final adapter = EcosystemProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          requests.add((method, params));
+          return switch (method) {
+            'config/mcpServer/reload' => const {},
+            'mcpServer/resource/read' => {
+              'originCallId': 'call-1',
+              'contents': [
+                {
+                  'uri': 'file:///workspace/readme.md',
+                  'mimeType': 'text/markdown',
+                  'text': '# Workspace',
+                },
+                {
+                  'uri': 'file:///workspace/icon.png',
+                  'mimeType': 'image/png',
+                  'blob': 'YWJjZA==',
+                },
+              ],
+            },
+            'mcpServer/tool/call' => {
+              'content': [
+                {'type': 'text', 'text': 'Tool complete'},
+                {'type': 'image', 'mimeType': 'image/png', 'data': 'YWJjZA=='},
+              ],
+              'structuredContent': {
+                'changed': true,
+                'paths': ['README.md'],
+              },
+              'isError': false,
+            },
+            _ => const {},
+          };
+        },
+      );
+
+      await adapter.reloadMcpServers();
+      expect(requests.single.$1, 'config/mcpServer/reload');
+      expect(requests.single.$2, isEmpty);
+
+      final resource = await adapter.readMcpResource(
+        const McpResourceReadQuery(
+          server: 'filesystem',
+          uri: 'file:///workspace/readme.md',
+          threadId: 'thread-1',
+          connectorId: 'connector-files',
+          originCallId: 'call-1',
+          target: McpResourceReadTarget(
+            connectorId: 'connector-files',
+            linkId: 'link-1',
+          ),
+        ),
+      );
+      expect(resource.originCallId, 'call-1');
+      expect(resource.contents, hasLength(2));
+      expect(
+        (resource.contents.first as McpTextResourceContentModel).text,
+        '# Workspace',
+      );
+      expect(
+        (resource.contents.last as McpBlobResourceContentModel).encodedLength,
+        8,
+      );
+      expect(requests[1].$1, 'mcpServer/resource/read');
+      expect(requests[1].$2, {
+        'server': 'filesystem',
+        'uri': 'file:///workspace/readme.md',
+        'threadId': 'thread-1',
+        'connectorId': 'connector-files',
+        'originCallId': 'call-1',
+        'target': {'connectorId': 'connector-files', 'linkId': 'link-1'},
+      });
+
+      final tool = await adapter.callMcpTool(
+        McpToolCallQuery(
+          server: 'filesystem',
+          threadId: 'thread-1',
+          tool: 'write_file',
+          arguments: const {'path': 'README.md', 'text': 'Updated'},
+        ),
+      );
+      expect(tool.isError, isFalse);
+      expect(tool.content, hasLength(2));
+      expect(tool.content.first.text, 'Tool complete');
+      expect(tool.content.last.encodedDataLength, 8);
+      expect(tool.structuredContentPreview, contains('README.md'));
+      expect(requests.last.$2, {
+        'server': 'filesystem',
+        'threadId': 'thread-1',
+        'tool': 'write_file',
+        'arguments': {'path': 'README.md', 'text': 'Updated'},
+      });
+    },
+  );
+
+  test('rejects oversized or structurally unbounded MCP payloads', () async {
+    var mode = 'resource';
+    final adapter = EcosystemProtocolAdapter(
+      request: (method, [params = const {}]) async {
+        if (mode == 'resource') {
+          return {
+            'contents': [
+              {
+                'uri': 'file:///oversized',
+                'text': List<String>.filled(
+                  EcosystemProtocolAdapter.maxMcpRetainedTextBytes + 1,
+                  'x',
+                ).join(),
+              },
+            ],
+          };
+        }
+        return const {'content': []};
+      },
+    );
+
+    await expectLater(
+      adapter.readMcpResource(
+        const McpResourceReadQuery(server: 'filesystem', uri: 'file:///x'),
+      ),
+      throwsFormatException,
+    );
+
+    mode = 'tool';
+    Object nested = 'leaf';
+    for (var i = 0; i <= EcosystemProtocolAdapter.maxMcpJsonDepth; i++) {
+      nested = <String, Object?>{'value': nested};
+    }
+    await expectLater(
+      adapter.callMcpTool(
+        McpToolCallQuery(
+          server: 'filesystem',
+          threadId: 'thread-1',
+          tool: 'deep',
+          arguments: {'input': nested},
+        ),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('parses app/list pagination, app/installed snapshots, and app/read metadata with bounds', () async {
     final calls = <(String, JsonObject)>[];
     final adapter = EcosystemProtocolAdapter(
@@ -538,6 +683,7 @@ void main() {
 
     final mcpServers = await transport.listMcpServerStatus();
     expect(mcpServers, isA<List<Object?>>());
+    await transport.reloadMcpServers();
 
     final remoteControl = await transport.readOfficialRemoteControlStatus();
     expect(remoteControl.supported, isTrue);

@@ -1030,6 +1030,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   List<AppSummaryModel> _catalogApps = const [];
   String? _appsNextCursor;
   List<McpServerStatusModel> _mcpServers = const [];
+  final Map<String, Object> _mcpResults = <String, Object>{};
+  final Map<String, String> _mcpErrors = <String, String>{};
+  String? _mcpBusyServer;
+  var _reloadingMcp = false;
+  String? _mcpNotice;
 
   final Set<String> _expandedPluginIds = <String>{};
   final Set<String> _readingPluginIds = <String>{};
@@ -1045,6 +1050,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   EcosystemCatalogGateway? get _catalogGateway => switch (widget.gateway) {
     final EcosystemCatalogGateway g when g.supportsEcosystemCatalog => g,
+    _ => null,
+  };
+
+  McpCapabilityGateway? get _mcpGateway => switch (widget.gateway) {
+    final McpCapabilityGateway g when g.supportsMcpCapabilities => g,
     _ => null,
   };
 
@@ -1317,6 +1327,125 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _appsError = '$error';
         _loadingMoreApps = false;
       });
+    }
+  }
+
+  Future<void> _reloadMcpServers() async {
+    final gateway = _mcpGateway;
+    if (gateway == null || _reloadingMcp) {
+      return;
+    }
+    setState(() {
+      _reloadingMcp = true;
+      _mcpNotice = null;
+      _mcpErrors.clear();
+    });
+    try {
+      await gateway.reloadMcpServers();
+      final servers = await widget.gateway.listMcpServerStatus();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mcpServers = servers;
+        _mcpResults.removeWhere(
+          (name, _) => !servers.any((server) => server.name == name),
+        );
+        _mcpNotice = 'MCP server configuration reloaded.';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _mcpNotice = 'Reload failed: $error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _reloadingMcp = false);
+      }
+    }
+  }
+
+  Future<void> _readMcpResource(McpServerStatusModel server) async {
+    final gateway = _mcpGateway;
+    if (gateway == null || _mcpBusyServer != null) {
+      return;
+    }
+    final uri = await showDialog<String>(
+      context: context,
+      builder: (context) => _McpResourceReadDialog(serverName: server.name),
+    );
+    if (uri == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _mcpBusyServer = server.name;
+      _mcpErrors.remove(server.name);
+    });
+    try {
+      final result = await gateway.readMcpResource(
+        McpResourceReadQuery(
+          server: server.name,
+          uri: uri,
+          threadId: widget.threadId,
+        ),
+      );
+      if (mounted) {
+        setState(() => _mcpResults[server.name] = result);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _mcpErrors[server.name] = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _mcpBusyServer = null);
+      }
+    }
+  }
+
+  Future<void> _callMcpTool(McpServerStatusModel server) async {
+    final gateway = _mcpGateway;
+    final threadId = widget.threadId;
+    if (gateway == null || _mcpBusyServer != null) {
+      return;
+    }
+    if (threadId == null || threadId.trim().isEmpty) {
+      setState(() {
+        _mcpErrors[server.name] =
+            'Select or create a thread before calling an MCP tool.';
+      });
+      return;
+    }
+    final input = await showDialog<({String tool, Map<String, Object?> args})>(
+      context: context,
+      builder: (context) => _McpToolCallDialog(serverName: server.name),
+    );
+    if (input == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _mcpBusyServer = server.name;
+      _mcpErrors.remove(server.name);
+    });
+    try {
+      final result = await gateway.callMcpTool(
+        McpToolCallQuery(
+          server: server.name,
+          threadId: threadId,
+          tool: input.tool,
+          arguments: input.args,
+        ),
+      );
+      if (mounted) {
+        setState(() => _mcpResults[server.name] = result);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _mcpErrors[server.name] = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _mcpBusyServer = null);
+      }
     }
   }
 
@@ -1615,6 +1744,23 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   child: _InlineNotice(
                     icon: Icons.info_outline_rounded,
                     color: palette.accent,
+                    text: notice,
+                  ),
+                ),
+              ),
+            if (_mcpNotice case final notice?
+                when _section == _EcosystemSection.mcp)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: KeyedSubtree(
+                  key: const ValueKey('mcp-action-notice'),
+                  child: _InlineNotice(
+                    icon: notice.startsWith('Reload failed')
+                        ? Icons.error_outline_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: notice.startsWith('Reload failed')
+                        ? palette.danger
+                        : palette.accent,
                     text: notice,
                   ),
                 ),
@@ -2438,16 +2584,41 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Widget _buildMcpList(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    if (_mcpServers.isEmpty) {
-      return Text(
-        'No MCP servers configured.',
-        key: const ValueKey('ecosystem-mcp-empty'),
-        style: Theme.of(context).textTheme.bodySmall,
-      );
-    }
+    final gateway = _mcpGateway;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                gateway == null
+                    ? 'MCP execution is unavailable on this transport.'
+                    : 'Inspect resources or call tools without embedding a web runtime.',
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textSecondary),
+              ),
+            ),
+            const SizedBox(width: ThemeTokens.space2),
+            CodexButton(
+              key: const ValueKey('mcp-reload-button'),
+              variant: CodexButtonVariant.secondary,
+              size: CodexButtonSize.sm,
+              loading: _reloadingMcp,
+              onPressed: gateway == null || _reloadingMcp
+                  ? null
+                  : _reloadMcpServers,
+              label: 'Reload config',
+            ),
+          ],
+        ),
+        const SizedBox(height: ThemeTokens.space3),
+        if (_mcpServers.isEmpty)
+          Text(
+            'No MCP servers configured.',
+            key: const ValueKey('ecosystem-mcp-empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         for (final server in _mcpServers)
           Container(
             key: ValueKey('mcp-row-${server.name}'),
@@ -2461,32 +2632,347 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               ),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        server.name,
-                        style: Theme.of(context).textTheme.titleSmall,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            server.name,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${server.toolCount} tools · ${server.resourceCount} resources',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${server.toolCount} tools · ${server.resourceCount} resources',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+                    ),
+                    Text(
+                      server.status,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: palette.textSecondary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: ThemeTokens.space2),
+                Wrap(
+                  spacing: ThemeTokens.space2,
+                  runSpacing: ThemeTokens.space2,
+                  children: [
+                    CodexButton(
+                      key: ValueKey('mcp-read-resource-${server.name}'),
+                      variant: CodexButtonVariant.secondary,
+                      size: CodexButtonSize.sm,
+                      onPressed: gateway == null || _mcpBusyServer != null
+                          ? null
+                          : () => _readMcpResource(server),
+                      label: 'Read resource',
+                    ),
+                    CodexButton(
+                      key: ValueKey('mcp-call-tool-${server.name}'),
+                      variant: CodexButtonVariant.secondary,
+                      size: CodexButtonSize.sm,
+                      loading: _mcpBusyServer == server.name,
+                      onPressed: gateway == null || _mcpBusyServer != null
+                          ? null
+                          : () => _callMcpTool(server),
+                      label: 'Call tool',
+                    ),
+                  ],
+                ),
+                if (_mcpErrors[server.name] case final error?) ...[
+                  const SizedBox(height: ThemeTokens.space2),
+                  SelectableText(
+                    error,
+                    key: ValueKey('mcp-error-${server.name}'),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.danger),
                   ),
-                ),
-                Text(
-                  server.status,
-                  style: Theme.of(context).textTheme.labelSmall
-                      ?.copyWith(color: palette.textSecondary),
-                ),
+                ],
+                if (_mcpResults[server.name] case final result?) ...[
+                  const SizedBox(height: ThemeTokens.space3),
+                  _McpOperationResult(
+                    key: ValueKey('mcp-result-${server.name}'),
+                    result: result,
+                  ),
+                ],
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _McpResourceReadDialog extends StatefulWidget {
+  const _McpResourceReadDialog({required this.serverName});
+
+  final String serverName;
+
+  @override
+  State<_McpResourceReadDialog> createState() => _McpResourceReadDialogState();
+}
+
+class _McpResourceReadDialogState extends State<_McpResourceReadDialog> {
+  final _uriController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _uriController.addListener(_changed);
+  }
+
+  void _changed() => setState(() {});
+
+  @override
+  void dispose() {
+    _uriController
+      ..removeListener(_changed)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Read from ${widget.serverName}'),
+    content: SizedBox(
+      width: 520,
+      child: TextField(
+        key: const ValueKey('mcp-resource-uri-field'),
+        controller: _uriController,
+        autofocus: true,
+        maxLength: 4096,
+        decoration: const InputDecoration(
+          labelText: 'Resource URI',
+          hintText: 'file:///workspace/README.md',
+          helperText: 'The server decides which URI schemes it supports.',
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+    ),
+    actions: [
+      CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
+        onPressed: () => Navigator.of(context).pop(),
+        label: 'Cancel',
+      ),
+      CodexButton(
+        key: const ValueKey('mcp-resource-read-submit'),
+        variant: CodexButtonVariant.primary,
+        size: CodexButtonSize.sm,
+        onPressed: _uriController.text.trim().isEmpty ? null : _submit,
+        label: 'Read',
+      ),
+    ],
+  );
+
+  void _submit() {
+    final uri = _uriController.text.trim();
+    if (uri.isNotEmpty) {
+      Navigator.of(context).pop(uri);
+    }
+  }
+}
+
+class _McpToolCallDialog extends StatefulWidget {
+  const _McpToolCallDialog({required this.serverName});
+
+  final String serverName;
+
+  @override
+  State<_McpToolCallDialog> createState() => _McpToolCallDialogState();
+}
+
+class _McpToolCallDialogState extends State<_McpToolCallDialog> {
+  final _toolController = TextEditingController();
+  final _argumentsController = TextEditingController(text: '{}');
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _toolController.addListener(_changed);
+  }
+
+  void _changed() => setState(() {});
+
+  @override
+  void dispose() {
+    _toolController
+      ..removeListener(_changed)
+      ..dispose();
+    _argumentsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Call a tool on ${widget.serverName}'),
+    content: SizedBox(
+      width: 560,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('mcp-tool-name-field'),
+            controller: _toolController,
+            autofocus: true,
+            maxLength: 256,
+            decoration: const InputDecoration(labelText: 'Tool name'),
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          TextField(
+            key: const ValueKey('mcp-tool-arguments-field'),
+            controller: _argumentsController,
+            minLines: 4,
+            maxLines: 10,
+            decoration: const InputDecoration(
+              labelText: 'Arguments (JSON object)',
+              alignLabelWithHint: true,
+            ),
+          ),
+          if (_error case final error?) ...[
+            const SizedBox(height: ThemeTokens.space2),
+            Text(
+              error,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: ThemeTokens.of(context).danger),
+            ),
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
+        onPressed: () => Navigator.of(context).pop(),
+        label: 'Cancel',
+      ),
+      CodexButton(
+        key: const ValueKey('mcp-tool-call-submit'),
+        variant: CodexButtonVariant.primary,
+        size: CodexButtonSize.sm,
+        onPressed: _toolController.text.trim().isEmpty ? null : _submit,
+        label: 'Call tool',
+      ),
+    ],
+  );
+
+  void _submit() {
+    try {
+      final decoded = jsonDecode(_argumentsController.text);
+      if (decoded is! Map<String, Object?>) {
+        throw const FormatException('Arguments must be a JSON object.');
+      }
+      Navigator.of(context).pop((
+        tool: _toolController.text.trim(),
+        args: Map<String, Object?>.unmodifiable(decoded),
+      ));
+    } on FormatException catch (error) {
+      setState(() => _error = error.message);
+    } on Object catch (error) {
+      setState(() => _error = '$error');
+    }
+  }
+}
+
+class _McpOperationResult extends StatelessWidget {
+  const _McpOperationResult({super.key, required this.result});
+
+  final Object result;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.all(ThemeTokens.space2),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: switch (result) {
+        final McpResourceReadResultModel value => _resourceResult(
+          context,
+          value,
+        ),
+        final McpToolCallResultModel value => _toolResult(context, value),
+        _ => Text('$result'),
+      },
+    );
+  }
+
+  Widget _resourceResult(
+    BuildContext context,
+    McpResourceReadResultModel value,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        'Resource contents (${value.contents.length})',
+        style: Theme.of(context).textTheme.labelLarge,
+      ),
+      for (final content in value.contents) ...[
+        const SizedBox(height: ThemeTokens.space2),
+        Text(
+          '${content.uri}${content.mimeType == null ? '' : ' · ${content.mimeType}'}',
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+        const SizedBox(height: ThemeTokens.space1),
+        switch (content) {
+          final McpTextResourceContentModel text => SelectableText(
+            text.text,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          final McpBlobResourceContentModel blob => Text(
+            'Binary payload omitted from UI state '
+            '(${blob.encodedLength} encoded characters).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        },
+      ],
+    ],
+  );
+
+  Widget _toolResult(BuildContext context, McpToolCallResultModel value) {
+    final palette = ThemeTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          value.isError ? 'Tool returned an error' : 'Tool result',
+          style: Theme.of(context).textTheme.labelLarge
+              ?.copyWith(color: value.isError ? palette.danger : null),
+        ),
+        for (final content in value.content) ...[
+          const SizedBox(height: ThemeTokens.space2),
+          Text(content.summary, style: Theme.of(context).textTheme.labelSmall),
+          if (content.text case final text?) ...[
+            const SizedBox(height: ThemeTokens.space1),
+            SelectableText(text, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ],
+        if (value.structuredContentPreview case final structured?) ...[
+          const SizedBox(height: ThemeTokens.space2),
+          Text(
+            'Structured content',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          const SizedBox(height: ThemeTokens.space1),
+          SelectableText(
+            structured,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ],
     );
   }

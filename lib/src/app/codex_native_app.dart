@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/chat_conversation_dag.dart';
 import '../domain/conversation_backend.dart';
@@ -105,7 +107,10 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _historyController = HistoryController(gateway: _controller);
     _diffController = DiffController(gateway: _controller);
     _approvalController = ApprovalController(gateway: _controller);
-    _userInputController = UserInputController(gateway: _controller);
+    _userInputController = UserInputController(
+      gateway: _controller,
+      mcpGateway: _controller,
+    );
     _lastRevertVersion = _threadController.revertVersion;
     _controller.addListener(_handleRuntimeState);
     _threadController.addListener(_handleThreadSelection);

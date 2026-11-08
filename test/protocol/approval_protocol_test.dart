@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
+import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
 import 'package:codex_native_unofficial/src/domain/user_input_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
@@ -115,6 +116,197 @@ void main() {
     expect(errors.single.$1, 99);
     expect(errors.single.$2, -32000);
   });
+
+  test('parses and accepts a typed MCP form elicitation', () async {
+    final eventFuture = adapter.mcpElicitationEvents.first;
+    requests.add(
+      const CodexServerRequest(
+        id: 'mcp-form-1',
+        method: 'mcpServer/elicitation/request',
+        params: {
+          'serverName': 'filesystem',
+          'threadId': 'thread-1',
+          'turnId': 'turn-1',
+          'mode': 'form',
+          'message': 'Choose how to write the file.',
+          'requestedSchema': {
+            'type': 'object',
+            'required': ['path', 'mode'],
+            'properties': {
+              'path': {
+                'type': 'string',
+                'title': 'Path',
+                'minLength': 1,
+                'maxLength': 120,
+              },
+              'mode': {
+                'type': 'string',
+                'title': 'Write mode',
+                'oneOf': [
+                  {'const': 'replace', 'title': 'Replace'},
+                  {'const': 'append', 'title': 'Append'},
+                ],
+              },
+              'retries': {
+                'type': 'integer',
+                'minimum': 0,
+                'maximum': 3,
+                'default': 1,
+              },
+              'confirm': {'type': 'boolean', 'default': true},
+              'labels': {
+                'type': 'array',
+                'items': {
+                  'type': 'string',
+                  'enum': ['docs', 'test'],
+                },
+                'maxItems': 2,
+              },
+            },
+          },
+        },
+      ),
+    );
+
+    final event = await eventFuture as McpElicitationRequestedEvent;
+    expect(event.request.serverName, 'filesystem');
+    expect(event.request.mode, McpElicitationMode.form);
+    expect(event.request.fields, hasLength(5));
+    expect(event.request.fields[1].kind, McpElicitationFieldKind.singleSelect);
+    expect(event.request.fields.last.kind, McpElicitationFieldKind.multiSelect);
+
+    await adapter.respondToMcpElicitation(
+      requestId: 'mcp-form-1',
+      action: McpElicitationAction.accept,
+      content: const {
+        'path': 'README.md',
+        'mode': 'replace',
+        'retries': 1,
+        'confirm': true,
+        'labels': ['docs'],
+      },
+    );
+    expect(responses.single.$2, {
+      'action': 'accept',
+      'content': {
+        'path': 'README.md',
+        'mode': 'replace',
+        'retries': 1,
+        'confirm': true,
+        'labels': ['docs'],
+      },
+    });
+  });
+
+  test('handles URL and hosted-form elicitation actions safely', () async {
+    final urlEvent = adapter.mcpElicitationEvents.first;
+    requests.add(
+      const CodexServerRequest(
+        id: 'mcp-url-1',
+        method: 'mcpServer/elicitation/request',
+        params: {
+          'serverName': 'github',
+          'threadId': 'thread-1',
+          'mode': 'url',
+          'message': 'Authorize GitHub.',
+          'elicitationId': 'auth-1',
+          'url': 'https://example.com/oauth',
+        },
+      ),
+    );
+    final parsedUrl = await urlEvent as McpElicitationRequestedEvent;
+    expect(parsedUrl.request.url, Uri.parse('https://example.com/oauth'));
+    await adapter.respondToMcpElicitation(
+      requestId: 'mcp-url-1',
+      action: McpElicitationAction.accept,
+    );
+    expect(responses.single.$2, {'action': 'accept'});
+
+    final formEvent = adapter.mcpElicitationEvents.first;
+    requests.add(
+      const CodexServerRequest(
+        id: 'mcp-hosted-form-1',
+        method: 'mcpServer/elicitation/request',
+        params: {
+          'serverName': 'hosted',
+          'threadId': 'thread-1',
+          'mode': 'openai/form',
+          'message': 'Complete the hosted form.',
+          'requestedSchema': {'opaque': true},
+        },
+      ),
+    );
+    await formEvent;
+    await expectLater(
+      adapter.respondToMcpElicitation(
+        requestId: 'mcp-hosted-form-1',
+        action: McpElicitationAction.accept,
+      ),
+      throwsA(isA<UnsupportedError>()),
+    );
+    await adapter.respondToMcpElicitation(
+      requestId: 'mcp-hosted-form-1',
+      action: McpElicitationAction.decline,
+    );
+    expect(responses.last.$2, {'action': 'decline'});
+  });
+
+  test(
+    'external resolution and adapter disposal clear MCP elicitations',
+    () async {
+      final events = <McpElicitationEvent>[];
+      final subscription = adapter.mcpElicitationEvents.listen(events.add);
+      addTearDown(subscription.cancel);
+      requests.add(
+        const CodexServerRequest(
+          id: 'mcp-resolved',
+          method: 'mcpServer/elicitation/request',
+          params: {
+            'serverName': 'filesystem',
+            'threadId': 'thread-1',
+            'mode': 'form',
+            'message': 'Input needed.',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': {
+                'value': {'type': 'string'},
+              },
+            },
+          },
+        ),
+      );
+      notifications.add(
+        const CodexNotification(
+          method: 'serverRequest/resolved',
+          params: {'requestId': 'mcp-resolved'},
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(events.whereType<McpElicitationResolvedEvent>(), hasLength(1));
+
+      requests.add(
+        const CodexServerRequest(
+          id: 'mcp-disconnect',
+          method: 'mcpServer/elicitation/request',
+          params: {
+            'serverName': 'filesystem',
+            'threadId': 'thread-1',
+            'mode': 'form',
+            'message': 'Input needed.',
+            'requestedSchema': {
+              'type': 'object',
+              'properties': <String, Object?>{},
+            },
+          },
+        ),
+      );
+      await adapter.dispose();
+      expect(
+        events.whereType<McpElicitationResolvedEvent>().last.requestId,
+        'mcp-disconnect',
+      );
+    },
+  );
 
   test('honors command availableDecisions', () async {
     requests.add(

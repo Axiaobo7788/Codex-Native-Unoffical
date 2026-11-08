@@ -296,6 +296,207 @@ class McpServerStatusModel {
   final String? authStatus;
 }
 
+class McpResourceReadTarget {
+  const McpResourceReadTarget({required this.connectorId, this.linkId});
+
+  final String connectorId;
+  final String? linkId;
+}
+
+class McpResourceReadQuery {
+  const McpResourceReadQuery({
+    required this.server,
+    required this.uri,
+    this.threadId,
+    this.connectorId,
+    this.originCallId,
+    this.target,
+  });
+
+  final String server;
+  final String uri;
+  final String? threadId;
+  final String? connectorId;
+  final String? originCallId;
+  final McpResourceReadTarget? target;
+}
+
+sealed class McpResourceContentModel {
+  const McpResourceContentModel({required this.uri, this.mimeType});
+
+  final String uri;
+  final String? mimeType;
+}
+
+final class McpTextResourceContentModel extends McpResourceContentModel {
+  const McpTextResourceContentModel({
+    required super.uri,
+    required this.text,
+    super.mimeType,
+  });
+
+  final String text;
+}
+
+final class McpBlobResourceContentModel extends McpResourceContentModel {
+  const McpBlobResourceContentModel({
+    required super.uri,
+    required this.encodedLength,
+    super.mimeType,
+  });
+
+  /// The base64 payload is deliberately not retained in Flutter state.
+  final int encodedLength;
+}
+
+class McpResourceReadResultModel {
+  McpResourceReadResultModel({
+    required List<McpResourceContentModel> contents,
+    this.originCallId,
+  }) : contents = List.unmodifiable(contents);
+
+  final List<McpResourceContentModel> contents;
+  final String? originCallId;
+}
+
+class McpToolCallQuery {
+  McpToolCallQuery({
+    required this.server,
+    required this.threadId,
+    required this.tool,
+    Map<String, Object?> arguments = const {},
+  }) : arguments = Map.unmodifiable(arguments);
+
+  final String server;
+  final String threadId;
+  final String tool;
+  final Map<String, Object?> arguments;
+}
+
+class McpToolContentModel {
+  const McpToolContentModel({
+    required this.kind,
+    required this.summary,
+    this.text,
+    this.uri,
+    this.mimeType,
+    this.encodedDataLength,
+  });
+
+  final String kind;
+  final String summary;
+  final String? text;
+  final String? uri;
+  final String? mimeType;
+
+  /// Encoded binary content is described, but never retained in UI state.
+  final int? encodedDataLength;
+}
+
+class McpToolCallResultModel {
+  McpToolCallResultModel({
+    required List<McpToolContentModel> content,
+    required this.isError,
+    this.structuredContentPreview,
+  }) : content = List.unmodifiable(content);
+
+  final List<McpToolContentModel> content;
+  final bool isError;
+  final String? structuredContentPreview;
+}
+
+enum McpElicitationMode { form, url, openaiForm }
+
+enum McpElicitationFieldKind {
+  string,
+  number,
+  integer,
+  boolean,
+  singleSelect,
+  multiSelect,
+}
+
+class McpElicitationOption {
+  const McpElicitationOption({required this.value, required this.label});
+
+  final String value;
+  final String label;
+}
+
+class McpElicitationField {
+  McpElicitationField({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.kind,
+    required this.required,
+    this.defaultValue,
+    this.minimum,
+    this.maximum,
+    this.minLength,
+    this.maxLength,
+    this.minItems,
+    this.maxItems,
+    List<McpElicitationOption> options = const [],
+  }) : options = List.unmodifiable(options);
+
+  final String id;
+  final String title;
+  final String description;
+  final McpElicitationFieldKind kind;
+  final bool required;
+  final Object? defaultValue;
+  final num? minimum;
+  final num? maximum;
+  final int? minLength;
+  final int? maxLength;
+  final int? minItems;
+  final int? maxItems;
+  final List<McpElicitationOption> options;
+}
+
+class McpElicitationRequest {
+  McpElicitationRequest({
+    required this.requestId,
+    required this.serverName,
+    required this.threadId,
+    required this.message,
+    required this.mode,
+    this.turnId,
+    this.elicitationId,
+    this.url,
+    List<McpElicitationField> fields = const [],
+  }) : fields = List.unmodifiable(fields);
+
+  final Object requestId;
+  final String serverName;
+  final String threadId;
+  final String? turnId;
+  final String message;
+  final McpElicitationMode mode;
+  final String? elicitationId;
+  final Uri? url;
+  final List<McpElicitationField> fields;
+}
+
+sealed class McpElicitationEvent {
+  const McpElicitationEvent();
+}
+
+final class McpElicitationRequestedEvent extends McpElicitationEvent {
+  const McpElicitationRequestedEvent({required this.request});
+
+  final McpElicitationRequest request;
+}
+
+final class McpElicitationResolvedEvent extends McpElicitationEvent {
+  const McpElicitationResolvedEvent({required this.requestId});
+
+  final Object requestId;
+}
+
+enum McpElicitationAction { accept, decline, cancel }
+
 enum RemoteArchitectureTrack {
   directHostBridge,
   officialAppServerRelay;

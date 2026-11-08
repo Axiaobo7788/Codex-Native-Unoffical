@@ -51,7 +51,8 @@ class RuntimeController extends ChangeNotifier
         HistoryGateway,
         RemoteAdminGateway,
         EcosystemGateway,
-        EcosystemCatalogGateway {
+        EcosystemCatalogGateway,
+        McpCapabilityGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     this.hostLocator = const HostExecutableLocator(),
@@ -107,6 +108,7 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
   StreamSubscription<UserInputEvent>? _userInputEventSubscription;
+  StreamSubscription<McpElicitationEvent>? _mcpElicitationEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
   final StreamController<TurnEvent> _turnEvents =
@@ -117,6 +119,8 @@ class RuntimeController extends ChangeNotifier
       StreamController<ApprovalEvent>.broadcast();
   final StreamController<UserInputEvent> _userInputEvents =
       StreamController<UserInputEvent>.broadcast();
+  final StreamController<McpElicitationEvent> _mcpElicitationEvents =
+      StreamController<McpElicitationEvent>.broadcast();
   Future<void>? _startOperation;
   var _disposed = false;
   var _stopping = false;
@@ -147,6 +151,13 @@ class RuntimeController extends ChangeNotifier
 
   @override
   Stream<UserInputEvent> get userInputEvents => _userInputEvents.stream;
+
+  @override
+  bool get supportsMcpCapabilities => !_usesRemote;
+
+  @override
+  Stream<McpElicitationEvent> get mcpElicitationEvents =>
+      _mcpElicitationEvents.stream;
 
   Future<void> start() =>
       _usesRemote ? _startRemote() : (_startOperation ??= _startDesktop());
@@ -333,6 +344,56 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().cancelUserInput(requestId);
 
   @override
+  Future<void> reloadMcpServers() {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'MCP configuration reload is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().reloadMcpServers();
+  }
+
+  @override
+  Future<McpResourceReadResultModel> readMcpResource(
+    McpResourceReadQuery query,
+  ) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'MCP resource reads are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readMcpResource(query);
+  }
+
+  @override
+  Future<McpToolCallResultModel> callMcpTool(McpToolCallQuery query) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'MCP tool calls are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().callMcpTool(query);
+  }
+
+  @override
+  Future<void> respondToMcpElicitation({
+    required Object requestId,
+    required McpElicitationAction action,
+    Map<String, Object?> content = const {},
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'MCP elicitation is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().respondToMcpElicitation(
+      requestId: requestId,
+      action: action,
+      content: content,
+    );
+  }
+
+  @override
   bool get supportsEcosystemCatalog => !_usesRemote;
 
   @override
@@ -501,6 +562,10 @@ class RuntimeController extends ChangeNotifier
       _userInputEventSubscription = transport.userInputEvents.listen(
         _userInputEvents.add,
         onError: _userInputEvents.addError,
+      );
+      _mcpElicitationEventSubscription = transport.mcpElicitationEvents.listen(
+        _mcpElicitationEvents.add,
+        onError: _mcpElicitationEvents.addError,
       );
       final result = await transport.initialize(const InitializeRequest());
       if (_stopping || _disposed) {
@@ -673,6 +738,7 @@ class RuntimeController extends ChangeNotifier
     await _threadEventSubscription?.cancel();
     await _approvalEventSubscription?.cancel();
     await _userInputEventSubscription?.cancel();
+    await _mcpElicitationEventSubscription?.cancel();
     await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
     await _remoteStateSubscription?.cancel();
@@ -682,6 +748,7 @@ class RuntimeController extends ChangeNotifier
     await _threadEvents.close();
     await _approvalEvents.close();
     await _userInputEvents.close();
+    await _mcpElicitationEvents.close();
     if (!_disposed) {
       _setSnapshot(
         RuntimeSnapshot(

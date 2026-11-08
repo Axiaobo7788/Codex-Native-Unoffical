@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../domain/ecosystem_models.dart';
 import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
@@ -11,6 +13,16 @@ class EcosystemProtocolAdapter {
   static const maxBoundedItems = maxBoundedEcosystemItems;
 
   final ProtocolRequest request;
+
+  static const maxMcpResourceContents = 32;
+  static const maxMcpToolContents = 32;
+  static const maxMcpPayloadBytes = 256 * 1024;
+  static const maxMcpRetainedTextBytes = 64 * 1024;
+  static const maxMcpStructuredPreviewBytes = 32 * 1024;
+  static const maxMcpJsonDepth = 8;
+  static const maxMcpJsonNodes = 1024;
+  static const maxMcpIdentifierLength = 256;
+  static const maxMcpUriLength = 4096;
 
   Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) async {
     final normalizedCwds = cwds
@@ -61,6 +73,167 @@ class EcosystemProtocolAdapter {
       'enabled': enabled,
     });
     return result['effectiveEnabled'] as bool? ?? enabled;
+  }
+
+  Future<void> reloadMcpServers() async {
+    await request('config/mcpServer/reload', const {});
+  }
+
+  Future<McpResourceReadResultModel> readMcpResource(
+    McpResourceReadQuery query,
+  ) async {
+    final server = _requiredInput(
+      query.server,
+      'server',
+      maxMcpIdentifierLength,
+    );
+    final uri = _requiredInput(query.uri, 'uri', maxMcpUriLength);
+    final threadId = _optionalInput(
+      query.threadId,
+      'threadId',
+      maxMcpIdentifierLength,
+    );
+    final connectorId = _optionalInput(
+      query.connectorId,
+      'connectorId',
+      maxMcpIdentifierLength,
+    );
+    final originCallId = _optionalInput(
+      query.originCallId,
+      'originCallId',
+      maxMcpIdentifierLength,
+    );
+    final target = query.target;
+    final targetConnectorId = target == null
+        ? null
+        : _requiredInput(
+            target.connectorId,
+            'target.connectorId',
+            maxMcpIdentifierLength,
+          );
+    final targetLinkId = target == null
+        ? null
+        : _optionalInput(
+            target.linkId,
+            'target.linkId',
+            maxMcpIdentifierLength,
+          );
+    final result = await request('mcpServer/resource/read', {
+      'server': server,
+      'uri': uri,
+      'threadId': ?threadId,
+      'connectorId': ?connectorId,
+      'originCallId': ?originCallId,
+      if (targetConnectorId != null)
+        'target': {'connectorId': targetConnectorId, 'linkId': targetLinkId},
+    });
+    _requireMcpPayloadBound(result, 'MCP resource response');
+    final rawContents = result['contents'];
+    if (rawContents is! List<Object?> ||
+        rawContents.length > maxMcpResourceContents) {
+      throw FormatException(
+        'MCP resource response must contain at most '
+        '$maxMcpResourceContents contents.',
+      );
+    }
+    final contents = <McpResourceContentModel>[];
+    for (final raw in rawContents) {
+      if (raw is! Map<String, Object?>) {
+        throw const FormatException('MCP resource content must be an object.');
+      }
+      final contentUri = _requiredOutputString(raw, 'uri', maxMcpUriLength);
+      final mimeType = _optionalOutputString(
+        raw,
+        'mimeType',
+        maxMcpIdentifierLength,
+      );
+      final text = raw['text'];
+      final blob = raw['blob'];
+      if (text is String && blob == null) {
+        _requireUtf8Bound(text, maxMcpRetainedTextBytes, 'MCP resource text');
+        contents.add(
+          McpTextResourceContentModel(
+            uri: contentUri,
+            text: text,
+            mimeType: mimeType,
+          ),
+        );
+      } else if (blob is String && text == null) {
+        _requireUtf8Bound(blob, maxMcpPayloadBytes, 'MCP resource blob');
+        contents.add(
+          McpBlobResourceContentModel(
+            uri: contentUri,
+            encodedLength: blob.length,
+            mimeType: mimeType,
+          ),
+        );
+      } else {
+        throw const FormatException(
+          'MCP resource content must contain exactly one of text or blob.',
+        );
+      }
+    }
+    return McpResourceReadResultModel(
+      contents: contents,
+      originCallId: _optionalOutputString(
+        result,
+        'originCallId',
+        maxMcpIdentifierLength,
+      ),
+    );
+  }
+
+  Future<McpToolCallResultModel> callMcpTool(McpToolCallQuery query) async {
+    final server = _requiredInput(
+      query.server,
+      'server',
+      maxMcpIdentifierLength,
+    );
+    final threadId = _requiredInput(
+      query.threadId,
+      'threadId',
+      maxMcpIdentifierLength,
+    );
+    final tool = _requiredInput(query.tool, 'tool', maxMcpIdentifierLength);
+    _validateBoundedJson(query.arguments, 'MCP tool arguments');
+    final result = await request('mcpServer/tool/call', {
+      'server': server,
+      'threadId': threadId,
+      'tool': tool,
+      'arguments': query.arguments,
+    });
+    _requireMcpPayloadBound(result, 'MCP tool response');
+    final rawContent = result['content'];
+    if (rawContent is! List<Object?> ||
+        rawContent.length > maxMcpToolContents) {
+      throw FormatException(
+        'MCP tool response must contain at most $maxMcpToolContents contents.',
+      );
+    }
+    final content = <McpToolContentModel>[];
+    for (final raw in rawContent) {
+      content.add(_parseMcpToolContent(raw));
+    }
+    final structured = result['structuredContent'];
+    String? structuredPreview;
+    if (structured != null) {
+      _validateBoundedJson(structured, 'MCP structured content');
+      structuredPreview = jsonEncode(structured);
+      _requireUtf8Bound(
+        structuredPreview,
+        maxMcpStructuredPreviewBytes,
+        'MCP structured content preview',
+      );
+    }
+    final isError = result['isError'];
+    if (isError != null && isError is! bool) {
+      throw const FormatException('MCP tool isError must be a boolean.');
+    }
+    return McpToolCallResultModel(
+      content: content,
+      isError: isError as bool? ?? false,
+      structuredContentPreview: structuredPreview,
+    );
   }
 
   Future<List<PluginSummaryModel>> listPlugins({
@@ -607,6 +780,219 @@ class EcosystemProtocolAdapter {
         'environmentId': normalizedEnv,
     });
     return result['disconnected'] as bool? ?? true;
+  }
+
+  static McpToolContentModel _parseMcpToolContent(Object? raw) {
+    if (raw is String) {
+      _requireUtf8Bound(raw, maxMcpRetainedTextBytes, 'MCP tool text');
+      return McpToolContentModel(kind: 'text', summary: 'Text', text: raw);
+    }
+    if (raw is! Map<String, Object?>) {
+      throw const FormatException(
+        'MCP tool content must be a string or object.',
+      );
+    }
+    final kind = _nonEmptyString(raw['type']) ?? 'content';
+    final directText = raw['text'];
+    final directData = raw['data'];
+    final directUri = _nonEmptyString(raw['uri']);
+    final directMime = _nonEmptyString(raw['mimeType']);
+    if (directText is String) {
+      _requireUtf8Bound(directText, maxMcpRetainedTextBytes, 'MCP tool text');
+      return McpToolContentModel(
+        kind: kind,
+        summary: directMime == null ? 'Text' : 'Text · $directMime',
+        text: directText,
+        uri: directUri,
+        mimeType: directMime,
+      );
+    }
+    if (directData is String) {
+      _requireUtf8Bound(directData, maxMcpPayloadBytes, 'MCP tool binary data');
+      return McpToolContentModel(
+        kind: kind,
+        summary: directMime == null
+            ? 'Encoded data (${directData.length} characters)'
+            : '$directMime · ${directData.length} encoded characters',
+        uri: directUri,
+        mimeType: directMime,
+        encodedDataLength: directData.length,
+      );
+    }
+    final resource = raw['resource'];
+    if (resource is Map<String, Object?>) {
+      final uri = _optionalOutputString(resource, 'uri', maxMcpUriLength);
+      final mime = _optionalOutputString(
+        resource,
+        'mimeType',
+        maxMcpIdentifierLength,
+      );
+      final text = resource['text'];
+      final blob = resource['blob'];
+      if (text is String && blob == null) {
+        _requireUtf8Bound(
+          text,
+          maxMcpRetainedTextBytes,
+          'MCP embedded resource text',
+        );
+        return McpToolContentModel(
+          kind: kind,
+          summary: uri == null ? 'Embedded resource' : 'Resource · $uri',
+          text: text,
+          uri: uri,
+          mimeType: mime,
+        );
+      }
+      if (blob is String && text == null) {
+        _requireUtf8Bound(
+          blob,
+          maxMcpPayloadBytes,
+          'MCP embedded resource blob',
+        );
+        return McpToolContentModel(
+          kind: kind,
+          summary: uri == null
+              ? 'Embedded data (${blob.length} characters)'
+              : 'Resource · $uri · ${blob.length} encoded characters',
+          uri: uri,
+          mimeType: mime,
+          encodedDataLength: blob.length,
+        );
+      }
+    }
+    _validateBoundedJson(raw, 'MCP tool content');
+    final preview = jsonEncode(raw);
+    _requireUtf8Bound(
+      preview,
+      maxMcpStructuredPreviewBytes,
+      'MCP tool content preview',
+    );
+    return McpToolContentModel(
+      kind: kind,
+      summary: preview,
+      uri: directUri,
+      mimeType: directMime,
+    );
+  }
+
+  static void _requireMcpPayloadBound(JsonObject value, String label) {
+    _validateBoundedJson(value, label);
+    final encoded = jsonEncode(value);
+    _requireUtf8Bound(encoded, maxMcpPayloadBytes, label);
+  }
+
+  static void _validateBoundedJson(Object? value, String label) {
+    var nodes = 0;
+
+    void visit(Object? current, int depth) {
+      if (depth > maxMcpJsonDepth) {
+        throw FormatException('$label exceeds depth $maxMcpJsonDepth.');
+      }
+      nodes++;
+      if (nodes > maxMcpJsonNodes) {
+        throw FormatException('$label exceeds $maxMcpJsonNodes JSON nodes.');
+      }
+      switch (current) {
+        case null || bool() || num():
+          if (current is double && !current.isFinite) {
+            throw FormatException('$label contains a non-finite number.');
+          }
+        case String():
+          _requireUtf8Bound(current, maxMcpRetainedTextBytes, '$label string');
+        case List<Object?>():
+          for (final item in current) {
+            visit(item, depth + 1);
+          }
+        case Map<String, Object?>():
+          for (final entry in current.entries) {
+            _requireUtf8Bound(entry.key, maxMcpIdentifierLength, '$label key');
+            visit(entry.value, depth + 1);
+          }
+        default:
+          throw FormatException('$label contains a non-JSON value.');
+      }
+    }
+
+    visit(value, 0);
+    late final String encoded;
+    try {
+      encoded = jsonEncode(value);
+    } on Object catch (error) {
+      throw FormatException('$label is not JSON encodable: $error');
+    }
+    _requireUtf8Bound(encoded, maxMcpPayloadBytes, label);
+  }
+
+  static String _requiredInput(String value, String label, int maximumLength) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty || trimmed.length > maximumLength) {
+      throw ArgumentError.value(
+        value,
+        label,
+        'Must be a non-empty string no longer than $maximumLength characters.',
+      );
+    }
+    return trimmed;
+  }
+
+  static String? _optionalInput(
+    String? value,
+    String label,
+    int maximumLength,
+  ) {
+    if (value == null) {
+      return null;
+    }
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.length > maximumLength) {
+      throw ArgumentError.value(
+        value,
+        label,
+        'Must be no longer than $maximumLength characters.',
+      );
+    }
+    return trimmed;
+  }
+
+  static String _requiredOutputString(
+    JsonObject value,
+    String key,
+    int maximumLength,
+  ) {
+    final result = value[key];
+    if (result is! String || result.isEmpty || result.length > maximumLength) {
+      throw FormatException(
+        '$key must be a non-empty string no longer than '
+        '$maximumLength characters.',
+      );
+    }
+    return result;
+  }
+
+  static String? _optionalOutputString(
+    JsonObject value,
+    String key,
+    int maximumLength,
+  ) {
+    final result = value[key];
+    if (result == null) {
+      return null;
+    }
+    if (result is! String || result.length > maximumLength) {
+      throw FormatException(
+        '$key must be a string no longer than $maximumLength characters.',
+      );
+    }
+    return result;
+  }
+
+  static void _requireUtf8Bound(String value, int maximumBytes, String label) {
+    if (utf8.encode(value).length > maximumBytes) {
+      throw FormatException('$label exceeds $maximumBytes UTF-8 bytes.');
+    }
   }
 
   static String? _nonEmptyString(Object? value) {

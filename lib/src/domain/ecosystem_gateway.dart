@@ -60,3 +60,28 @@ abstract interface class EcosystemCatalogGateway implements EcosystemGateway {
 
   Future<void> uninstallPlugin({required String pluginId});
 }
+
+/// Optional stable stock app-server MCP capability surface.
+///
+/// Direct-Host Remote deliberately does not expose these calls. Callers must
+/// check [supportsMcpCapabilities] and fail closed instead of assuming that a
+/// transport which can list server status can also execute MCP operations.
+abstract interface class McpCapabilityGateway implements EcosystemGateway {
+  bool get supportsMcpCapabilities;
+
+  Stream<McpElicitationEvent> get mcpElicitationEvents;
+
+  Future<void> reloadMcpServers();
+
+  Future<McpResourceReadResultModel> readMcpResource(
+    McpResourceReadQuery query,
+  );
+
+  Future<McpToolCallResultModel> callMcpTool(McpToolCallQuery query);
+
+  Future<void> respondToMcpElicitation({
+    required Object requestId,
+    required McpElicitationAction action,
+    Map<String, Object?> content = const {},
+  });
+}
