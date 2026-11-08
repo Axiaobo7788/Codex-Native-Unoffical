@@ -50,7 +50,8 @@ class RuntimeController extends ChangeNotifier
         OutputGateway,
         HistoryGateway,
         RemoteAdminGateway,
-        EcosystemGateway {
+        EcosystemGateway,
+        EcosystemCatalogGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     this.hostLocator = const HostExecutableLocator(),
@@ -332,6 +333,9 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().cancelUserInput(requestId);
 
   @override
+  bool get supportsEcosystemCatalog => !_usesRemote;
+
+  @override
   Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) =>
       _connectedTransport().listSkills(cwds: cwds);
 
@@ -343,6 +347,58 @@ class RuntimeController extends ChangeNotifier
   Future<List<PluginSummaryModel>> listPlugins({
     List<String> cwds = const [],
   }) => _connectedTransport().listPlugins(cwds: cwds);
+
+  @override
+  Future<PluginDetailModel> readPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  }) => _connectedTransport().readPlugin(
+    pluginName: pluginName,
+    marketplacePath: marketplacePath,
+    remoteMarketplaceName: remoteMarketplaceName,
+  );
+
+  @override
+  Future<PluginInstallResultModel> installPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  }) => _connectedTransport().installPlugin(
+    pluginName: pluginName,
+    marketplacePath: marketplacePath,
+    remoteMarketplaceName: remoteMarketplaceName,
+    installAttemptId: installAttemptId,
+  );
+
+  @override
+  Future<void> uninstallPlugin({required String pluginId}) =>
+      _connectedTransport().uninstallPlugin(pluginId: pluginId);
+
+  @override
+  Future<AppListPage> listApps([AppListQuery query = const AppListQuery()]) =>
+      _connectedTransport().listApps(query);
+
+  @override
+  Future<List<InstalledAppSnapshotModel>> listInstalledApps({
+    String? threadId,
+    bool forceRefresh = false,
+  }) => _connectedTransport().listInstalledApps(
+    threadId: threadId,
+    forceRefresh: forceRefresh,
+  );
+
+  @override
+  Future<AppReadResultModel> readApps({
+    required List<String> appIds,
+    bool includeTools = true,
+    String? threadId,
+  }) => _connectedTransport().readApps(
+    appIds: appIds,
+    includeTools: includeTools,
+    threadId: threadId,
+  );
 
   @override
   Future<List<McpServerStatusModel>> listMcpServerStatus() =>

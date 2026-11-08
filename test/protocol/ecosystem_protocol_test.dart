@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/ecosystem_protocol.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
@@ -67,13 +68,26 @@ void main() {
             'plugin/list' => {
               'marketplaces': [
                 {
+                  'name': 'openai-primary-runtime',
+                  'path': '/workspace/.agents/plugins/marketplace.json',
                   'plugins': [
                     {
-                      'id': 'git-workflow',
+                      'id': 'git-workflow@openai-primary-runtime',
+                      'name': 'git-workflow',
+                      'installed': true,
                       'enabled': true,
+                      'localVersion': '1.2.0',
+                      'installPolicy': 'AVAILABLE',
+                      'authPolicy': 'ON_USE',
+                      'source': {
+                        'type': 'local',
+                        'path': '/workspace/.agents/plugins/git-workflow',
+                      },
                       'interface': {
                         'displayName': 'Git Workflow',
                         'shortDescription': 'Branch and PR helpers',
+                        'category': 'Productivity',
+                        'capabilities': ['skills', 'mcp'],
                       },
                     },
                   ],
@@ -99,8 +113,19 @@ void main() {
 
       final plugins = await adapter.listPlugins(cwds: const ['/workspace']);
       expect(plugins, hasLength(1));
-      expect(plugins.single.id, 'git-workflow');
+      expect(plugins.single.id, 'git-workflow@openai-primary-runtime');
       expect(plugins.single.name, 'Git Workflow');
+      expect(plugins.single.effectivePluginName, 'git-workflow');
+      expect(plugins.single.installed, isTrue);
+      expect(plugins.single.version, '1.2.0');
+      expect(plugins.single.marketplaceName, 'openai-primary-runtime');
+      expect(
+        plugins.single.marketplacePath,
+        '/workspace/.agents/plugins/marketplace.json',
+      );
+      expect(plugins.single.sourceType, 'local');
+      expect(plugins.single.category, 'Productivity');
+      expect(plugins.single.capabilities, ['skills', 'mcp']);
 
       final mcp = await adapter.listMcpServerStatus();
       expect(mcp, hasLength(1));
@@ -110,6 +135,247 @@ void main() {
       expect(mcp.single.status, 'ready');
     },
   );
+
+  test('parses app/list pagination, app/installed snapshots, and app/read metadata with bounds', () async {
+    final calls = <(String, JsonObject)>[];
+    final adapter = EcosystemProtocolAdapter(
+      request: (method, [params = const {}]) async {
+        calls.add((method, params));
+        return switch (method) {
+          'app/list' => {
+            'data': [
+              {
+                'id': 'connector_github',
+                'name': 'GitHub',
+                'description': 'Access repositories and pull requests.',
+                'isAccessible': true,
+                'isEnabled': true,
+                'distributionChannel': 'DEFAULT_OAI_CATALOG',
+                'installUrl': 'https://chatgpt.com/apps/github',
+                'pluginDisplayNames': ['GitHub'],
+                'branding': {
+                  'category': 'Developer Tools',
+                  'developer': 'OpenAI',
+                  'isDiscoverableApp': true,
+                },
+                'appMetadata': {'version': '2.1.0'},
+              },
+              {'id': 'connector_github', 'name': 'Duplicate GitHub'},
+            ],
+            'nextCursor': 'cursor-page-2',
+          },
+          'app/installed' => {
+            'apps': [
+              {
+                'id': 'connector_github',
+                'runtimeName': 'GitHub',
+                'enabled': true,
+                'callable': true,
+              },
+              {
+                'id': 'connector_github',
+                'runtimeName': 'Duplicate GitHub',
+                'enabled': false,
+                'callable': false,
+              },
+            ],
+          },
+          'app/read' => {
+            'apps': [
+              {
+                'id': 'connector_github',
+                'name': 'GitHub',
+                'description': 'Access repositories, issues, and PRs.',
+                'distributionChannel': 'DEFAULT_OAI_CATALOG',
+                'installUrl': 'https://chatgpt.com/apps/github',
+                'pluginDisplayNames': ['GitHub'],
+                'toolSummaries': [
+                  {
+                    'name': 'add_comment_to_issue',
+                    'title': 'Add Issue Comment',
+                    'description': 'Create a top-level PR comment.',
+                    'isEnabled': true,
+                    'isReadOnly': false,
+                    'disabledReason': null,
+                  },
+                ],
+              },
+            ],
+            'missingAppIds': ['missing_app'],
+          },
+          _ => const {},
+        };
+      },
+    );
+
+    final page = await adapter.listApps(
+      const AppListQuery(
+        cursor: 'cursor-page-1',
+        limit: 250,
+        threadId: 'thread-42',
+        forceRefetch: true,
+      ),
+    );
+    expect(calls.single.$1, 'app/list');
+    expect(calls.single.$2, {
+      'limit': 100,
+      'cursor': 'cursor-page-1',
+      'threadId': 'thread-42',
+      'forceRefetch': true,
+    });
+    expect(page.apps, hasLength(1));
+    expect(page.apps.single.id, 'connector_github');
+    expect(page.apps.single.category, 'Developer Tools');
+    expect(page.apps.single.developer, 'OpenAI');
+    expect(page.apps.single.version, '2.1.0');
+    expect(page.apps.single.isDiscoverableApp, isTrue);
+    expect(page.nextCursor, 'cursor-page-2');
+
+    final installed = await adapter.listInstalledApps(
+      threadId: 'thread-42',
+      forceRefresh: true,
+    );
+    expect(calls.last.$1, 'app/installed');
+    expect(calls.last.$2, {'threadId': 'thread-42', 'forceRefresh': true});
+    expect(installed, hasLength(1));
+    expect(installed.single.id, 'connector_github');
+    expect(installed.single.displayName, 'GitHub');
+    expect(installed.single.enabled, isTrue);
+    expect(installed.single.callable, isTrue);
+
+    final emptyRead = await adapter.readApps(appIds: const ['  ', '']);
+    expect(emptyRead.apps, isEmpty);
+    expect(emptyRead.missingAppIds, isEmpty);
+    expect(calls, hasLength(2));
+
+    final oversizedIds = [
+      'connector_github',
+      'connector_github',
+      'missing_app',
+      for (var i = 0; i < 120; i++) 'extra_$i',
+    ];
+    final readResult = await adapter.readApps(
+      appIds: oversizedIds,
+      includeTools: true,
+      threadId: 'thread-42',
+    );
+    expect(calls.last.$1, 'app/read');
+    final sentAppIds = calls.last.$2['appIds'] as List<String>;
+    expect(sentAppIds, hasLength(100));
+    expect(sentAppIds.take(2), ['connector_github', 'missing_app']);
+    expect(readResult.apps, hasLength(1));
+    expect(
+      readResult.apps.single.toolSummaries.single.name,
+      'add_comment_to_issue',
+    );
+    expect(readResult.missingAppIds, ['missing_app']);
+  });
+
+  test('parses plugin/read detail manifest and executes plugin/install and plugin/uninstall RPCs', () async {
+    final calls = <(String, JsonObject)>[];
+    final adapter = EcosystemProtocolAdapter(
+      request: (method, [params = const {}]) async {
+        calls.add((method, params));
+        return switch (method) {
+          'plugin/read' => {
+            'plugin': {
+              'marketplaceName': 'openai-primary-runtime',
+              'marketplacePath': '/mp/marketplace.json',
+              'description': 'Create and edit document artifacts in Codex.',
+              'summary': {
+                'id': 'documents@openai-primary-runtime',
+                'name': 'documents',
+                'localVersion': '26.1104.22356',
+                'installed': true,
+                'enabled': true,
+                'installPolicy': 'AVAILABLE',
+                'authPolicy': 'ON_USE',
+                'availability': 'AVAILABLE',
+                'source': {'type': 'local', 'path': '/mp/plugins/documents'},
+                'interface': {
+                  'displayName': 'Documents',
+                  'shortDescription': 'Create and edit documents',
+                },
+              },
+              'skills': [
+                {
+                  'name': 'documents:documents',
+                  'description': 'Docx workflow',
+                  'enabled': true,
+                  'path': '/mp/plugins/documents/SKILL.md',
+                },
+              ],
+              'apps': [
+                {
+                  'id': 'connector_github',
+                  'name': 'GitHub',
+                  'category': 'Developer Tools',
+                },
+              ],
+              'mcpServers': ['docs-mcp'],
+              'hooks': [
+                {'key': 'pre-tool', 'eventName': 'preToolUse'},
+              ],
+              'shareUrl': 'https://chatgpt.com/plugins/documents',
+            },
+          },
+          'plugin/install' => {
+            'authPolicy': 'ON_INSTALL',
+            'appsNeedingAuth': [
+              {
+                'id': 'connector_github',
+                'name': 'GitHub',
+                'installUrl': 'https://chatgpt.com/apps/github',
+              },
+            ],
+          },
+          'plugin/uninstall' => const {},
+          _ => const {},
+        };
+      },
+    );
+
+    final detail = await adapter.readPlugin(
+      pluginName: 'documents',
+      marketplacePath: '/mp/marketplace.json',
+      remoteMarketplaceName: 'ignored-when-path-present',
+    );
+    expect(calls.last.$1, 'plugin/read');
+    expect(calls.last.$2, {
+      'pluginName': 'documents',
+      'marketplacePath': '/mp/marketplace.json',
+    });
+    expect(detail.summary.id, 'documents@openai-primary-runtime');
+    expect(detail.summary.name, 'Documents');
+    expect(detail.summary.version, '26.1104.22356');
+    expect(detail.marketplaceName, 'openai-primary-runtime');
+    expect(detail.skills.single.name, 'documents:documents');
+    expect(detail.apps.single.name, 'GitHub');
+    expect(detail.mcpServers, ['docs-mcp']);
+    expect(detail.hooks.single.eventName, 'preToolUse');
+
+    final installResult = await adapter.installPlugin(
+      pluginName: 'github',
+      remoteMarketplaceName: 'openai-curated',
+      installAttemptId: 'attempt-99',
+    );
+    expect(calls.last.$1, 'plugin/install');
+    expect(calls.last.$2, {
+      'pluginName': 'github',
+      'remoteMarketplaceName': 'openai-curated',
+      'installAttemptId': 'attempt-99',
+    });
+    expect(installResult.authPolicy, 'ON_INSTALL');
+    expect(installResult.appsNeedingAuth.single.id, 'connector_github');
+
+    await adapter.uninstallPlugin(pluginId: 'github@openai-curated');
+    expect(calls.last.$1, 'plugin/uninstall');
+    expect(calls.last.$2, {'pluginId': 'github@openai-curated'});
+
+    expect(() => adapter.readPlugin(pluginName: '   '), throwsArgumentError);
+    expect(() => adapter.installPlugin(pluginName: ''), throwsArgumentError);
+    expect(() => adapter.uninstallPlugin(pluginId: ''), throwsArgumentError);
+  });
 
   test('manages Track B official remoteControl/* RPCs and distinguishes operational errors from unsupported methods', () async {
     var mode = 'ok';
@@ -241,12 +507,34 @@ void main() {
     final init = await transport.initialize(const InitializeRequest());
     expect(init.userAgent, isNotEmpty);
 
-    // 1. Ecosystem discovery (Skills, Plugins, MCP, Track B Remote Control)
+    // 1. Ecosystem discovery (Skills, Plugins, Apps, MCP, Track B Remote Control)
     final skills = await transport.listSkills(cwds: [Directory.current.path]);
     expect(skills, isNotEmpty);
 
     final plugins = await transport.listPlugins(cwds: [Directory.current.path]);
     expect(plugins, isNotEmpty);
+    final firstPlugin = plugins.first;
+    final pluginDetail = await transport.readPlugin(
+      pluginName: firstPlugin.effectivePluginName,
+      marketplacePath: firstPlugin.marketplacePath,
+      remoteMarketplaceName: firstPlugin.marketplacePath == null
+          ? firstPlugin.marketplaceName
+          : null,
+    );
+    expect(pluginDetail.summary.id, firstPlugin.id);
+
+    final installedApps = await transport.listInstalledApps();
+    expect(installedApps, isA<List<InstalledAppSnapshotModel>>());
+    if (installedApps.isNotEmpty) {
+      final appRead = await transport.readApps(
+        appIds: [installedApps.first.id],
+        includeTools: true,
+      );
+      expect(
+        appRead.apps.isNotEmpty || appRead.missingAppIds.isNotEmpty,
+        isTrue,
+      );
+    }
 
     final mcpServers = await transport.listMcpServerStatus();
     expect(mcpServers, isA<List<Object?>>());

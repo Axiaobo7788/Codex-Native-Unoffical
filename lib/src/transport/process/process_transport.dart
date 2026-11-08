@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/approval_models.dart';
+import '../../domain/ecosystem_gateway.dart';
 import '../../domain/ecosystem_models.dart';
 import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
@@ -32,7 +33,7 @@ class ProcessExit {
   final String stderrTail;
 }
 
-class ProcessTransport implements CodexTransport {
+class ProcessTransport implements CodexTransport, EcosystemCatalogGateway {
   ProcessTransport._({
     required this.executablePath,
     required ChildProcess process,
@@ -328,6 +329,9 @@ class ProcessTransport implements CodexTransport {
       _remoteAdminProtocol.revokeDevice(deviceId);
 
   @override
+  bool get supportsEcosystemCatalog => true;
+
+  @override
   Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) =>
       _ecosystemProtocol.listSkills(cwds: cwds);
 
@@ -339,6 +343,58 @@ class ProcessTransport implements CodexTransport {
   Future<List<PluginSummaryModel>> listPlugins({
     List<String> cwds = const [],
   }) => _ecosystemProtocol.listPlugins(cwds: cwds);
+
+  @override
+  Future<PluginDetailModel> readPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  }) => _ecosystemProtocol.readPlugin(
+    pluginName: pluginName,
+    marketplacePath: marketplacePath,
+    remoteMarketplaceName: remoteMarketplaceName,
+  );
+
+  @override
+  Future<PluginInstallResultModel> installPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  }) => _ecosystemProtocol.installPlugin(
+    pluginName: pluginName,
+    marketplacePath: marketplacePath,
+    remoteMarketplaceName: remoteMarketplaceName,
+    installAttemptId: installAttemptId,
+  );
+
+  @override
+  Future<void> uninstallPlugin({required String pluginId}) =>
+      _ecosystemProtocol.uninstallPlugin(pluginId: pluginId);
+
+  @override
+  Future<AppListPage> listApps([AppListQuery query = const AppListQuery()]) =>
+      _ecosystemProtocol.listApps(query);
+
+  @override
+  Future<List<InstalledAppSnapshotModel>> listInstalledApps({
+    String? threadId,
+    bool forceRefresh = false,
+  }) => _ecosystemProtocol.listInstalledApps(
+    threadId: threadId,
+    forceRefresh: forceRefresh,
+  );
+
+  @override
+  Future<AppReadResultModel> readApps({
+    required List<String> appIds,
+    bool includeTools = true,
+    String? threadId,
+  }) => _ecosystemProtocol.readApps(
+    appIds: appIds,
+    includeTools: includeTools,
+    threadId: threadId,
+  );
 
   @override
   Future<List<McpServerStatusModel>> listMcpServerStatus() =>

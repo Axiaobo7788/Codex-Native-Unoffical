@@ -1,3 +1,5 @@
+const maxBoundedEcosystemItems = 100;
+
 class SkillSummary {
   const SkillSummary({
     required this.name,
@@ -29,6 +31,17 @@ class PluginSummaryModel {
     required this.description,
     required this.enabled,
     this.version,
+    this.pluginName,
+    this.installed = true,
+    this.marketplaceName,
+    this.marketplacePath,
+    this.sourceType,
+    this.installPolicy = 'AVAILABLE',
+    this.authPolicy = 'ON_USE',
+    this.availability = 'AVAILABLE',
+    this.disabledReason,
+    this.category,
+    this.capabilities = const [],
   });
 
   final String id;
@@ -36,6 +49,235 @@ class PluginSummaryModel {
   final String description;
   final bool enabled;
   final String? version;
+  final String? pluginName;
+  final bool installed;
+  final String? marketplaceName;
+  final String? marketplacePath;
+  final String? sourceType;
+  final String installPolicy;
+  final String authPolicy;
+  final String availability;
+  final String? disabledReason;
+  final String? category;
+  final List<String> capabilities;
+
+  String get effectivePluginName {
+    final trimmed = pluginName?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) {
+      return trimmed;
+    }
+    final atIndex = id.indexOf('@');
+    if (atIndex > 0) {
+      return id.substring(0, atIndex);
+    }
+    return id;
+  }
+
+  bool get canInstall =>
+      !installed &&
+      availability == 'AVAILABLE' &&
+      installPolicy != 'NOT_AVAILABLE';
+
+  bool get canUninstall => installed && installPolicy != 'INSTALLED_BY_DEFAULT';
+
+  PluginSummaryModel copyWith({
+    bool? enabled,
+    bool? installed,
+    String? version,
+  }) => PluginSummaryModel(
+    id: id,
+    name: name,
+    description: description,
+    enabled: enabled ?? this.enabled,
+    version: version ?? this.version,
+    pluginName: pluginName,
+    installed: installed ?? this.installed,
+    marketplaceName: marketplaceName,
+    marketplacePath: marketplacePath,
+    sourceType: sourceType,
+    installPolicy: installPolicy,
+    authPolicy: authPolicy,
+    availability: availability,
+    disabledReason: disabledReason,
+    category: category,
+    capabilities: capabilities,
+  );
+}
+
+class PluginAppReferenceModel {
+  const PluginAppReferenceModel({
+    required this.id,
+    required this.name,
+    this.description,
+    this.category,
+    this.installUrl,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final String? category;
+  final String? installUrl;
+}
+
+class PluginHookSummaryModel {
+  const PluginHookSummaryModel({required this.key, required this.eventName});
+
+  final String key;
+  final String eventName;
+}
+
+class PluginDetailModel {
+  const PluginDetailModel({
+    required this.summary,
+    required this.marketplaceName,
+    this.marketplacePath,
+    this.description = '',
+    this.skills = const [],
+    this.apps = const [],
+    this.mcpServers = const [],
+    this.hooks = const [],
+    this.shareUrl,
+  });
+
+  final PluginSummaryModel summary;
+  final String marketplaceName;
+  final String? marketplacePath;
+  final String description;
+  final List<SkillSummary> skills;
+  final List<PluginAppReferenceModel> apps;
+  final List<String> mcpServers;
+  final List<PluginHookSummaryModel> hooks;
+  final String? shareUrl;
+}
+
+class PluginInstallResultModel {
+  const PluginInstallResultModel({
+    this.authPolicy = 'ON_USE',
+    this.appsNeedingAuth = const [],
+  });
+
+  final String authPolicy;
+  final List<PluginAppReferenceModel> appsNeedingAuth;
+}
+
+class AppListQuery {
+  const AppListQuery({
+    this.cursor,
+    this.limit = 50,
+    this.threadId,
+    this.forceRefetch = false,
+  }) : assert(limit > 0);
+
+  final String? cursor;
+  final int limit;
+  final String? threadId;
+  final bool forceRefetch;
+}
+
+class AppSummaryModel {
+  const AppSummaryModel({
+    required this.id,
+    required this.name,
+    this.description = '',
+    this.isAccessible = false,
+    this.isEnabled = true,
+    this.distributionChannel,
+    this.installUrl,
+    this.category,
+    this.developer,
+    this.version,
+    this.isDiscoverableApp = false,
+    this.pluginDisplayNames = const [],
+  });
+
+  final String id;
+  final String name;
+  final String description;
+  final bool isAccessible;
+  final bool isEnabled;
+  final String? distributionChannel;
+  final String? installUrl;
+  final String? category;
+  final String? developer;
+  final String? version;
+  final bool isDiscoverableApp;
+  final List<String> pluginDisplayNames;
+}
+
+class AppListPage {
+  const AppListPage({required this.apps, this.nextCursor});
+
+  final List<AppSummaryModel> apps;
+  final String? nextCursor;
+}
+
+class InstalledAppSnapshotModel {
+  const InstalledAppSnapshotModel({
+    required this.id,
+    required this.enabled,
+    required this.callable,
+    this.runtimeName,
+  });
+
+  final String id;
+  final bool enabled;
+  final bool callable;
+  final String? runtimeName;
+
+  String get displayName {
+    final trimmed = runtimeName?.trim();
+    return (trimmed != null && trimmed.isNotEmpty) ? trimmed : id;
+  }
+}
+
+class AppToolSummaryModel {
+  const AppToolSummaryModel({
+    required this.name,
+    required this.description,
+    this.title,
+    this.isEnabled = true,
+    this.isReadOnly = false,
+    this.disabledReason,
+  });
+
+  final String name;
+  final String description;
+  final String? title;
+  final bool isEnabled;
+  final bool isReadOnly;
+  final String? disabledReason;
+}
+
+class AppDetailModel {
+  const AppDetailModel({
+    required this.id,
+    required this.name,
+    this.description = '',
+    this.distributionChannel,
+    this.installUrl,
+    this.iconUrl,
+    this.iconUrlDark,
+    this.pluginDisplayNames = const [],
+    this.toolSummaries = const [],
+  });
+
+  final String id;
+  final String name;
+  final String description;
+  final String? distributionChannel;
+  final String? installUrl;
+  final String? iconUrl;
+  final String? iconUrlDark;
+  final List<String> pluginDisplayNames;
+  final List<AppToolSummaryModel> toolSummaries;
+}
+
+class AppReadResultModel {
+  const AppReadResultModel({required this.apps, this.missingAppIds = const []});
+
+  final List<AppDetailModel> apps;
+  final List<String> missingAppIds;
 }
 
 class McpServerStatusModel {

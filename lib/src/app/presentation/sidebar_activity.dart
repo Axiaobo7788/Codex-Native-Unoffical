@@ -146,6 +146,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                         cwd:
                             widget.controller.selectedThread?.cwd ??
                             _workingDirectory,
+                        threadId: widget.controller.selectedThread?.id,
                       ),
                     ),
                   ),
@@ -994,25 +995,59 @@ String _shortTime(DateTime time) {
   return '${(days / 365).floor()}y';
 }
 
-enum _EcosystemSection { skills, plugins, mcp }
+enum _EcosystemSection { skills, plugins, apps, mcp }
 
 class _EcosystemDialog extends StatefulWidget {
-  const _EcosystemDialog({required this.gateway, required this.cwd});
+  const _EcosystemDialog({
+    required this.gateway,
+    required this.cwd,
+    this.threadId,
+  });
 
   final EcosystemGateway gateway;
   final String cwd;
+  final String? threadId;
 
   @override
   State<_EcosystemDialog> createState() => _EcosystemDialogState();
 }
 
 class _EcosystemDialogState extends State<_EcosystemDialog> {
+  static const _appsPageSize = 25;
+  static const _maxDisplayedAppTools = 20;
+
   var _section = _EcosystemSection.skills;
   var _loading = true;
+  var _loadingMoreApps = false;
   String? _error;
+  String? _appsError;
+  String? _pluginActionNotice;
   List<SkillSummary> _skills = const [];
   List<PluginSummaryModel> _plugins = const [];
+  List<InstalledAppSnapshotModel> _installedApps = const [];
+  List<AppSummaryModel> _catalogApps = const [];
+  String? _appsNextCursor;
   List<McpServerStatusModel> _mcpServers = const [];
+
+  final Set<String> _expandedPluginIds = <String>{};
+  final Set<String> _readingPluginIds = <String>{};
+  final Set<String> _mutatingPluginIds = <String>{};
+  final Map<String, PluginDetailModel> _pluginDetails =
+      <String, PluginDetailModel>{};
+
+  final Set<String> _expandedInstalledAppIds = <String>{};
+  final Set<String> _expandedCatalogAppIds = <String>{};
+  final Set<String> _readingAppIds = <String>{};
+  final Map<String, AppDetailModel> _appDetails = <String, AppDetailModel>{};
+  final Set<String> _missingAppIds = <String>{};
+
+  EcosystemCatalogGateway? get _catalogGateway => switch (widget.gateway) {
+    final EcosystemCatalogGateway g when g.supportsEcosystemCatalog => g,
+    _ => null,
+  };
+
+  int get _appsBadgeCount =>
+      _catalogApps.isNotEmpty ? _catalogApps.length : _installedApps.length;
 
   @override
   void initState() {
@@ -1020,26 +1055,70 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     unawaited(_refresh());
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool forceRefetch = false}) async {
     setState(() {
       _loading = true;
       _error = null;
+      _appsError = null;
     });
     final cwds = widget.cwd.trim().isEmpty
         ? const <String>[]
         : <String>[widget.cwd.trim()];
+    final catalog = _catalogGateway;
     try {
       final results = await Future.wait<Object>([
         widget.gateway.listSkills(cwds: cwds),
         widget.gateway.listPlugins(cwds: cwds),
         widget.gateway.listMcpServerStatus(),
       ]);
+      var installedApps = _installedApps;
+      var catalogApps = _catalogApps;
+      String? nextCursor = _appsNextCursor;
+      String? appsError;
+
+      if (catalog != null) {
+        try {
+          installedApps = await catalog.listInstalledApps(
+            threadId: widget.threadId,
+            forceRefresh: forceRefetch,
+          );
+        } catch (error) {
+          appsError = '$error';
+        }
+        try {
+          final page = await catalog.listApps(
+            AppListQuery(
+              limit: _appsPageSize,
+              threadId: widget.threadId,
+              forceRefetch: forceRefetch,
+            ),
+          );
+          catalogApps = page.apps
+              .take(maxBoundedEcosystemItems)
+              .toList(growable: false);
+          nextCursor = catalogApps.length >= maxBoundedEcosystemItems
+              ? null
+              : page.nextCursor;
+        } catch (error) {
+          appsError = appsError == null ? '$error' : '$appsError\n$error';
+        }
+      } else {
+        installedApps = const [];
+        catalogApps = const [];
+        nextCursor = null;
+      }
+
       if (!mounted) {
         return;
       }
+      final nextPlugins = results[1] as List<PluginSummaryModel>;
       setState(() {
         _skills = results[0] as List<SkillSummary>;
-        _plugins = results[1] as List<PluginSummaryModel>;
+        _plugins = nextPlugins;
+        _installedApps = installedApps;
+        _catalogApps = catalogApps;
+        _appsNextCursor = nextCursor;
+        _appsError = appsError;
         _mcpServers = results[2] as List<McpServerStatusModel>;
         _loading = false;
       });
@@ -1050,6 +1129,59 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       setState(() {
         _error = '$error';
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreApps() async {
+    final catalog = _catalogGateway;
+    final cursor = _appsNextCursor;
+    if (catalog == null ||
+        cursor == null ||
+        _loadingMoreApps ||
+        _catalogApps.length >= maxBoundedEcosystemItems) {
+      return;
+    }
+    setState(() {
+      _loadingMoreApps = true;
+      _appsError = null;
+    });
+    try {
+      final remaining = maxBoundedEcosystemItems - _catalogApps.length;
+      final page = await catalog.listApps(
+        AppListQuery(
+          cursor: cursor,
+          limit: remaining < _appsPageSize ? remaining : _appsPageSize,
+          threadId: widget.threadId,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      final merged = <AppSummaryModel>[..._catalogApps];
+      final seen = merged.map((a) => a.id).toSet();
+      for (final app in page.apps) {
+        if (merged.length >= maxBoundedEcosystemItems) {
+          break;
+        }
+        if (seen.add(app.id)) {
+          merged.add(app);
+        }
+      }
+      setState(() {
+        _catalogApps = List<AppSummaryModel>.unmodifiable(merged);
+        _appsNextCursor = merged.length >= maxBoundedEcosystemItems
+            ? null
+            : page.nextCursor;
+        _loadingMoreApps = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appsError = '$error';
+        _loadingMoreApps = false;
       });
     }
   }
@@ -1080,6 +1212,201 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
+  Future<void> _togglePluginDetails(PluginSummaryModel plugin) async {
+    final catalog = _catalogGateway;
+    if (catalog == null) {
+      return;
+    }
+    if (_expandedPluginIds.contains(plugin.id)) {
+      setState(() => _expandedPluginIds.remove(plugin.id));
+      return;
+    }
+    setState(() {
+      _expandedPluginIds.add(plugin.id);
+      _readingPluginIds.add(plugin.id);
+      _error = null;
+    });
+    try {
+      final detail = await catalog.readPlugin(
+        pluginName: plugin.effectivePluginName,
+        marketplacePath: plugin.marketplacePath,
+        remoteMarketplaceName: plugin.marketplacePath == null
+            ? plugin.marketplaceName
+            : null,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pluginDetails[plugin.id] = detail;
+        _readingPluginIds.remove(plugin.id);
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _readingPluginIds.remove(plugin.id);
+        _expandedPluginIds.remove(plugin.id);
+        _error = '$error';
+      });
+    }
+  }
+
+  Future<void> _installPlugin(PluginSummaryModel plugin) async {
+    final catalog = _catalogGateway;
+    if (catalog == null || _mutatingPluginIds.contains(plugin.id)) {
+      return;
+    }
+    setState(() {
+      _mutatingPluginIds.add(plugin.id);
+      _error = null;
+      _pluginActionNotice = null;
+    });
+    try {
+      final result = await catalog.installPlugin(
+        pluginName: plugin.effectivePluginName,
+        marketplacePath: plugin.marketplacePath,
+        remoteMarketplaceName: plugin.marketplacePath == null
+            ? plugin.marketplaceName
+            : null,
+      );
+      if (!mounted) {
+        return;
+      }
+      final authApps = result.appsNeedingAuth.map((a) => a.name).join(', ');
+      final notice = authApps.isNotEmpty
+          ? 'Installed ${plugin.name} (${result.authPolicy}). Connector authentication required: $authApps.'
+          : 'Installed ${plugin.name}.';
+      await _refresh(forceRefetch: true);
+      if (!mounted) {
+        return;
+      }
+      if (_expandedPluginIds.contains(plugin.id)) {
+        try {
+          final updatedDetail = await catalog.readPlugin(
+            pluginName: plugin.effectivePluginName,
+            marketplacePath: plugin.marketplacePath,
+            remoteMarketplaceName: plugin.marketplacePath == null
+                ? plugin.marketplaceName
+                : null,
+          );
+          if (mounted) {
+            _pluginDetails[plugin.id] = updatedDetail;
+          }
+        } on Object {
+          // Keep refreshed summary state if detail re-read fails.
+        }
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mutatingPluginIds.remove(plugin.id);
+        _pluginActionNotice = notice;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mutatingPluginIds.remove(plugin.id);
+        _error = '$error';
+      });
+    }
+  }
+
+  Future<void> _uninstallPlugin(PluginSummaryModel plugin) async {
+    final catalog = _catalogGateway;
+    if (catalog == null || _mutatingPluginIds.contains(plugin.id)) {
+      return;
+    }
+    setState(() {
+      _mutatingPluginIds.add(plugin.id);
+      _error = null;
+      _pluginActionNotice = null;
+    });
+    try {
+      await catalog.uninstallPlugin(pluginId: plugin.id);
+      if (!mounted) {
+        return;
+      }
+      await _refresh(forceRefetch: true);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mutatingPluginIds.remove(plugin.id);
+        _pluginDetails.remove(plugin.id);
+        _expandedPluginIds.remove(plugin.id);
+        _pluginActionNotice = 'Uninstalled ${plugin.name}.';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mutatingPluginIds.remove(plugin.id);
+        _error = '$error';
+      });
+    }
+  }
+
+  Future<void> _toggleAppDetails(
+    String appId, {
+    required bool installedSection,
+  }) async {
+    final catalog = _catalogGateway;
+    if (catalog == null) {
+      return;
+    }
+    final targetSet = installedSection
+        ? _expandedInstalledAppIds
+        : _expandedCatalogAppIds;
+    if (targetSet.contains(appId)) {
+      setState(() => targetSet.remove(appId));
+      return;
+    }
+    setState(() {
+      targetSet.add(appId);
+      _readingAppIds.add(appId);
+      _appsError = null;
+    });
+    try {
+      final result = await catalog.readApps(
+        appIds: <String>[appId],
+        includeTools: true,
+        threadId: widget.threadId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _readingAppIds.remove(appId);
+        for (final detail in result.apps) {
+          _appDetails[detail.id] = detail;
+          _missingAppIds.remove(detail.id);
+        }
+        for (final missing in result.missingAppIds) {
+          _missingAppIds.add(missing);
+        }
+        if (!_appDetails.containsKey(appId) &&
+            !result.missingAppIds.contains(appId)) {
+          _missingAppIds.add(appId);
+        }
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _readingAppIds.remove(appId);
+        targetSet.remove(appId);
+        _appsError = '$error';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
@@ -1094,7 +1421,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         ),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 680),
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 700),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1127,6 +1454,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                         label: 'Plugins (${_plugins.length})',
                       ),
                       CodexSegmentItem(
+                        value: _EcosystemSection.apps,
+                        label: 'Apps ($_appsBadgeCount)',
+                      ),
+                      CodexSegmentItem(
                         value: _EcosystemSection.mcp,
                         label: 'MCP (${_mcpServers.length})',
                       ),
@@ -1138,7 +1469,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   CodexIconButton(
                     key: const ValueKey('ecosystem-refresh-button'),
                     tooltip: 'Refresh',
-                    onPressed: _loading ? null : _refresh,
+                    onPressed: _loading
+                        ? null
+                        : () => _refresh(forceRefetch: true),
                     icon: const Icon(Icons.refresh_rounded, size: 17),
                   ),
                   CodexIconButton(
@@ -1159,6 +1492,18 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   text: error,
                 ),
               ),
+            if (_pluginActionNotice case final notice?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: KeyedSubtree(
+                  key: const ValueKey('plugin-install-auth-notice'),
+                  child: _InlineNotice(
+                    icon: Icons.info_outline_rounded,
+                    color: palette.accent,
+                    text: notice,
+                  ),
+                ),
+              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -1167,6 +1512,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                       child: switch (_section) {
                         _EcosystemSection.skills => _buildSkillsList(context),
                         _EcosystemSection.plugins => _buildPluginsList(context),
+                        _EcosystemSection.apps => _buildAppsList(context),
                         _EcosystemSection.mcp => _buildMcpList(context),
                       },
                     ),
@@ -1260,16 +1606,46 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Widget _buildPluginsList(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final catalogSupported = _catalogGateway != null;
     if (_plugins.isEmpty) {
-      return Text(
-        'No plugins installed.',
-        key: const ValueKey('ecosystem-plugins-empty'),
-        style: Theme.of(context).textTheme.bodySmall,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!catalogSupported)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: KeyedSubtree(
+                key: const ValueKey('ecosystem-plugins-lifecycle-unsupported'),
+                child: _InlineNotice(
+                  icon: Icons.lock_outline_rounded,
+                  color: palette.textSecondary,
+                  text: 'Plugin detail inspection and install/uninstall mutations require a local app-server catalog backend.',
+                ),
+              ),
+            ),
+          Text(
+            'No plugins installed.',
+            key: const ValueKey('ecosystem-plugins-empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (!catalogSupported)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: KeyedSubtree(
+              key: const ValueKey('ecosystem-plugins-lifecycle-unsupported'),
+              child: _InlineNotice(
+                icon: Icons.lock_outline_rounded,
+                color: palette.textSecondary,
+                text: 'Plugin detail inspection and install/uninstall mutations require a local app-server catalog backend.',
+              ),
+            ),
+          ),
         for (final plugin in _plugins)
           Container(
             key: ValueKey('plugin-row-${plugin.id}'),
@@ -1283,34 +1659,552 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               ),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        plugin.name,
-                        style: Theme.of(context).textTheme.titleSmall,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                plugin.name,
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              if (plugin.version case final version?
+                                  when version.isNotEmpty)
+                                Text(
+                                  'v$version',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: palette.textMuted),
+                                ),
+                              if (plugin.marketplaceName case final mpName?
+                                  when mpName.isNotEmpty)
+                                Text(
+                                  mpName,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: palette.textMuted),
+                                ),
+                              if (plugin.sourceType case final sourceType?
+                                  when sourceType.isNotEmpty)
+                                Text(
+                                  sourceType,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: palette.textMuted),
+                                ),
+                            ],
+                          ),
+                          if (plugin.description.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              plugin.description,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                          if (plugin.disabledReason case final reason?
+                              when reason.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Unavailable: $reason',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: palette.danger),
+                            ),
+                          ],
+                        ],
                       ),
-                      if (plugin.description.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                    ),
+                    const SizedBox(width: 12),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          plugin.description,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          plugin.installed
+                              ? (plugin.enabled ? 'Enabled' : 'Disabled')
+                              : 'Not installed',
+                          style: Theme.of(context).textTheme.labelSmall,
                         ),
+                        if (catalogSupported) ...[
+                          const SizedBox(width: 8),
+                          CodexButton(
+                            key: ValueKey('plugin-read-${plugin.id}'),
+                            size: CodexButtonSize.sm,
+                            variant: CodexButtonVariant.ghost,
+                            loading: _readingPluginIds.contains(plugin.id),
+                            onPressed: _readingPluginIds.contains(plugin.id)
+                                ? null
+                                : () => _togglePluginDetails(plugin),
+                            label: _expandedPluginIds.contains(plugin.id)
+                                ? 'Hide details'
+                                : 'Details',
+                          ),
+                          const SizedBox(width: 6),
+                          if (!plugin.installed)
+                            CodexButton(
+                              key: ValueKey('plugin-install-${plugin.id}'),
+                              size: CodexButtonSize.sm,
+                              variant: CodexButtonVariant.secondary,
+                              loading: _mutatingPluginIds.contains(plugin.id),
+                              onPressed:
+                                  plugin.canInstall &&
+                                      !_mutatingPluginIds.contains(plugin.id)
+                                  ? () => _installPlugin(plugin)
+                                  : null,
+                              label: 'Install',
+                            )
+                          else
+                            CodexButton(
+                              key: ValueKey('plugin-uninstall-${plugin.id}'),
+                              size: CodexButtonSize.sm,
+                              variant: CodexButtonVariant.ghost,
+                              loading: _mutatingPluginIds.contains(plugin.id),
+                              onPressed:
+                                  plugin.canUninstall &&
+                                      !_mutatingPluginIds.contains(plugin.id)
+                                  ? () => _uninstallPlugin(plugin)
+                                  : null,
+                              label: 'Uninstall',
+                            ),
+                        ],
                       ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Text(
-                  plugin.enabled ? 'Enabled' : 'Disabled',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
+                if (_expandedPluginIds.contains(plugin.id))
+                  _buildPluginDetailSection(context, plugin),
               ],
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildPluginDetailSection(
+    BuildContext context,
+    PluginSummaryModel plugin,
+  ) {
+    final palette = ThemeTokens.of(context);
+    final detail = _pluginDetails[plugin.id];
+    if (detail == null) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 10),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+    return Container(
+      key: ValueKey('plugin-detail-${plugin.id}'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (detail.description.isNotEmpty) ...[
+            Text(
+              detail.description,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 6),
+          ],
+          Text(
+            'Marketplace: ${detail.marketplaceName}'
+            '${detail.marketplacePath != null ? ' · ${detail.marketplacePath}' : ''}',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: palette.textMuted, fontFamily: 'monospace'),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Skills (${detail.skills.length}) · Apps (${detail.apps.length}) · '
+            'MCP (${detail.mcpServers.length}) · Hooks (${detail.hooks.length})',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: palette.textSecondary),
+          ),
+          if (detail.skills.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Bundled skills: ${detail.skills.map((s) => '\$${s.name}').join(', ')}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (detail.apps.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Linked apps: ${detail.apps.map((a) => a.name).join(', ')}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (detail.mcpServers.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'MCP servers: ${detail.mcpServers.join(', ')}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppsList(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    if (_catalogGateway == null) {
+      return KeyedSubtree(
+        key: const ValueKey('ecosystem-catalog-unsupported'),
+        child: _InlineNotice(
+          icon: Icons.lock_outline_rounded,
+          color: palette.textSecondary,
+          text: 'Apps catalog and connector runtime inspection are unavailable on this backend.',
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_appsError case final appsError?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: KeyedSubtree(
+              key: const ValueKey('ecosystem-apps-error'),
+              child: _InlineNotice(
+                icon: Icons.error_outline_rounded,
+                color: palette.danger,
+                text: appsError,
+              ),
+            ),
+          ),
+        Text(
+          'Installed Connector Runtime (${_installedApps.length})',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        if (_installedApps.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(
+              'No installed connector runtime apps in the committed snapshot.',
+              key: const ValueKey('ecosystem-installed-apps-empty'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          )
+        else ...[
+          for (final installed in _installedApps)
+            Container(
+              key: ValueKey('installed-app-row-${installed.id}'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                border: Border.all(
+                  color: palette.border,
+                  width: OfficialCodexTheme.hairlineBorderWidth,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              installed.displayName,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              installed.id,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: palette.textMuted,
+                                    fontFamily: 'monospace',
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${installed.enabled ? 'Enabled' : 'Disabled'} · '
+                        '${installed.callable ? 'Callable' : 'Not callable'}',
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                      const SizedBox(width: 8),
+                      CodexButton(
+                        key: ValueKey('installed-app-read-${installed.id}'),
+                        size: CodexButtonSize.sm,
+                        variant: CodexButtonVariant.ghost,
+                        loading: _readingAppIds.contains(installed.id),
+                        onPressed: _readingAppIds.contains(installed.id)
+                            ? null
+                            : () => _toggleAppDetails(
+                                installed.id,
+                                installedSection: true,
+                              ),
+                        label: _expandedInstalledAppIds.contains(installed.id)
+                            ? 'Hide details'
+                            : 'Details',
+                      ),
+                    ],
+                  ),
+                  if (_expandedInstalledAppIds.contains(installed.id))
+                    _buildAppDetailSection(context, installed.id),
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+        ],
+        Text(
+          'App Catalog (${_catalogApps.length})',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        if (_catalogApps.isEmpty)
+          Text(
+            'No catalog apps returned.',
+            key: const ValueKey('ecosystem-apps-empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          for (final app in _catalogApps)
+            Container(
+              key: ValueKey('app-row-${app.id}'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                border: Border.all(
+                  color: palette.border,
+                  width: OfficialCodexTheme.hairlineBorderWidth,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  app.name,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                if (app.category case final category?
+                                    when category.isNotEmpty)
+                                  Text(
+                                    category,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: palette.textMuted),
+                                  ),
+                                if (app.developer case final developer?
+                                    when developer.isNotEmpty)
+                                  Text(
+                                    developer,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: palette.textMuted),
+                                  ),
+                              ],
+                            ),
+                            if (app.description.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                app.description,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${app.isAccessible ? 'Accessible' : 'Unlinked'} · '
+                            '${app.isEnabled ? 'Enabled' : 'Disabled'}',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: palette.textSecondary),
+                          ),
+                          const SizedBox(width: 8),
+                          CodexButton(
+                            key: ValueKey('app-read-${app.id}'),
+                            size: CodexButtonSize.sm,
+                            variant: CodexButtonVariant.ghost,
+                            loading: _readingAppIds.contains(app.id),
+                            onPressed: _readingAppIds.contains(app.id)
+                                ? null
+                                : () => _toggleAppDetails(
+                                    app.id,
+                                    installedSection: false,
+                                  ),
+                            label: _expandedCatalogAppIds.contains(app.id)
+                                ? 'Hide details'
+                                : 'Details',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  if (_expandedCatalogAppIds.contains(app.id))
+                    _buildAppDetailSection(context, app.id),
+                ],
+              ),
+            ),
+          if (_appsNextCursor != null &&
+              _catalogApps.length < maxBoundedEcosystemItems)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: CodexButton(
+                  key: const ValueKey('ecosystem-apps-load-more'),
+                  size: CodexButtonSize.sm,
+                  variant: CodexButtonVariant.secondary,
+                  loading: _loadingMoreApps,
+                  onPressed: _loadingMoreApps ? null : _loadMoreApps,
+                  label: 'Load more apps',
+                ),
+              ),
+            )
+          else if (_catalogApps.length >= maxBoundedEcosystemItems)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Showing first $maxBoundedEcosystemItems catalog apps.',
+                key: const ValueKey('ecosystem-apps-bound-notice'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAppDetailSection(BuildContext context, String appId) {
+    final palette = ThemeTokens.of(context);
+    if (_readingAppIds.contains(appId) && !_appDetails.containsKey(appId)) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 10),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+    if (_missingAppIds.contains(appId) && !_appDetails.containsKey(appId)) {
+      return Container(
+        key: ValueKey('app-detail-missing-$appId'),
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: palette.border,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+        child: Text(
+          'No catalog metadata found for $appId.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+    final detail = _appDetails[appId];
+    if (detail == null) {
+      return const SizedBox.shrink();
+    }
+    final displayedTools = detail.toolSummaries
+        .take(_maxDisplayedAppTools)
+        .toList(growable: false);
+    return Container(
+      key: ValueKey('app-detail-$appId'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (detail.description.isNotEmpty) ...[
+            Text(
+              detail.description,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 6),
+          ],
+          if (detail.distributionChannel case final channel?
+              when channel.isNotEmpty)
+            Text(
+              'Channel: $channel',
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: palette.textMuted),
+            ),
+          if (detail.pluginDisplayNames.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Plugins: ${detail.pluginDisplayNames.join(', ')}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            'Tools (${detail.toolSummaries.length})',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: palette.textSecondary),
+          ),
+          for (final tool in displayedTools)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '• ${tool.name}${tool.isReadOnly ? ' (read-only)' : ''}'
+                '${!tool.isEnabled ? ' [disabled]' : ''}: ${tool.description}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          if (detail.toolSummaries.length > _maxDisplayedAppTools)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Showing first $_maxDisplayedAppTools of ${detail.toolSummaries.length} tools.',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ),
+        ],
+      ),
     );
   }
 

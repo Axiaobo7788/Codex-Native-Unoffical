@@ -67,6 +67,8 @@ class E2ERuntimeHarness extends RuntimeController {
     }
     skills.addAll(_defaultSkills);
     plugins.addAll(_defaultPlugins);
+    installedApps.addAll(_defaultInstalledApps);
+    catalogApps.addAll(_defaultCatalogApps);
     mcpServers.addAll(_defaultMcpServers);
   }
 
@@ -84,9 +86,37 @@ class E2ERuntimeHarness extends RuntimeController {
     PluginSummaryModel(
       id: 'git-workflow',
       name: 'Git Workflow',
+      pluginName: 'git-workflow',
       description: 'Branch and PR helpers',
       enabled: true,
+      installed: true,
       version: '1.0.0',
+      marketplaceName: 'openai-primary-runtime',
+      marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+      sourceType: 'local',
+    ),
+  ];
+
+  static const _defaultInstalledApps = [
+    InstalledAppSnapshotModel(
+      id: 'connector_github',
+      runtimeName: 'GitHub',
+      enabled: true,
+      callable: true,
+    ),
+  ];
+
+  static const _defaultCatalogApps = [
+    AppSummaryModel(
+      id: 'connector_github',
+      name: 'GitHub',
+      description: 'Access repositories, issues, and pull requests.',
+      isAccessible: true,
+      isEnabled: true,
+      distributionChannel: 'DEFAULT_OAI_CATALOG',
+      category: 'Developer Tools',
+      developer: 'OpenAI',
+      pluginDisplayNames: ['Git Workflow'],
     ),
   ];
 
@@ -142,7 +172,14 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<RemotePairedDevice> pairedDevices = [];
   final List<SkillSummary> skills = [];
   final List<PluginSummaryModel> plugins = [];
+  final List<InstalledAppSnapshotModel> installedApps = [];
+  final List<AppSummaryModel> catalogApps = [];
+  final Map<String, AppDetailModel> appDetails = {};
+  final Map<String, PluginDetailModel> pluginDetails = {};
+  final List<PluginAppReferenceModel> installAuthApps = [];
   final List<McpServerStatusModel> mcpServers = [];
+  var catalogSupported = true;
+  int? catalogPageSizeOverride;
   OfficialRemoteControlStatus officialRemoteStatus =
       const OfficialRemoteControlStatus(
         supported: true,
@@ -172,6 +209,27 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<({String threadId, String beforeTurnId})> revertedThreads = [];
   final List<String> compactedThreadIds = [];
   final List<({String path, bool enabled})> toggledSkills = [];
+  final List<AppListQuery> appListQueries = [];
+  final List<({String? threadId, bool forceRefresh})> installedAppsQueries = [];
+  final List<({List<String> appIds, bool includeTools, String? threadId})>
+  readAppRequests = [];
+  final List<
+    ({
+      String pluginName,
+      String? marketplacePath,
+      String? remoteMarketplaceName,
+    })
+  >
+  readPluginRequests = [];
+  final List<
+    ({
+      String pluginName,
+      String? marketplacePath,
+      String? remoteMarketplaceName,
+    })
+  >
+  installedPluginRequests = [];
+  final List<String> uninstalledPluginIds = [];
   final List<bool> officialRemoteEnabledToggles = [];
   final List<String> disconnectedOfficialClients = [];
   final List<({String threadId, String turnId})> interruptedTurns = [];
@@ -508,10 +566,176 @@ class E2ERuntimeHarness extends RuntimeController {
   }
 
   @override
+  bool get supportsEcosystemCatalog => catalogSupported;
+
+  @override
   Future<List<PluginSummaryModel>> listPlugins({
     List<String> cwds = const [],
   }) async {
     return List.unmodifiable(plugins);
+  }
+
+  @override
+  Future<PluginDetailModel> readPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  }) async {
+    readPluginRequests.add((
+      pluginName: pluginName,
+      marketplacePath: marketplacePath,
+      remoteMarketplaceName: remoteMarketplaceName,
+    ));
+    final existing = pluginDetails[pluginName];
+    if (existing != null) {
+      return existing;
+    }
+    final summary = plugins.firstWhere(
+      (p) => p.effectivePluginName == pluginName || p.id == pluginName,
+      orElse: () => PluginSummaryModel(
+        id: pluginName,
+        name: pluginName,
+        pluginName: pluginName,
+        description: 'Detailed plugin description for $pluginName',
+        enabled: true,
+        marketplaceName: remoteMarketplaceName ?? 'openai-primary-runtime',
+        marketplacePath: marketplacePath,
+      ),
+    );
+    return PluginDetailModel(
+      summary: summary,
+      marketplaceName:
+          summary.marketplaceName ??
+          remoteMarketplaceName ??
+          'openai-primary-runtime',
+      marketplacePath: marketplacePath ?? summary.marketplacePath,
+      description: 'Full detail manifest for ${summary.name}.',
+      skills: skills,
+      apps: const [
+        PluginAppReferenceModel(
+          id: 'connector_github',
+          name: 'GitHub',
+          category: 'Developer Tools',
+        ),
+      ],
+      mcpServers: const ['filesystem-mcp'],
+      hooks: const [
+        PluginHookSummaryModel(key: 'pre-tool', eventName: 'preToolUse'),
+      ],
+    );
+  }
+
+  @override
+  Future<PluginInstallResultModel> installPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  }) async {
+    installedPluginRequests.add((
+      pluginName: pluginName,
+      marketplacePath: marketplacePath,
+      remoteMarketplaceName: remoteMarketplaceName,
+    ));
+    final idx = plugins.indexWhere(
+      (p) => p.effectivePluginName == pluginName || p.id == pluginName,
+    );
+    if (idx != -1) {
+      plugins[idx] = plugins[idx].copyWith(installed: true, enabled: true);
+    }
+    return PluginInstallResultModel(
+      authPolicy: installAuthApps.isNotEmpty ? 'ON_INSTALL' : 'ON_USE',
+      appsNeedingAuth: List.unmodifiable(installAuthApps),
+    );
+  }
+
+  @override
+  Future<void> uninstallPlugin({required String pluginId}) async {
+    uninstalledPluginIds.add(pluginId);
+    final idx = plugins.indexWhere((p) => p.id == pluginId);
+    if (idx != -1) {
+      plugins[idx] = plugins[idx].copyWith(installed: false, enabled: false);
+    }
+  }
+
+  @override
+  Future<AppListPage> listApps([
+    AppListQuery query = const AppListQuery(),
+  ]) async {
+    appListQueries.add(query);
+    final startIndex = int.tryParse(query.cursor ?? '') ?? 0;
+    if (startIndex < 0 || startIndex >= catalogApps.length) {
+      return const AppListPage(apps: []);
+    }
+    final pageSize = catalogPageSizeOverride ?? query.limit;
+    final endIndex = (startIndex + pageSize).clamp(0, catalogApps.length);
+    final slice = catalogApps.sublist(startIndex, endIndex);
+    final nextCursor = endIndex < catalogApps.length ? '$endIndex' : null;
+    return AppListPage(apps: List.unmodifiable(slice), nextCursor: nextCursor);
+  }
+
+  @override
+  Future<List<InstalledAppSnapshotModel>> listInstalledApps({
+    String? threadId,
+    bool forceRefresh = false,
+  }) async {
+    installedAppsQueries.add((threadId: threadId, forceRefresh: forceRefresh));
+    return List.unmodifiable(installedApps);
+  }
+
+  @override
+  Future<AppReadResultModel> readApps({
+    required List<String> appIds,
+    bool includeTools = true,
+    String? threadId,
+  }) async {
+    readAppRequests.add((
+      appIds: List.unmodifiable(appIds),
+      includeTools: includeTools,
+      threadId: threadId,
+    ));
+    final found = <AppDetailModel>[];
+    final missing = <String>[];
+    for (final id in appIds) {
+      final custom = appDetails[id];
+      if (custom != null) {
+        found.add(custom);
+        continue;
+      }
+      final match = catalogApps.where((a) => a.id == id);
+      if (match.isNotEmpty) {
+        final summary = match.first;
+        found.add(
+          AppDetailModel(
+            id: summary.id,
+            name: summary.name,
+            description: summary.description,
+            distributionChannel: summary.distributionChannel,
+            installUrl: summary.installUrl,
+            pluginDisplayNames: summary.pluginDisplayNames,
+            toolSummaries: includeTools
+                ? const [
+                    AppToolSummaryModel(
+                      name: 'create_pull_request',
+                      description: 'Create a GitHub pull request.',
+                    ),
+                    AppToolSummaryModel(
+                      name: 'get_issue',
+                      description: 'Read an issue snapshot.',
+                      isReadOnly: true,
+                    ),
+                  ]
+                : const [],
+          ),
+        );
+      } else {
+        missing.add(id);
+      }
+    }
+    return AppReadResultModel(
+      apps: List.unmodifiable(found),
+      missingAppIds: List.unmodifiable(missing),
+    );
   }
 
   @override
