@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/official_codex_theme.dart';
+import 'codex_tooltip.dart';
 
 class CodexSegmentItem<T> {
   const CodexSegmentItem({
@@ -79,6 +81,19 @@ class _SegmentOptionWidget<T> extends StatefulWidget {
 
 class _SegmentOptionWidgetState<T> extends State<_SegmentOptionWidget<T>> {
   bool _isHovered = false;
+  bool _isFocused = false;
+
+  void _handleHover(bool hovering) {
+    if (hovering != _isHovered) {
+      setState(() => _isHovered = hovering);
+    }
+  }
+
+  void _handleFocus(bool focused) {
+    if (focused != _isFocused) {
+      setState(() => _isFocused = focused);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +119,9 @@ class _SegmentOptionWidgetState<T> extends State<_SegmentOptionWidget<T>> {
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(6.0),
+        border: _isFocused
+            ? Border.all(color: theme.focusRing, width: 1.5)
+            : null,
         boxShadow: widget.isSelected
             ? [
                 BoxShadow(
@@ -139,15 +157,39 @@ class _SegmentOptionWidgetState<T> extends State<_SegmentOptionWidget<T>> {
       ),
     );
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: content,
+    Widget result = Semantics(
+      button: true,
+      selected: widget.isSelected,
+      label: widget.item.label,
+      child: FocusableActionDetector(
+        onShowHoverHighlight: _handleHover,
+        onShowFocusHighlight: _handleFocus,
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) => widget.onTap(),
+          ),
+        },
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        child: MouseRegion(
+          onEnter: (_) => _handleHover(true),
+          onExit: (_) => _handleHover(false),
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: content,
+          ),
+        ),
       ),
     );
+
+    if (widget.item.tooltip != null && widget.item.tooltip!.isNotEmpty) {
+      result = CodexTooltip(message: widget.item.tooltip!, child: result);
+    }
+
+    return result;
   }
 }

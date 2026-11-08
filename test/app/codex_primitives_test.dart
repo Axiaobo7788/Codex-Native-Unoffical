@@ -8,6 +8,7 @@ import 'package:codex_native_unofficial/src/app/primitives/codex_segment.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_sidebar_row.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_tooltip.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -233,5 +234,108 @@ void main() {
       expect(find.text('Hover me'), findsOneWidget);
       expect(find.byTooltip('Helpful tip'), findsOneWidget);
     });
+
+    testWidgets(
+      'CodexSidebarRow and CodexSegment wrap tooltips in CodexTooltip instead of raw Material Tooltip',
+      (tester) async {
+        await tester.pumpWidget(
+          wrap(
+            Column(
+              children: [
+                CodexSidebarRow(
+                  title: 'Thread item',
+                  tooltip: 'Sidebar row tooltip',
+                  onTap: () {},
+                ),
+                CodexSegment<String>(
+                  items: const [
+                    CodexSegmentItem(
+                      value: 'native',
+                      label: 'Native',
+                      tooltip: 'Native segment tooltip',
+                    ),
+                    CodexSegmentItem(
+                      value: 'chat',
+                      label: 'Chat',
+                      tooltip: 'Chat segment tooltip',
+                    ),
+                  ],
+                  selectedValue: 'native',
+                  onSelected: (_) {},
+                ),
+              ],
+            ),
+          ),
+        );
+
+        expect(find.byType(CodexTooltip), findsNWidgets(3));
+        expect(find.byTooltip('Sidebar row tooltip'), findsOneWidget);
+        expect(find.byTooltip('Native segment tooltip'), findsOneWidget);
+        expect(find.byTooltip('Chat segment tooltip'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CodexButton and CodexActivityDivider reset hover/pressed states when disabled or loading',
+      (tester) async {
+        var enabled = true;
+        var loading = false;
+        var dividerTaps = 0;
+
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) => wrap(
+              Column(
+                children: [
+                  CodexButton(
+                    label: 'Toggle Enable',
+                    onPressed: enabled
+                        ? () => setState(() => enabled = false)
+                        : null,
+                  ),
+                  CodexActivityDivider(
+                    label: 'Worked for 12s',
+                    isExpanded: false,
+                    isLoading: loading,
+                    onToggle: () {
+                      dividerTaps += 1;
+                      setState(() => loading = true);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        addTearDown(gesture.removePointer);
+        await gesture.addPointer(
+          location: tester.getCenter(find.text('Toggle Enable')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Toggle Enable'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(CodexButton),
+            matching: find.byType(Opacity),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Worked for 12s'));
+        await tester.pump();
+        expect(dividerTaps, 1);
+
+        // Tapping while loading is ignored
+        await tester.tap(find.text('Worked for 12s'));
+        await tester.pump();
+        expect(dividerTaps, 1);
+      },
+    );
   });
 }

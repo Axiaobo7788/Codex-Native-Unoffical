@@ -507,34 +507,45 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     final field = TextEditingController(text: _workingDirectory);
     final next = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New thread location'),
-        content: SizedBox(
-          width: 480,
-          child: TextField(
-            key: const ValueKey('thread-directory-field'),
-            controller: field,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Working directory',
-              hintText: '/path/to/project',
+      builder: (context) {
+        final theme = OfficialCodexTheme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.modalSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: theme.hairlineBorder,
+              width: OfficialCodexTheme.hairlineBorderWidth,
             ),
-            onSubmitted: (value) => Navigator.of(context).pop(value),
           ),
-        ),
-        actions: [
-          CodexButton(
-            variant: CodexButtonVariant.ghost,
-            onPressed: () => Navigator.of(context).pop(),
-            label: 'Cancel',
+          title: const Text('New thread location'),
+          content: SizedBox(
+            width: 480,
+            child: TextField(
+              key: const ValueKey('thread-directory-field'),
+              controller: field,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Working directory',
+                hintText: '/path/to/project',
+              ),
+              onSubmitted: (value) => Navigator.of(context).pop(value),
+            ),
           ),
-          CodexButton(
-            variant: CodexButtonVariant.primary,
-            onPressed: () => Navigator.of(context).pop(field.text),
-            label: 'Use location',
-          ),
-        ],
-      ),
+          actions: [
+            CodexButton(
+              variant: CodexButtonVariant.ghost,
+              onPressed: () => Navigator.of(context).pop(),
+              label: 'Cancel',
+            ),
+            CodexButton(
+              variant: CodexButtonVariant.primary,
+              onPressed: () => Navigator.of(context).pop(field.text),
+              label: 'Use location',
+            ),
+          ],
+        );
+      },
     );
     field.dispose();
     if (next != null && next.trim().isNotEmpty && mounted) {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/official_codex_theme.dart';
 import '../theme_tokens.dart';
+import 'codex_tooltip.dart';
 
 /// Semantic navigation and thread row primitive conforming to official
 /// Codex desktop specifications (36px height, 10px radius, 0 10px padding, no ink ripple).
@@ -169,11 +170,7 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
     );
 
     if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
-      result = Tooltip(
-        message: widget.tooltip!,
-        waitDuration: const Duration(milliseconds: 500),
-        child: result,
-      );
+      result = CodexTooltip(message: widget.tooltip!, child: result);
     }
 
     return result;
