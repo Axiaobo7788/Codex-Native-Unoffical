@@ -179,7 +179,7 @@ void main() {
       const CodexServerRequest(
         id: 'clock',
         method: 'currentTime/read',
-        params: {},
+        params: {'threadId': 'thread-1'},
       ),
     );
     await pumpEventQueue();
@@ -187,6 +187,21 @@ void main() {
     expect(responses.single.$1, 'clock');
     expect(responses.single.$2, {'currentTimeAt': 1760000000});
     expect(errors, isEmpty);
+  });
+
+  test('rejects currentTime/read without its required thread ID', () async {
+    requests.add(
+      const CodexServerRequest(
+        id: 'invalid-clock',
+        method: 'currentTime/read',
+        params: {},
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(responses, isEmpty);
+    expect(errors.single.$1, 'invalid-clock');
+    expect(errors.single.$2, -32602);
   });
 
   test('projects bounded tool user input and writes schema response', () async {
@@ -330,6 +345,123 @@ void main() {
     await adapter.cancelUserInput('input-2');
     expect(errors.single.$1, 'input-2');
     expect(errors.single.$2, -32000);
+  });
+
+  test('preserves secret whitespace and declared option labels', () async {
+    final eventFuture = adapter.userInputEvents.first;
+    requests.add(
+      const CodexServerRequest(
+        id: 'input-whitespace',
+        method: 'item/tool/requestUserInput',
+        params: {
+          'threadId': 'thread-1',
+          'turnId': 'turn-1',
+          'itemId': 'item-1',
+          'isBlocking': true,
+          'questions': [
+            {
+              'id': 'choice',
+              'header': 'Choice',
+              'question': 'Choose one.',
+              'options': [
+                {'label': ' A ', 'description': 'Whitespace is significant.'},
+              ],
+            },
+            {
+              'id': 'secret',
+              'header': 'Secret',
+              'question': 'Enter a secret.',
+              'isSecret': true,
+            },
+          ],
+        },
+      ),
+    );
+    await eventFuture;
+
+    await adapter.submitUserInput(
+      requestId: 'input-whitespace',
+      answers: UserInputAnswers({
+        'choice': [' A '],
+        'secret': ['  pass phrase  '],
+      }),
+    );
+
+    expect(responses.single.$2, {
+      'answers': {
+        'choice': {
+          'answers': [' A '],
+        },
+        'secret': {
+          'answers': ['  pass phrase  '],
+        },
+      },
+    });
+  });
+
+  test('coalesces an in-flight response with external resolution', () async {
+    await adapter.dispose();
+    final responseStarted = Completer<void>();
+    final releaseResponse = Completer<void>();
+    adapter = ServerRequestProtocolAdapter(
+      serverRequests: requests.stream,
+      notifications: notifications.stream,
+      respond: (id, result) async {
+        responses.add((id, result));
+        responseStarted.complete();
+        await releaseResponse.future;
+      },
+      respondError: (id, code, message) async =>
+          errors.add((id, code, message)),
+    );
+    final events = <UserInputEvent>[];
+    final subscription = adapter.userInputEvents.listen(events.add);
+    addTearDown(subscription.cancel);
+    requests.add(
+      const CodexServerRequest(
+        id: 'input-race',
+        method: 'item/tool/requestUserInput',
+        params: {
+          'threadId': 'thread-1',
+          'turnId': 'turn-1',
+          'itemId': 'item-1',
+          'isBlocking': true,
+          'questions': [
+            {'id': 'answer', 'header': 'Answer', 'question': 'Continue?'},
+          ],
+        },
+      ),
+    );
+    await pumpEventQueue();
+
+    final firstResponse = adapter.submitUserInput(
+      requestId: 'input-race',
+      answers: UserInputAnswers({
+        'answer': ['yes'],
+      }),
+    );
+    await responseStarted.future;
+    await expectLater(
+      adapter.submitUserInput(
+        requestId: 'input-race',
+        answers: UserInputAnswers({
+          'answer': ['yes'],
+        }),
+      ),
+      throwsStateError,
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'serverRequest/resolved',
+        params: {'threadId': 'thread-1', 'requestId': 'input-race'},
+      ),
+    );
+    await pumpEventQueue();
+    releaseResponse.complete();
+    await firstResponse;
+
+    expect(responses, hasLength(1));
+    expect(events.whereType<UserInputResolvedEvent>(), hasLength(1));
   });
 
   test(

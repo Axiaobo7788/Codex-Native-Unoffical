@@ -115,7 +115,7 @@ void main() {
       child.addStdout({
         'id': 'clock-1',
         'method': 'currentTime/read',
-        'params': <String, Object?>{},
+        'params': <String, Object?>{'threadId': 'thread-1'},
       });
       await pumpEventQueue();
 

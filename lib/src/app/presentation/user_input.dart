@@ -279,7 +279,8 @@ class _UserInputCardState extends State<_UserInputCard> {
   bool get _isComplete {
     for (final question in widget.request.questions) {
       if (question.options.isEmpty || _otherSelections.contains(question.id)) {
-        if (_textControllers[question.id]!.text.trim().isEmpty) {
+        final value = _textControllers[question.id]!.text;
+        if ((question.isSecret ? value : value.trim()).isEmpty) {
           return false;
         }
       } else if (_selectedOptions[question.id] == null) {
@@ -294,7 +295,9 @@ class _UserInputCardState extends State<_UserInputCard> {
     for (final question in widget.request.questions) {
       final answer =
           question.options.isEmpty || _otherSelections.contains(question.id)
-          ? _textControllers[question.id]!.text.trim()
+          ? question.isSecret
+                ? _textControllers[question.id]!.text
+                : _textControllers[question.id]!.text.trim()
           : _selectedOptions[question.id]!;
       answers[question.id] = [answer];
     }

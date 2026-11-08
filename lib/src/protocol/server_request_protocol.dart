@@ -75,6 +75,7 @@ final class ServerRequestProtocolAdapter {
       LinkedHashMap();
   final LinkedHashMap<Object, UserInputRequest> _pendingUserInputs =
       LinkedHashMap();
+  final Set<Object> _inFlightRequestIds = <Object>{};
   final StreamController<ApprovalEvent> _approvalEvents =
       StreamController<ApprovalEvent>.broadcast();
   final StreamController<UserInputEvent> _userInputEvents =
@@ -101,34 +102,39 @@ final class ServerRequestProtocolAdapter {
         'This server request cannot be safely approved by this client.',
       );
     }
+    _beginResolution(requestId);
+    try {
+      switch (pending.style) {
+        case _ApprovalResponseStyle.commandV2:
+        case _ApprovalResponseStyle.fileV2:
+          await respond(requestId, {
+            'decision': decision == ApprovalDecision.approveOnce
+                ? 'accept'
+                : 'decline',
+          });
+        case _ApprovalResponseStyle.execLegacy:
+        case _ApprovalResponseStyle.patchLegacy:
+          await respond(requestId, {
+            'decision': decision == ApprovalDecision.approveOnce
+                ? 'approved'
+                : {
+                    'denied': {'rejection': 'Rejected by the user'},
+                  },
+          });
+        case _ApprovalResponseStyle.unsupported:
+          await respondError(
+            requestId,
+            _unsupportedErrorCode,
+            'Request rejected: unsupported by this client.',
+          );
+      }
 
-    switch (pending.style) {
-      case _ApprovalResponseStyle.commandV2:
-      case _ApprovalResponseStyle.fileV2:
-        await respond(requestId, {
-          'decision': decision == ApprovalDecision.approveOnce
-              ? 'accept'
-              : 'decline',
-        });
-      case _ApprovalResponseStyle.execLegacy:
-      case _ApprovalResponseStyle.patchLegacy:
-        await respond(requestId, {
-          'decision': decision == ApprovalDecision.approveOnce
-              ? 'approved'
-              : {
-                  'denied': {'rejection': 'Rejected by the user'},
-                },
-        });
-      case _ApprovalResponseStyle.unsupported:
-        await respondError(
-          requestId,
-          _unsupportedErrorCode,
-          'Request rejected: unsupported by this client.',
-        );
+      if (_pendingApprovals.remove(requestId) != null) {
+        _emitApproval(ApprovalResolvedEvent(requestId: requestId));
+      }
+    } finally {
+      _inFlightRequestIds.remove(requestId);
     }
-
-    _pendingApprovals.remove(requestId);
-    _emitApproval(ApprovalResolvedEvent(requestId: requestId));
   }
 
   Future<void> submitUserInput({
@@ -140,31 +146,49 @@ final class ServerRequestProtocolAdapter {
       throw StateError('User input request is no longer pending.');
     }
     final normalized = _validateAnswers(request, answers);
-    await respond(requestId, {
-      'answers': {
-        for (final entry in normalized.entries)
-          entry.key: {'answers': entry.value},
-      },
-    });
-    _pendingUserInputs.remove(requestId);
-    _emitUserInput(UserInputResolvedEvent(requestId: requestId));
+    _beginResolution(requestId);
+    try {
+      await respond(requestId, {
+        'answers': {
+          for (final entry in normalized.entries)
+            entry.key: {'answers': entry.value},
+        },
+      });
+      if (_pendingUserInputs.remove(requestId) != null) {
+        _emitUserInput(UserInputResolvedEvent(requestId: requestId));
+      }
+    } finally {
+      _inFlightRequestIds.remove(requestId);
+    }
   }
 
   Future<void> cancelUserInput(Object requestId) async {
     if (!_pendingUserInputs.containsKey(requestId)) {
       throw StateError('User input request is no longer pending.');
     }
-    await respondError(
-      requestId,
-      _unsupportedErrorCode,
-      'User input request cancelled by the user.',
-    );
-    _pendingUserInputs.remove(requestId);
-    _emitUserInput(UserInputResolvedEvent(requestId: requestId));
+    _beginResolution(requestId);
+    try {
+      await respondError(
+        requestId,
+        _unsupportedErrorCode,
+        'User input request cancelled by the user.',
+      );
+      if (_pendingUserInputs.remove(requestId) != null) {
+        _emitUserInput(UserInputResolvedEvent(requestId: requestId));
+      }
+    } finally {
+      _inFlightRequestIds.remove(requestId);
+    }
   }
 
   void _handleRequest(CodexServerRequest request) {
     if (_disposed) {
+      return;
+    }
+    if (_inFlightRequestIds.contains(request.id)) {
+      // A JSON-RPC ID cannot be reused before its response completes. Sending
+      // another response with the same ID would itself violate correlation, so
+      // keep the in-flight request authoritative and ignore the duplicate.
       return;
     }
     if (_pendingApprovals.containsKey(request.id) ||
@@ -227,9 +251,28 @@ final class ServerRequestProtocolAdapter {
   }
 
   void _handleCurrentTimeRequest(CodexServerRequest request) {
-    final seconds =
-        _clock().millisecondsSinceEpoch ~/ Duration.millisecondsPerSecond;
-    _runDetached(respond(request.id, {'currentTimeAt': seconds}));
+    try {
+      _requiredBoundedString(
+        request.params,
+        'threadId',
+        _maximumIdentifierLength,
+      );
+      final seconds =
+          _clock().millisecondsSinceEpoch ~/ Duration.millisecondsPerSecond;
+      _runDetached(respond(request.id, {'currentTimeAt': seconds}));
+    } on FormatException catch (error) {
+      _respondDetached(
+        request.id,
+        _invalidParamsErrorCode,
+        'Invalid currentTime/read params: ${error.message}',
+      );
+    }
+  }
+
+  void _beginResolution(Object requestId) {
+    if (!_inFlightRequestIds.add(requestId)) {
+      throw StateError('Server request response is already in flight.');
+    }
   }
 
   bool _reservePendingSlot(Object requestId) {
@@ -441,7 +484,13 @@ final class ServerRequestProtocolAdapter {
           'answers',
         );
       }
-      final answer = values.single.trim();
+      final rawAnswer = values.single;
+      final matchesDeclaredOption = question.options.any(
+        (option) => option.label == rawAnswer,
+      );
+      final answer = matchesDeclaredOption || question.isSecret
+          ? rawAnswer
+          : rawAnswer.trim();
       if (answer.isEmpty || answer.length > _maximumAnswerLength) {
         throw ArgumentError(
           'Question ${question.id} has an invalid answer length.',
@@ -450,7 +499,7 @@ final class ServerRequestProtocolAdapter {
       }
       if (question.options.isNotEmpty &&
           !question.allowsOther &&
-          !question.options.any((option) => option.label == answer)) {
+          !matchesDeclaredOption) {
         throw ArgumentError(
           'Question ${question.id} requires one of its declared options.',
           'answers',
@@ -566,6 +615,7 @@ final class ServerRequestProtocolAdapter {
     await _notificationSubscription.cancel();
     _pendingApprovals.clear();
     _pendingUserInputs.clear();
+    _inFlightRequestIds.clear();
     await Future.wait([_approvalEvents.close(), _userInputEvents.close()]);
   }
 }

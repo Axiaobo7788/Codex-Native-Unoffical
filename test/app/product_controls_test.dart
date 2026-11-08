@@ -310,7 +310,7 @@ void main() {
     );
     await tester.enterText(
       find.byKey(const ValueKey('user-input-note-text')),
-      'Keep this bounded.',
+      '  Keep this bounded.  ',
     );
     await tester.pump();
     expect(
@@ -326,7 +326,7 @@ void main() {
     expect(runtime.userInputSubmissions.single.$1, 'input-1');
     expect(runtime.userInputSubmissions.single.$2.values, {
       'approach': ['Incremental'],
-      'note': ['Keep this bounded.'],
+      'note': ['  Keep this bounded.  '],
     });
     expect(find.text('Codex needs your input'), findsNothing);
     expect(tester.takeException(), isNull);
