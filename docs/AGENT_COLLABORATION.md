@@ -308,6 +308,30 @@ research owner
 The reviewer does not become the permanent superior, and the implementer does
 not gain permanent ownership of that subsystem.
 
+## 11.1 Continuous peer-round loop
+
+A successful peer round does not end the collaboration session.
+
+After both owned slices are integrated and the shared HEAD has passed the
+appropriate local/hosted gates:
+
+1. refresh repository state and the living convergence queue;
+2. reopen or continue the official `agy` TUI;
+3. exchange a compact HANDOFF for the completed round;
+4. identify the next highest-value non-overlapping work;
+5. assign ownership as equal peers;
+6. continue immediately.
+
+If the current `READY` queue is empty, the peers must not conclude "nothing
+left to do." They should jointly select a machine-progressable
+`RESEARCH_MORE` item or perform a fresh Native-vs-official/schema audit to
+discover new supported gaps.
+
+A final peer-session completion report is appropriate only when the global stop
+predicate in `AGENTS.md` is satisfied. Otherwise use the report as a checkpoint
+and continue to the next round.
+
+
 ## 12. Success criterion
 
 The collaboration model is working when:

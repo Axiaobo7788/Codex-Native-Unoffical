@@ -216,6 +216,55 @@ does not make Codex the manager of Gemini. Codex may ask Gemini for an
 independent opinion, evidence gathering, or a jointly scoped slice; Gemini's
 answer is peer input and is judged by the same evidence rules as Codex's work.
 
+### Continuous iteration and queue exhaustion
+
+A completed slice, peer-coordinated round, merge, hosted CI run, or peer closure
+is a **checkpoint**, not a valid end of the active `SELF_ITERATION` turn.
+
+Before emitting a final completion report or returning control solely because
+the current slice is closed, evaluate this global stop predicate:
+
+1. there is no independent `READY` work;
+2. there is no materially progressable `RESEARCH_MORE` work using available
+   source, schemas, binaries, APK/ASAR evidence, live runtime, tests, or public
+   documentation;
+3. a fresh audit of current Native HEAD vs current stock app-server schema,
+   official Desktop evidence, and available Android evidence finds no new
+   supported `MISSING` / `PARTIAL` / regression gap;
+4. every remaining material item is genuinely blocked by Human input,
+   unavailable physical/external environment, or an intentionally excluded
+   private/unsupported service.
+
+Only when **all four** are true may the larger authorized program become idle or
+move to program-level `HUMAN_REVIEW`.
+
+Queue behavior:
+
+- If `READY` is non-empty, select the highest-value independent item and
+  continue.
+- If `READY` is empty, `RESEARCH_MORE` becomes the active machine-work queue:
+  select the highest-value researchable item, investigate it, and reclassify it
+  as `READY`, `PRIVATE_ONLY`, `BLOCKED`, `NOT_APPLICABLE`, or
+  `RESEARCH_EXHAUSTED`.
+- If existing `RESEARCH_MORE` cannot progress, perform a fresh convergence
+  audit and rebuild the living backlog.
+- `OFFICIAL_FEATURE_MATRIX.md` is a living backlog, not a finite checklist.
+  Completing all currently listed `READY` rows requires a new audit; it does
+  not prove convergence is finished.
+
+During a peer-coordinated Codex + Gemini run:
+
+- after integrating the current owned slices and validating the resulting HEAD,
+  reopen or continue the official `agy` TUI peer session;
+- exchange the compact handoff/evidence for the completed round;
+- negotiate the next non-overlapping high-value ownership pair;
+- then continue implementation without waiting for the user unless the global
+  stop predicate above is satisfied.
+
+Do not use wording such as "this report closes the current coordinated slice" as
+an implicit reason to end the active program. A report may close a slice while
+the same agent turn immediately proceeds to the next authorized slice.
+
 ### Evidence labels and completion claims
 
 Keep these evidence classes distinct:
