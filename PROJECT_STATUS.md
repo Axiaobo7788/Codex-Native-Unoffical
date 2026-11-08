@@ -8,19 +8,22 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `SELF_ITERATION`**
 
-- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_HUMAN_REVIEW_PENDING`**.
-- Phase marker: **`Official Client Convergence (M0–M5 checkpoint complete; program continues)`**.
-- Prior status: `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`.
-- The Desktop fidelity / semantic-primitives slice is now **`HUMAN_REVIEW_PENDING` only**. Its subjective visual/interaction acceptance remains with the user, but that review does **not** block the larger Official Client Convergence program.
-- While that slice awaits Human review, keep the repository in `SELF_ITERATION` and continue independent machine-actionable convergence work. Use `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` plus the current code/reverse evidence to choose the highest-value supported `MISSING` / `PARTIAL` capability that does not depend on private unsupported APIs or the pending visual judgment.
-- A completed milestone, green CI, Victory Auditor approval, or pending Human review must not be treated as a global stop signal. Only switch the whole project to `HUMAN_REVIEW` when all remaining authorized material work is blocked on Human input or the user explicitly asks to pause.
-- Convergence Phase Completion Summary: Successfully executed the full 6-stage Official Client Convergence roadmap authorized in `ORIGINAL_REQUEST.md`:
+- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_AND_FUNCTIONAL_SLICES_HUMAN_REVIEW_PENDING`**.
+- Phase marker: **`Official Client Convergence (M0–M5 + Functional Slices F1–F3 machine & real-use verified; program continues)`**.
+- Prior status: `OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_HUMAN_REVIEW_PENDING` (`abb6713`).
+- The Desktop fidelity / semantic-primitives slice (`M3`, `ADR-033`) and the newly completed Functional Convergence slices (`F1–F3`, `ADR-034`) are marked **`HUMAN_REVIEW_PENDING`** for subjective visual/interaction acceptance while the larger Official Client Convergence program remains in `SELF_ITERATION`.
+- While those slices await Human review, keep the repository in `SELF_ITERATION` for any remaining independent machine-actionable convergence work or Human feedback integration.
+- Convergence Phase Completion Summary:
   1. Stage 0 Hygiene & Security (`0858bb8`, `fd0db59`): Audited and pinned all GitHub Action workflows to verified 40-char commit SHAs with `# vX.Y.Z` comments across `.github/workflows/ci.yml` and `desktop-review-artifacts.yml`; de-identified all personal local Codex thread UUIDs in repository memory.
   2. Stage 1 & 2 Evidence Refresh (`d1c4bb0`): Clean-room analysis of installed ChatGPT/Codex Desktop `26.1103.32239` (build `25471`), 2,970 custom CSS variables, and stock `codex app-server 0.167.0-alpha.3.2` schemas; clean web-sourced Android APK research; strict two-axis evidence confidence grading.
-  3. Stage 3, 5 & 6 Reverse Specifications (`d1c4bb0`): Delivered 12 specification documents under `docs/reverse/` (`OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, and 8 `CHAT_*` protocol/data model specifications).
+  3. Stage 3, 5 & 6 Reverse Specifications (`d1c4bb0`, re-audited against code in `241ef6e`): Delivered 12 specification documents under `docs/reverse/` (`OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, and 8 `CHAT_*` protocol/data model specifications).
   4. Stage 3, 4 & 5 Desktop UI Refactor (`a4fbdaa`, `c7cfda4`): Built `OfficialCodexTheme` design token contract and 10 zero-ink-ripple native semantic primitives (`CodexButton`, `CodexIconButton`, `CodexTooltip`, `CodexSidebarRow`, `CodexComposer`, `CodexMessageBubble`, `CodexActivityRow`, `CodexPopoverAnchor`, `CodexMenu`, `CodexSegment`). Converged App Shell (12px card inset, hairline border), 260px sidebar with collapsible project groupings and compact relative timestamps, single-line thread header, 704px reading column, user message bubbles (max 528px / 75%), fenced code blocks with copy actions, `Worked for Xm Ys ›` turn dividers, 3-way client-side `PresentationDetailMode` projection filtering (`Prose` / `Commands` / `Execution` without prompt injection), floating composer (704px bounded, 24px corner radius, hairline border) with popover selectors, and bounded diff/approval/output viewers.
   5. Stage 4 Multi-Viewport Geometry Verification (`a4fbdaa`, `c7cfda4`): Automated test suite `test/app/official_convergence_geometry_test.dart` asserting exact geometry across 1920x1080 (FHD), 1440x900 (Laptop), 2560x1440 DPR 1.25 (QHD), 2560x1440 DPR 2.0 (Retina), and 720x800 (<760px compact workspace).
-  6. Stage 7 Full Verification, Live Desktop Walkthrough & ADR (`M5`): Full machine test gates (format, analyze, 286 Flutter tests, 98 Rust host tests, memory benchmark retaining 100 turns, debug Linux bundle build); live Linux desktop walkthrough on KDE Wayland against stock `codex app-server` (`0.167.0-alpha.3.2`) exercising UI, streaming prose, and clean shutdown (`ALL_CLEAN`); ADR-033 documented in `docs/DECISIONS.md`.
+  6. Stage 7 Full Verification, Live Desktop Walkthrough & ADR (`M5`, `3d31be2`): Full machine test gates, live Linux desktop walkthrough on KDE Wayland against stock `codex app-server` (`0.167.0-alpha.3.2`), and `ADR-033` documented in `docs/DECISIONS.md`.
+  7. Functional Convergence Slices F1–F3 (`241ef6e`, `732b87d`, `7b01bfb`, `1084ba6`, `ADR-034`):
+     - **Slice F1 (`732b87d`)**: Pure domain `ProductMode` (`codex`, `work`, `chat`) & `BackendCapabilities` seam (`lib/src/domain/product_mode.dart`), sidebar `product-mode-selector`, full thread lifecycle RPC parity (`thread/name/set` rename, `thread/archive`, `thread/unarchive`, `archived` filter, `thread/fork` branching with `excludeTurns: true`, `thread/revert` history truncation, `thread/compact/start` server-side compaction), bounded sidebar thread pinning (`maxPinnedThreads = 32`), and live `ThreadLifecycleEvent` notifications.
+     - **Slice F2 (`7b01bfb`)**: Active turn steering (`turn/steer` via `TurnProtocolAdapter.steerTurn` & `ConversationController.steerTurn`), structured composer attachments (`UserAttachment` write path into `turn/start` & `turn/steer` `UserInput[]` array, composer `+` attachment picker & removable chip bar), and zero-vertical-height turn-level actions (`user-copy-<id>`, `turn-fork-<turnId>`, `turn-revert-<turnId>`).
+     - **Slice F3 (`1084ba6`)**: Bounded `EcosystemProtocolAdapter` (`maxEcosystemItems = 100` for `skills/list`, `skills/config/write`, `plugin/list`, `mcpServerStatus/list`), `_EcosystemDialog` (`ecosystem-button` in sidebar footer), and Dual-Track Remote Setup (`OfficialRemoteControlStatus` Track B for stock `remoteControl/*` RPCs alongside Track A `DirectHostRemoteBackend` via `remote-track-selector`).
 - Prior desktop UI marker (`c7cfda4`, preserved history): `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`.
 - Prior foundation marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
 
@@ -2218,20 +2221,19 @@ specific evidence boundaries.
 
 ## Next action
 
-`OFFICIAL_CLIENT_CONVERGENCE_MACHINE_AND_REAL_USE_VERIFIED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
+`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_AND_FUNCTIONAL_SLICES_HUMAN_REVIEW_PENDING` (`Mode: SELF_ITERATION`).
 
 - **LOCAL MACHINE VERIFIED**:
-  - `dart format --output=none --set-exit-if-changed lib test tool` (`147` files, `0` changed);
+  - `dart format --output=none --set-exit-if-changed lib test tool` (`152` files, `0` changed);
   - `dart analyze` (`0` issues, `No issues found!`);
-  - `flutter test` (`286/286` unit, widget, and E2E tests passing with 0 failures);
+  - `flutter test` (`301/301` unit, widget, protocol, and E2E tests passing with 0 failures, including `T1.6.6` thread lifecycle, `T1.6.7` turn steering & structured attachments, `T1.6.8` Ecosystem & Dual-Track Remote, and `ecosystem_protocol_test.dart`);
   - `flutter test test/app/official_convergence_geometry_test.dart` (`5/5` viewports passing: 1920x1080 FHD, 1440x900 Laptop, 2560x1440 DPR 1.25 QHD, 2560x1440 DPR 2.0 Retina, 720x800 compact workspace);
   - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (`98/98` Rust tests passing: 26 unit + 68 bin + 4 failure paths);
-  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, `RSS_TURN_DELTA=1519616`);
+  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`);
   - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`).
 - **AGENT REAL-USE VERIFIED**:
   - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` on KDE Wayland (`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, Impeller OpenGLESSDF) against stock `codex app-server` (`0.167.0-alpha.3.2`).
-  - Process tree verified: `codex_native_un(2104117)` -> `codex-native-ho(2104496)` (RSS: 9,160 KiB) -> `codex(2104498)` (RSS: 197,204 KiB).
-  - Converged UI slices verified: window title `Codex Native`, 46 px titlebar, 260 px sidebar with collapsible project groupings (`Codex-Native-Unoffical`, `fura-project`, `libreoffice_modern`, etc.) and compact relative timestamps (`2d`, `3d`, `2w`, `4d`, `21h`, `1mo`), 12 px inset card, single-line header with 3-way `PresentationDetailMode` segment control (`Prose`, `Commands`, `Execution`), landing state `>_ Let's build`, floating composer (704 px bounded, 24 px radius), and circular flush-right Send button.
+  - Live stock `codex app-server` protocol integration test (`test/protocol/ecosystem_protocol_test.dart`) exercising `initialize`, `skills/list`, `plugin/list`, `mcpServerStatus/list`, `remoteControl/status`, `thread/start`, `thread/name/set`, `thread/archive`, `thread/list(archived: true)`, `thread/unarchive`, and `thread/delete` against `/opt/codex-desktop/resources/codex`.
   - Real coding task executed against stock app-server: `CODING_TASK_SMOKE=PASS`, `TURN_STATUS=completed`, `CHANGED_FILES=1`, `ADDITIONS=1`, `UNEXPECTED_APPROVALS=0`, `SMOKE_THREAD_CLEANED=true`, `HOST_SHUTDOWN_MS=60`.
   - Clean application exit via VM service and clean process termination verified with zero orphaned processes (`ALL_CLEAN`).
 - **HOSTED CI VERIFIED**:
@@ -2240,7 +2242,7 @@ specific evidence boundaries.
   - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), `17f08f3` / `99e6141` were reviewed to authorize `ADR-032` (`683d431`), and `cb684b5` was reviewed to authorize the **Desktop Shared Conversation Foundation Correction & Evidence Tightening** recalibration.
   - Authoritative user instruction received (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorized the **`Official Client Convergence`** phase.
 - **NOT YET HUMAN VERIFIED**:
-  - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, and bounded activity/diff/approval presentation against official client baselines.
+  - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, bounded activity/diff/approval presentation, and functional convergence slices (`F1` thread lifecycle & `ProductMode`, `F2` active turn steering & structured attachments, `F3` Ecosystem & Dual-Track Remote) against official client baselines.
 
 Blockers: None.
 
@@ -2282,7 +2284,8 @@ Blockers: None.
 
 - Stage 0: Repository Hygiene & Security Audit (40-char SHA action pinning, UUID de-identification, mode transition): COMPLETE (`0858bb8`, `fd0db59`);
 - Stage 1 & 2: Official Evidence Refresh (Desktop installed package refresh + clean web-sourced Android APK research & cross-validation with evidence grading): COMPLETE (`d1c4bb0`);
-- Stage 3, 5 & 6: Reverse Specification Suite (`docs/reverse/OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, `CHAT_*` architecture suite): COMPLETE (`d1c4bb0`);
+- Stage 3, 5 & 6: Reverse Specification Suite (`docs/reverse/OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, `CHAT_*` architecture suite): COMPLETE (`d1c4bb0`, re-audited `241ef6e`);
 - Stage 3, 4 & 5: Multi-Slice Desktop UI Refactor (Slices A–E: `OfficialCodexTheme` & `Codex*` primitives, Shell/Sidebar/Header, Timeline & detail-mode projection, Composer & selectors, Activities/Diff/Approvals): COMPLETE (`a4fbdaa`, `c7cfda4`);
 - Stage 4: Multi-Viewport Geometry Verification (automated 1920x1080, 1440x900, 2560x1440 geometry tests): COMPLETE (`a4fbdaa`, `c7cfda4`);
-- Stage 7: Full Verification & Victory Audit (full machine gates, live Linux walkthrough, ADR-033 in `docs/DECISIONS.md`, green hosted CI): COMPLETE (M5).
+- Stage 7: Full Verification & Victory Audit (full machine gates, live Linux walkthrough, ADR-033 in `docs/DECISIONS.md`, green hosted CI): COMPLETE (M5);
+- Functional Convergence Slices F1–F3 (`ProductMode` seam, thread lifecycle/branch/revert/compact/pinning, `turn/steer` & structured composer attachments, Ecosystem `Skills`/`Plugins`/`MCP`, and Dual-Track Remote `Track A + Track B`, `ADR-034`): COMPLETE (`732b87d`, `7b01bfb`, `1084ba6`).

@@ -1764,5 +1764,47 @@ Prior clean-room reverse engineering of the installed official ChatGPT / Codex D
   - Verified real coding turn execution against stock app-server (`CODING_TASK_SMOKE=PASS`, `TURN_STATUS=completed`, `CHANGED_FILES=1`, `ADDITIONS=1`, `SMOKE_THREAD_CLEANED=true`, `HOST_SHUTDOWN_MS=60`).
   - Verified clean process termination without orphaned processes (`ALL_CLEAN`).
 
+---
 
+## ADR-034 — Official Client Functional Convergence Architecture (Slices F1–F3)
 
+**Status:** Accepted  
+**Date:** 2026-11-08
+
+### Context
+
+Following the M0–M5 Official Client Convergence checkpoint (`ADR-033`, `3d31be2`) and the governance rule clarification (`abb6713`), the Desktop UI fidelity / semantic-primitives slice (`OfficialCodexTheme` + `Codex*` primitives) entered `HUMAN_REVIEW_PENDING` while the overall repository remained in `Mode: SELF_ITERATION`.
+
+Re-auditing `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` against actual code (`lib/src/`, commit `241ef6e`) identified three high-value, independent machine-actionable functional slices backed by `PUBLIC_SUPPORTED` and `EXPERIMENTAL_STOCK_SCHEMA` stock `codex app-server` interfaces that did not depend on subjective visual review or private `/backend-api/*` / `/wham/*` cloud endpoints:
+1. **Slice F1**: Shared `ProductMode` (`codex`, `work`, `chat`) & `BackendCapabilities` domain seam + full Thread Lifecycle & Sidebar Organization parity (`thread/name/set`, `thread/archive`, `thread/unarchive`, `archived` filter, `thread/fork`, `thread/revert`, `thread/compact/start`, sidebar thread pinning, and live `ThreadLifecycleEvent` notifications).
+2. **Slice F2**: Active Turn Steering (`turn/steer`), Structured Composer Attachments (`UserAttachment` write path into `turn/start` & `turn/steer` `UserInput[]` array), and Turn-Level Conversation Actions (`Copy`, `Fork from turn`, `Revert from turn`).
+3. **Slice F3**: Ecosystem Discovery & Configuration (`skills/list`, `skills/config/write`, `plugin/list`, `mcpServerStatus/list`) and Dual-Track Remote Architecture (`ADR-032` Track B `OfficialRemoteControlStatus` alongside Track A `DirectHostRemoteBackend`).
+
+### Decision
+
+1. **Pure Domain `ProductMode` and `BackendCapabilities` Seam (`lib/src/domain/product_mode.dart`)**:
+   - Define `ProductMode` (`codex`, `work`, `chat`) and `BackendCapabilities` (`codexAppServer` vs `readOnlyRemote`) in a pure leaf domain module without protocol or Flutter imports.
+   - Switching between `Codex` and `Work` modes in the shared shell (`product-mode-selector`) adjusts default client-side detail projection (`Commands` vs `Prose`) while strictly preserving `AGENTS.md` Rule #1 (zero client-side `STEPS_PROSE` / `a2` prompt injection).
+
+2. **Full Thread Lifecycle, Branching, Truncation, and Server-Side Compaction (`Slice F1`)**:
+   - Extend `ThreadGateway`, `ThreadProtocolAdapter`, and `ThreadListController` with:
+     - `renameThread` (`thread/name/set`) and live `thread/name/updated` notification handling.
+     - `archiveThread` (`thread/archive`), `unarchiveThread` (`thread/unarchive`), and `ThreadListQuery.archived` filtering (`thread-archive-filter-button`).
+     - `forkThread` (`thread/fork` with `excludeTurns: true` so forked thread summaries never hydrate full turn arrays into memory) supporting both whole-thread forks and per-turn branching (`beforeTurnId`).
+     - `revertThread` (`thread/revert` with `beforeTurnId`) for truncating persisted history before a selected turn.
+     - `compactThread` (`thread/compact/start`) delegating context compaction to stock `codex app-server`.
+     - Bounded sidebar pinning (`maxPinnedThreads = 32`) rendered in a dedicated `Pinned` section without mutating stock `~/.codex/*.sqlite` databases.
+
+3. **Active Turn Steering, Structured `UserInput[]` Write Path, and Zero-Height Turn Actions (`Slice F2`)**:
+   - Extend `TurnGateway` and `TurnProtocolAdapter` with `steerTurn` (`turn/steer` carrying `threadId`, `expectedTurnId`, and structured `input` items) and serialize `List<UserAttachment>` (`localImage`, `image`, `skill` with normalized leading `$` stripped for RPC `name`, and `mention` / `file`) alongside `text` in both `turn/start` and `turn/steer`.
+   - Keep `CodexComposer` interactive while a turn is `inProgress` (`canSteer == true`) so follow-up input steers the active turn via `ConversationController.steerTurn` without interrupting execution.
+   - Surface turn-level actions (`user-copy-<id>`, `turn-fork-<turnId>`, `turn-revert-<turnId>`) in the left gutter opposite the right-aligned `75%` `CodexMessageBubble` using a `Stack` so user message vertical height is unchanged (`0.0 px` scroll-anchor impact).
+
+4. **Bounded Ecosystem Adapter and Dual-Track Remote Setup (`Slice F3`)**:
+   - Implement `EcosystemGateway` and `EcosystemProtocolAdapter` (`maxEcosystemItems = 100`) for `skills/list`, `skills/config/write`, `plugin/list`, and `mcpServerStatus/list`, surfaced in `_EcosystemDialog` (`ecosystem-button` in sidebar footer).
+   - Implement Track B host-side Official Remote Control (`remoteControl/status`, `remoteControl/setEnabled`, `remoteControl/pair/start`, `remoteControl/clients/disconnect`) with graceful fallback when unauthenticated or unsupported, selectable alongside Track A (`DirectHostRemoteBackend`) via `ValueKey('remote-track-selector')` in `_RemoteSetupDialog`.
+
+### Consequences
+
+- Closes all remaining `PUBLIC_SUPPORTED` and `EXPERIMENTAL_STOCK_SCHEMA` functional gaps in `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` (`1.7`, `2.2–2.7`, `3.5–3.7`, `4.4 local`, `5.2`, `6.1–6.3`) while keeping the M3 Desktop UI geometry frozen (`5/5` viewports passing in `official_convergence_geometry_test.dart`).
+- Strictly preserves all `NATIVE_ADVANTAGE` invariants: `100`-thread catalog cap, `100`-turn / `100`-item sliding windows, `50 ms` streaming coalescing, `512 MiB/item` Rust host output spooling, acyclic `lib/src/domain/` graph, and zero direct SQLite mutation.
