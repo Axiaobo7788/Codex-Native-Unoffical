@@ -461,6 +461,10 @@ fn is_remote_notification(method: &str) -> bool {
             | "item/started"
             | "item/completed"
             | "thread/status/changed"
+            | "thread/name/updated"
+            | "thread/archived"
+            | "thread/unarchived"
+            | "thread/reverted"
             | "error"
     )
 }

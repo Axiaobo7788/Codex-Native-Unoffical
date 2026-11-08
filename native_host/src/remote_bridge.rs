@@ -153,6 +153,9 @@ pub(crate) fn validate_read_only_request(
         "model/list" => validate_model_list(object),
         "thread/list" => validate_thread_list(object),
         "thread/read" => validate_thread_read(object),
+        "thread/turns/list" => validate_thread_turns_list(object),
+        "thread/items/list" => validate_thread_items_list(object),
+        "thread/items/read" => validate_thread_items_read(object),
         _ => Err("Method is not available on the Remote read-only surface"),
     }
 }
@@ -210,17 +213,119 @@ fn validate_thread_list(params: &Map<String, Value>) -> Result<Value, &'static s
 
 fn validate_thread_read(params: &Map<String, Value>) -> Result<Value, &'static str> {
     require_known_keys(params, &["threadId", "includeTurns"])?;
-    let thread_id = params
-        .get("threadId")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty() && value.len() <= MAX_THREAD_ID_BYTES)
-        .ok_or("thread/read threadId is invalid")?;
+    let thread_id = validate_required_id(params, "threadId", "thread/read threadId is invalid")?;
     if let Some(value) = params.get("includeTurns")
         && value.as_bool() != Some(false)
     {
         return Err("thread/read includeTurns must be the boolean false");
     }
     Ok(json!({"threadId": thread_id, "includeTurns": false}))
+}
+
+fn validate_thread_turns_list(params: &Map<String, Value>) -> Result<Value, &'static str> {
+    require_known_keys(
+        params,
+        &["threadId", "cursor", "limit", "sortDirection", "itemsView"],
+    )?;
+    let thread_id =
+        validate_required_id(params, "threadId", "thread/turns/list threadId is invalid")?;
+    validate_cursor(params.get("cursor"))?;
+    let limit = bounded_history_limit(params.get("limit"))?;
+    if let Some(value) = params.get("sortDirection")
+        && !matches!(value.as_str(), Some("asc" | "desc"))
+    {
+        return Err("thread/turns/list sortDirection is invalid");
+    }
+    if let Some(value) = params.get("itemsView")
+        && value.as_str() != Some("summary")
+    {
+        return Err("thread/turns/list itemsView must be summary");
+    }
+    let mut normalized = params.clone();
+    normalized.insert("threadId".into(), Value::from(thread_id));
+    normalized.insert("limit".into(), Value::from(limit));
+    normalized.insert("itemsView".into(), Value::from("summary"));
+    Ok(Value::Object(normalized))
+}
+
+fn validate_thread_items_list(params: &Map<String, Value>) -> Result<Value, &'static str> {
+    require_known_keys(
+        params,
+        &[
+            "threadId",
+            "turnId",
+            "cursor",
+            "limit",
+            "sortDirection",
+            "deferOutput",
+        ],
+    )?;
+    let thread_id =
+        validate_required_id(params, "threadId", "thread/items/list threadId is invalid")?;
+    let turn_id = validate_required_id(params, "turnId", "thread/items/list turnId is invalid")?;
+    validate_cursor(params.get("cursor"))?;
+    let limit = bounded_history_limit(params.get("limit"))?;
+    if let Some(value) = params.get("sortDirection")
+        && !matches!(value.as_str(), Some("asc" | "desc"))
+    {
+        return Err("thread/items/list sortDirection is invalid");
+    }
+    if let Some(defer) = params.get("deferOutput") {
+        let Some(defer_obj) = defer.as_object() else {
+            return Err("thread/items/list deferOutput must be an object");
+        };
+        if defer_obj.len() != 1
+            || defer_obj.get("commandExecution").and_then(Value::as_bool) != Some(true)
+        {
+            return Err("thread/items/list deferOutput must defer commandExecution");
+        }
+    }
+    let mut normalized = params.clone();
+    normalized.insert("threadId".into(), Value::from(thread_id));
+    normalized.insert("turnId".into(), Value::from(turn_id));
+    normalized.insert("limit".into(), Value::from(limit));
+    normalized.insert("deferOutput".into(), json!({"commandExecution": true}));
+    Ok(Value::Object(normalized))
+}
+
+fn validate_thread_items_read(params: &Map<String, Value>) -> Result<Value, &'static str> {
+    require_known_keys(params, &["threadId", "turnId", "itemIds"])?;
+    let thread_id =
+        validate_required_id(params, "threadId", "thread/items/read threadId is invalid")?;
+    let turn_id = validate_required_id(params, "turnId", "thread/items/read turnId is invalid")?;
+    let Some(raw_ids) = params.get("itemIds").and_then(Value::as_array) else {
+        return Err("thread/items/read itemIds must be an array");
+    };
+    if raw_ids.is_empty() || raw_ids.len() > MAX_PAGE_SIZE as usize {
+        return Err("thread/items/read requires between 1 and 100 itemIds");
+    }
+    let mut item_ids = Vec::with_capacity(raw_ids.len());
+    for raw_id in raw_ids {
+        let Some(id) = raw_id
+            .as_str()
+            .filter(|val| !val.is_empty() && val.len() <= MAX_THREAD_ID_BYTES)
+        else {
+            return Err("thread/items/read itemId is invalid");
+        };
+        item_ids.push(Value::from(id));
+    }
+    Ok(json!({
+        "threadId": thread_id,
+        "turnId": turn_id,
+        "itemIds": item_ids,
+    }))
+}
+
+fn validate_required_id<'a>(
+    params: &'a Map<String, Value>,
+    key: &str,
+    err: &'static str,
+) -> Result<&'a str, &'static str> {
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= MAX_THREAD_ID_BYTES)
+        .ok_or(err)
 }
 
 fn require_known_keys(params: &Map<String, Value>, allowed: &[&str]) -> Result<(), &'static str> {
@@ -250,6 +355,20 @@ fn bounded_limit(value: Option<&Value>) -> Result<u64, &'static str> {
             Ok(value.as_u64().expect("checked above"))
         }
         _ => Err("page limit must be between 1 and 100"),
+    }
+}
+
+fn bounded_history_limit(value: Option<&Value>) -> Result<u64, &'static str> {
+    match value {
+        None | Some(Value::Null) => Ok(25),
+        Some(value)
+            if value
+                .as_u64()
+                .is_some_and(|limit| (1..=50).contains(&limit)) =>
+        {
+            Ok(value.as_u64().expect("checked above"))
+        }
+        _ => Err("history page limit must be between 1 and 50"),
     }
 }
 
@@ -298,10 +417,59 @@ mod tests {
             validate_read_only_request("model/list", &json!({})).unwrap()["limit"],
             MAX_PAGE_SIZE
         );
+        assert_eq!(
+            validate_read_only_request(
+                "thread/turns/list",
+                &json!({"threadId": "thread-1", "limit": 10}),
+            )
+            .unwrap(),
+            json!({
+                "threadId": "thread-1",
+                "limit": 10,
+                "itemsView": "summary"
+            })
+        );
+        assert_eq!(
+            validate_read_only_request(
+                "thread/items/list",
+                &json!({"threadId": "thread-1", "turnId": "turn-1", "limit": 20}),
+            )
+            .unwrap(),
+            json!({
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "limit": 20,
+                "deferOutput": {"commandExecution": true}
+            })
+        );
+        assert_eq!(
+            validate_read_only_request(
+                "thread/items/read",
+                &json!({"threadId": "thread-1", "turnId": "turn-1", "itemIds": ["item-1"]}),
+            )
+            .unwrap(),
+            json!({
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "itemIds": ["item-1"]
+            })
+        );
         for (method, params) in [
             (
                 "thread/read",
                 json!({"threadId": "thread-1", "includeTurns": true}),
+            ),
+            (
+                "thread/turns/list",
+                json!({"threadId": "thread-1", "itemsView": "full"}),
+            ),
+            (
+                "thread/items/list",
+                json!({"threadId": "thread-1", "turnId": "turn-1", "deferOutput": {"commandExecution": false}}),
+            ),
+            (
+                "thread/items/read",
+                json!({"threadId": "thread-1", "turnId": "turn-1", "itemIds": []}),
             ),
             ("thread/list", json!({"limit": 101})),
             ("thread/list", json!({"limit": 10, "cwd": "/secret"})),

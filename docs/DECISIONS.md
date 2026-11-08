@@ -1809,3 +1809,42 @@ Re-auditing `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` against actual code (`lib/
 - Closes all remaining `PUBLIC_SUPPORTED` and `EXPERIMENTAL_STOCK_SCHEMA` functional gaps in `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` (`1.7`, `2.1–2.7`, `3.5–3.7`, `4.4 local`, `5.2`, `6.1–6.3`) while keeping the M3 Desktop UI geometry frozen (`5/5` viewports passing in `official_convergence_geometry_test.dart`).
 - Strictly preserves all `NATIVE_ADVANTAGE` invariants: `100`-thread catalog cap, `100`-turn / `100`-item sliding windows, `50 ms` streaming coalescing, `512 MiB/item` Rust host output spooling, acyclic `lib/src/domain/` graph, and zero direct SQLite mutation.
 
+---
+
+## ADR-035 — Mode-Aware `ConversationBackend` Seam, Bounded `ChatConversationDag`, Structured Assistant Blocks & Track A Remote History Parity (Slices F4–F6)
+
+**Status:** Accepted  
+**Date:** 2026-11-08
+
+### Context
+
+With Slices `F1–F3` (`ADR-034`, `64b2566`) complete and verified, three additional independent machine-actionable convergence slices remained in the `Official Client Convergence` queue:
+1. **Slice F4**: Turn-level Edit & Resubmit (`turn-edit-<turnId>`), Regenerate (`turn-regenerate-<turnId>`), Interrupted Turn `Continue` (`turn-continue-<turnId>`), Failed Turn `Retry` (`turn-retry-<id>`), In-Conversation Search (`Ctrl+F` / `Cmd+F` / `conversation-search-bar`), and Structured Writing/Artifact Cards (`:::writing`, `:::artifact`, `<artifact>`, ```` ```artifact: ````) + Citation Chips (`【1†...】`, `[cite: ...]`, `[^1]: ...`) in `AssistantMarkdown`.
+2. **Slice F5**: Formalized `ConversationBackend` and `ExecutionBackend` domain contracts (`lib/src/domain/conversation_backend.dart`), mode-aware `resolveEffectiveCapabilities` composer capability gating (`ProductMode.codex`, `ProductMode.work`, `ProductMode.chat`), and clean-room `ChatConversationDag` (`lib/src/domain/chat_conversation_dag.dart`) supporting both `conversations.json` (`MrGp`) `mapping`/`current_node` payloads and `< 1/2 >` sibling branch navigation (`branch-prev-<turnId>`, `branch-label-<turnId>`, `branch-next-<turnId>`).
+3. **Slice F6**: Rich Codex Activity Projection (`mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `webSearch`, `plan`, `contextCompaction`) in `HistoryProtocolAdapter`, `TurnProtocolAdapter`, and `_ActivityContent`, plus Track A `RemoteTransport` and Rust `codex-native-host` read-only allowlist parity for bounded history pagination (`thread/turns/list`, `thread/items/list`, `thread/items/read`) and thread lifecycle notifications (`thread/name/updated`, `thread/archived`, `thread/unarchived`, `thread/reverted`).
+
+### Decision
+
+1. **Turn-Level Edit, Regenerate, Continue, Retry, Search, and Structured Assistant Blocks (`Slice F4`)**:
+   - Wire `turn-edit-<turnId>` and `turn-regenerate-<turnId>` in `_UserMessageEntryView` (left gutter `Stack`, preserving zero vertical height change) to truncate persisted history before the selected turn (`threadController.revertThread`), clear stale live entries/bookmarks, and either populate and focus the composer (`_editTurn`) or immediately resubmit the normalized prompt and attachments (`_regenerateTurn`).
+   - Surface `turn-continue-<turnId>` on interrupted turns and `turn-retry-<id>` on failed turns.
+   - Add an inline conversation search bar (`conversation-search-toggle`, `conversation-search-bar`, `conversation-search-field`, `conversation-search-count`, `conversation-search-prev`, `conversation-search-next`, `conversation-search-close`, `Ctrl+F` / `Cmd+F`) that searches currently loaded timeline items without hydrating unbounded history and jumps to matches via `_schedulePostLoadAnchorAlignment`.
+   - Implement `parseAssistantContentBlocks` in a pure leaf domain module (`lib/src/domain/assistant_content_blocks.dart`, capped at `maxStructuredBlocks = 32` and `maxCitations = 64`) and render `_StructuredDocumentBlockCard` (`structured-block-card-<index>`) and `_CitationFooterBar` (`citation-chip-<index>`) in `AssistantMarkdown`.
+
+2. **Mode-Aware `ConversationBackend` / `ExecutionBackend` Seam & Bounded `ChatConversationDag` (`Slice F5`)**:
+   - Define `ConversationBackend` and `ExecutionBackend` in `lib/src/domain/conversation_backend.dart`, implemented by `CodexTransport` and `RuntimeController`.
+   - Project effective mode capabilities via `resolveEffectiveCapabilities({required BackendCapabilities transportCapabilities, required ProductMode mode})`:
+     - `ProductMode.codex`: full execution, sandbox configuration, working directory selection, and skills/MCP.
+     - `ProductMode.work`: hides low-level sandbox configuration (`supportsSandboxConfiguration: false`, showing `composer-mode-badge` `'Work'`) while keeping workspace folder and skills/MCP.
+     - `ProductMode.chat`: prose-first conversation mode (`supportsSandboxConfiguration: false`, `supportsWorkingDirectorySelection: false`, `supportsSkillsAndMcp: false`, showing `composer-mode-badge` `'Chat'` and hiding skill attachments in the `+` menu).
+   - Implement `ChatConversationDag` in `lib/src/domain/chat_conversation_dag.dart` (`maxRetainedNodes = 256`, `maxSiblingsPerTurn = 16`, cycle-safe `fromMappingJson` for `MrGp` `mapping`/`current_node` trees, `recordTurnBranch`, `updateTurnAssistantText`, and `selectSiblingBranch`) driving `< 1/2 >` sibling branch navigation in `conversation.dart`.
+
+3. **Rich Codex Activity Projection & Track A Remote History/Lifecycle Parity (`Slice F6`)**:
+   - Project `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `webSearch`, `plan`, and `contextCompaction` items with structured `subtitle`, `badgeLabel`, and `status` in `HistoryProtocolAdapter`, `TurnProtocolAdapter`, and `_ActivityContent`.
+   - Extend `RemoteTransport` (`lib/src/transport/remote/remote_transport.dart`) with `renameThread`, `archiveThread`, `unarchiveThread`, `forkThread`, `revertThread`, `compactThread`, `deleteThread`, `steerTurn`, `listHistoryTurns`, `listHistoryItems`, and `readHistoryItems`, and update the Rust Host read-only allowlist (`native_host/src/remote_bridge.rs` & `native_host/src/transform.rs`) to permit `thread/turns/list`, `thread/items/list`, and `thread/items/read` and forward `thread/name/updated`, `thread/archived`, `thread/unarchived`, and `thread/reverted`.
+
+### Consequences
+
+- Completes Slices `F4–F6` of the `Official Client Convergence` functional roadmap while keeping `lib/src/domain/` strictly acyclic (`0` Flutter or protocol imports) and preserving all `5/5` M3 Desktop UI geometry viewports.
+- Expands automated verification to `312/312` Flutter tests (`T1.6.9`, `T1.6.10`, `assistant_markdown_test`, `history_protocol_test`, `turn_protocol_test`, `remote_transport_test`) and `98/98` Rust Host tests.
+

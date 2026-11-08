@@ -302,6 +302,85 @@ void main() {
     expect(event.snapshot.additions, 1);
     expect(event.snapshot.deletions, 1);
   });
+
+  test('projects rich Codex tool, webSearch, plan, and contextCompaction notifications into ActivityEvent', () async {
+    final events = <ActivityEvent>[];
+    final sub = adapter.events
+        .where((e) => e is ActivityEvent)
+        .cast<ActivityEvent>()
+        .listen(events.add);
+    addTearDown(sub.cancel);
+
+    notifications
+      ..add(
+        const CodexNotification(
+          method: 'item/started',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
+              'type': 'mcpToolCall',
+              'id': 'mcp-1',
+              'server': 'github',
+              'tool': 'list_issues',
+              'status': 'inProgress',
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
+              'type': 'webSearch',
+              'id': 'ws-1',
+              'query': 'rust tokio select',
+              'status': 'completed',
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
+              'type': 'plan',
+              'id': 'plan-1',
+              'text': 'Inspect transport layer\nRun tests',
+              'status': 'completed',
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
+              'type': 'contextCompaction',
+              'id': 'compact-1',
+              'status': 'completed',
+            },
+          },
+        ),
+      );
+    await pumpEventQueue();
+
+    expect(events, hasLength(4));
+    expect(events[0].summary, 'MCP: github/list_issues');
+    expect(events[0].completed, isFalse);
+    expect(events[1].summary, 'Web search: rust tokio select');
+    expect(events[2].summary, 'Plan: Inspect transport layer');
+    expect(events[3].summary, 'Context compacted');
+  });
 }
 
 class _Request {

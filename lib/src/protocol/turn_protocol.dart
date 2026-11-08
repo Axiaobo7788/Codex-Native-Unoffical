@@ -212,14 +212,33 @@ final class TurnProtocolAdapter {
     'collabAgentToolCall' => 'Collaboration: ${_requiredString(item, 'tool')}',
     'subAgentActivity' => 'Sub-agent activity',
     'functionCallOutput' => 'Function output: ${_requiredString(item, 'name')}',
-    'plan' => 'Plan updated',
+    'plan' => _planSummary(item),
     'reasoning' => 'Reasoning',
-    'webSearch' => 'Web search',
+    'webSearch' => () {
+      final query = item['query'];
+      if (query is String && query.trim().isNotEmpty) {
+        return 'Web search: ${_truncate(query.trim(), 160)}';
+      }
+      return 'Web search';
+    }(),
     'imageView' => 'Viewed image',
     'imageGeneration' => 'Generated image',
     'contextCompaction' => 'Context compacted',
     _ => _humanize(type),
   };
+
+  static String _planSummary(JsonObject item) {
+    final text = item['text'];
+    if (text is String && text.trim().isNotEmpty) {
+      final firstLine = text.trim().split('\n').first.trim();
+      return 'Plan: ${_truncate(firstLine, 160)}';
+    }
+    final steps = item['steps'] ?? item['items'];
+    if (steps is List<Object?> && steps.isNotEmpty) {
+      return 'Plan updated (${steps.length} step(s))';
+    }
+    return 'Plan updated';
+  }
 
   static String _activityStatus(JsonObject item, bool completed) {
     final status = item['status'];

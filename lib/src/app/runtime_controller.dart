@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/approval_gateway.dart';
 import '../domain/approval_models.dart';
+import '../domain/conversation_backend.dart';
 import '../domain/ecosystem_gateway.dart';
 import '../domain/ecosystem_models.dart';
 import '../domain/history_gateway.dart';
@@ -39,6 +40,8 @@ typedef TransportStarter = Future<ProcessTransport> Function(
 
 class RuntimeController extends ChangeNotifier
     implements
+        ConversationBackend,
+        ExecutionBackend,
         ThreadGateway,
         TurnGateway,
         ApprovalGateway,

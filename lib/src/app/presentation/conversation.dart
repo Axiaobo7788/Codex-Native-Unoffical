@@ -57,8 +57,25 @@ class _VisibleAnchor {
   final double viewportTopDy;
 }
 
+class _PendingTurnBranchEdit {
+  const _PendingTurnBranchEdit({
+    required this.threadId,
+    required this.turnId,
+    required this.userText,
+    required this.attachments,
+    this.assistantText,
+  });
+
+  final String threadId;
+  final String turnId;
+  final String userText;
+  final List<UserAttachment> attachments;
+  final String? assistantText;
+}
+
 class _ConversationPanelState extends State<_ConversationPanel> {
   static const _maxRetainedThreadScrollBookmarks = 32;
+  static const _maxRetainedThreadDags = 32;
   static const _maxMeasuredItemHeights = 512;
   static const _maxRestorePages = 10;
   static const _maxRestoreAlignmentPasses = 32;
@@ -66,15 +83,21 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   late final TextEditingController _composerController;
   late final FocusNode _composerFocusNode;
+  late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   late final ScrollController _scrollController;
   final LinkedHashMap<String, _ThreadScrollBookmark> _threadScrollBookmarks =
+      LinkedHashMap();
+  final LinkedHashMap<String, ChatConversationDag> _threadChatDags =
       LinkedHashMap();
   final LinkedHashMap<String, double> _measuredItemHeights = LinkedHashMap();
   final Map<String, RenderBox> _mountedItemBoxes = <String, RenderBox>{};
   final Map<String, String> _mountedItemTurnIds = <String, String>{};
   List<String> _currentTimelineItemKeys = const [];
+  List<String> _searchMatchItemKeys = const [];
   _VisibleAnchor? _preLoadOlderAnchor;
   _VisibleAnchor? _pendingStreamAnchor;
+  _PendingTurnBranchEdit? _pendingBranchEdit;
   String? _activeThreadId;
   var _lastMeasuredItemWidth = 0.0;
   var _pendingThreadRestore = false;
@@ -88,11 +111,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
   var _showChanges = false;
+  var _searchOpen = false;
+  var _activeSearchMatchIndex = 0;
+  var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
   var _productMode = ProductMode.codex;
   final _threadActionsPopoverController = CodexPopoverController();
   final _composerAttachPopoverController = CodexPopoverController();
   final List<UserAttachment> _composerAttachments = <UserAttachment>[];
+
+  BackendCapabilities get _activeCapabilities => resolveEffectiveCapabilities(
+    transportCapabilities: const BackendCapabilities.stockCodexLocal(),
+    mode: _productMode,
+  );
 
   String get _activeProjectDirectory {
     final selectedCwd = widget.controller.thread?.cwd;
@@ -114,6 +145,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     super.initState();
     _composerController = TextEditingController();
     _composerFocusNode = FocusNode();
+    _searchController = TextEditingController()
+      ..addListener(_handleSearchQueryChanged);
+    _searchFocusNode = FocusNode();
     _scrollController = ScrollController(keepScrollOffset: false)
       ..addListener(_handleScrollPositionChanged);
     _activeThreadId = widget.controller.thread?.id;
@@ -147,39 +181,218 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..dispose();
     _threadActionsPopoverController.dispose();
     _composerAttachPopoverController.dispose();
+    _searchController
+      ..removeListener(_handleSearchQueryChanged)
+      ..dispose();
+    _searchFocusNode.dispose();
     _composerFocusNode.dispose();
     _composerController.dispose();
     super.dispose();
   }
 
+  void _openConversationSearch() {
+    if (widget.controller.thread == null) {
+      return;
+    }
+    if (!_searchOpen) {
+      setState(() {
+        _searchOpen = true;
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _searchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _toggleConversationSearch() {
+    if (_searchOpen) {
+      _closeConversationSearch();
+    } else {
+      _openConversationSearch();
+    }
+  }
+
+  void _closeConversationSearch() {
+    if (!_searchOpen) {
+      return;
+    }
+    setState(() {
+      _searchOpen = false;
+      _searchController.clear();
+      _searchMatchItemKeys = const [];
+      _activeSearchMatchIndex = 0;
+    });
+  }
+
+  void _handleSearchQueryChanged() {
+    if (!mounted || !_searchOpen) {
+      return;
+    }
+    setState(() {
+      _activeSearchMatchIndex = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _searchMatchItemKeys.isNotEmpty) {
+        _jumpToSearchMatch(0);
+      }
+    });
+  }
+
+  void _jumpToSearchMatch(int index) {
+    if (_searchMatchItemKeys.isEmpty) {
+      return;
+    }
+    final normalized =
+        ((index % _searchMatchItemKeys.length) + _searchMatchItemKeys.length) %
+        _searchMatchItemKeys.length;
+    setState(() {
+      _activeSearchMatchIndex = normalized;
+    });
+    final targetKey = _searchMatchItemKeys[normalized];
+    _schedulePostLoadAnchorAlignment(
+      _VisibleAnchor(itemKey: targetKey, turnId: '', viewportTopDy: 48.0),
+      pass: 0,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return ColoredBox(
-      color: palette.canvas,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([
-          widget.controller,
-          if (widget.threadController != null) widget.threadController!,
-          widget.diffController,
-          widget.historyController,
-        ]),
-        builder: (context, _) {
-          final controller = widget.controller;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _conversationHeader(controller),
-              Expanded(
-                child: _showChanges && widget.diffController.snapshot != null
-                    ? _DiffView(controller: widget.diffController)
-                    : _timeline(controller),
-              ),
-              _ApprovalBanner(controller: widget.approvalController),
-              _composer(controller),
-            ],
-          );
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _openConversationSearch,
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
+            _openConversationSearch,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_searchOpen) {
+            _closeConversationSearch();
+          }
         },
+      },
+      child: ColoredBox(
+        color: palette.canvas,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([
+            widget.controller,
+            if (widget.threadController != null) widget.threadController!,
+            widget.diffController,
+            widget.historyController,
+          ]),
+          builder: (context, _) {
+            final controller = widget.controller;
+            final timelineChild =
+                _showChanges && widget.diffController.snapshot != null
+                ? _DiffView(controller: widget.diffController)
+                : _timeline(controller);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _conversationHeader(controller),
+                if (_searchOpen && controller.thread != null)
+                  _conversationSearchBar(),
+                Expanded(child: timelineChild),
+                _ApprovalBanner(controller: widget.approvalController),
+                _composer(controller),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _conversationSearchBar() {
+    final palette = ThemeTokens.of(context);
+    final query = _searchController.text.trim();
+    final matchCount = _searchMatchItemKeys.length;
+    final statusLabel = query.isEmpty
+        ? 'Type to search'
+        : matchCount == 0
+        ? '0 matches'
+        : '${(_activeSearchMatchIndex + 1).clamp(1, matchCount)} of $matchCount';
+    return Container(
+      key: const ValueKey('conversation-search-bar'),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border(
+          bottom: BorderSide(
+            color: palette.border,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 15, color: palette.textMuted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('conversation-search-field'),
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  decoration: const InputDecoration(
+                    hintText: 'Find in conversation…',
+                    isDense: true,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 6),
+                  ),
+                  onSubmitted: (_) {
+                    if (matchCount > 0) {
+                      _jumpToSearchMatch(_activeSearchMatchIndex + 1);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                statusLabel,
+                key: const ValueKey('conversation-search-count'),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textSecondary),
+              ),
+              const SizedBox(width: 6),
+              CodexIconButton(
+                key: const ValueKey('conversation-search-prev'),
+                tooltip: 'Previous match',
+                size: 26,
+                onPressed: matchCount > 0
+                    ? () => _jumpToSearchMatch(_activeSearchMatchIndex - 1)
+                    : null,
+                icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 16),
+              ),
+              CodexIconButton(
+                key: const ValueKey('conversation-search-next'),
+                tooltip: 'Next match',
+                size: 26,
+                onPressed: matchCount > 0
+                    ? () => _jumpToSearchMatch(_activeSearchMatchIndex + 1)
+                    : null,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+              ),
+              CodexIconButton(
+                key: const ValueKey('conversation-search-close'),
+                tooltip: 'Close search (Esc)',
+                size: 26,
+                onPressed: _closeConversationSearch,
+                icon: const Icon(Icons.close_rounded, size: 15),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -207,6 +420,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         builder: (context, constraints) {
           final showProductMode = constraints.maxWidth >= 600;
           final showSegment = constraints.maxWidth >= 380;
+          final showSearchButton =
+              thread != null &&
+              _activeCapabilities.supportsInConversationSearch &&
+              constraints.maxWidth >= 520;
           return Row(
             children: [
               if (widget.sidebarCollapsed &&
@@ -235,6 +452,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       ),
                     ),
                     if (projectCwd.isNotEmpty &&
+                        _activeCapabilities.supportsWorkingDirectorySelection &&
                         constraints.maxWidth >= 680) ...[
                       const SizedBox(width: 10),
                       Flexible(
@@ -336,6 +554,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     });
                   },
                 ),
+              if (showSearchButton) ...[
+                const SizedBox(width: ThemeTokens.space1),
+                CodexIconButton(
+                  key: const ValueKey('conversation-search-toggle'),
+                  tooltip: 'Find in conversation (Ctrl+F)',
+                  onPressed: _toggleConversationSearch,
+                  icon: Icon(
+                    Icons.search_rounded,
+                    size: 17,
+                    color: _searchOpen ? palette.accent : null,
+                  ),
+                ),
+              ],
               if (thread != null && threadController != null) ...[
                 const SizedBox(width: ThemeTokens.space1),
                 CodexPopoverAnchor(
@@ -348,6 +579,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     final archived = threadController.showArchived;
                     return CodexMenu<String>(
                       items: [
+                        const CodexMenuItem(
+                          value: 'search',
+                          label: 'Find in conversation',
+                          icon: Icon(Icons.search_rounded),
+                        ),
                         CodexMenuItem(
                           value: 'pin',
                           label: pinned ? 'Unpin thread' : 'Pin thread',
@@ -392,6 +628,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       onSelected: (action) {
                         close();
                         switch (action) {
+                          case 'search':
+                            _openConversationSearch();
                           case 'pin':
                             threadController.togglePinThread(thread.id);
                           case 'rename':
@@ -470,9 +708,237 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
   }
 
+  void _rememberThreadDag(String threadId, ChatConversationDag dag) {
+    _threadChatDags.remove(threadId);
+    _threadChatDags[threadId] = dag;
+    while (_threadChatDags.length > _maxRetainedThreadDags) {
+      _threadChatDags.remove(_threadChatDags.keys.first);
+    }
+  }
+
+  void _selectSiblingBranch(String threadId, String nodeId, int offset) {
+    final current = _threadChatDags[threadId];
+    if (current == null) {
+      return;
+    }
+    setState(() {
+      _rememberThreadDag(
+        threadId,
+        current.selectSiblingBranch(nodeId: nodeId, offset: offset),
+      );
+    });
+  }
+
+  Future<void> _editTurn({
+    required String threadId,
+    required String turnId,
+    required String rawText,
+    required List<UserAttachment> attachments,
+    String? assistantText,
+  }) async {
+    final threadController = widget.threadController;
+    if (threadController == null || widget.controller.busy) {
+      return;
+    }
+    final presentation = parseUserMessagePresentation(
+      rawText,
+      attachments: attachments,
+    );
+    final bodyText = presentation.bodyText.trim();
+    final normalizedAttachments = normalizeUserAttachments(
+      presentation.attachments,
+    );
+    _pendingBranchEdit = _PendingTurnBranchEdit(
+      threadId: threadId,
+      turnId: turnId,
+      userText: bodyText,
+      attachments: normalizedAttachments,
+      assistantText: assistantText,
+    );
+    final reverted = await threadController.revertThread(
+      threadId: threadId,
+      beforeTurnId: turnId,
+    );
+    if (reverted != null && mounted) {
+      widget.controller.clearEntries();
+      _threadScrollBookmarks.remove(threadId);
+      await widget.historyController.refresh();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _composerController.value = TextEditingValue(
+          text: bodyText,
+          selection: TextSelection.collapsed(offset: bodyText.length),
+        );
+        _composerAttachments
+          ..clear()
+          ..addAll(normalizedAttachments);
+      });
+      _composerFocusNode.requestFocus();
+    }
+  }
+
+  Future<void> _regenerateTurn({
+    required String threadId,
+    required String turnId,
+    required String rawText,
+    required List<UserAttachment> attachments,
+    String? assistantText,
+  }) async {
+    final threadController = widget.threadController;
+    if (threadController == null || widget.controller.busy) {
+      return;
+    }
+    final presentation = parseUserMessagePresentation(
+      rawText,
+      attachments: attachments,
+    );
+    final bodyText = presentation.bodyText.trim();
+    final normalizedAttachments = normalizeUserAttachments(
+      presentation.attachments,
+    );
+    if (bodyText.isEmpty && normalizedAttachments.isEmpty) {
+      return;
+    }
+    final reverted = await threadController.revertThread(
+      threadId: threadId,
+      beforeTurnId: turnId,
+    );
+    if (reverted != null && mounted) {
+      widget.controller.clearEntries();
+      _threadScrollBookmarks.remove(threadId);
+      await widget.historyController.refresh();
+      if (!mounted) {
+        return;
+      }
+      final submitted = await widget.controller.submit(
+        bodyText,
+        attachments: normalizedAttachments,
+      );
+      if (submitted && mounted) {
+        final nextTurnId =
+            widget.controller.activeTurnId ??
+            _latestLiveUserTurnId() ??
+            'branch-${_branchSequence++}';
+        final currentDag =
+            _threadChatDags[threadId] ?? const ChatConversationDag.empty();
+        setState(() {
+          _rememberThreadDag(
+            threadId,
+            currentDag.recordTurnBranch(
+              turnId: turnId,
+              originalUserText: bodyText,
+              originalAttachments: normalizedAttachments,
+              originalAssistantText: assistantText,
+              nextTurnId: nextTurnId,
+              nextUserText: bodyText,
+              nextAttachments: normalizedAttachments,
+            ),
+          );
+        });
+        _jumpToLatest();
+      }
+    }
+  }
+
+  String? _latestLiveUserTurnId() {
+    final entries = widget.controller.entries;
+    for (var i = entries.length - 1; i >= 0; i -= 1) {
+      if (entries[i].kind == ConversationEntryKind.user) {
+        final turnId = entries[i].turnId;
+        if (turnId != null && turnId.isNotEmpty) {
+          return turnId;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _continueTurn() async {
+    if (widget.controller.busy || widget.controller.thread == null) {
+      return;
+    }
+    if (await widget.controller.submit('Continue')) {
+      _jumpToLatest();
+    }
+  }
+
+  Future<void> _retryFailedHistoryTurn(
+    String threadId,
+    String turnId,
+    List<HistoryItem> rawHistoryItems,
+  ) async {
+    HistoryItem? userItem;
+    String? assistantText;
+    for (final candidate in rawHistoryItems) {
+      if (candidate.turnId == turnId) {
+        if (candidate.kind == HistoryItemKind.user) {
+          userItem = candidate;
+        } else if (candidate.kind == HistoryItemKind.assistant) {
+          assistantText = candidate.text;
+        }
+      }
+    }
+    if (userItem != null) {
+      await _regenerateTurn(
+        threadId: threadId,
+        turnId: turnId,
+        rawText: userItem.text,
+        attachments: userItem.attachments,
+        assistantText: assistantText,
+      );
+    }
+  }
+
+  Future<void> _retryFailedLiveTurn(
+    String? threadId,
+    String turnId,
+    List<ConversationEntry> rawLiveEntries,
+  ) async {
+    ConversationEntry? userEntry;
+    String? assistantText;
+    for (var i = rawLiveEntries.length - 1; i >= 0; i -= 1) {
+      final candidate = rawLiveEntries[i];
+      if (candidate.kind == ConversationEntryKind.user &&
+          (turnId.isEmpty || candidate.turnId == turnId)) {
+        userEntry ??= candidate;
+      } else if (candidate.kind == ConversationEntryKind.assistant &&
+          turnId.isNotEmpty &&
+          candidate.turnId == turnId) {
+        assistantText ??= candidate.text;
+      }
+    }
+    if (userEntry == null) {
+      return;
+    }
+    final effectiveTurnId = userEntry.turnId ?? turnId;
+    if (threadId != null &&
+        effectiveTurnId.isNotEmpty &&
+        widget.threadController != null) {
+      await _regenerateTurn(
+        threadId: threadId,
+        turnId: effectiveTurnId,
+        rawText: userEntry.text,
+        attachments: userEntry.attachments,
+        assistantText: assistantText,
+      );
+      return;
+    }
+    final presentation = parseUserMessagePresentation(
+      userEntry.text,
+      attachments: userEntry.attachments,
+    );
+    await widget.controller.submit(
+      presentation.bodyText.trim(),
+      attachments: presentation.attachments,
+    );
+  }
+
   Widget _timeline(ConversationController controller) {
     if (controller.thread == null) {
       _currentTimelineItemKeys = const [];
+      _searchMatchItemKeys = const [];
       return Center(
         child: ConstrainedBox(
           key: const ValueKey('conversation_reading_column'),
@@ -495,7 +961,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             .where(
               (e) =>
                   e.kind == ConversationEntryKind.user ||
-                  e.kind == ConversationEntryKind.assistant,
+                  e.kind == ConversationEntryKind.assistant ||
+                  e.kind == ConversationEntryKind.error,
             )
             .toList(growable: false),
       PresentationDetailMode.commands =>
@@ -504,6 +971,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               (e) =>
                   e.kind == ConversationEntryKind.user ||
                   e.kind == ConversationEntryKind.assistant ||
+                  e.kind == ConversationEntryKind.error ||
                   !e.completed ||
                   e ==
                       rawLiveEntries.lastWhere(
@@ -549,6 +1017,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     };
     if (liveEntries.isEmpty && historyItems.isEmpty) {
       _currentTimelineItemKeys = const [];
+      _searchMatchItemKeys = const [];
       final Widget emptyChild;
       if (widget.historyController.loadingTurns) {
         emptyChild = const _ConversationLoadingState();
@@ -570,6 +1039,61 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         ),
       );
     }
+
+    final activeThreadId = controller.thread!.id;
+    if (_threadChatDags[activeThreadId] case var dag?) {
+      for (final item in rawHistoryItems) {
+        if (item.kind == HistoryItemKind.assistant &&
+            item.turnId.isNotEmpty &&
+            item.text.trim().isNotEmpty) {
+          dag = dag.updateTurnAssistantText(
+            turnId: item.turnId,
+            assistantText: item.text,
+          );
+        }
+      }
+      for (final entry in rawLiveEntries) {
+        if (entry.kind == ConversationEntryKind.assistant &&
+            entry.completed &&
+            (entry.turnId?.isNotEmpty ?? false) &&
+            entry.text.trim().isNotEmpty) {
+          dag = dag.updateTurnAssistantText(
+            turnId: entry.turnId!,
+            assistantText: entry.text,
+          );
+        }
+      }
+      _threadChatDags[activeThreadId] = dag;
+    }
+
+    final searchQuery = _searchOpen
+        ? _searchController.text.trim().toLowerCase()
+        : '';
+    if (searchQuery.isEmpty) {
+      _searchMatchItemKeys = const [];
+    } else {
+      final matches = <String>[];
+      for (final item in historyItems) {
+        if (item.text.toLowerCase().contains(searchQuery)) {
+          matches.add('history-${item.id}');
+        }
+      }
+      for (final entry in liveEntries) {
+        if (entry.text.toLowerCase().contains(searchQuery)) {
+          matches.add('live-${entry.id}');
+        }
+      }
+      _searchMatchItemKeys = matches;
+      if (_activeSearchMatchIndex >= matches.length) {
+        _activeSearchMatchIndex = 0;
+      }
+    }
+    final activeMatchKey =
+        _searchMatchItemKeys.isNotEmpty &&
+            _activeSearchMatchIndex >= 0 &&
+            _activeSearchMatchIndex < _searchMatchItemKeys.length
+        ? _searchMatchItemKeys[_activeSearchMatchIndex]
+        : null;
 
     final footerCount =
         widget.historyController.canLoadOlderTurns ||
@@ -631,6 +1155,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final chronologicalIndex = messageCount - 1 - reverseIndex;
                   final activeThread = controller.thread;
                   final threadController = widget.threadController;
+                  final dag = activeThread == null
+                      ? null
+                      : _threadChatDags[activeThread.id];
                   if (chronologicalIndex < historyItems.length) {
                     final item = historyItems[chronologicalIndex];
                     final itemKey = 'history-${item.id}';
@@ -641,6 +1168,57 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         threadController != null &&
                         !controller.busy &&
                         !threadController.mutating;
+                    String? assistantTextForTurn;
+                    if (item.kind == HistoryItemKind.user &&
+                        item.turnId.isNotEmpty) {
+                      for (final candidate in rawHistoryItems) {
+                        if (candidate.turnId == item.turnId &&
+                            candidate.kind == HistoryItemKind.assistant) {
+                          assistantTextForTurn = candidate.text;
+                        }
+                      }
+                    }
+                    final activeSibling =
+                        _activeCapabilities.supportsBranchNavigation &&
+                            item.turnId.isNotEmpty
+                        ? dag?.activeSiblingForTurn(item.turnId)
+                        : null;
+                    final siblingInfo = activeSibling != null
+                        ? dag?.siblingInfoFor(activeSibling.id)
+                        : null;
+                    final hasMultipleBranches =
+                        siblingInfo != null && siblingInfo.hasMultipleBranches;
+                    String? overrideText;
+                    List<UserAttachment>? overrideAttachments;
+                    if (hasMultipleBranches && activeSibling != null) {
+                      if (item.kind == HistoryItemKind.user) {
+                        overrideText = activeSibling.text;
+                        overrideAttachments = activeSibling.attachments;
+                      } else if (item.kind == HistoryItemKind.assistant) {
+                        final asstNode = dag?.assistantChildFor(
+                          activeSibling.id,
+                        );
+                        if (asstNode != null && asstNode.text.isNotEmpty) {
+                          overrideText = asstNode.text;
+                        }
+                      }
+                    }
+                    final isLastInTurn =
+                        chronologicalIndex + 1 >= historyItems.length ||
+                        historyItems[chronologicalIndex + 1].turnId !=
+                            item.turnId;
+                    final historyTurn = item.turnId.isEmpty
+                        ? null
+                        : widget.historyController.turnForId(item.turnId);
+                    final showHistoryContinue =
+                        isLastInTurn &&
+                        historyTurn?.status == TurnRuntimeStatus.interrupted &&
+                        !controller.busy;
+                    final showHistoryRetry =
+                        isLastInTurn &&
+                        historyTurn?.status == TurnRuntimeStatus.failed &&
+                        activeThread != null &&
+                        !controller.busy;
                     return _MeasuredTimelineItem(
                       key: ValueKey('measured-$itemKey'),
                       itemKey: itemKey,
@@ -653,6 +1231,62 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         historyController: widget.historyController,
                         outputGateway: widget.outputGateway,
                         detailMode: _detailMode,
+                        overrideEntryText: overrideText,
+                        overrideAttachments: overrideAttachments,
+                        siblingBranchInfo:
+                            item.kind == HistoryItemKind.user &&
+                                hasMultipleBranches
+                            ? siblingInfo
+                            : null,
+                        onSelectSiblingBranch:
+                            item.kind == HistoryItemKind.user &&
+                                hasMultipleBranches &&
+                                activeThread != null &&
+                                activeSibling != null
+                            ? (offset) => _selectSiblingBranch(
+                                activeThread.id,
+                                activeSibling.id,
+                                offset,
+                              )
+                            : null,
+                        isSearchMatch: _searchMatchItemKeys.contains(itemKey),
+                        isActiveSearchMatch: activeMatchKey == itemKey,
+                        onEditFromTurn: canMutateTurn
+                            ? () => unawaited(
+                                _editTurn(
+                                  threadId: activeThread.id,
+                                  turnId: item.turnId,
+                                  rawText: overrideText ?? item.text,
+                                  attachments:
+                                      overrideAttachments ?? item.attachments,
+                                  assistantText: assistantTextForTurn,
+                                ),
+                              )
+                            : null,
+                        onRegenerateFromTurn: canMutateTurn
+                            ? () => unawaited(
+                                _regenerateTurn(
+                                  threadId: activeThread.id,
+                                  turnId: item.turnId,
+                                  rawText: overrideText ?? item.text,
+                                  attachments:
+                                      overrideAttachments ?? item.attachments,
+                                  assistantText: assistantTextForTurn,
+                                ),
+                              )
+                            : null,
+                        onContinueTurn: showHistoryContinue
+                            ? () => unawaited(_continueTurn())
+                            : null,
+                        onRetryTurn: showHistoryRetry
+                            ? () => unawaited(
+                                _retryFailedHistoryTurn(
+                                  activeThread.id,
+                                  item.turnId,
+                                  rawHistoryItems,
+                                ),
+                              )
+                            : null,
                         onForkFromTurn: canMutateTurn
                             ? () => unawaited(
                                 threadController.forkThread(
@@ -694,6 +1328,51 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       threadController != null &&
                       !controller.busy &&
                       !threadController.mutating;
+                  String? assistantTextForLiveTurn;
+                  if (entry.kind == ConversationEntryKind.user &&
+                      liveTurnId.isNotEmpty) {
+                    for (final candidate in rawLiveEntries) {
+                      if (candidate.turnId == liveTurnId &&
+                          candidate.kind == ConversationEntryKind.assistant) {
+                        assistantTextForLiveTurn = candidate.text;
+                      }
+                    }
+                  }
+                  final activeSibling =
+                      _activeCapabilities.supportsBranchNavigation &&
+                          liveTurnId.isNotEmpty
+                      ? dag?.activeSiblingForTurn(liveTurnId)
+                      : null;
+                  final siblingInfo = activeSibling != null
+                      ? dag?.siblingInfoFor(activeSibling.id)
+                      : null;
+                  final hasMultipleBranches =
+                      siblingInfo != null && siblingInfo.hasMultipleBranches;
+                  var effectiveEntry = entry;
+                  var effectiveAttachments = entry.attachments;
+                  if (hasMultipleBranches && activeSibling != null) {
+                    if (entry.kind == ConversationEntryKind.user) {
+                      effectiveEntry = entry.copyWith(
+                        text: activeSibling.text,
+                        attachments: activeSibling.attachments,
+                      );
+                      effectiveAttachments = activeSibling.attachments;
+                    } else if (entry.kind == ConversationEntryKind.assistant) {
+                      final asstNode = dag?.assistantChildFor(activeSibling.id);
+                      if (asstNode != null && asstNode.text.isNotEmpty) {
+                        effectiveEntry = entry.copyWith(text: asstNode.text);
+                      }
+                    }
+                  }
+                  final showLiveContinue =
+                      entry.kind == ConversationEntryKind.error &&
+                      entry.status == 'interrupted' &&
+                      !controller.busy;
+                  final showLiveRetry =
+                      entry.kind == ConversationEntryKind.error &&
+                      entry.status != 'interrupted' &&
+                      entry.status != 'retrying' &&
+                      !controller.busy;
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -702,9 +1381,61 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     onUnmount: _unregisterItemBox,
                     child: _ConversationEntryView(
                       key: ValueKey(entry.id),
-                      entry: entry,
+                      entry: effectiveEntry,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
-                      attachments: entry.attachments,
+                      attachments: effectiveAttachments,
+                      siblingBranchInfo:
+                          entry.kind == ConversationEntryKind.user &&
+                              hasMultipleBranches
+                          ? siblingInfo
+                          : null,
+                      onSelectSiblingBranch:
+                          entry.kind == ConversationEntryKind.user &&
+                              hasMultipleBranches &&
+                              activeThread != null &&
+                              activeSibling != null
+                          ? (offset) => _selectSiblingBranch(
+                              activeThread.id,
+                              activeSibling.id,
+                              offset,
+                            )
+                          : null,
+                      isSearchMatch: _searchMatchItemKeys.contains(itemKey),
+                      isActiveSearchMatch: activeMatchKey == itemKey,
+                      onEditFromTurn: canMutateLiveTurn
+                          ? () => unawaited(
+                              _editTurn(
+                                threadId: activeThread.id,
+                                turnId: liveTurnId,
+                                rawText: effectiveEntry.text,
+                                attachments: effectiveAttachments,
+                                assistantText: assistantTextForLiveTurn,
+                              ),
+                            )
+                          : null,
+                      onRegenerateFromTurn: canMutateLiveTurn
+                          ? () => unawaited(
+                              _regenerateTurn(
+                                threadId: activeThread.id,
+                                turnId: liveTurnId,
+                                rawText: effectiveEntry.text,
+                                attachments: effectiveAttachments,
+                                assistantText: assistantTextForLiveTurn,
+                              ),
+                            )
+                          : null,
+                      onContinueTurn: showLiveContinue
+                          ? () => unawaited(_continueTurn())
+                          : null,
+                      onRetryTurn: showLiveRetry
+                          ? () => unawaited(
+                              _retryFailedLiveTurn(
+                                activeThread?.id,
+                                liveTurnId,
+                                rawLiveEntries,
+                              ),
+                            )
+                          : null,
                       onForkFromTurn: canMutateLiveTurn
                           ? () => unawaited(
                               threadController.forkThread(
@@ -754,6 +1485,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final palette = ThemeTokens.of(context);
     final thread = controller.thread;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
+    final capabilities = _activeCapabilities;
     final canCreateOnSend =
         thread == null &&
         widget.threadController != null &&
@@ -824,8 +1556,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     hintText: thread == null && !canCreateOnSend
                         ? 'Select or create a thread'
                         : canSteer
-                        ? 'Steer active turn in Codex'
-                        : 'Send a message to Codex',
+                        ? _productMode.steerPlaceholder
+                        : _productMode.composerPlaceholder,
                     filled: false,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -852,23 +1584,24 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         offset: const Offset(0, -6),
                         popoverBuilder: (context, close) =>
                             CodexMenu<UserAttachmentKind>(
-                              items: const [
-                                CodexMenuItem(
+                              items: [
+                                const CodexMenuItem(
                                   value: UserAttachmentKind.mention,
                                   label: 'Attach file (@mention)',
                                   icon: Icon(Icons.description_outlined),
                                 ),
-                                CodexMenuItem(
+                                const CodexMenuItem(
                                   value: UserAttachmentKind.image,
                                   label: 'Attach image',
                                   icon: Icon(Icons.image_outlined),
                                 ),
-                                CodexMenuItem(
-                                  value: UserAttachmentKind.skill,
-                                  label: 'Attach skill (\$skill)',
-                                  icon: Icon(Icons.auto_fix_high_outlined),
-                                ),
-                                CodexMenuItem(
+                                if (capabilities.supportsSkillsAndMcp)
+                                  const CodexMenuItem(
+                                    value: UserAttachmentKind.skill,
+                                    label: 'Attach skill (\$skill)',
+                                    icon: Icon(Icons.auto_fix_high_outlined),
+                                  ),
+                                const CodexMenuItem(
                                   value: UserAttachmentKind.pastedText,
                                   label: 'Attach snippet',
                                   icon: Icon(Icons.notes_rounded),
@@ -890,10 +1623,30 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       ),
                       const SizedBox(width: 2),
-                      _ExecutionSettingsButton(
-                        controller: widget.settingsController,
-                      ),
-                      if (projectCwd.isNotEmpty && !compactComposer) ...[
+                      if (capabilities.supportsSandboxConfiguration)
+                        _ExecutionSettingsButton(
+                          controller: widget.settingsController,
+                        )
+                      else
+                        Container(
+                          key: const ValueKey('composer-mode-badge'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.surfaceRaised,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _productMode.modeBadgeLabel,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: palette.textSecondary),
+                          ),
+                        ),
+                      if (projectCwd.isNotEmpty &&
+                          !compactComposer &&
+                          capabilities.supportsWorkingDirectorySelection) ...[
                         const SizedBox(width: 4),
                         CodexTooltip(
                           message: projectCwd,
@@ -1024,8 +1777,34 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     }
     if (await widget.controller.submit(text, attachments: attachments)) {
+      final pendingBranch = _pendingBranchEdit;
+      _pendingBranchEdit = null;
       _composerController.clear();
-      setState(_composerAttachments.clear);
+      setState(() {
+        _composerAttachments.clear();
+        if (pendingBranch != null &&
+            widget.controller.thread?.id == pendingBranch.threadId) {
+          final nextTurnId =
+              widget.controller.activeTurnId ??
+              _latestLiveUserTurnId() ??
+              'branch-${_branchSequence++}';
+          final currentDag =
+              _threadChatDags[pendingBranch.threadId] ??
+              const ChatConversationDag.empty();
+          _rememberThreadDag(
+            pendingBranch.threadId,
+            currentDag.recordTurnBranch(
+              turnId: pendingBranch.turnId,
+              originalUserText: pendingBranch.userText,
+              originalAttachments: pendingBranch.attachments,
+              originalAssistantText: pendingBranch.assistantText,
+              nextTurnId: nextTurnId,
+              nextUserText: text.trim(),
+              nextAttachments: attachments,
+            ),
+          );
+        }
+      });
       _jumpToLatest();
     }
   }
@@ -1995,6 +2774,14 @@ class _ConversationEntryView extends StatelessWidget {
     this.trailingAction,
     this.onForkFromTurn,
     this.onRevertFromTurn,
+    this.onEditFromTurn,
+    this.onRegenerateFromTurn,
+    this.onContinueTurn,
+    this.onRetryTurn,
+    this.siblingBranchInfo,
+    this.onSelectSiblingBranch,
+    this.isSearchMatch = false,
+    this.isActiveSearchMatch = false,
   });
 
   final ConversationEntry entry;
@@ -2006,6 +2793,14 @@ class _ConversationEntryView extends StatelessWidget {
   final Widget? trailingAction;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
+  final VoidCallback? onEditFromTurn;
+  final VoidCallback? onRegenerateFromTurn;
+  final VoidCallback? onContinueTurn;
+  final VoidCallback? onRetryTurn;
+  final ChatSiblingBranchInfo? siblingBranchInfo;
+  final ValueChanged<int>? onSelectSiblingBranch;
+  final bool isSearchMatch;
+  final bool isActiveSearchMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -2022,6 +2817,12 @@ class _ConversationEntryView extends StatelessWidget {
             attachments: attachments,
             onForkFromTurn: onForkFromTurn,
             onRevertFromTurn: onRevertFromTurn,
+            onEditFromTurn: onEditFromTurn,
+            onRegenerateFromTurn: onRegenerateFromTurn,
+            siblingBranchInfo: siblingBranchInfo,
+            onSelectSiblingBranch: onSelectSiblingBranch,
+            isSearchMatch: isSearchMatch,
+            isActiveSearchMatch: isActiveSearchMatch,
           ),
         ),
       );
@@ -2052,6 +2853,9 @@ class _ConversationEntryView extends StatelessWidget {
         entry.kind == ConversationEntryKind.assistant &&
         entry.completed &&
         entry.text.trim().isNotEmpty;
+    final actionKeySuffix = (turnId != null && turnId!.isNotEmpty)
+        ? turnId!
+        : entry.id;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(
@@ -2064,6 +2868,9 @@ class _ConversationEntryView extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Container(
+                key: isActiveSearchMatch
+                    ? ValueKey('active-search-match-${entry.id}')
+                    : null,
                 width: double.infinity,
                 margin: EdgeInsets.only(
                   bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
@@ -2076,6 +2883,8 @@ class _ConversationEntryView extends StatelessWidget {
                       ? palette.danger.withValues(alpha: 0.08)
                       : isActivity
                       ? palette.surfaceRaised
+                      : isActiveSearchMatch
+                      ? palette.accent.withValues(alpha: 0.06)
                       : Colors.transparent,
                   border: isActivity || isError
                       ? Border.all(
@@ -2118,11 +2927,49 @@ class _ConversationEntryView extends StatelessWidget {
                                         : palette.textPrimary,
                                   ),
                             ),
-                          if (showAssistantCopy) ...[
+                          if (showAssistantCopy ||
+                              onContinueTurn != null ||
+                              onRetryTurn != null) ...[
                             const SizedBox(height: 6),
-                            _AssistantCopyButton(
-                              key: ValueKey('assistant-copy-${entry.id}'),
-                              text: entry.text,
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (showAssistantCopy)
+                                  _AssistantCopyButton(
+                                    key: ValueKey('assistant-copy-${entry.id}'),
+                                    text: entry.text,
+                                  ),
+                                if (onContinueTurn != null)
+                                  CodexButton(
+                                    key: ValueKey(
+                                      'turn-continue-$actionKeySuffix',
+                                    ),
+                                    size: CodexButtonSize.sm,
+                                    variant: CodexButtonVariant.secondary,
+                                    onPressed: onContinueTurn,
+                                    icon: const Icon(
+                                      Icons.play_arrow_rounded,
+                                      size: 14,
+                                    ),
+                                    label: 'Continue',
+                                  ),
+                                if (onRetryTurn != null)
+                                  CodexButton(
+                                    key: ValueKey(
+                                      'turn-retry-$actionKeySuffix',
+                                    ),
+                                    size: CodexButtonSize.sm,
+                                    variant: CodexButtonVariant.secondary,
+                                    onPressed: onRetryTurn,
+                                    icon: const Icon(
+                                      Icons.refresh_rounded,
+                                      size: 14,
+                                    ),
+                                    label: 'Retry',
+                                  ),
+                              ],
                             ),
                           ],
                           if (!entry.completed) ...[
@@ -2219,6 +3066,12 @@ class _UserMessageEntryView extends StatelessWidget {
     required this.attachments,
     this.onForkFromTurn,
     this.onRevertFromTurn,
+    this.onEditFromTurn,
+    this.onRegenerateFromTurn,
+    this.siblingBranchInfo,
+    this.onSelectSiblingBranch,
+    this.isSearchMatch = false,
+    this.isActiveSearchMatch = false,
   });
 
   final ConversationEntry entry;
@@ -2226,6 +3079,12 @@ class _UserMessageEntryView extends StatelessWidget {
   final List<UserAttachment> attachments;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
+  final VoidCallback? onEditFromTurn;
+  final VoidCallback? onRegenerateFromTurn;
+  final ChatSiblingBranchInfo? siblingBranchInfo;
+  final ValueChanged<int>? onSelectSiblingBranch;
+  final bool isSearchMatch;
+  final bool isActiveSearchMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -2242,12 +3101,21 @@ class _UserMessageEntryView extends StatelessWidget {
           attachment: presentation.attachments[index],
         ),
     ];
+    final keySuffix = turnId ?? entry.id;
+    final hasBranches =
+        siblingBranchInfo != null && siblingBranchInfo!.hasMultipleBranches;
     final hasTurnActions =
         fullText.isNotEmpty ||
+        hasBranches ||
+        onEditFromTurn != null ||
+        onRegenerateFromTurn != null ||
         onForkFromTurn != null ||
         onRevertFromTurn != null;
 
     return Padding(
+      key: isActiveSearchMatch
+          ? ValueKey('active-search-match-${entry.id}')
+          : null,
       padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
       child: Stack(
         alignment: Alignment.centerRight,
@@ -2259,16 +3127,115 @@ class _UserMessageEntryView extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (hasBranches) ...[
+                    GestureDetector(
+                      key: ValueKey('branch-prev-$keySuffix'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap:
+                          siblingBranchInfo!.canSelectPrevious &&
+                              onSelectSiblingBranch != null
+                          ? () => onSelectSiblingBranch!(-1)
+                          : null,
+                      child: MouseRegion(
+                        cursor: siblingBranchInfo!.canSelectPrevious
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.chevron_left_rounded,
+                            size: 14,
+                            color: siblingBranchInfo!.canSelectPrevious
+                                ? palette.textSecondary
+                                : palette.textMuted.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      siblingBranchInfo!.displayLabel,
+                      key: ValueKey('branch-label-$keySuffix'),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontSize: 11,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                    GestureDetector(
+                      key: ValueKey('branch-next-$keySuffix'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap:
+                          siblingBranchInfo!.canSelectNext &&
+                              onSelectSiblingBranch != null
+                          ? () => onSelectSiblingBranch!(1)
+                          : null,
+                      child: MouseRegion(
+                        cursor: siblingBranchInfo!.canSelectNext
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.chevron_right_rounded,
+                            size: 14,
+                            color: siblingBranchInfo!.canSelectNext
+                                ? palette.textSecondary
+                                : palette.textMuted.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                  ],
                   if (fullText.isNotEmpty)
                     _AssistantCopyButton(
                       key: ValueKey('user-copy-${entry.id}'),
                       text: fullText,
                     ),
+                  if (onEditFromTurn != null)
+                    CodexTooltip(
+                      message: 'Edit message and resubmit',
+                      child: GestureDetector(
+                        key: ValueKey('turn-edit-$keySuffix'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onEditFromTurn,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.edit_outlined,
+                              size: 14,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (onRegenerateFromTurn != null)
+                    CodexTooltip(
+                      message: 'Regenerate response from this turn',
+                      child: GestureDetector(
+                        key: ValueKey('turn-regenerate-$keySuffix'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onRegenerateFromTurn,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.refresh_rounded,
+                              size: 14,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (onForkFromTurn != null)
                     CodexTooltip(
                       message: 'Fork thread before this turn',
                       child: GestureDetector(
-                        key: ValueKey('turn-fork-${turnId ?? entry.id}'),
+                        key: ValueKey('turn-fork-$keySuffix'),
                         behavior: HitTestBehavior.opaque,
                         onTap: onForkFromTurn,
                         child: MouseRegion(
@@ -2288,7 +3255,7 @@ class _UserMessageEntryView extends StatelessWidget {
                     CodexTooltip(
                       message: 'Revert thread before this turn',
                       child: GestureDetector(
-                        key: ValueKey('turn-revert-${turnId ?? entry.id}'),
+                        key: ValueKey('turn-revert-$keySuffix'),
                         behavior: HitTestBehavior.opaque,
                         onTap: onRevertFromTurn,
                         child: MouseRegion(
@@ -2698,6 +3665,13 @@ class _ActivityContent extends StatelessWidget {
     final palette = ThemeTokens.of(context);
     final effectiveCommand = isCommand || entry.text.startsWith('Command: ');
     final isFileChange = entry.text.startsWith('File changes:');
+    final isToolCall =
+        entry.text.startsWith('MCP: ') ||
+        entry.text.startsWith('Tool: ') ||
+        entry.text.startsWith('Collaboration: ');
+    final isWebSearch = entry.text.startsWith('Web search');
+    final isPlan = entry.text.startsWith('Plan');
+    final isCompaction = entry.text.startsWith('Context compacted');
     final statusBadge = _nonNominalStatus(entry.status);
     final icon = !entry.completed
         ? Icons.hourglass_top_rounded
@@ -2705,12 +3679,25 @@ class _ActivityContent extends StatelessWidget {
         ? Icons.terminal_rounded
         : isFileChange
         ? Icons.difference_outlined
+        : isToolCall
+        ? Icons.extension_outlined
+        : isWebSearch
+        ? Icons.travel_explore_rounded
+        : isPlan
+        ? Icons.checklist_rounded
+        : isCompaction
+        ? Icons.compress_rounded
         : Icons.check_circle_outline_rounded;
     final iconColor = !entry.completed
         ? palette.accent
         : statusBadge != null
         ? palette.warning
-        : effectiveCommand || isFileChange
+        : effectiveCommand ||
+              isFileChange ||
+              isToolCall ||
+              isWebSearch ||
+              isPlan ||
+              isCompaction
         ? palette.textSecondary
         : palette.success;
 

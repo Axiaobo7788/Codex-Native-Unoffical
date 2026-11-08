@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
+import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
@@ -534,6 +535,135 @@ void main() {
 
     expect(socket.closeCalls, 1);
     expect(socket.closeCode, WebSocketStatus.normalClosure);
+  });
+
+  test('supports bounded remote history pagination (listHistoryTurns, listHistoryItems, readHistoryItems) and thread lifecycle events', () async {
+    final socket = _FakeRemoteSocket();
+    sockets.add(socket);
+    final transport = await _connect(socket);
+    transports.add(transport);
+    transport.completeResync(generation: transport.resyncGeneration);
+
+    final turnsFuture = transport.listHistoryTurns(
+      const HistoryTurnQuery(threadId: 'thread-1', limit: 10),
+    );
+    final itemsFuture = transport.listHistoryItems(
+      const HistoryItemQuery(threadId: 'thread-1', turnId: 'turn-1', limit: 25),
+    );
+    final readFuture = transport.readHistoryItems(
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemIds: const ['item-1'],
+    );
+    await _waitFor(() => _rpcWrites(socket).length == 3);
+    final rpcs = {
+      for (final req in _rpcWrites(socket)) req['method'] as String: req,
+    };
+
+    expect(rpcs['thread/turns/list']!['params'], {
+      'threadId': 'thread-1',
+      'limit': 10,
+      'sortDirection': 'desc',
+      'itemsView': 'summary',
+    });
+    expect(rpcs['thread/items/list']!['params'], {
+      'threadId': 'thread-1',
+      'turnId': 'turn-1',
+      'limit': 25,
+      'sortDirection': 'asc',
+      'deferOutput': {'commandExecution': true},
+    });
+    expect(rpcs['thread/items/read']!['params'], {
+      'threadId': 'thread-1',
+      'turnId': 'turn-1',
+      'itemIds': ['item-1'],
+    });
+
+    socket
+      ..addJson({
+        'type': 'rpc_result',
+        'id': rpcs['thread/turns/list']!['id'],
+        'result': {
+          'data': [
+            {
+              'id': 'turn-1',
+              'status': 'completed',
+              'itemsView': 'summary',
+              'items': [
+                {
+                  'id': 'user-1',
+                  'type': 'userMessage',
+                  'content': [
+                    {'type': 'text', 'text': 'Remote history prompt'},
+                  ],
+                },
+              ],
+            },
+          ],
+          'nextCursor': null,
+        },
+      })
+      ..addJson({
+        'type': 'rpc_result',
+        'id': rpcs['thread/items/list']!['id'],
+        'result': {
+          'data': [
+            {
+              'turnId': 'turn-1',
+              'item': {
+                'id': 'item-1',
+                'type': 'agentMessage',
+                'text': 'Remote assistant reply',
+              },
+            },
+          ],
+          'nextCursor': null,
+        },
+      })
+      ..addJson({
+        'type': 'rpc_result',
+        'id': rpcs['thread/items/read']!['id'],
+        'result': {
+          'data': [
+            {
+              'turnId': 'turn-1',
+              'item': {
+                'id': 'item-1',
+                'type': 'agentMessage',
+                'text': 'Remote assistant reply',
+              },
+            },
+          ],
+        },
+      });
+
+    final turnsPage = await turnsFuture;
+    final itemsPage = await itemsFuture;
+    final readItems = await readFuture;
+
+    expect(turnsPage.turns.single.items.single.text, 'Remote history prompt');
+    expect(itemsPage.items.single.text, 'Remote assistant reply');
+    expect(readItems.single.text, 'Remote assistant reply');
+
+    final lifecycleEvents = <ThreadLifecycleEvent>[];
+    final sub = transport.threadEvents.listen(lifecycleEvents.add);
+    addTearDown(sub.cancel);
+
+    socket.addJson({
+      'type': 'codex_event',
+      'sequence': 1,
+      'method': 'thread/name/updated',
+      'params': {'threadId': 'thread-1', 'name': 'Renamed Remotely'},
+    });
+    await _waitFor(() => lifecycleEvents.isNotEmpty);
+    expect(
+      lifecycleEvents.single,
+      isA<ThreadNameUpdatedEvent>().having(
+        (e) => e.threadName,
+        'threadName',
+        'Renamed Remotely',
+      ),
+    );
   });
 }
 

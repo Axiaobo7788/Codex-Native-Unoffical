@@ -7,6 +7,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme_tokens.dart';
+import '../../domain/assistant_content_blocks.dart';
 
 typedef ExternalLinkLauncher = Future<bool> Function(Uri uri);
 
@@ -50,6 +51,7 @@ class AssistantMarkdown extends StatelessWidget {
       );
     }
 
+    final presentation = parseAssistantContentPresentation(source);
     final theme = Theme.of(context);
     final palette = ThemeTokens.of(context);
     final bodyStyle = theme.textTheme.bodyMedium?.copyWith(height: 1.55);
@@ -89,10 +91,10 @@ class AssistantMarkdown extends StatelessWidget {
       codeblockDecoration: const BoxDecoration(),
     );
 
-    return SelectionArea(
+    Widget buildMarkdown(String markdownData) => SelectionArea(
       child: MarkdownBody(
         key: const ValueKey('assistant-markdown'),
-        data: source,
+        data: markdownData,
         selectable: false,
         extensionSet: _safeExtensions,
         styleSheet: styleSheet,
@@ -101,6 +103,40 @@ class AssistantMarkdown extends StatelessWidget {
             _blockedImage(context, uri, title, alt),
         onTapLink: (text, href, title) => unawaited(_openLink(context, href)),
       ),
+    );
+
+    if (!presentation.hasStructuredBlocks) {
+      return buildMarkdown(source);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (presentation.proseMarkdown.isNotEmpty)
+          buildMarkdown(presentation.proseMarkdown),
+        for (var i = 0; i < presentation.artifacts.length; i++) ...[
+          if (presentation.proseMarkdown.isNotEmpty || i > 0)
+            const SizedBox(height: ThemeTokens.space2),
+          _AssistantArtifactCard(index: i, block: presentation.artifacts[i]),
+        ],
+        if (presentation.citations.isNotEmpty) ...[
+          const SizedBox(height: ThemeTokens.space2),
+          Wrap(
+            key: const ValueKey('assistant-citations'),
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final citation in presentation.citations)
+                _AssistantCitationChip(
+                  citation: citation,
+                  onTapUrl: citation.url == null
+                      ? null
+                      : () => unawaited(_openLink(context, citation.url)),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
@@ -332,6 +368,204 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AssistantArtifactCard extends StatefulWidget {
+  const _AssistantArtifactCard({required this.index, required this.block});
+
+  final int index;
+  final AssistantArtifactBlock block;
+
+  @override
+  State<_AssistantArtifactCard> createState() => _AssistantArtifactCardState();
+}
+
+class _AssistantArtifactCardState extends State<_AssistantArtifactCard> {
+  var _copied = false;
+  var _expanded = true;
+
+  Future<void> _copyContent() async {
+    await Clipboard.setData(ClipboardData(text: widget.block.content));
+    if (!mounted) {
+      return;
+    }
+    setState(() => _copied = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) {
+      setState(() => _copied = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final isWriting = widget.block.kind == AssistantArtifactKind.writing;
+    final kindLabel = isWriting ? 'Writing' : 'Artifact';
+    final langSuffix = widget.block.language == null
+        ? ''
+        : ' · ${widget.block.language}';
+    return Container(
+      key: ValueKey('assistant-artifact-${widget.index}'),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: palette.sidebar.withValues(alpha: 0.7),
+              border: _expanded
+                  ? Border(bottom: BorderSide(color: palette.border))
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isWriting ? Icons.article_outlined : Icons.widgets_outlined,
+                  size: 15,
+                  color: palette.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${widget.block.title} ($kindLabel$langSuffix)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: palette.textPrimary,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: ValueKey('assistant-artifact-copy-${widget.index}'),
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: _copyContent,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _copied ? Icons.check_rounded : Icons.copy_rounded,
+                          size: 13,
+                          color: _copied
+                              ? palette.success
+                              : palette.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _copied ? 'Copied' : 'Copy',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: _copied
+                                    ? palette.success
+                                    : palette.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                InkWell(
+                  key: ValueKey('assistant-artifact-toggle-${widget.index}'),
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      _expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 16,
+                      color: palette.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SelectableText(
+                widget.block.content,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontFamily: isWriting ? null : 'monospace',
+                  fontSize: isWriting ? 13.5 : 12.5,
+                  height: 1.55,
+                  color: palette.textPrimary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssistantCitationChip extends StatelessWidget {
+  const _AssistantCitationChip({required this.citation, this.onTapUrl});
+
+  final AssistantCitation citation;
+  final VoidCallback? onTapUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final chip = Container(
+      key: ValueKey('assistant-citation-${citation.index}'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            citation.url == null
+                ? Icons.bookmark_border_rounded
+                : Icons.open_in_new_rounded,
+            size: 12,
+            color: palette.textSecondary,
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              '[${citation.index}] ${citation.label}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: palette.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTapUrl == null) {
+      return chip;
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTapUrl,
+      child: chip,
     );
   }
 }

@@ -73,7 +73,9 @@ The official desktop client bundles `codex app-server` (`codex-cli 0.167.0-alpha
 | `turn/start` | `threadId: string`, `input: UserInput[]` | `{ turn: Turn }` | Dispatches user prompt, structured attachments, and configuration. |
 | `turn/steer` | `threadId: string`, `expectedTurnId: string`, `input: UserInput[]` | `{ turnId: string }` | Steers an active in-progress turn with follow-up input (`PUBLIC_SOURCE` stable). |
 | `turn/interrupt`| `threadId: string`, `turnId: string` | `{}` | Requests immediate cancellation/abortion of running turn. |
+| `thread/turns/list` | `threadId`, `cursor?`, `limit` | `{ data: HistoryTurn[], nextCursor }` | Bounded turn-window pagination across local (`CodexNativeHost`) and remote (`RemoteTransport`) transports. |
 | `thread/items/list` | `threadId`, `turnId`, `deferOutput` | `{ data: ThreadItemEntry[], nextCursor }` | On-demand lazy fetch of turn items and command outputs. |
+| `thread/items/read` | `threadId`, `turnId`, `itemIds` | `{ data: ThreadItemEntry[] }` | Targeted item hydration by ID across local and remote transports. |
 | `skills/list` / `skills/config/write` | `cwds: string[]` / `path, enabled` | `{ data: SkillsListEntry[] }` / `{ effectiveEnabled }` | Discovers and enables/disables workspace and bundled skills (`PUBLIC_SOURCE` stable). |
 | `plugin/list` / `mcpServerStatus/list` | `cwds?: string[]` / `cursor?, limit?` | `{ marketplaces: ... }` / `{ data: McpServerStatus[] }` | Discovers installed plugins and MCP server connection/tool status (`PUBLIC_SOURCE` stable). |
 | `remoteControl/pairing/start` | `{ manualCode?: boolean }` | `{ pairingCode, manualPairingCode?, environmentId, expiresAt }` | Initiates pairing handshake for official remote control (`EXPERIMENTAL_STOCK_SCHEMA`). |

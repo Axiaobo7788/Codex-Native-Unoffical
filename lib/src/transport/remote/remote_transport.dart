@@ -10,6 +10,7 @@ import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
+import '../../protocol/history_protocol.dart';
 import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/model_protocol.dart';
 import '../../protocol/protocol_models.dart';
@@ -32,6 +33,10 @@ const _eventMethods = {
   'item/started',
   'item/completed',
   'thread/status/changed',
+  'thread/name/updated',
+  'thread/archived',
+  'thread/unarchived',
+  'thread/reverted',
   'error',
   'host/resyncRequired',
 };
@@ -65,6 +70,7 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
       request: _request,
       notifications: _notifications.stream,
     );
+    _historyProtocol = HistoryProtocolAdapter(request: _request);
     _ensureReader();
   }
 
@@ -230,6 +236,7 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
   late final TurnProtocolAdapter _turnProtocol;
   late final ModelProtocolAdapter _modelProtocol;
   late final ThreadProtocolAdapter _threadProtocol;
+  late final HistoryProtocolAdapter _historyProtocol;
   Future<void>? _reader;
   Future<void>? _finishOperation;
   final Completer<RemoteTransportClose> _closed = Completer();
@@ -327,18 +334,22 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
 
   @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
-      _unsupported('History paging');
+      _historyProtocol.listTurns(query);
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
-      _unsupported('History item paging');
+      _historyProtocol.listItems(query);
 
   @override
   Future<List<HistoryItem>> readHistoryItems({
     required String threadId,
     required String turnId,
     required List<String> itemIds,
-  }) => _unsupported('History item reads');
+  }) => _historyProtocol.readItems(
+    threadId: threadId,
+    turnId: turnId,
+    itemIds: itemIds,
+  );
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) =>

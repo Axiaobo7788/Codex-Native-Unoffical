@@ -6,6 +6,7 @@ import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/product_mode.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
+import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -1390,6 +1391,224 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(harness.disconnectedOfficialClients, ['client-ios-1']);
+      },
+    );
+
+    testWidgets(
+      'T1.6.9: Turn-level Edit & Resubmit, Regenerate, Sibling Branch Navigation (< 1 / 2 >), and Interrupted Turn Continue',
+      (tester) async {
+        final thread = createTestThread(
+          id: 'branch-thread',
+          preview: 'Branch thread',
+        );
+        final histTurn = createTestTurn(
+          id: 'turn-hist-1',
+          userPrompt: 'Original prompt v1',
+          assistantProse: 'Original response v1',
+        );
+        final harness = E2ERuntimeHarness(
+          initialThreads: [thread],
+          initialHistoryTurns: [histTurn],
+        );
+        await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.text('Branch thread'));
+        await tester.pumpAndSettle();
+
+        // 1. Edit user message from turn-hist-1
+        final editTurnBtn = find.byKey(const ValueKey('turn-edit-turn-hist-1'));
+        final regenerateTurnBtn = find.byKey(
+          const ValueKey('turn-regenerate-turn-hist-1'),
+        );
+        expect(editTurnBtn, findsOneWidget);
+        expect(regenerateTurnBtn, findsOneWidget);
+
+        await tester.tap(editTurnBtn);
+        await tester.pumpAndSettle();
+
+        expect(harness.revertedThreads, [
+          (threadId: 'branch-thread', beforeTurnId: 'turn-hist-1'),
+        ]);
+        final composerField = find.byKey(
+          const ValueKey('conversation-composer'),
+        );
+        expect(
+          tester.widget<TextField>(composerField).controller?.text,
+          'Original prompt v1',
+        );
+
+        // 2. Resubmit edited prompt -> creates turn-1 and records branch
+        await tester.enterText(composerField, 'Edited prompt v2');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+        await tester.pump();
+
+        expect(harness.startedTurns, hasLength(1));
+        expect(harness.startedTurns.single.text, 'Edited prompt v2');
+
+        harness.emitAssistantMessage(
+          'asst-turn-1',
+          'Edited response v2',
+          turnId: 'turn-1',
+          threadId: 'branch-thread',
+        );
+        harness.emitTurnCompleted('turn-1', threadId: 'branch-thread');
+        await tester.pumpAndSettle();
+
+        // 3. Sibling branch switcher (< 2/2 >) is shown on turn-1
+        expect(
+          find.byKey(const ValueKey('branch-label-turn-1')),
+          findsOneWidget,
+        );
+        expect(find.text('2/2'), findsOneWidget);
+        expect(find.text('Edited prompt v2'), findsOneWidget);
+        expect(find.text('Edited response v2'), findsOneWidget);
+
+        // Switch to previous sibling branch (1/2)
+        await tester.tap(find.byKey(const ValueKey('branch-prev-turn-1')));
+        await tester.pumpAndSettle();
+        expect(find.text('1/2'), findsOneWidget);
+        expect(find.text('Original prompt v1'), findsOneWidget);
+        expect(find.text('Original response v1'), findsOneWidget);
+
+        // Switch back to next sibling branch (2/2)
+        await tester.tap(find.byKey(const ValueKey('branch-next-turn-1')));
+        await tester.pumpAndSettle();
+        expect(find.text('2/2'), findsOneWidget);
+        expect(find.text('Edited prompt v2'), findsOneWidget);
+
+        // 4. Regenerate turn-1 -> reverts and automatically resubmits
+        await tester.tap(find.byKey(const ValueKey('turn-regenerate-turn-1')));
+        await tester.pump();
+        expect(harness.revertedThreads.last, (
+          threadId: 'branch-thread',
+          beforeTurnId: 'turn-1',
+        ));
+        expect(harness.startedTurns, hasLength(2));
+        expect(harness.startedTurns.last.text, 'Edited prompt v2');
+
+        // 5. Complete turn-2 as interrupted -> Continue action appears
+        harness.emitTurnCompleted(
+          'turn-2',
+          status: TurnRuntimeStatus.interrupted,
+          threadId: 'branch-thread',
+        );
+        await tester.pumpAndSettle();
+
+        final continueBtn = find.byKey(const ValueKey('turn-continue-turn-2'));
+        expect(continueBtn, findsOneWidget);
+        await tester.tap(continueBtn);
+        await tester.pump();
+
+        expect(harness.startedTurns, hasLength(3));
+        expect(harness.startedTurns.last.text, 'Continue');
+      },
+    );
+
+    testWidgets(
+      'T1.6.10: In-conversation search (find/count/jump/close) and mode-aware composer capability gating (Codex vs Work vs Chat)',
+      (tester) async {
+        final thread = createTestThread(
+          id: 'search-mode-thread',
+          preview: 'Search & Mode thread',
+        );
+        final turn1 = createTestTurn(
+          id: 'turn-s1',
+          userPrompt: 'Investigate Needle alpha',
+          assistantProse: 'Alpha analysis complete',
+        );
+        final turn2 = createTestTurn(
+          id: 'turn-s2',
+          userPrompt: 'Investigate Needle beta',
+          assistantProse: 'Beta analysis complete',
+        );
+        final harness = E2ERuntimeHarness(
+          initialThreads: [thread],
+          initialHistoryTurns: [turn1, turn2],
+        );
+        await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.text('Search & Mode thread'));
+        await tester.pumpAndSettle();
+
+        // 1. Open in-conversation search via header toggle
+        final searchToggle = find.byKey(
+          const ValueKey('conversation-search-toggle'),
+        );
+        expect(searchToggle, findsOneWidget);
+        await tester.tap(searchToggle);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('conversation-search-bar')),
+          findsOneWidget,
+        );
+        expect(find.text('Type to search'), findsOneWidget);
+
+        // 2. Enter search query matching both turns
+        await tester.enterText(
+          find.byKey(const ValueKey('conversation-search-field')),
+          'Needle',
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('1 of 2'), findsOneWidget);
+
+        // Navigate next and previous matches
+        await tester.tap(
+          find.byKey(const ValueKey('conversation-search-next')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('2 of 2'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('conversation-search-prev')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('1 of 2'), findsOneWidget);
+
+        // Close search bar
+        await tester.tap(
+          find.byKey(const ValueKey('conversation-search-close')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('conversation-search-bar')),
+          findsNothing,
+        );
+
+        // 3. Mode-aware composer capability gating (Codex vs Work vs Chat)
+        final productModeSelector = find.byKey(
+          const ValueKey('product-mode-selector'),
+        );
+        expect(find.byKey(const ValueKey('composer-mode-badge')), findsNothing);
+
+        // Switch to Work mode -> shows mode badge, keeps skill attachment
+        await tester.tap(
+          find.descendant(of: productModeSelector, matching: find.text('Work')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('composer-mode-badge')),
+          findsOneWidget,
+        );
+        expect(find.text(ProductMode.work.composerPlaceholder), findsOneWidget);
+
+        // Switch to Chat mode -> shows Chat badge, hides skill attachment in + menu
+        await tester.tap(
+          find.descendant(of: productModeSelector, matching: find.text('Chat')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('composer-mode-badge')),
+          findsOneWidget,
+        );
+        expect(find.text(ProductMode.chat.composerPlaceholder), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('composer-attach-button')));
+        await tester.pumpAndSettle();
+        expect(find.text('Attach file (@mention)'), findsOneWidget);
+        expect(find.text(r'Attach skill ($skill)'), findsNothing);
       },
     );
   });

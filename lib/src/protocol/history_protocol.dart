@@ -152,6 +152,56 @@ final class HistoryProtocolAdapter {
         text: 'File changes: ${_listLength(value['changes'])} update(s)',
         status: _optionalString(value, 'status'),
       ),
+      'mcpToolCall' => HistoryItem(
+        id: id,
+        turnId: turnId,
+        kind: HistoryItemKind.activity,
+        text: _bounded(
+          'MCP: ${_optionalString(value, 'server') ?? 'mcp'}/'
+          '${_optionalString(value, 'tool') ?? 'tool'}',
+        ),
+        status: _optionalString(value, 'status'),
+      ),
+      'dynamicToolCall' => HistoryItem(
+        id: id,
+        turnId: turnId,
+        kind: HistoryItemKind.activity,
+        text: _bounded('Tool: ${_optionalString(value, 'tool') ?? 'tool'}'),
+        status: _optionalString(value, 'status'),
+      ),
+      'collabAgentToolCall' => HistoryItem(
+        id: id,
+        turnId: turnId,
+        kind: HistoryItemKind.activity,
+        text: _bounded(
+          'Collaboration: ${_optionalString(value, 'tool') ?? 'agent'}',
+        ),
+        status: _optionalString(value, 'status'),
+      ),
+      'webSearch' => () {
+        final query = (_optionalString(value, 'query') ?? '').trim();
+        return HistoryItem(
+          id: id,
+          turnId: turnId,
+          kind: HistoryItemKind.activity,
+          text: _bounded(query.isEmpty ? 'Web search' : 'Web search: $query'),
+          status: _optionalString(value, 'status'),
+        );
+      }(),
+      'plan' => HistoryItem(
+        id: id,
+        turnId: turnId,
+        kind: HistoryItemKind.activity,
+        text: _bounded(_planSummary(value)),
+        status: _optionalString(value, 'status'),
+      ),
+      'contextCompaction' => HistoryItem(
+        id: id,
+        turnId: turnId,
+        kind: HistoryItemKind.activity,
+        text: 'Context compacted',
+        status: _optionalString(value, 'status'),
+      ),
       _ => HistoryItem(
         id: id,
         turnId: turnId,
@@ -160,6 +210,19 @@ final class HistoryProtocolAdapter {
         status: _optionalString(value, 'status'),
       ),
     };
+  }
+
+  static String _planSummary(JsonObject value) {
+    final text = (_optionalString(value, 'text') ?? '').trim();
+    if (text.isNotEmpty) {
+      final firstLine = text.split('\n').first.trim();
+      return 'Plan: $firstLine';
+    }
+    final steps = value['steps'] ?? value['items'];
+    if (steps is List<Object?> && steps.isNotEmpty) {
+      return 'Plan updated (${steps.length} step(s))';
+    }
+    return 'Plan updated';
   }
 
   String _userText(Object? content) {

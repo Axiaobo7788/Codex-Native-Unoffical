@@ -7,6 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../domain/chat_conversation_dag.dart';
+import '../domain/conversation_backend.dart';
 import '../domain/diff_models.dart';
 import '../domain/ecosystem_gateway.dart';
 import '../domain/ecosystem_models.dart';
@@ -19,6 +21,7 @@ import '../domain/remote_admin_gateway.dart';
 import '../domain/remote_admin_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
+import '../domain/turn_models.dart';
 import '../features/approvals/approval_controller.dart';
 import '../features/conversation/assistant_markdown.dart';
 import '../features/conversation/conversation_controller.dart';

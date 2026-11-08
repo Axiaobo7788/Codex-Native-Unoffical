@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:codex_native_unofficial/src/domain/chat_conversation_dag.dart';
+import 'package:codex_native_unofficial/src/domain/conversation_backend.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
+import 'package:codex_native_unofficial/src/domain/product_mode.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/history_protocol.dart';
@@ -543,6 +546,189 @@ Outer actual user request after envelope.
       }
     },
   );
+
+  test('projects rich Codex item types (mcpToolCall, dynamicToolCall, collabAgentToolCall, webSearch, plan, contextCompaction)', () async {
+    final richAdapter = HistoryProtocolAdapter(
+      request: (method, [params = const {}]) async => {
+        'data': [
+          {
+            'id': 'turn-rich',
+            'status': 'completed',
+            'itemsView': 'summary',
+            'items': [
+              {
+                'id': 'mcp-1',
+                'type': 'mcpToolCall',
+                'server': 'filesystem',
+                'tool': 'read_file',
+                'status': 'completed',
+              },
+              {
+                'id': 'dyn-1',
+                'type': 'dynamicToolCall',
+                'tool': 'run_linter',
+                'status': 'completed',
+              },
+              {
+                'id': 'collab-1',
+                'type': 'collabAgentToolCall',
+                'tool': 'spawn_worker',
+                'status': 'completed',
+              },
+              {
+                'id': 'search-1',
+                'type': 'webSearch',
+                'query': 'flutter custom scroll view',
+                'status': 'completed',
+              },
+              {
+                'id': 'plan-1',
+                'type': 'plan',
+                'steps': [
+                  {'step': '1'},
+                  {'step': '2'},
+                ],
+                'status': 'completed',
+              },
+              {
+                'id': 'compact-1',
+                'type': 'contextCompaction',
+                'status': 'completed',
+              },
+            ],
+          },
+        ],
+        'nextCursor': null,
+      },
+    );
+
+    final page = await richAdapter.listTurns(
+      const HistoryTurnQuery(threadId: 'thread-rich'),
+    );
+    final items = page.turns.single.items;
+    expect(items, hasLength(6));
+    expect(items[0].kind, HistoryItemKind.activity);
+    expect(items[0].text, 'MCP: filesystem/read_file');
+    expect(items[1].text, 'Tool: run_linter');
+    expect(items[2].text, 'Collaboration: spawn_worker');
+    expect(items[3].text, 'Web search: flutter custom scroll view');
+    expect(items[4].text, 'Plan updated (2 step(s))');
+    expect(items[5].text, 'Context compacted');
+  });
+
+  test('parses ChatGPT conversations.json mapping DAG with cycle protection and sibling branch switching', () {
+    final dag = ChatConversationDag.fromMappingJson({
+      'current_node': 'asst-b',
+      'mapping': {
+        'root': {
+          'id': 'root',
+          'parent': null,
+          'children': ['user-a', 'user-b'],
+        },
+        'user-a': {
+          'id': 'user-a',
+          'parent': 'root',
+          'children': ['asst-a'],
+          'message': {
+            'id': 'turn-a',
+            'author': {'role': 'user'},
+            'content': {
+              'parts': ['Original question'],
+            },
+          },
+        },
+        'asst-a': {
+          'id': 'asst-a',
+          'parent': 'user-a',
+          'children': <Object?>[],
+          'message': {
+            'id': 'turn-a',
+            'author': {'role': 'assistant'},
+            'content': {
+              'parts': ['Original answer'],
+            },
+          },
+        },
+        'user-b': {
+          'id': 'user-b',
+          'parent': 'root',
+          'children': ['asst-b'],
+          'message': {
+            'id': 'turn-b',
+            'author': {'role': 'user'},
+            'content': {
+              'parts': ['Edited question'],
+            },
+          },
+        },
+        'asst-b': {
+          'id': 'asst-b',
+          'parent': 'user-b',
+          'children': <Object?>[],
+          'message': {
+            'id': 'turn-b',
+            'author': {'role': 'assistant'},
+            'content': {
+              'parts': ['Edited answer'],
+            },
+          },
+        },
+      },
+    });
+
+    expect(dag.activeVisibleMessages.map((n) => n.text), [
+      'Edited question',
+      'Edited answer',
+    ]);
+    final siblingInfo = dag.siblingInfoFor('user-b')!;
+    expect(siblingInfo.hasMultipleBranches, isTrue);
+    expect(siblingInfo.displayLabel, '2/2');
+    expect(siblingInfo.canSelectPrevious, isTrue);
+    expect(siblingInfo.canSelectNext, isFalse);
+
+    final switched = dag.selectSiblingBranch(nodeId: 'user-b', offset: -1);
+    expect(switched.activeVisibleMessages.map((n) => n.text), [
+      'Original question',
+      'Original answer',
+    ]);
+    expect(switched.siblingInfoFor('user-a')!.displayLabel, '1/2');
+
+    final switchedBack = switched.selectSiblingBranch(
+      nodeId: 'user-a',
+      offset: 1,
+    );
+    expect(switchedBack.activeVisibleMessages.map((n) => n.text), [
+      'Edited question',
+      'Edited answer',
+    ]);
+  });
+
+  test('resolves mode-aware BackendCapabilities across Codex, Work, and Chat modes', () {
+    final codexCaps = resolveEffectiveCapabilities(
+      transportCapabilities: const BackendCapabilities.stockCodexLocal(),
+      mode: ProductMode.codex,
+    );
+    expect(codexCaps.supportsSandboxConfiguration, isTrue);
+    expect(codexCaps.supportsWorkingDirectorySelection, isTrue);
+    expect(codexCaps.supportsSkillsAndMcp, isTrue);
+
+    final workCaps = resolveEffectiveCapabilities(
+      transportCapabilities: const BackendCapabilities.stockCodexLocal(),
+      mode: ProductMode.work,
+    );
+    expect(workCaps.supportsSandboxConfiguration, isFalse);
+    expect(workCaps.supportsWorkingDirectorySelection, isTrue);
+    expect(workCaps.supportsSkillsAndMcp, isTrue);
+
+    final chatCaps = resolveEffectiveCapabilities(
+      transportCapabilities: const BackendCapabilities.stockCodexLocal(),
+      mode: ProductMode.chat,
+    );
+    expect(chatCaps.supportsSandboxConfiguration, isFalse);
+    expect(chatCaps.supportsWorkingDirectorySelection, isFalse);
+    expect(chatCaps.supportsSkillsAndMcp, isFalse);
+    expect(chatCaps.supportsBranchNavigation, isTrue);
+  });
 }
 
 String _multiMegabyteOutput() {

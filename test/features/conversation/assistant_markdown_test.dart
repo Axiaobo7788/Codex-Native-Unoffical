@@ -118,6 +118,75 @@ Raw <em>inline</em> HTML.
     expect(find.byKey(const ValueKey('assistant-markdown')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'renders structured writing/artifact cards and citation chips with collapse and link actions',
+    (tester) async {
+      final launched = <Uri>[];
+      await tester.pumpWidget(
+        _app(
+          SingleChildScrollView(
+            child: AssistantMarkdown(
+              data: '''
+Here is the summary 【1†Protocol Spec】 and [cite: Guide](https://example.com/guide).
+
+:::writing{title="Release Notes"}
+# v1.2 Release
+All checks green.
+:::
+
+<artifact title="config.json" language="json">
+{"port": 8765}
+</artifact>
+
+[^2]: https://example.com/ footnote "Footnote Source"
+''',
+              completed: true,
+              externalLinkLauncher: (uri) async {
+                launched.add(uri);
+                return true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('assistant-markdown')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('assistant-artifact-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('assistant-artifact-1')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Release Notes (Writing)'), findsOneWidget);
+      expect(
+        find.textContaining('config.json (Artifact · json)'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('{"port": 8765}'), findsOneWidget);
+
+      // Collapse first artifact card
+      await tester.tap(
+        find.byKey(const ValueKey('assistant-artifact-toggle-0')),
+      );
+      await tester.pump();
+      expect(find.textContaining('All checks green.'), findsNothing);
+
+      // Citations rendered and clickable when URL is present
+      expect(find.byKey(const ValueKey('assistant-citations')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('assistant-citation-1')),
+        findsOneWidget,
+      );
+      final guideCitation = find.textContaining('Guide');
+      expect(guideCitation, findsOneWidget);
+      await tester.tap(guideCitation);
+      await tester.pump();
+      expect(launched, [Uri.parse('https://example.com/guide')]);
+    },
+  );
 }
 
 Widget _app(Widget child) => MaterialApp(home: Scaffold(body: child));

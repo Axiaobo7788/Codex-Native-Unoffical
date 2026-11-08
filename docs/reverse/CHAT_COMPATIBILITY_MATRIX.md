@@ -33,47 +33,47 @@ This document establishes the capability matrix across all supported and potenti
 
 ---
 
-## 3. The `ChatBackend` Abstraction Contract
+## 3. The `ConversationBackend` & `ExecutionBackend` Abstraction Contracts
 
-All backends implement the unified `ChatBackend` interface in `lib/src/domain/`:
+All conversation and agentic execution transports implement the pure domain interfaces in `lib/src/domain/conversation_backend.dart` (implemented by `CodexTransport` and `RuntimeController`, with mode-aware capability projection via `resolveEffectiveCapabilities` in `lib/src/domain/product_mode.dart`):
 
 ```dart
-abstract interface class ChatBackend {
-  /// Unique identifier of the backend implementation.
-  String get id;
-
-  /// Human-readable display label (e.g. "Stock Codex Local", "OpenAI Public API").
-  String get displayName;
-
-  /// Declares capabilities supported by this engine.
-  BackendCapabilities get capabilities;
-
-  /// Connects or initializes the backend transport.
-  Future<void> initialize();
-
-  /// Dispatches a user turn and yields streaming response events.
-  Stream<TurnStreamEvent> dispatchTurn({
+abstract interface class ConversationBackend {
+  Stream<ThreadLifecycleEvent> get threads;
+  Stream<TurnStreamEvent> get turns;
+  Future<ThreadPage> listThreads(ThreadListQuery query);
+  Future<ThreadSummary> readThread(String threadId);
+  Future<ThreadSummary> startThread(ThreadStartOptions options);
+  Future<ThreadSummary> resumeThread(ThreadResumeOptions options);
+  Future<void> renameThread({required String threadId, required String name});
+  Future<void> archiveThread(String threadId);
+  Future<ThreadSummary> unarchiveThread(String threadId);
+  Future<ThreadSummary> forkThread(ThreadForkOptions options);
+  Future<ThreadSummary> revertThread({
     required String threadId,
-    required String userPrompt,
-    List<AttachmentPresentation> attachments = const [],
-    TurnConfiguration? config,
+    required String beforeTurnId,
   });
+  Future<void> compactThread(String threadId);
+  Future<void> deleteThread(String threadId);
+  Future<ModelPage> listModels(ModelListQuery query);
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query);
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query);
+  Future<HistoryItemPage> readHistoryItems(HistoryItemReadQuery query);
+  Future<TurnHandle> startTurn(TurnStartOptions options);
+  Future<String> steerTurn(TurnSteerOptions options);
+  Future<void> interruptTurn({required String threadId, required String turnId});
+}
 
-  /// Requests immediate cancellation of an active turn.
-  Future<void> interruptTurn({
-    required String threadId,
-    required String turnId,
-  });
-
-  /// Submits an interactive approval decision (approve or reject).
-  Future<void> submitApproval({
-    required String threadId,
-    required String requestId,
+abstract interface class ExecutionBackend implements ConversationBackend, OutputGateway {
+  Stream<ApprovalStreamEvent> get approvals;
+  Future<void> decideApproval({
+    required Object requestId,
     required ApprovalDecision decision,
   });
-
-  /// Shuts down the backend cleanly.
-  Future<void> dispose();
+  Future<List<SkillMetadata>> listSkills({List<String> cwds = const []});
+  Future<bool> setSkillEnabled({required String path, required bool enabled});
+  Future<List<PluginMarketplaceSummary>> listPlugins({List<String> cwds = const []});
+  Future<List<McpServerStatusSummary>> listMcpServers();
 }
 ```
 

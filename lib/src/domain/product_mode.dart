@@ -23,6 +23,24 @@ enum ProductMode {
     ProductMode.chat => 'Conversational prose and structured attachments.',
   };
 
+  String get composerPlaceholder => switch (this) {
+    ProductMode.codex => 'Send a message to Codex',
+    ProductMode.work => 'Describe a task for Work',
+    ProductMode.chat => 'Message Chat',
+  };
+
+  String get steerPlaceholder => switch (this) {
+    ProductMode.codex => 'Steer active turn in Codex',
+    ProductMode.work => 'Steer active task in Work',
+    ProductMode.chat => 'Steer active response in Chat',
+  };
+
+  String get modeBadgeLabel => switch (this) {
+    ProductMode.codex => 'Codex',
+    ProductMode.work => 'Work · Auto',
+    ProductMode.chat => 'Chat · Prose',
+  };
+
   /// Default client-side presentation detail policy for this product mode.
   ///
   /// Strictly enforced as a pure UI projection filter; never injects prompts.
@@ -31,6 +49,9 @@ enum ProductMode {
     ProductMode.work => PresentationDetailPolicy.prose,
     ProductMode.chat => PresentationDetailPolicy.prose,
   };
+
+  BackendCapabilities get capabilities =>
+      BackendCapabilities.forProductMode(this);
 }
 
 enum PresentationDetailPolicy { prose, commands, execution }
@@ -49,6 +70,10 @@ class BackendCapabilities {
     required this.supportsStructuredAttachments,
     required this.supportsSkillsAndMcp,
     required this.supportsOfficialRemoteControlHost,
+    this.supportsSandboxConfiguration = true,
+    this.supportsWorkingDirectorySelection = true,
+    this.supportsBranchNavigation = true,
+    this.supportsInConversationSearch = true,
   });
 
   const BackendCapabilities.stockCodexLocal()
@@ -63,7 +88,47 @@ class BackendCapabilities {
       supportsGitDiff = true,
       supportsStructuredAttachments = true,
       supportsSkillsAndMcp = true,
-      supportsOfficialRemoteControlHost = true;
+      supportsOfficialRemoteControlHost = true,
+      supportsSandboxConfiguration = true,
+      supportsWorkingDirectorySelection = true,
+      supportsBranchNavigation = true,
+      supportsInConversationSearch = true;
+
+  const BackendCapabilities.workModeLocal()
+    : supportsThreadRename = true,
+      supportsThreadArchive = true,
+      supportsThreadFork = true,
+      supportsThreadRevert = true,
+      supportsThreadCompact = true,
+      supportsTurnSteer = true,
+      supportsCommandExecution = true,
+      supportsInteractiveApprovals = true,
+      supportsGitDiff = true,
+      supportsStructuredAttachments = true,
+      supportsSkillsAndMcp = true,
+      supportsOfficialRemoteControlHost = true,
+      supportsSandboxConfiguration = false,
+      supportsWorkingDirectorySelection = true,
+      supportsBranchNavigation = true,
+      supportsInConversationSearch = true;
+
+  const BackendCapabilities.chatModeLocal()
+    : supportsThreadRename = true,
+      supportsThreadArchive = true,
+      supportsThreadFork = true,
+      supportsThreadRevert = true,
+      supportsThreadCompact = true,
+      supportsTurnSteer = true,
+      supportsCommandExecution = false,
+      supportsInteractiveApprovals = false,
+      supportsGitDiff = false,
+      supportsStructuredAttachments = true,
+      supportsSkillsAndMcp = false,
+      supportsOfficialRemoteControlHost = false,
+      supportsSandboxConfiguration = false,
+      supportsWorkingDirectorySelection = false,
+      supportsBranchNavigation = true,
+      supportsInConversationSearch = true;
 
   const BackendCapabilities.directHostRemoteReadOnly()
     : supportsThreadRename = false,
@@ -77,7 +142,11 @@ class BackendCapabilities {
       supportsGitDiff = false,
       supportsStructuredAttachments = false,
       supportsSkillsAndMcp = false,
-      supportsOfficialRemoteControlHost = false;
+      supportsOfficialRemoteControlHost = false,
+      supportsSandboxConfiguration = false,
+      supportsWorkingDirectorySelection = false,
+      supportsBranchNavigation = false,
+      supportsInConversationSearch = true;
 
   const BackendCapabilities.openAiPublicResponses()
     : supportsThreadRename = true,
@@ -91,7 +160,18 @@ class BackendCapabilities {
       supportsGitDiff = false,
       supportsStructuredAttachments = true,
       supportsSkillsAndMcp = false,
-      supportsOfficialRemoteControlHost = false;
+      supportsOfficialRemoteControlHost = false,
+      supportsSandboxConfiguration = false,
+      supportsWorkingDirectorySelection = false,
+      supportsBranchNavigation = true,
+      supportsInConversationSearch = true;
+
+  factory BackendCapabilities.forProductMode(ProductMode mode) =>
+      switch (mode) {
+        ProductMode.codex => const BackendCapabilities.stockCodexLocal(),
+        ProductMode.work => const BackendCapabilities.workModeLocal(),
+        ProductMode.chat => const BackendCapabilities.chatModeLocal(),
+      };
 
   final bool supportsThreadRename;
   final bool supportsThreadArchive;
@@ -105,4 +185,8 @@ class BackendCapabilities {
   final bool supportsStructuredAttachments;
   final bool supportsSkillsAndMcp;
   final bool supportsOfficialRemoteControlHost;
+  final bool supportsSandboxConfiguration;
+  final bool supportsWorkingDirectorySelection;
+  final bool supportsBranchNavigation;
+  final bool supportsInConversationSearch;
 }

@@ -303,9 +303,19 @@ class ConversationController extends ChangeNotifier {
         _steering = false;
         _interruptReady = false;
         if (event.errorMessage case final message?) {
-          _appendError(message);
+          _appendError(
+            message,
+            turnId: event.turnId,
+            status: event.status == TurnRuntimeStatus.interrupted
+                ? 'interrupted'
+                : 'failed',
+          );
         } else if (event.status == TurnRuntimeStatus.interrupted) {
-          _appendError('Turn interrupted.');
+          _appendError(
+            'Turn interrupted.',
+            turnId: event.turnId,
+            status: 'interrupted',
+          );
         }
         _notify();
       case AssistantTextDeltaEvent():
@@ -327,6 +337,8 @@ class ConversationController extends ChangeNotifier {
       case TurnErrorEvent():
         _appendError(
           event.willRetry ? '${event.message} (retrying)' : event.message,
+          turnId: event.turnId,
+          status: event.willRetry ? 'retrying' : 'failed',
         );
         _notify();
       case TurnDiffUpdatedEvent():
@@ -419,13 +431,19 @@ class ConversationController extends ChangeNotifier {
     }
   }
 
-  void _appendError(String message) {
+  void _appendError(
+    String message, {
+    String? turnId,
+    String status = 'failed',
+  }) {
     _append(
       ConversationEntry(
         id: 'local-error-${_localEntrySequence++}',
         kind: ConversationEntryKind.error,
         text: _bounded(message),
         completed: true,
+        turnId: turnId,
+        status: status,
       ),
     );
   }

@@ -318,6 +318,16 @@ class _HistoryEntryView extends StatelessWidget {
     this.detailMode = PresentationDetailMode.commands,
     this.onForkFromTurn,
     this.onRevertFromTurn,
+    this.onEditFromTurn,
+    this.onRegenerateFromTurn,
+    this.onContinueTurn,
+    this.onRetryTurn,
+    this.siblingBranchInfo,
+    this.onSelectSiblingBranch,
+    this.overrideEntryText,
+    this.overrideAttachments,
+    this.isSearchMatch = false,
+    this.isActiveSearchMatch = false,
   });
 
   final HistoryItem item;
@@ -326,6 +336,16 @@ class _HistoryEntryView extends StatelessWidget {
   final PresentationDetailMode detailMode;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
+  final VoidCallback? onEditFromTurn;
+  final VoidCallback? onRegenerateFromTurn;
+  final VoidCallback? onContinueTurn;
+  final VoidCallback? onRetryTurn;
+  final ChatSiblingBranchInfo? siblingBranchInfo;
+  final ValueChanged<int>? onSelectSiblingBranch;
+  final String? overrideEntryText;
+  final List<UserAttachment>? overrideAttachments;
+  final bool isSearchMatch;
+  final bool isActiveSearchMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -344,19 +364,28 @@ class _HistoryEntryView extends StatelessWidget {
     final expanded =
         detailMode == PresentationDetailMode.execution ||
         historyController.selectedTurnId == item.turnId;
+    final effectiveAttachments = overrideAttachments ?? item.attachments;
     return _ConversationEntryView(
       entry: ConversationEntry(
         id: item.id,
         kind: kind,
-        text: item.text,
+        text: overrideEntryText ?? item.text,
         completed: true,
         status: item.status,
-        attachments: item.attachments,
+        attachments: effectiveAttachments,
       ),
-      attachments: item.attachments,
+      attachments: effectiveAttachments,
       turnId: item.turnId,
       onForkFromTurn: onForkFromTurn,
       onRevertFromTurn: onRevertFromTurn,
+      onEditFromTurn: onEditFromTurn,
+      onRegenerateFromTurn: onRegenerateFromTurn,
+      onContinueTurn: onContinueTurn,
+      onRetryTurn: onRetryTurn,
+      siblingBranchInfo: siblingBranchInfo,
+      onSelectSiblingBranch: onSelectSiblingBranch,
+      isSearchMatch: isSearchMatch,
+      isActiveSearchMatch: isActiveSearchMatch,
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
       leadingHeader: showWorkDivider
