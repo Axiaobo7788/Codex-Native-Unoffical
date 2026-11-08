@@ -32,7 +32,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Phase 3 — Bounded-memory long-session UX: LINUX MACHINE-ACTIONABLE WORK EXHAUSTED — paginated history, bounded native command-output viewing, safe lazy assistant Markdown, storage-failure recovery, and lifecycle soak are integrated; cross-platform and Human gates remain**
 
-**Phase 4 — Android Remote: PAUSED BY EXPLICIT PRIORITY OVERRIDE — the existing bounded read-only transport/onboarding/admin work remains intact, but writes, approvals, full conversation integration, headless Host work, relay migration, and mobile architecture work must not advance during the Desktop UI phase**
+**Phase 4 — Android Remote: PRIOR DESKTOP-UI PAUSE SUPERSEDED BY `Official Client Convergence` — existing bounded read-only transport/onboarding/admin work remains intact; supported, independently verifiable Remote/mobile slices may now advance under `SELF_ITERATION` when selected from `OFFICIAL_FEATURE_MATRIX.md`, while private relay compatibility and unsupported controller paths remain research-only.**
 
 **Prior Desktop UI phase marker (`7f220d5`, preserved history): `DESKTOP_UI_PHASE_COMPLETE — STOPPED FOR MOBILE RESEARCH` — superseded by Human real-use review on 2026-11-07 because machine-only widget tests missed real-use scroll positioning, history anchor preservation, user attachment envelope presentation, and desktop product-completeness defects.**
 
