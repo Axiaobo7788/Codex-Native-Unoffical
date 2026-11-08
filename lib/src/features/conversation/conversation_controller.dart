@@ -93,6 +93,7 @@ class ConversationController extends ChangeNotifier {
   TurnPlanSnapshot? _latestTurnPlan;
   ThreadTokenUsageSnapshot? _tokenUsage;
   ModelReroutedEvent? _latestModelReroute;
+  String? _processWarning;
   String? _latestWarning;
   var _busy = false;
   var _steering = false;
@@ -116,6 +117,7 @@ class ConversationController extends ChangeNotifier {
     if (_latestWarning == null && _latestModelReroute == null) {
       return;
     }
+    _processWarning = null;
     _latestWarning = null;
     _latestModelReroute = null;
     _notify();
@@ -153,7 +155,7 @@ class ConversationController extends ChangeNotifier {
     _latestTurnPlan = null;
     _tokenUsage = null;
     _latestModelReroute = null;
-    _latestWarning = null;
+    _latestWarning = _processWarning;
     _busy = false;
     _steering = false;
     _interruptReady = false;
@@ -181,7 +183,7 @@ class ConversationController extends ChangeNotifier {
     _latestTurnPlan = null;
     _tokenUsage = null;
     _latestModelReroute = null;
-    _latestWarning = null;
+    _latestWarning = _processWarning;
     _busy = false;
     _steering = false;
     _interruptReady = false;
@@ -344,7 +346,16 @@ class ConversationController extends ChangeNotifier {
   }
 
   void _handleEvent(TurnEvent event) {
-    if (_disposed || _thread == null) {
+    if (_disposed) {
+      return;
+    }
+    if (event case TurnWarningEvent(threadId: '', message: final message)) {
+      _processWarning = _truncate(message.trim(), _maxWarningChars);
+      _latestWarning = _processWarning;
+      _notify();
+      return;
+    }
+    if (_thread == null) {
       return;
     }
     if (event.threadId.isNotEmpty && event.threadId != _thread!.id) {

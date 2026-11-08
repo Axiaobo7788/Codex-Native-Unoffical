@@ -142,6 +142,35 @@ void main() {
     );
   });
 
+  test('drops overlong git origins before parsing or reconstruction', () async {
+    responses['thread/list'] = {
+      'data': [
+        {
+          ..._threadJson(id: 'thread-git-overlong-url'),
+          'gitInfo': {
+            'branch': 'main',
+            'originUrl': 'https://example.test/${'a' * 1100}',
+            'sha': 'abc123',
+          },
+        },
+        {
+          ..._threadJson(id: 'thread-git-overlong-scp'),
+          'gitInfo': {
+            'branch': 'main',
+            'originUrl': 'git@example.test:${'b' * 1100}',
+            'sha': 'def456',
+          },
+        },
+      ],
+      'nextCursor': null,
+    };
+
+    final page = await adapter.listThreads(const ThreadListQuery());
+
+    expect(page.threads[0].gitInfo?.originUrl, isNull);
+    expect(page.threads[1].gitInfo?.originUrl, isNull);
+  });
+
   test(
     'passes archived filter and trimmed searchTerm in thread/list',
     () async {

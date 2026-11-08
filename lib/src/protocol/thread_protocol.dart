@@ -252,9 +252,7 @@ final class ThreadProtocolAdapter {
     }
     return ThreadGitInfo(
       branch: _boundedOptionalString(value, 'branch', _maxGitBranchLength),
-      originUrl: _sanitizeOriginUrl(
-        _boundedOptionalString(value, 'originUrl', _maxGitOriginLength),
-      ),
+      originUrl: _sanitizeOriginUrl(_optionalString(value, 'originUrl')),
       sha: _boundedOptionalString(value, 'sha', _maxGitShaLength),
     );
   }
@@ -262,6 +260,13 @@ final class ThreadProtocolAdapter {
   static String? _sanitizeOriginUrl(String? value) {
     final normalized = value?.trim();
     if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    // Do not truncate an origin before parsing it. A truncated URI can change
+    // meaning, and rebuilding it may percent-encode the ellipsis beyond the
+    // bounded projection. Overlong origins are diagnostic metadata, so failing
+    // closed is safer than retaining an ambiguous partial credential surface.
+    if (normalized.length > _maxGitOriginLength) {
       return null;
     }
     if (!normalized.contains('://')) {
