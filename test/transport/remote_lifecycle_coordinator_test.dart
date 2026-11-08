@@ -102,6 +102,77 @@ void main() {
       await coordinator.stop();
     });
 
+    test('rehydrates metadata-incomplete lifecycle events before advancing the cursor', () async {
+      final order = <String>[];
+      final backend = _pairedBackend(order: order);
+      var threadLoad = 0;
+      final session = _FakeRemoteSession(
+        sessionId: 'host-1',
+        serverSequence: 5,
+        threadsLoader: () async {
+          threadLoad += 1;
+          return ThreadPage(
+            threads: [
+              _thread(
+                threadLoad == 1 ? 'old-thread' : 'restored-thread',
+                name: threadLoad == 1 ? null : 'Authoritative name',
+              ),
+            ],
+            nextCursor: null,
+          );
+        },
+      );
+      final connector = _Connector()..sessions.add(session);
+      final coordinator = _coordinator(backend, connector: connector.call);
+
+      await coordinator.start();
+      await _waitFor(
+        () => coordinator.state.phase == RemoteLifecyclePhase.ready,
+      );
+      expect(coordinator.projection!.threads.single.id, 'old-thread');
+
+      session.emit(
+        const RemoteSequencedNotification(
+          sessionId: 'host-1',
+          sequence: 6,
+          notification: CodexNotification(
+            method: 'thread/unarchived',
+            params: {'threadId': 'restored-thread'},
+          ),
+        ),
+      );
+      // This event is deliberately queued before the first one can switch
+      // the session into resync. The authoritative baseline at sequence 7
+      // covers it, so it must not be applied again after hydration.
+      session.emit(
+        const RemoteSequencedNotification(
+          sessionId: 'host-1',
+          sequence: 7,
+          notification: CodexNotification(
+            method: 'thread/name/updated',
+            params: {
+              'threadId': 'restored-thread',
+              'threadName': 'Queued name',
+            },
+          ),
+        ),
+      );
+
+      await _waitFor(
+        () =>
+            threadLoad == 2 &&
+            coordinator.state.phase == RemoteLifecyclePhase.ready &&
+            coordinator.projection!.appliedSequence == 7,
+      );
+      expect(coordinator.projection!.threads.single.id, 'restored-thread');
+      expect(coordinator.projection!.threads.single.name, 'Authoritative name');
+      expect(session.authoritativeResyncReasons, [
+        'thread/unarchived requires authoritative hydration.',
+      ]);
+      expect(order, contains('cursor:7'));
+      await coordinator.stop();
+    });
+
     test('resumes only with an exactly retained applied projection', () async {
       final backend = _pairedBackend();
       final first = _FakeRemoteSession(sessionId: 'host-1', serverSequence: 4);
@@ -498,9 +569,12 @@ final class _RecordingProjection implements RemoteProjectionOwner {
   }
 
   @override
-  Future<void> apply(RemoteSequencedNotification event) async {
-    await delegate.apply(event);
+  Future<RemoteProjectionApplyOutcome> apply(
+    RemoteSequencedNotification event,
+  ) async {
+    final outcome = await delegate.apply(event);
     order.add('apply:${event.sequence}');
+    return outcome;
   }
 
   @override
@@ -529,10 +603,13 @@ final class _DelayedApplyProjection implements RemoteProjectionOwner {
   );
 
   @override
-  Future<void> apply(RemoteSequencedNotification event) async {
-    await delegate.apply(event);
+  Future<RemoteProjectionApplyOutcome> apply(
+    RemoteSequencedNotification event,
+  ) async {
+    final outcome = await delegate.apply(event);
     applyEntered.complete();
     await releaseApply.future;
+    return outcome;
   }
 
   @override
@@ -589,12 +666,13 @@ final class _FakeRemoteSession implements RemoteSession {
   var modelCalls = 0;
   var threadCalls = 0;
   var closeCalls = 0;
+  final List<String> authoritativeResyncReasons = [];
 
   @override
   final RemoteHandshake handshake;
 
   @override
-  final int currentSequence;
+  int currentSequence;
 
   @override
   RemoteResumeCursor? get resumeCursor => null;
@@ -641,6 +719,23 @@ final class _FakeRemoteSession implements RemoteSession {
   }
 
   @override
+  void requireAuthoritativeResync({required String reason}) {
+    if (_requiresResync) {
+      return;
+    }
+    authoritativeResyncReasons.add(reason);
+    _requiresResync = true;
+    _resyncGeneration += 1;
+    _resync.add(
+      RemoteResyncRequired(
+        sessionId: handshake.sessionId,
+        sequence: currentSequence,
+        reason: reason,
+      ),
+    );
+  }
+
+  @override
   void completeResync({required int generation}) {
     if (generation != _resyncGeneration) {
       throw StateError('stale generation');
@@ -648,7 +743,10 @@ final class _FakeRemoteSession implements RemoteSession {
     _requiresResync = false;
   }
 
-  void emit(RemoteSequencedNotification event) => _events.add(event);
+  void emit(RemoteSequencedNotification event) {
+    currentSequence = event.sequence;
+    _events.add(event);
+  }
 
   void invalidateResync() {
     _requiresResync = true;
@@ -685,7 +783,7 @@ CodexModel _model(String id) => CodexModel(
   supportedReasoningEfforts: const [],
 );
 
-ThreadSummary _thread(String id) => ThreadSummary(
+ThreadSummary _thread(String id, {String? name}) => ThreadSummary(
   id: id,
   sessionId: 'codex-$id',
   preview: 'Test thread',
@@ -694,6 +792,7 @@ ThreadSummary _thread(String id) => ThreadSummary(
   updatedAt: DateTime.fromMillisecondsSinceEpoch(2),
   status: ThreadRuntimeStatus.idle,
   ephemeral: false,
+  name: name,
 );
 
 Future<void> _waitFor(bool Function() condition) async {

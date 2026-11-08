@@ -245,6 +245,49 @@ void main() {
   );
 
   test(
+    'locally requested authoritative resync buffers events until hydration',
+    () async {
+      final socket = _FakeRemoteSocket();
+      sockets.add(socket);
+      final transport = await _connect(socket);
+      transports.add(transport);
+      transport.completeResync(generation: transport.resyncGeneration);
+      final received = <CodexNotification>[];
+      final subscription = transport.notifications.listen(received.add);
+      addTearDown(subscription.cancel);
+      final resyncFuture = transport.resyncEvents.first;
+
+      transport.requireAuthoritativeResync(
+        reason: 'thread/unarchived requires authoritative hydration.',
+      );
+      final resync = await resyncFuture;
+      expect(resync.sequence, 0);
+      expect(resync.reason, contains('thread/unarchived'));
+      expect(transport.requiresResync, isTrue);
+      expect(transport.resumeCursor, isNull);
+
+      socket.addJson({
+        'type': 'codex_event',
+        'sequence': 1,
+        'method': 'thread/status/changed',
+        'params': {
+          'threadId': 'thread-1',
+          'status': {'type': 'active'},
+        },
+      });
+      await _waitFor(() => _acks(socket).contains(1));
+      expect(received, isEmpty);
+
+      transport.completeResync(generation: transport.resyncGeneration);
+      expect(received.single.method, 'thread/status/changed');
+      expect(
+        transport.resumeCursor,
+        const RemoteResumeCursor(sessionId: _sessionId, sequence: 1),
+      );
+    },
+  );
+
+  test(
     'exposes applied event sequences and a redacted revoked close',
     () async {
       final socket = _FakeRemoteSocket();

@@ -266,6 +266,26 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
   Future<RemoteTransportClose> get closed => _closed.future;
 
   @override
+  void requireAuthoritativeResync({required String reason}) {
+    if (_closing) {
+      throw const TransportClosedException();
+    }
+    if (reason.isEmpty || reason.length > 512) {
+      throw ArgumentError.value(reason, 'reason', 'Invalid resync reason.');
+    }
+    if (_requiresResync) {
+      return;
+    }
+    _markRequiresResync(
+      RemoteResyncRequired(
+        sessionId: handshake.sessionId,
+        sequence: _lastSequence,
+        reason: reason,
+      ),
+    );
+  }
+
+  @override
   void completeResync({required int generation}) {
     if (_closing) {
       throw const TransportClosedException();

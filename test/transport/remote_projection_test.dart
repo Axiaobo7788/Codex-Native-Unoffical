@@ -67,6 +67,79 @@ void main() {
       );
     });
 
+    test('applies thread rename and archive without rehydration', () async {
+      final projection = BoundedRemoteProjection();
+      await projection.replace(
+        sessionId: 'session-1',
+        baselineSequence: 4,
+        models: const ModelPage(models: [], nextCursor: null),
+        threads: ThreadPage(
+          threads: [
+            _thread('thread-1', name: 'Initial name'),
+            _thread('thread-2'),
+          ],
+          nextCursor: null,
+        ),
+      );
+
+      final rename = await projection.apply(
+        const RemoteSequencedNotification(
+          sessionId: 'session-1',
+          sequence: 5,
+          notification: CodexNotification(
+            method: 'thread/name/updated',
+            params: {'threadId': 'thread-1', 'threadName': 'Updated name'},
+          ),
+        ),
+      );
+      final archive = await projection.apply(
+        const RemoteSequencedNotification(
+          sessionId: 'session-1',
+          sequence: 6,
+          notification: CodexNotification(
+            method: 'thread/archived',
+            params: {'threadId': 'thread-2'},
+          ),
+        ),
+      );
+
+      expect(rename, RemoteProjectionApplyOutcome.applied);
+      expect(archive, RemoteProjectionApplyOutcome.applied);
+      expect(projection.snapshot!.appliedSequence, 6);
+      expect(projection.snapshot!.threads, hasLength(1));
+      expect(projection.snapshot!.threads.single.id, 'thread-1');
+      expect(projection.snapshot!.threads.single.name, 'Updated name');
+    });
+
+    test('requires authoritative hydration for metadata-incomplete lifecycle events', () async {
+      for (final method in ['thread/unarchived', 'thread/reverted']) {
+        final projection = BoundedRemoteProjection();
+        await projection.replace(
+          sessionId: 'session-1',
+          baselineSequence: 4,
+          models: const ModelPage(models: [], nextCursor: null),
+          threads: ThreadPage(threads: [_thread('thread-1')], nextCursor: null),
+        );
+
+        final outcome = await projection.apply(
+          RemoteSequencedNotification(
+            sessionId: 'session-1',
+            sequence: 5,
+            notification: CodexNotification(
+              method: method,
+              params: const {'threadId': 'thread-1'},
+            ),
+          ),
+        );
+
+        expect(
+          outcome,
+          RemoteProjectionApplyOutcome.requiresAuthoritativeHydration,
+        );
+        expect(projection.snapshot!.appliedSequence, 4);
+      }
+    });
+
     test(
       'fails closed on a gap, session mismatch, or malformed event',
       () async {
@@ -103,6 +176,14 @@ void main() {
               params: {'threadId': 'thread-1', 'status': 7},
             ),
           ),
+          RemoteSequencedNotification(
+            sessionId: 'session-1',
+            sequence: 5,
+            notification: CodexNotification(
+              method: 'thread/name/updated',
+              params: {'threadId': 'thread-1', 'threadName': 'x' * 4097},
+            ),
+          ),
         ]) {
           await expectLater(
             projection.apply(event),
@@ -125,7 +206,7 @@ CodexModel _model(String id) => CodexModel(
   supportedReasoningEfforts: const [],
 );
 
-ThreadSummary _thread(String id) => ThreadSummary(
+ThreadSummary _thread(String id, {String? name}) => ThreadSummary(
   id: id,
   sessionId: 'codex-$id',
   preview: 'Test thread',
@@ -134,4 +215,5 @@ ThreadSummary _thread(String id) => ThreadSummary(
   updatedAt: DateTime.fromMillisecondsSinceEpoch(2),
   status: ThreadRuntimeStatus.idle,
   ephemeral: false,
+  name: name,
 );

@@ -18,6 +18,7 @@ abstract interface class RemoteSession {
   Future<RemoteStatus> status();
   Future<ModelPage> listModels(ModelListQuery query);
   Future<ThreadPage> listThreads(ThreadListQuery query);
+  void requireAuthoritativeResync({required String reason});
   void completeResync({required int generation});
   Future<void> close();
 }

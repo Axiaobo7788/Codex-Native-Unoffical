@@ -6,6 +6,9 @@ import 'remote_protocol.dart';
 const _maxProjectionModels = 100;
 const _maxProjectionThreads = 100;
 const _maxThreadIdLength = 128;
+const _maxThreadNameLength = 4096;
+
+enum RemoteProjectionApplyOutcome { applied, requiresAuthoritativeHydration }
 
 final class RemoteProjectionSnapshot {
   const RemoteProjectionSnapshot({
@@ -35,7 +38,7 @@ abstract interface class RemoteProjectionOwner {
     required ThreadPage threads,
   });
 
-  Future<void> apply(RemoteSequencedNotification event);
+  Future<RemoteProjectionApplyOutcome> apply(RemoteSequencedNotification event);
 
   void invalidate();
 }
@@ -69,7 +72,9 @@ final class BoundedRemoteProjection implements RemoteProjectionOwner {
   }
 
   @override
-  Future<void> apply(RemoteSequencedNotification event) async {
+  Future<RemoteProjectionApplyOutcome> apply(
+    RemoteSequencedNotification event,
+  ) async {
     final current = _snapshot;
     if (current == null || event.sessionId != current.sessionId) {
       throw const ProtocolViolation(
@@ -84,6 +89,33 @@ final class BoundedRemoteProjection implements RemoteProjectionOwner {
     }
 
     final notification = event.notification;
+    if (notification.method == 'thread/unarchived' ||
+        notification.method == 'thread/reverted') {
+      _requiredThreadId(notification.params);
+      return RemoteProjectionApplyOutcome.requiresAuthoritativeHydration;
+    }
+
+    if (notification.method == 'thread/name/updated') {
+      final threadId = _requiredThreadId(notification.params);
+      final threadName = _optionalThreadName(notification.params);
+      _snapshot = _copySnapshot(
+        current,
+        appliedSequence: event.sequence,
+        threads: _replaceThreadName(current.threads, threadId, threadName),
+      );
+      return RemoteProjectionApplyOutcome.applied;
+    }
+
+    if (notification.method == 'thread/archived') {
+      final threadId = _requiredThreadId(notification.params);
+      _snapshot = _copySnapshot(
+        current,
+        appliedSequence: event.sequence,
+        threads: _removeThread(current.threads, threadId),
+      );
+      return RemoteProjectionApplyOutcome.applied;
+    }
+
     final ThreadRuntimeStatus? status = switch (notification.method) {
       'turn/started' => ThreadRuntimeStatus.active,
       'turn/completed' => ThreadRuntimeStatus.idle,
@@ -99,14 +131,12 @@ final class BoundedRemoteProjection implements RemoteProjectionOwner {
     final updatedThreads = status == null
         ? current.threads
         : _replaceThreadStatus(current.threads, threadId, status);
-    _snapshot = RemoteProjectionSnapshot(
-      sessionId: current.sessionId,
+    _snapshot = _copySnapshot(
+      current,
       appliedSequence: event.sequence,
-      models: current.models,
       threads: updatedThreads,
-      nextModelCursor: current.nextModelCursor,
-      nextThreadCursor: current.nextThreadCursor,
     );
+    return RemoteProjectionApplyOutcome.applied;
   }
 
   @override
@@ -121,6 +151,21 @@ final class BoundedRemoteProjection implements RemoteProjectionOwner {
         value.length > _maxThreadIdLength) {
       throw const ProtocolViolation(
         'Remote projection event has an invalid thread ID.',
+      );
+    }
+    return value;
+  }
+
+  static String? _optionalThreadName(Map<String, Object?> params) {
+    final value = params.containsKey('threadName')
+        ? params['threadName']
+        : params['name'];
+    if (value == null) {
+      return null;
+    }
+    if (value is! String || value.length > _maxThreadNameLength) {
+      throw const ProtocolViolation(
+        'Remote thread name event has an invalid name.',
       );
     }
     return value;
@@ -172,4 +217,46 @@ final class BoundedRemoteProjection implements RemoteProjectionOwner {
     );
     return List.unmodifiable(updated);
   }
+
+  static List<ThreadSummary> _replaceThreadName(
+    List<ThreadSummary> threads,
+    String threadId,
+    String? threadName,
+  ) {
+    final index = threads.indexWhere((thread) => thread.id == threadId);
+    if (index == -1 || threads[index].name == threadName) {
+      return threads;
+    }
+    final updated = List<ThreadSummary>.of(threads);
+    updated[index] = updated[index].copyWith(
+      name: threadName,
+      clearName: threadName == null,
+    );
+    return List.unmodifiable(updated);
+  }
+
+  static List<ThreadSummary> _removeThread(
+    List<ThreadSummary> threads,
+    String threadId,
+  ) {
+    final index = threads.indexWhere((thread) => thread.id == threadId);
+    if (index == -1) {
+      return threads;
+    }
+    final updated = List<ThreadSummary>.of(threads)..removeAt(index);
+    return List.unmodifiable(updated);
+  }
+
+  static RemoteProjectionSnapshot _copySnapshot(
+    RemoteProjectionSnapshot current, {
+    required int appliedSequence,
+    required List<ThreadSummary> threads,
+  }) => RemoteProjectionSnapshot(
+    sessionId: current.sessionId,
+    appliedSequence: appliedSequence,
+    models: current.models,
+    threads: threads,
+    nextModelCursor: current.nextModelCursor,
+    nextThreadCursor: current.nextThreadCursor,
+  );
 }

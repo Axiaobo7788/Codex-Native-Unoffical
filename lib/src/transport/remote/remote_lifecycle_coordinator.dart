@@ -523,15 +523,35 @@ final class RemoteLifecycleCoordinator implements RemoteLifecycleOwner {
     if (!_isCurrentConnection(generation, connectionGeneration, session)) {
       return;
     }
+    final snapshot = _projection.snapshot;
+    if (session.requiresResync ||
+        (snapshot != null &&
+            snapshot.sessionId == event.sessionId &&
+            event.sequence <= snapshot.appliedSequence)) {
+      // A locally requested hydration may cover notifications that were
+      // already delivered to this queue before the session entered resync.
+      return;
+    }
     _appliedCursor = null;
+    var outcome = RemoteProjectionApplyOutcome.applied;
     final applied = await _mutateProjection(
       generation: generation,
       connectionGeneration: connectionGeneration,
       session: session,
-      operation: () => _projection.apply(event),
+      operation: () async {
+        outcome = await _projection.apply(event);
+      },
     );
     if (!applied ||
         !_isCurrentConnection(generation, connectionGeneration, session)) {
+      return;
+    }
+    if (outcome ==
+        RemoteProjectionApplyOutcome.requiresAuthoritativeHydration) {
+      session.requireAuthoritativeResync(
+        reason:
+            '${event.notification.method} requires authoritative hydration.',
+      );
       return;
     }
     final cursor = RemoteResumeCursor(
