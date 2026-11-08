@@ -144,100 +144,53 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
       },
       child: ColoredBox(
         color: theme.shellBackground,
-        child: Column(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              key: const ValueKey('app_shell_titlebar'),
-              height: OfficialCodexTheme.titlebarHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              decoration: BoxDecoration(
-                color: theme.shellBackground,
-                border: Border(
-                  bottom: BorderSide(
+            if (!_sidebarCollapsed)
+              SizedBox(
+                key: const ValueKey('app_shell_sidebar'),
+                width: _desktopSidebarWidth,
+                child: _ThreadPanel(
+                  controller: widget.threadController,
+                  settingsController: widget.settingsController,
+                  runtimeController: widget.runtimeController,
+                  defaultWorkingDirectory: widget.defaultWorkingDirectory,
+                  onToggleSidebar: _toggleSidebar,
+                ),
+              ),
+            Expanded(
+              child: Container(
+                key: const ValueKey('inset_workspace_card'),
+                margin: EdgeInsets.fromLTRB(
+                  _sidebarCollapsed ? 6.0 : 0.0,
+                  6.0,
+                  6.0,
+                  6.0,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.workspaceBackground,
+                  borderRadius: BorderRadius.circular(
+                    OfficialCodexTheme.mainSurfaceRadius,
+                  ),
+                  border: Border.all(
                     color: theme.hairlineBorder,
                     width: OfficialCodexTheme.hairlineBorderWidth,
                   ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: theme.textPrimary,
-                      borderRadius: BorderRadius.circular(6.0),
-                    ),
-                    child: Icon(
-                      Icons.terminal_rounded,
-                      size: 14,
-                      color: theme.shellBackground,
-                    ),
-                  ),
-                  const SizedBox(width: 8.0),
-                  Text(
-                    'Codex Native',
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 13.0,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  _RuntimeStatusPill(
-                    controller: widget.runtimeController,
-                    compact: true,
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (!_sidebarCollapsed) ...[
-                    SizedBox(
-                      key: const ValueKey('app_shell_sidebar'),
-                      width: _desktopSidebarWidth,
-                      child: _ThreadPanel(
-                        controller: widget.threadController,
-                        settingsController: widget.settingsController,
-                        runtimeController: widget.runtimeController,
-                        defaultWorkingDirectory: widget.defaultWorkingDirectory,
-                        onToggleSidebar: _toggleSidebar,
-                      ),
-                    ),
-                  ],
-                  Expanded(
-                    child: Container(
-                      key: const ValueKey('inset_workspace_card'),
-                      margin: const EdgeInsets.only(bottom: 6.0, right: 6.0),
-                      decoration: BoxDecoration(
-                        color: theme.workspaceBackground,
-                        borderRadius: BorderRadius.circular(
-                          OfficialCodexTheme.mainSurfaceRadius,
-                        ),
-                        border: Border.all(
-                          color: theme.hairlineBorder,
-                          width: OfficialCodexTheme.hairlineBorderWidth,
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: _ConversationPanel(
-                        controller: widget.conversationController,
-                        threadController: widget.threadController,
-                        historyController: widget.historyController,
-                        approvalController: widget.approvalController,
-                        settingsController: widget.settingsController,
-                        diffController: widget.diffController,
-                        outputGateway: widget.runtimeController,
-                        defaultWorkingDirectory: widget.defaultWorkingDirectory,
-                        sidebarCollapsed: _sidebarCollapsed,
-                        onToggleSidebar: _toggleSidebar,
-                      ),
-                    ),
-                  ),
-                ],
+                clipBehavior: Clip.antiAlias,
+                child: _ConversationPanel(
+                  controller: widget.conversationController,
+                  threadController: widget.threadController,
+                  historyController: widget.historyController,
+                  approvalController: widget.approvalController,
+                  settingsController: widget.settingsController,
+                  diffController: widget.diffController,
+                  outputGateway: widget.runtimeController,
+                  defaultWorkingDirectory: widget.defaultWorkingDirectory,
+                  sidebarCollapsed: _sidebarCollapsed,
+                  onToggleSidebar: _toggleSidebar,
+                ),
               ),
             ),
           ],

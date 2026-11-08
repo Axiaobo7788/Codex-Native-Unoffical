@@ -116,6 +116,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
   var _productMode = ProductMode.codex;
+  String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
   final _composerAttachPopoverController = CodexPopoverController();
   final List<UserAttachment> _composerAttachments = <UserAttachment>[];
@@ -130,6 +131,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (selectedCwd != null && selectedCwd.trim().isNotEmpty) {
       return selectedCwd.trim();
     }
+    if (_customProjectDirectory != null &&
+        _customProjectDirectory!.trim().isNotEmpty) {
+      return _customProjectDirectory!.trim();
+    }
     if (widget.defaultWorkingDirectory.trim().isNotEmpty) {
       return widget.defaultWorkingDirectory.trim();
     }
@@ -138,6 +143,45 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return threads.first.cwd.trim();
     }
     return '';
+  }
+
+  Future<void> _chooseProjectDirectory() async {
+    final field = TextEditingController(text: _activeProjectDirectory);
+    final next = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select project directory'),
+        content: SizedBox(
+          width: 480,
+          child: TextField(
+            controller: field,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Working directory',
+              hintText: '/path/to/repository',
+            ),
+            onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+          ),
+        ),
+        actions: [
+          CodexButton(
+            variant: CodexButtonVariant.ghost,
+            onPressed: () => Navigator.of(context).pop(),
+            label: 'Cancel',
+          ),
+          CodexButton(
+            variant: CodexButtonVariant.primary,
+            onPressed: () => Navigator.of(context).pop(field.text.trim()),
+            label: 'Use directory',
+          ),
+        ],
+      ),
+    );
+    field.dispose();
+    if (next == null || next.isEmpty || !mounted) {
+      return;
+    }
+    setState(() => _customProjectDirectory = next);
   }
 
   @override
@@ -260,7 +304,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
@@ -274,7 +318,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         },
       },
       child: ColoredBox(
-        color: palette.canvas,
+        color: theme.workspaceBackground,
         child: AnimatedBuilder(
           animation: Listenable.merge([
             widget.controller,
@@ -284,6 +328,68 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           ]),
           builder: (context, _) {
             final controller = widget.controller;
+            if (controller.thread == null &&
+                !(_showChanges && widget.diffController.snapshot != null)) {
+              _currentTimelineItemKeys = const [];
+              _searchMatchItemKeys = const [];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _conversationHeader(controller),
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal:
+                              OfficialCodexTheme.threadBodyInlinePadding,
+                          vertical: 20,
+                        ),
+                        child: ConstrainedBox(
+                          key: const ValueKey('conversation_reading_column'),
+                          constraints: const BoxConstraints(
+                            maxWidth: OfficialCodexTheme.maxContentWidth,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _ConversationEmptyState(
+                                workingDirectory: _activeProjectDirectory,
+                                onChooseDirectory:
+                                    _activeCapabilities
+                                        .supportsWorkingDirectorySelection
+                                    ? _chooseProjectDirectory
+                                    : null,
+                              ),
+                              const SizedBox(height: 22),
+                              _ApprovalBanner(
+                                controller: widget.approvalController,
+                              ),
+                              _composer(controller, isHeroCentered: true),
+                              const SizedBox(height: 14),
+                              _StarterSuggestionRow(
+                                productMode: _productMode,
+                                onSelectSuggestion: (prompt) {
+                                  setState(() {
+                                    _composerController.value =
+                                        TextEditingValue(
+                                          text: prompt,
+                                          selection: TextSelection.collapsed(
+                                            offset: prompt.length,
+                                          ),
+                                        );
+                                  });
+                                  _composerFocusNode.requestFocus();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
             final timelineChild =
                 _showChanges && widget.diffController.snapshot != null
                 ? _DiffView(controller: widget.diffController)
@@ -404,23 +510,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final thread = controller.thread;
     final threadController = widget.threadController;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
+    final isHomeEmpty = thread == null;
     return Container(
       key: const ValueKey('thread_header_bar'),
       height: OfficialCodexTheme.headerHeight,
       padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
       decoration: BoxDecoration(
         color: theme.workspaceBackground,
-        border: Border(
-          bottom: BorderSide(
-            color: palette.border,
-            width: OfficialCodexTheme.hairlineBorderWidth,
-          ),
-        ),
+        border: isHomeEmpty
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: palette.border,
+                  width: OfficialCodexTheme.hairlineBorderWidth,
+                ),
+              ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final showProductMode = constraints.maxWidth >= 600;
-          final showSegment = constraints.maxWidth >= 380;
+          final showSegment = thread != null && constraints.maxWidth >= 380;
           final showSearchButton =
               thread != null &&
               _activeCapabilities.supportsInConversationSearch &&
@@ -431,46 +540,78 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   widget.onToggleSidebar != null) ...[
                 CodexIconButton(
                   key: const ValueKey('sidebar-expand-button'),
-                  tooltip: 'Show sidebar',
+                  tooltip: 'Show sidebar (Ctrl+B)',
                   onPressed: widget.onToggleSidebar,
                   icon: const Icon(Icons.view_sidebar_outlined, size: 17),
                 ),
                 const SizedBox(width: ThemeTokens.space2),
               ],
               Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        thread?.displayTitle ?? 'New thread',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14.0,
+                child: thread == null
+                    ? const SizedBox.shrink()
+                    : Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              thread.displayTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13.5,
+                                    letterSpacing: -0.1,
+                                  ),
                             ),
-                      ),
-                    ),
-                    if (projectCwd.isNotEmpty &&
-                        _activeCapabilities.supportsWorkingDirectorySelection &&
-                        constraints.maxWidth >= 680) ...[
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: CodexTooltip(
-                          message: projectCwd,
-                          child: Text(
-                            _projectName(projectCwd),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: palette.textSecondary),
                           ),
-                        ),
+                          if (projectCwd.isNotEmpty &&
+                              _activeCapabilities
+                                  .supportsWorkingDirectorySelection &&
+                              constraints.maxWidth >= 680) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: CodexTooltip(
+                                message: projectCwd,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.elevatedSurface,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.folder_outlined,
+                                        size: 12,
+                                        color: palette.textMuted,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          _projectName(projectCwd),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: palette.textSecondary,
+                                                fontSize: 11.5,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ],
-                ),
               ),
               if (widget.diffController.snapshot?.files.isNotEmpty ??
                   false) ...[
@@ -527,7 +668,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     });
                   },
                 ),
-                const SizedBox(width: ThemeTokens.space1),
+                if (showSegment) const SizedBox(width: ThemeTokens.space1),
               ],
               if (showSegment)
                 CodexSegment<PresentationDetailMode>(
@@ -1590,7 +1731,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
-  Widget _composer(ConversationController controller) {
+  Widget _composer(
+    ConversationController controller, {
+    bool isHeroCentered = false,
+  }) {
     final palette = ThemeTokens.of(context);
     final thread = controller.thread;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
@@ -1604,8 +1748,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final enabled =
         (thread != null || canCreateOnSend) && (!controller.busy || canSteer);
     return Container(
-      color: palette.canvas,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+      color: isHeroCentered ? Colors.transparent : palette.canvas,
+      padding: isHeroCentered
+          ? EdgeInsets.zero
+          : const EdgeInsets.fromLTRB(16, 8, 16, 14),
       child: Center(
         child: CodexComposer(
           key: const ValueKey('floating_composer'),
@@ -1658,7 +1804,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   controller: _composerController,
                   focusNode: _composerFocusNode,
                   enabled: enabled,
-                  minLines: 1,
+                  minLines: isHeroCentered ? 2 : 1,
                   maxLines: 6,
                   textInputAction: TextInputAction.newline,
                   decoration: InputDecoration(
@@ -1679,10 +1825,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               LayoutBuilder(
                 builder: (context, rowConstraints) {
                   final compactComposer = rowConstraints.maxWidth < 560;
-                  final showModelPill = rowConstraints.maxWidth >= 340;
+                  final showModelPill = rowConstraints.maxWidth >= 320;
+                  final busyReserve = controller.busy ? 76.0 : 0.0;
                   final maxModelLabelWidth =
-                      (rowConstraints.maxWidth - (compactComposer ? 270 : 450))
-                          .clamp(56.0, 160.0);
+                      (rowConstraints.maxWidth -
+                              (compactComposer ? 260 : 455) -
+                              busyReserve)
+                          .clamp(52.0, 148.0);
                   return Row(
                     children: [
                       CodexPopoverAnchor(
@@ -1732,6 +1881,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       ),
                       const SizedBox(width: 2),
+                      if (showModelPill)
+                        _ComposerModelSummaryButton(
+                          controller: widget.settingsController,
+                          maxLabelWidth: maxModelLabelWidth,
+                        ),
                       if (capabilities.supportsSandboxConfiguration)
                         _ExecutionSettingsButton(
                           controller: widget.settingsController,
@@ -1744,7 +1898,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: palette.surfaceRaised,
+                            color: palette.surface,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -1754,53 +1908,62 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           ),
                         ),
                       if (projectCwd.isNotEmpty &&
+                          !isHeroCentered &&
                           !compactComposer &&
                           capabilities.supportsWorkingDirectorySelection) ...[
                         const SizedBox(width: 4),
                         CodexTooltip(
                           message: projectCwd,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: palette.surfaceRaised,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.folder_outlined,
-                                  size: 13,
-                                  color: palette.textMuted,
+                          child: GestureDetector(
+                            onTap: thread == null
+                                ? _chooseProjectDirectory
+                                : null,
+                            child: MouseRegion(
+                              cursor: thread == null
+                                  ? SystemMouseCursors.click
+                                  : SystemMouseCursors.basic,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
-                                const SizedBox(width: 4),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 120,
-                                  ),
-                                  child: Text(
-                                    _projectName(projectCwd),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall,
-                                  ),
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.folder_outlined,
+                                      size: 13,
+                                      color: palette.textMuted,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 110,
+                                      ),
+                                      child: Text(
+                                        _projectName(projectCwd),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: palette.textSecondary,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ],
                       const Spacer(),
-                      if (showModelPill)
-                        _ComposerModelSummaryButton(
-                          controller: widget.settingsController,
-                          maxLabelWidth: maxModelLabelWidth,
-                        ),
                       if (controller.busy)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
@@ -3823,61 +3986,168 @@ class _ActivityContent extends StatelessWidget {
 }
 
 class _ConversationEmptyState extends StatelessWidget {
-  const _ConversationEmptyState({this.workingDirectory = ''});
+  const _ConversationEmptyState({
+    this.workingDirectory = '',
+    this.onChooseDirectory,
+  });
 
   final String workingDirectory;
+  final VoidCallback? onChooseDirectory;
 
   @override
   Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final projectLabel = workingDirectory.trim().isEmpty
         ? null
         : _projectName(workingDirectory);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(ThemeTokens.space8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: palette.surfaceRaised,
-                border: Border.all(color: palette.border),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(
-                Icons.terminal_rounded,
-                size: 22,
-                color: palette.textPrimary,
-              ),
-            ),
-            const SizedBox(height: ThemeTokens.space4),
-            Text(
-              'Let’s build',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            if (projectLabel != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                projectLabel,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: palette.textSecondary,
-                  fontWeight: FontWeight.w500,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.auto_awesome_mosaic_outlined,
+          size: 40,
+          color: theme.textPrimary.withValues(alpha: 0.78),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Let’s build',
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontSize: 28,
+            fontWeight: FontWeight.w500,
+            letterSpacing: -0.6,
+            height: 1.2,
+          ),
+        ),
+        if (projectLabel != null) ...[
+          const SizedBox(height: 2),
+          GestureDetector(
+            onTap: onChooseDirectory,
+            child: MouseRegion(
+              cursor: onChooseDirectory != null
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.basic,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        projectLabel,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.textMuted,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: -0.4,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                    if (onChooseDirectory != null) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 20,
+                        color: theme.textMuted,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
-            const SizedBox(height: ThemeTokens.space2),
-            Text(
-              'Select existing work from the sidebar or type below to start a new thread.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
             ),
-          ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StarterSuggestionRow extends StatelessWidget {
+  const _StarterSuggestionRow({
+    required this.productMode,
+    required this.onSelectSuggestion,
+  });
+
+  final ProductMode productMode;
+  final ValueChanged<String> onSelectSuggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final suggestions = switch (productMode) {
+      ProductMode.codex => const [
+        (
+          icon: Icons.account_tree_outlined,
+          label: 'Explore codebase architecture',
+          prompt: 'Explore this repository and summarize its architecture and key modules.',
         ),
-      ),
+        (
+          icon: Icons.difference_outlined,
+          label: 'Review local git changes',
+          prompt: 'Review uncommitted git changes and highlight any potential regressions.',
+        ),
+        (
+          icon: Icons.bug_report_outlined,
+          label: 'Run tests & fix failures',
+          prompt:
+              'Run the test suite and diagnose any failing or flaky checks.',
+        ),
+      ],
+      ProductMode.work => const [
+        (
+          icon: Icons.checklist_rounded,
+          label: 'Draft an implementation plan',
+          prompt: 'Draft a step-by-step engineering plan for the next task.',
+        ),
+        (
+          icon: Icons.summarize_outlined,
+          label: 'Summarize recent progress',
+          prompt: 'Summarize recent commits and current project status.',
+        ),
+        (
+          icon: Icons.fact_check_outlined,
+          label: 'Audit release readiness',
+          prompt: 'Audit open blockers and verification gates before the next milestone.',
+        ),
+      ],
+      ProductMode.chat => const [
+        (
+          icon: Icons.lightbulb_outline_rounded,
+          label: 'Brainstorm design tradeoffs',
+          prompt: 'Help me evaluate architectural tradeoffs for a new feature.',
+        ),
+        (
+          icon: Icons.code_rounded,
+          label: 'Explain a complex algorithm',
+          prompt:
+              'Walk through the core state management and streaming pipeline.',
+        ),
+        (
+          icon: Icons.edit_note_rounded,
+          label: 'Refine technical documentation',
+          prompt: 'Help me write concise technical documentation and ADRs.',
+        ),
+      ],
+    };
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: [
+        for (final item in suggestions)
+          CodexButton(
+            variant: CodexButtonVariant.secondary,
+            size: CodexButtonSize.sm,
+            onPressed: () => onSelectSuggestion(item.prompt),
+            icon: Icon(item.icon, size: 14, color: theme.textMuted),
+            label: item.label,
+          ),
+      ],
     );
   }
 }
@@ -3889,39 +4159,28 @@ class _ThreadEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(ThemeTokens.space8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: palette.surfaceRaised,
-                border: Border.all(color: palette.border),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(
-                Icons.terminal_rounded,
-                size: 22,
-                color: palette.textPrimary,
-              ),
+            Icon(
+              Icons.auto_awesome_mosaic_outlined,
+              size: 38,
+              color: theme.textPrimary.withValues(alpha: 0.78),
             ),
-            const SizedBox(height: ThemeTokens.space4),
+            const SizedBox(height: 12),
             Text(
               'Let’s build ${_projectName(thread.cwd)}',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: ThemeTokens.space2),
-            Text(
-              'Describe the change you want to make. Codex will keep progress, '
-              'tools, approvals, and changes in this thread.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.5,
+              ),
             ),
           ],
         ),
@@ -4071,15 +4330,18 @@ class _ComposerModelSummaryButton extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         final model = controller.effectiveModel;
+        final String summary;
         if (model == null) {
-          return const SizedBox.shrink();
+          summary = controller.loading ? 'Loading models…' : 'Codex default';
+        } else {
+          final rawEffort =
+              controller.selectedReasoningEffort ??
+              model.defaultReasoningEffort;
+          final effortLabel = _formatEffortLabel(rawEffort);
+          summary = effortLabel == null
+              ? model.displayName
+              : '${model.displayName} · $effortLabel';
         }
-        final rawEffort =
-            controller.selectedReasoningEffort ?? model.defaultReasoningEffort;
-        final effortLabel = _formatEffortLabel(rawEffort);
-        final summary = effortLabel == null
-            ? model.displayName
-            : '${model.displayName} · $effortLabel';
         return Padding(
           padding: const EdgeInsets.only(right: 4),
           child: CodexButton(

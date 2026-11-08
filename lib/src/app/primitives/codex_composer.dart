@@ -35,17 +35,17 @@ class CodexComposer extends StatelessWidget {
         curve: Curves.easeOut,
         padding: padding,
         decoration: BoxDecoration(
-          color: theme.workspaceBackground,
+          color: theme.elevatedSurface,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: isFocused ? theme.focusRing : theme.hairlineBorder,
-            width: isFocused ? 1.5 : OfficialCodexTheme.hairlineBorderWidth,
+            width: isFocused ? 1.5 : 1.0,
           ),
           boxShadow: [
             BoxShadow(
-              color: isDark ? const Color(0x33000000) : const Color(0x14000000),
-              blurRadius: 16.0,
-              offset: const Offset(0, 4.0),
+              color: isDark ? const Color(0x24000000) : const Color(0x0A000000),
+              blurRadius: 8.0,
+              offset: const Offset(0, 2.0),
             ),
           ],
         ),

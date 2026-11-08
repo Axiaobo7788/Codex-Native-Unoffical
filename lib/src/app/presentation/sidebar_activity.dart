@@ -96,50 +96,86 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               children: [
                 _brandHeader(context),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 2, 6, 4),
+                  padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
                   child: Row(
                     children: [
                       Expanded(
-                        child: CodexButton(
+                        child: CodexSidebarRow(
                           key: const ValueKey('new-thread-button'),
-                          variant: CodexButtonVariant.secondary,
-                          size: CodexButtonSize.md,
-                          onPressed: controller.mutating ? null : _startThread,
-                          icon: Icon(
-                            Icons.edit_square,
-                            size: 15,
-                            color: palette.textSecondary,
-                          ),
-                          label: 'New thread',
+                          title: 'New thread',
+                          leading: const Icon(Icons.edit_square, size: 16),
+                          onTap: controller.mutating ? null : _startThread,
+                          trailingBuilder: (context, isHovered) => isHovered
+                              ? Text(
+                                  'Ctrl+N',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        fontSize: 11,
+                                        color: palette.textMuted,
+                                      ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 2),
                       CodexIconButton(
                         key: const ValueKey('thread-directory-button'),
                         tooltip: 'New thread location',
+                        size: 30,
                         onPressed: controller.mutating
                             ? null
                             : _chooseDirectory,
                         icon: const Icon(
                           Icons.create_new_folder_outlined,
-                          size: 17,
+                          size: 16,
                         ),
                       ),
                     ],
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 2, 6, 2),
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                  child: CodexSidebarRow(
+                    key: const ValueKey('ecosystem-button'),
+                    title: 'Automations & Skills',
+                    leading: const Icon(Icons.auto_fix_high_outlined, size: 16),
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => _EcosystemDialog(
+                        gateway: widget.runtimeController,
+                        cwd:
+                            widget.controller.selectedThread?.cwd ??
+                            _workingDirectory,
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 8, 2),
                   child: Row(
                     children: [
                       Expanded(
                         child: Text(
                           controller.showArchived ? 'Archived' : 'Threads',
-                          style: Theme.of(context).textTheme.labelMedium
+                          style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
-                                color: palette.textSecondary,
-                                fontWeight: FontWeight.w600,
+                                color: palette.textMuted,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.1,
                               ),
+                        ),
+                      ),
+                      CodexIconButton(
+                        key: const ValueKey('thread-search-toggle'),
+                        tooltip: 'Filter threads',
+                        size: 26,
+                        onPressed: _toggleSearch,
+                        icon: Icon(
+                          _showSearch
+                              ? Icons.filter_list_off_rounded
+                              : Icons.search_rounded,
+                          size: 15,
                         ),
                       ),
                       CodexIconButton(
@@ -147,6 +183,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                         tooltip: controller.showArchived
                             ? 'Show active threads'
                             : 'Show archived threads',
+                        size: 26,
                         onPressed: controller.loading || controller.mutating
                             ? null
                             : () => controller.setShowArchived(
@@ -156,26 +193,16 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                           controller.showArchived
                               ? Icons.inventory_2_rounded
                               : Icons.inventory_2_outlined,
-                          size: 16,
-                        ),
-                      ),
-                      CodexIconButton(
-                        key: const ValueKey('thread-search-toggle'),
-                        tooltip: 'Filter threads',
-                        onPressed: _toggleSearch,
-                        icon: Icon(
-                          _showSearch
-                              ? Icons.filter_list_off_rounded
-                              : Icons.search_rounded,
-                          size: 16,
+                          size: 15,
                         ),
                       ),
                       CodexIconButton(
                         tooltip: 'Refresh threads',
+                        size: 26,
                         onPressed: controller.loading || controller.mutating
                             ? null
                             : controller.refresh,
-                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        icon: const Icon(Icons.refresh_rounded, size: 15),
                       ),
                     ],
                   ),
@@ -241,38 +268,37 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   Widget _brandHeader(BuildContext context) {
-    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return Container(
+      key: const ValueKey('app_shell_titlebar'),
       height: OfficialCodexTheme.titlebarHeight,
-      padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+      padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
       child: Row(
         children: [
-          Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              color: palette.textPrimary,
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Icon(
-              Icons.terminal_rounded,
-              size: 15,
-              color: palette.canvas,
-            ),
+          Icon(
+            Icons.auto_awesome_mosaic_outlined,
+            size: 17,
+            color: theme.textPrimary,
           ),
-          const SizedBox(width: ThemeTokens.space2),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Codex Native',
+              'Codex',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
           if (widget.onToggleSidebar != null)
             CodexIconButton(
               key: const ValueKey('sidebar-collapse-button'),
-              tooltip: 'Hide sidebar',
+              tooltip: 'Hide sidebar (Ctrl+B)',
+              size: 28,
               onPressed: widget.onToggleSidebar,
               icon: const Icon(Icons.view_sidebar_outlined, size: 17),
             ),
@@ -424,11 +450,16 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   Widget _sidebarFooter(BuildContext context) {
-    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 8, 8),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: palette.border)),
+        border: Border(
+          top: BorderSide(
+            color: theme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -437,20 +468,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           ),
           const SizedBox(width: ThemeTokens.space1),
           CodexIconButton(
-            key: const ValueKey('ecosystem-button'),
-            tooltip: 'Skills, Plugins & MCP',
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => _EcosystemDialog(
-                gateway: widget.runtimeController,
-                cwd: widget.controller.selectedThread?.cwd ?? _workingDirectory,
-              ),
-            ),
-            icon: const Icon(Icons.extension_outlined, size: 17),
-          ),
-          CodexIconButton(
             key: const ValueKey('remote-setup-button'),
-            tooltip: 'Remote setup',
+            tooltip: 'Remote & host settings',
+            size: 28,
             onPressed: () => showDialog<void>(
               context: context,
               builder: (context) => _RemoteSetupDialog(
@@ -458,7 +478,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                 ecosystemGateway: widget.runtimeController,
               ),
             ),
-            icon: const Icon(Icons.devices_outlined, size: 18),
+            icon: const Icon(Icons.devices_outlined, size: 17),
           ),
         ],
       ),
@@ -660,36 +680,40 @@ class _ProjectHeadingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final leadingIcon = heading.collapsed
-        ? Icons.keyboard_arrow_right_rounded
-        : Icons.folder_outlined;
+        ? Icons.folder_outlined
+        : Icons.folder_open_outlined;
 
-    return CodexSidebarRow(
-      tooltip: heading.directory,
-      title: _projectName(heading.directory),
-      leading: Icon(leadingIcon, size: 15, color: palette.textSecondary),
-      onTap: onToggleCollapse,
-      trailingBuilder: (context, isHovered) {
-        if (isHovered && onNewThreadInProject != null) {
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onNewThreadInProject,
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: Icon(
-                Icons.add_rounded,
-                size: 15,
-                color: palette.textSecondary,
+    return Padding(
+      padding: const EdgeInsets.only(top: 2.0),
+      child: CodexSidebarRow(
+        height: 32.0,
+        tooltip: heading.directory,
+        title: _projectName(heading.directory),
+        leading: Icon(leadingIcon, size: 15, color: palette.textSecondary),
+        onTap: onToggleCollapse,
+        trailingBuilder: (context, isHovered) {
+          if (isHovered && onNewThreadInProject != null) {
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onNewThreadInProject,
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  Icons.add_rounded,
+                  size: 15,
+                  color: palette.textSecondary,
+                ),
               ),
-            ),
-          );
-        } else if (heading.collapsed) {
-          return Text(
-            '${heading.count}',
-            style: Theme.of(context).textTheme.labelSmall,
-          );
-        }
-        return const SizedBox.shrink();
-      },
+            );
+          } else if (heading.collapsed) {
+            return Text(
+              '${heading.count}',
+              style: Theme.of(context).textTheme.labelSmall,
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
     );
   }
 }
@@ -747,119 +771,126 @@ class _ThreadRowState extends State<_ThreadRow> {
       _ => null,
     };
 
-    return CodexSidebarRow(
-      containerKey: ValueKey('thread-row-${thread.id}'),
-      title: thread.displayTitle,
-      selected: widget.selected,
-      onTap: widget.enabled ? widget.onSelect : null,
-      padding: EdgeInsets.only(left: statusColor != null ? 8 : 12, right: 8),
-      leading: statusColor != null
-          ? Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
-            )
-          : null,
-      trailingBuilder: (context, isHovered) {
-        if (isHovered || _menuController.isOpen) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 14.0),
+      child: CodexSidebarRow(
+        containerKey: ValueKey('thread-row-${thread.id}'),
+        title: thread.displayTitle,
+        selected: widget.selected,
+        onTap: widget.enabled ? widget.onSelect : null,
+        padding: EdgeInsets.only(left: statusColor != null ? 8 : 10, right: 8),
+        leading: statusColor != null
+            ? Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+              )
+            : null,
+        trailingBuilder: (context, isHovered) {
+          if (isHovered || _menuController.isOpen) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (thread.status == ThreadRuntimeStatus.notLoaded)
+                  CodexIconButton(
+                    tooltip: 'Resume thread',
+                    onPressed: widget.enabled ? widget.onResume : null,
+                    size: 24,
+                    icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                  ),
+                CodexPopoverAnchor(
+                  controller: _menuController,
+                  targetAnchor: Alignment.bottomRight,
+                  followerAnchor: Alignment.topRight,
+                  width: 184,
+                  popoverBuilder: (context, close) => CodexMenu<String>(
+                    items: [
+                      CodexMenuItem(
+                        value: 'pin',
+                        label: widget.pinned ? 'Unpin thread' : 'Pin thread',
+                        icon: Icon(
+                          widget.pinned
+                              ? Icons.push_pin_rounded
+                              : Icons.push_pin_outlined,
+                        ),
+                      ),
+                      const CodexMenuItem(
+                        value: 'rename',
+                        label: 'Rename thread',
+                        icon: Icon(Icons.drive_file_rename_outline_rounded),
+                      ),
+                      const CodexMenuItem(
+                        value: 'fork',
+                        label: 'Fork thread',
+                        icon: Icon(Icons.call_split_rounded),
+                      ),
+                      CodexMenuItem(
+                        value: 'archive',
+                        label: widget.archived
+                            ? 'Unarchive thread'
+                            : 'Archive thread',
+                        icon: Icon(
+                          widget.archived
+                              ? Icons.unarchive_outlined
+                              : Icons.inventory_2_outlined,
+                        ),
+                      ),
+                      const CodexMenuItem(
+                        value: 'delete',
+                        label: 'Delete thread',
+                        icon: Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
+                    onSelected: (action) {
+                      close();
+                      switch (action) {
+                        case 'pin':
+                          widget.onTogglePin();
+                        case 'rename':
+                          widget.onRename();
+                        case 'fork':
+                          widget.onFork();
+                        case 'archive':
+                          widget.onArchiveToggle();
+                        case 'delete':
+                          widget.onDelete();
+                      }
+                    },
+                  ),
+                  child: CodexIconButton(
+                    key: ValueKey('thread-menu-${thread.id}'),
+                    tooltip: 'Thread actions',
+                    onPressed: widget.enabled ? _menuController.toggle : null,
+                    size: 24,
+                    icon: const Icon(Icons.more_horiz_rounded, size: 15),
+                  ),
+                ),
+              ],
+            );
+          }
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (thread.status == ThreadRuntimeStatus.notLoaded)
-                CodexIconButton(
-                  tooltip: 'Resume thread',
-                  onPressed: widget.enabled ? widget.onResume : null,
-                  size: 24,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 16),
+              if (widget.pinned) ...[
+                Icon(
+                  Icons.push_pin_rounded,
+                  size: 12,
+                  color: palette.textMuted,
                 ),
-              CodexPopoverAnchor(
-                controller: _menuController,
-                targetAnchor: Alignment.bottomRight,
-                followerAnchor: Alignment.topRight,
-                width: 184,
-                popoverBuilder: (context, close) => CodexMenu<String>(
-                  items: [
-                    CodexMenuItem(
-                      value: 'pin',
-                      label: widget.pinned ? 'Unpin thread' : 'Pin thread',
-                      icon: Icon(
-                        widget.pinned
-                            ? Icons.push_pin_rounded
-                            : Icons.push_pin_outlined,
-                      ),
-                    ),
-                    const CodexMenuItem(
-                      value: 'rename',
-                      label: 'Rename thread',
-                      icon: Icon(Icons.drive_file_rename_outline_rounded),
-                    ),
-                    const CodexMenuItem(
-                      value: 'fork',
-                      label: 'Fork thread',
-                      icon: Icon(Icons.call_split_rounded),
-                    ),
-                    CodexMenuItem(
-                      value: 'archive',
-                      label: widget.archived
-                          ? 'Unarchive thread'
-                          : 'Archive thread',
-                      icon: Icon(
-                        widget.archived
-                            ? Icons.unarchive_outlined
-                            : Icons.inventory_2_outlined,
-                      ),
-                    ),
-                    const CodexMenuItem(
-                      value: 'delete',
-                      label: 'Delete thread',
-                      icon: Icon(Icons.delete_outline_rounded),
-                    ),
-                  ],
-                  onSelected: (action) {
-                    close();
-                    switch (action) {
-                      case 'pin':
-                        widget.onTogglePin();
-                      case 'rename':
-                        widget.onRename();
-                      case 'fork':
-                        widget.onFork();
-                      case 'archive':
-                        widget.onArchiveToggle();
-                      case 'delete':
-                        widget.onDelete();
-                    }
-                  },
-                ),
-                child: CodexIconButton(
-                  key: ValueKey('thread-menu-${thread.id}'),
-                  tooltip: 'Thread actions',
-                  onPressed: widget.enabled ? _menuController.toggle : null,
-                  size: 24,
-                  icon: const Icon(Icons.more_horiz_rounded, size: 15),
-                ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                _shortTime(thread.updatedAt),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(fontSize: 11, color: palette.textMuted),
               ),
             ],
           );
-        }
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.pinned) ...[
-              Icon(Icons.push_pin_rounded, size: 12, color: palette.textMuted),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              _shortTime(thread.updatedAt),
-              style: Theme.of(context).textTheme.labelSmall
-                  ?.copyWith(fontSize: 11, color: palette.textMuted),
-            ),
-          ],
-        );
-      },
+        },
+      ),
     );
   }
 }

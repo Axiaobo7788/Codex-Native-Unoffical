@@ -143,6 +143,29 @@ void main() {
       await hostChild.dispose();
     },
   );
+
+  test('IoChildProcess serializes concurrent writes without StreamSink flush errors', () async {
+    final ioChild = await launchIoProcess('cat', const []);
+    final linesFuture = ioChild.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .toList();
+
+    await Future.wait([
+      ioChild.write('{"id":2,"method":"thread/list"}\n'),
+      ioChild.write('{"id":3,"method":"model/list"}\n'),
+      ioChild.write('{"id":4,"method":"skills/list"}\n'),
+    ]);
+    await ioChild.closeInput();
+
+    final lines = await linesFuture;
+    expect(lines, [
+      '{"id":2,"method":"thread/list"}',
+      '{"id":3,"method":"model/list"}',
+      '{"id":4,"method":"skills/list"}',
+    ]);
+    expect(await ioChild.exitCode, 0);
+  });
 }
 
 final class _FakeChildProcess implements ChildProcess {

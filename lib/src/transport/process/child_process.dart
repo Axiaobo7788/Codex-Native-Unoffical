@@ -15,6 +15,7 @@ class IoChildProcess implements ChildProcess {
   IoChildProcess(this._process);
 
   final Process _process;
+  Future<void> _writeQueue = Future<void>.value();
 
   @override
   int get pid => _process.pid;
@@ -29,13 +30,21 @@ class IoChildProcess implements ChildProcess {
   Future<int> get exitCode => _process.exitCode;
 
   @override
-  Future<void> write(String value) async {
-    _process.stdin.write(value);
-    await _process.stdin.flush();
+  Future<void> write(String value) {
+    final operation = _writeQueue.then((_) async {
+      _process.stdin.write(value);
+      await _process.stdin.flush();
+    });
+    _writeQueue = operation.catchError((Object _) {});
+    return operation;
   }
 
   @override
-  Future<void> closeInput() => _process.stdin.close();
+  Future<void> closeInput() {
+    final operation = _writeQueue.then((_) => _process.stdin.close());
+    _writeQueue = operation.catchError((Object _) {});
+    return operation;
+  }
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) =>

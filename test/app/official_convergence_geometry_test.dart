@@ -54,16 +54,17 @@ void main() {
         await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
         await tester.pumpAndSettle();
 
-        // 1. Assert Titlebar geometry: height exactly 46px
+        // 1. Assert single sidebar header geometry: height 46px, no duplicate Codex Native titlebar
         final titlebarFinder = find.byKey(const ValueKey('app_shell_titlebar'));
         expect(titlebarFinder, findsOneWidget);
+        expect(find.text('Codex Native'), findsNothing);
         expect(
           tester.getSize(titlebarFinder).height,
           equals(OfficialCodexTheme.titlebarHeight),
         );
         expect(tester.getSize(titlebarFinder).height, equals(46.0));
 
-        // 2. Assert Sidebar width: exactly 260px
+        // 2. Assert Sidebar width: exactly 260px and nested thread row indentation under project folder
         final sidebarFinder = find.byKey(const ValueKey('app_shell_sidebar'));
         expect(sidebarFinder, findsOneWidget);
         expect(
@@ -71,17 +72,55 @@ void main() {
           equals(OfficialCodexTheme.sidebarWidth),
         );
         expect(tester.getSize(sidebarFinder).width, equals(260.0));
+        final projectHeadingFinder = find.text('project');
+        final threadRowFinder = find.byKey(
+          const ValueKey('thread-row-geom-thread-1'),
+        );
+        expect(projectHeadingFinder, findsOneWidget);
+        expect(threadRowFinder, findsOneWidget);
+        expect(
+          tester.getTopLeft(threadRowFinder).dx,
+          greaterThan(tester.getTopLeft(sidebarFinder).dx + 14.0),
+        );
 
-        // 3. Assert Inset workspace card: top-left corner radius 12px
+        // 3. Assert Inset workspace card: top-left corner radius 12px and 6px inset margin
         final insetCardFinder = find.byKey(
           const ValueKey('inset_workspace_card'),
         );
         expect(insetCardFinder, findsOneWidget);
         final container = tester.widget<Container>(insetCardFinder);
+        expect(
+          container.margin,
+          equals(const EdgeInsets.fromLTRB(0.0, 6.0, 6.0, 6.0)),
+        );
         final boxDecoration = container.decoration as BoxDecoration;
         expect(
           boxDecoration.borderRadius,
           equals(BorderRadius.circular(OfficialCodexTheme.mainSurfaceRadius)),
+        );
+
+        // 3b. Assert Home (Let's build) state: header has no bottom border, detail modes hidden, composer centered with hero and uses Tier 2 elevatedSurface
+        final emptyHeaderContainer = tester.widget<Container>(
+          find.byKey(const ValueKey('thread_header_bar')),
+        );
+        expect(
+          (emptyHeaderContainer.decoration as BoxDecoration).border,
+          isNull,
+        );
+        expect(find.text('Prose'), findsNothing);
+        final heroTitleBottom = tester
+            .getBottomLeft(find.text('Let’s build'))
+            .dy;
+        final heroComposerTop = tester
+            .getTopLeft(find.byKey(const ValueKey('floating_composer')))
+            .dy;
+        expect(heroComposerTop - heroTitleBottom, lessThan(80.0));
+        final composerSurface = tester.widget<AnimatedContainer>(
+          find.byKey(const ValueKey('composer-surface')),
+        );
+        expect(
+          (composerSurface.decoration as BoxDecoration).color,
+          equals(OfficialCodexThemeData.light.elevatedSurface),
         );
 
         // Select thread to view conversation timeline

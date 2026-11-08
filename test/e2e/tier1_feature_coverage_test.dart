@@ -1151,6 +1151,10 @@ void main() {
         await tester.tap(find.text('Unarchive thread'));
         await tester.pumpAndSettle();
         expect(harness.unarchivedThreadIds, ['thread-fork-1']);
+        await tester.tap(find.byKey(const ValueKey('thread-archive-toggle')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Renamed Convergence Thread (fork)'));
+        await tester.pumpAndSettle();
 
         // 6. ProductMode selector (Codex / Work / Chat) updates detail projection
         final productModeSelector = find.byKey(
@@ -1199,10 +1203,6 @@ void main() {
         );
 
         // 7. Delete thread via header actions menu
-        await tester.tap(find.byKey(const ValueKey('thread-archive-toggle')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Renamed Convergence Thread (fork)'));
-        await tester.pumpAndSettle();
         await tester.tap(headerMenuBtn);
         await tester.pumpAndSettle();
         await tester.tap(find.text('Delete thread'));

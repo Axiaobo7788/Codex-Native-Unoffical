@@ -198,14 +198,17 @@ class _CodexButtonState extends State<CodexButton> {
         if (widget.child != null)
           Flexible(child: widget.child!)
         else if (widget.label != null)
-          Text(
-            widget.label!,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: textColor,
-              fontSize: fontSize,
-              fontWeight: FontWeight.w500,
-              letterSpacing: -0.1,
+          Flexible(
+            child: Text(
+              widget.label!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textColor,
+                fontSize: fontSize,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.1,
+              ),
             ),
           ),
         if (widget.trailingIcon != null) ...[
