@@ -14,6 +14,12 @@ typedef ProtocolRequest = Future<JsonObject> Function(
 /// belongs to separate adapters so metadata screens cannot accidentally hydrate
 /// an entire thread.
 final class ThreadProtocolAdapter {
+  static const _maxGitBranchLength = 512;
+  static const _maxGitOriginLength = 1024;
+  static const _maxGitShaLength = 128;
+  static const _maxGoalObjectiveLength = 2048;
+  static const _maxIdentifierLength = 512;
+
   ThreadProtocolAdapter({
     required this.request,
     Stream<CodexNotification> notifications = const Stream.empty(),
@@ -148,6 +154,10 @@ final class ThreadProtocolAdapter {
         itemsBackwardsCursor: _optionalString(params, 'itemsBackwardsCursor'),
       ),
       'thread/status/changed' => _parseStatusChanged(params),
+      'thread/goal/updated' => _parseGoalUpdated(params),
+      'thread/goal/cleared' => ThreadGoalClearedEvent(
+        threadId: _requiredString(params, 'threadId'),
+      ),
       _ => null,
     };
   }
@@ -160,6 +170,40 @@ final class ThreadProtocolAdapter {
     return ThreadStatusChangedEvent(
       threadId: _requiredString(params, 'threadId'),
       status: _status(_requiredString(statusValue, 'type')),
+    );
+  }
+
+  static ThreadGoalUpdatedEvent _parseGoalUpdated(JsonObject params) {
+    final threadId = _requiredString(params, 'threadId');
+    final rawGoal = _requiredObject(params, 'goal', 'thread/goal/updated');
+    final goalThreadId = _requiredString(rawGoal, 'threadId');
+    if (goalThreadId != threadId) {
+      throw const ProtocolViolation(
+        'Thread goal threadId must match the notification threadId.',
+      );
+    }
+    final rawTokenBudget = rawGoal['tokenBudget'];
+    if (rawTokenBudget != null &&
+        (rawTokenBudget is! int || rawTokenBudget < 0)) {
+      throw const ProtocolViolation(
+        'Thread goal tokenBudget must be a non-negative integer or null.',
+      );
+    }
+    return ThreadGoalUpdatedEvent(
+      threadId: threadId,
+      turnId: _boundedOptionalString(params, 'turnId', _maxIdentifierLength),
+      goal: ThreadGoal(
+        objective: _truncate(
+          _requiredString(rawGoal, 'objective').trim(),
+          _maxGoalObjectiveLength,
+        ),
+        status: _goalStatus(_requiredString(rawGoal, 'status')),
+        createdAtSeconds: _nonNegativeInt(rawGoal, 'createdAt'),
+        updatedAtSeconds: _nonNegativeInt(rawGoal, 'updatedAt'),
+        tokensUsed: _nonNegativeInt(rawGoal, 'tokensUsed'),
+        timeUsedSeconds: _nonNegativeInt(rawGoal, 'timeUsedSeconds'),
+        tokenBudget: rawTokenBudget as int?,
+      ),
     );
   }
 
@@ -195,7 +239,59 @@ final class ThreadProtocolAdapter {
       name: _optionalString(value, 'name'),
       model: _optionalString(value, 'model'),
       projectId: _optionalString(value, 'projectId'),
+      gitInfo: _parseGitInfo(value['gitInfo']),
     );
+  }
+
+  static ThreadGitInfo? _parseGitInfo(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is! Map<String, Object?>) {
+      throw const ProtocolViolation('Thread field gitInfo must be an object.');
+    }
+    return ThreadGitInfo(
+      branch: _boundedOptionalString(value, 'branch', _maxGitBranchLength),
+      originUrl: _sanitizeOriginUrl(
+        _boundedOptionalString(value, 'originUrl', _maxGitOriginLength),
+      ),
+      sha: _boundedOptionalString(value, 'sha', _maxGitShaLength),
+    );
+  }
+
+  static String? _sanitizeOriginUrl(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) {
+      return null;
+    }
+    if (!uri.hasScheme) {
+      return normalized;
+    }
+    if (uri.host.isEmpty) {
+      return null;
+    }
+    return Uri(
+      scheme: uri.scheme,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+      path: uri.path,
+    ).toString();
+  }
+
+  static JsonObject _requiredObject(
+    JsonObject object,
+    String key,
+    String context,
+  ) {
+    final value = object[key];
+    if (value is! Map<String, Object?>) {
+      throw ProtocolViolation('$context field $key must be an object.');
+    }
+    return value;
   }
 
   static String _requiredString(JsonObject object, String key) {
@@ -213,6 +309,28 @@ final class ThreadProtocolAdapter {
     }
     if (value is! String) {
       throw ProtocolViolation('Thread field $key must be a string or null.');
+    }
+    return value;
+  }
+
+  static String? _boundedOptionalString(
+    JsonObject object,
+    String key,
+    int limit,
+  ) {
+    final value = _optionalString(object, key)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return _truncate(value, limit);
+  }
+
+  static int _nonNegativeInt(JsonObject object, String key) {
+    final value = object[key];
+    if (value is! int || value < 0) {
+      throw ProtocolViolation(
+        'Thread field $key must be a non-negative integer.',
+      );
     }
     return value;
   }
@@ -242,6 +360,19 @@ final class ThreadProtocolAdapter {
     'systemError' => ThreadRuntimeStatus.systemError,
     _ => ThreadRuntimeStatus.unknown,
   };
+
+  static ThreadGoalStatus _goalStatus(String value) => switch (value) {
+    'active' => ThreadGoalStatus.active,
+    'paused' => ThreadGoalStatus.paused,
+    'blocked' => ThreadGoalStatus.blocked,
+    'usageLimited' => ThreadGoalStatus.usageLimited,
+    'budgetLimited' => ThreadGoalStatus.budgetLimited,
+    'complete' => ThreadGoalStatus.complete,
+    _ => ThreadGoalStatus.unknown,
+  };
+
+  static String _truncate(String value, int limit) =>
+      value.length <= limit ? value : '${value.substring(0, limit)}…';
 
   static String _sortKey(ThreadSortKey key) => switch (key) {
     ThreadSortKey.createdAt => 'created_at',

@@ -3,9 +3,47 @@ import 'user_message_presentation.dart';
 
 enum ThreadRuntimeStatus { notLoaded, idle, active, systemError, unknown }
 
+enum ThreadGoalStatus {
+  active,
+  paused,
+  blocked,
+  usageLimited,
+  budgetLimited,
+  complete,
+  unknown,
+}
+
 enum ThreadSortKey { createdAt, updatedAt, recencyAt }
 
 enum SortDirection { ascending, descending }
+
+class ThreadGitInfo {
+  const ThreadGitInfo({this.branch, this.originUrl, this.sha});
+
+  final String? branch;
+  final String? originUrl;
+  final String? sha;
+}
+
+class ThreadGoal {
+  const ThreadGoal({
+    required this.objective,
+    required this.status,
+    required this.createdAtSeconds,
+    required this.updatedAtSeconds,
+    required this.tokensUsed,
+    required this.timeUsedSeconds,
+    this.tokenBudget,
+  });
+
+  final String objective;
+  final ThreadGoalStatus status;
+  final int createdAtSeconds;
+  final int updatedAtSeconds;
+  final int tokensUsed;
+  final int timeUsedSeconds;
+  final int? tokenBudget;
+}
 
 class ThreadSummary {
   const ThreadSummary({
@@ -20,6 +58,8 @@ class ThreadSummary {
     this.name,
     this.model,
     this.projectId,
+    this.gitInfo,
+    this.goal,
   });
 
   final String id;
@@ -33,6 +73,8 @@ class ThreadSummary {
   final String? name;
   final String? model;
   final String? projectId;
+  final ThreadGitInfo? gitInfo;
+  final ThreadGoal? goal;
 
   ThreadSummary copyWith({
     String? preview,
@@ -43,6 +85,10 @@ class ThreadSummary {
     bool clearName = false,
     String? model,
     String? projectId,
+    ThreadGitInfo? gitInfo,
+    bool clearGitInfo = false,
+    ThreadGoal? goal,
+    bool clearGoal = false,
   }) => ThreadSummary(
     id: id,
     sessionId: sessionId,
@@ -55,6 +101,8 @@ class ThreadSummary {
     name: clearName ? null : (name ?? this.name),
     model: model ?? this.model,
     projectId: projectId ?? this.projectId,
+    gitInfo: clearGitInfo ? null : (gitInfo ?? this.gitInfo),
+    goal: clearGoal ? null : (goal ?? this.goal),
   );
 
   String get displayTitle {
@@ -181,4 +229,19 @@ final class ThreadStatusChangedEvent extends ThreadLifecycleEvent {
   });
 
   final ThreadRuntimeStatus status;
+}
+
+final class ThreadGoalUpdatedEvent extends ThreadLifecycleEvent {
+  const ThreadGoalUpdatedEvent({
+    required super.threadId,
+    required this.goal,
+    this.turnId,
+  });
+
+  final ThreadGoal goal;
+  final String? turnId;
+}
+
+final class ThreadGoalClearedEvent extends ThreadLifecycleEvent {
+  const ThreadGoalClearedEvent({required super.threadId});
 }
