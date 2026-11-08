@@ -876,12 +876,14 @@ class EcosystemProtocolAdapter {
   }
 
   static void _requireMcpPayloadBound(JsonObject value, String label) {
-    _validateBoundedJson(value, label);
-    final encoded = jsonEncode(value);
-    _requireUtf8Bound(encoded, maxMcpPayloadBytes, label);
+    _validateBoundedJson(value, label, maximumStringBytes: maxMcpPayloadBytes);
   }
 
-  static void _validateBoundedJson(Object? value, String label) {
+  static void _validateBoundedJson(
+    Object? value,
+    String label, {
+    int maximumStringBytes = maxMcpRetainedTextBytes,
+  }) {
     var nodes = 0;
 
     void visit(Object? current, int depth) {
@@ -898,7 +900,7 @@ class EcosystemProtocolAdapter {
             throw FormatException('$label contains a non-finite number.');
           }
         case String():
-          _requireUtf8Bound(current, maxMcpRetainedTextBytes, '$label string');
+          _requireUtf8Bound(current, maximumStringBytes, '$label string');
         case List<Object?>():
           for (final item in current) {
             visit(item, depth + 1);

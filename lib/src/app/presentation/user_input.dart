@@ -416,6 +416,7 @@ class _McpElicitationCardState extends State<_McpElicitationCard> {
           }
           final value = num.tryParse(text);
           if (value == null ||
+              (value is double && !value.isFinite) ||
               (field.minimum != null && value < field.minimum!) ||
               (field.maximum != null && value > field.maximum!)) {
             return false;

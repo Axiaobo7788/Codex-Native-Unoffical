@@ -1109,6 +1109,19 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     );
   }
 
+  void _pruneMcpCaches(
+    List<McpServerStatusModel> servers, {
+    required bool forceRefetch,
+  }) {
+    final reachableNames = servers.map((server) => server.name).toSet();
+    _mcpResults.removeWhere(
+      (name, _) => forceRefetch || !reachableNames.contains(name),
+    );
+    _mcpErrors.removeWhere(
+      (name, _) => forceRefetch || !reachableNames.contains(name),
+    );
+  }
+
   Future<void> _refresh({bool forceRefetch = false}) async {
     setState(() {
       _loading = true;
@@ -1129,11 +1142,13 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         return;
       }
       final nextPlugins = results[1] as List<PluginSummaryModel>;
+      final nextMcpServers = results[2] as List<McpServerStatusModel>;
       setState(() {
         _skills = results[0] as List<SkillSummary>;
         _plugins = nextPlugins;
         _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
-        _mcpServers = results[2] as List<McpServerStatusModel>;
+        _mcpServers = nextMcpServers;
+        _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
         _loading = false;
       });
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
@@ -1348,9 +1363,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       }
       setState(() {
         _mcpServers = servers;
-        _mcpResults.removeWhere(
-          (name, _) => !servers.any((server) => server.name == name),
-        );
+        _pruneMcpCaches(servers, forceRefetch: true);
         _mcpNotice = 'MCP server configuration reloaded.';
       });
     } catch (error) {

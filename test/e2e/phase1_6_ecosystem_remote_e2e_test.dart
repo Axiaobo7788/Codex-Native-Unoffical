@@ -53,6 +53,19 @@ void main() {
           'file:///workspace/README.md',
         );
         expect(find.text('# Test workspace'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('mcp-result-filesystem-mcp')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('mcp-result-filesystem-mcp')),
+          findsNothing,
+        );
 
         final callTool = find.byKey(
           const ValueKey('mcp-call-tool-filesystem-mcp'),
@@ -137,6 +150,58 @@ void main() {
         );
       },
     );
+
+    testWidgets('keeps non-finite MCP number elicitation values unsubmitable', (
+      tester,
+    ) async {
+      final harness = E2ERuntimeHarness(
+        initialThreads: [
+          createTestThread(id: 'thread-mcp', preview: 'MCP number test'),
+        ],
+      );
+
+      await pumpE2EApp(tester, harness: harness);
+      await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
+      await tester.pumpAndSettle();
+
+      harness.emitMcpElicitation(
+        McpElicitationRequest(
+          requestId: 'elicitation-number',
+          serverName: 'filesystem-mcp',
+          threadId: 'thread-mcp',
+          message: 'Choose a finite retry interval.',
+          mode: McpElicitationMode.form,
+          fields: [
+            McpElicitationField(
+              id: 'interval',
+              title: 'Interval',
+              description: 'Seconds between retries',
+              kind: McpElicitationFieldKind.number,
+              required: true,
+              minimum: 0,
+              maximum: 60,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final numberField = find.byKey(
+        const ValueKey('mcp-elicitation-field-interval'),
+      );
+      final accept = find.byKey(const ValueKey('mcp-elicitation-accept'));
+      await tester.enterText(numberField, 'NaN');
+      await tester.pump();
+      await tester.tap(accept, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(harness.mcpElicitationResponses, isEmpty);
+
+      await tester.enterText(numberField, '1.5');
+      await tester.pump();
+      await tester.tap(accept);
+      await tester.pumpAndSettle();
+      expect(harness.mcpElicitationResponses.single.content, {'interval': 1.5});
+    });
   });
 
   group('F9 Apps & Plugins Lifecycle E2E', () {

@@ -281,6 +281,62 @@ void main() {
     );
   });
 
+  test(
+    'accepts bounded binary MCP payloads above retained text limit',
+    () async {
+      final encodedBinary = List<String>.filled(
+        EcosystemProtocolAdapter.maxMcpRetainedTextBytes + 1,
+        'A',
+      ).join();
+      final adapter = EcosystemProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          return switch (method) {
+            'mcpServer/resource/read' => {
+              'contents': [
+                {
+                  'uri': 'file:///workspace/image.bin',
+                  'mimeType': 'application/octet-stream',
+                  'blob': encodedBinary,
+                },
+              ],
+            },
+            'mcpServer/tool/call' => {
+              'content': [
+                {
+                  'type': 'image',
+                  'mimeType': 'application/octet-stream',
+                  'data': encodedBinary,
+                },
+              ],
+            },
+            _ => const {},
+          };
+        },
+      );
+
+      final resource = await adapter.readMcpResource(
+        const McpResourceReadQuery(
+          server: 'filesystem',
+          uri: 'file:///workspace/image.bin',
+        ),
+      );
+      expect(
+        (resource.contents.single as McpBlobResourceContentModel).encodedLength,
+        encodedBinary.length,
+      );
+
+      final tool = await adapter.callMcpTool(
+        McpToolCallQuery(
+          server: 'filesystem',
+          threadId: 'thread-1',
+          tool: 'read_image',
+          arguments: const {},
+        ),
+      );
+      expect(tool.content.single.encodedDataLength, encodedBinary.length);
+    },
+  );
+
   test('parses app/list pagination, app/installed snapshots, and app/read metadata with bounds', () async {
     final calls = <(String, JsonObject)>[];
     final adapter = EcosystemProtocolAdapter(
