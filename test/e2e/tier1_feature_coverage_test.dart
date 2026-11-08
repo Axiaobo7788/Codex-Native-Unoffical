@@ -1,4 +1,5 @@
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_segment.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
@@ -717,7 +718,7 @@ void main() {
 
           expect(find.text('Disable approval prompts?'), findsOneWidget);
 
-          await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+          await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
           await tester.pumpAndSettle();
 
           expect(find.text('Disable approval prompts?'), findsNothing);

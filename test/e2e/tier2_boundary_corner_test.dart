@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
@@ -470,7 +471,7 @@ void main() {
 
           expect(find.text('Allow full filesystem access?'), findsOneWidget);
 
-          await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+          await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
           await tester.pumpAndSettle();
 
           expect(find.text('Allow full filesystem access?'), findsNothing);

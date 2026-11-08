@@ -1,3 +1,4 @@
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
@@ -312,7 +313,7 @@ void main() {
       // 4. Warning dialog appears
       expect(find.text('Disable approval prompts?'), findsOneWidget);
       // User cancels
-      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
       await tester.pumpAndSettle();
 
       // 5. User selects Danger: full access sandbox and confirms
@@ -322,7 +323,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Allow full filesystem access?'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, 'Allow full access'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Allow full access'));
       await tester.pumpAndSettle();
 
       // 6. Close settings dialog

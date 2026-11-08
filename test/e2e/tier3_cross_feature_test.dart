@@ -1,3 +1,4 @@
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
@@ -215,7 +216,7 @@ void main() {
 
       // Confirm danger dialog
       expect(find.text('Allow full filesystem access?'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, 'Allow full access'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Allow full access'));
       await tester.pumpAndSettle();
 
       // Close settings dialog

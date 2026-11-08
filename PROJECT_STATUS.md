@@ -1,6 +1,6 @@
 # Project Status
 
-_Last updated: 2026-11-08_
+_Last updated: 2026-11-09_
 
 This file is the repository's durable project memory. Update it whenever a task materially changes implementation status, milestones, known blockers, or the next recommended step.
 
@@ -8,9 +8,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `SELF_ITERATION`**
 
-- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_RECONVERGED_AFTER_HUMAN_REVIEW_FEEDBACK`**.
-- Phase marker: **`Official Client Convergence (M0–M5 + Functional Slices F1–F6 + Post-Review Desktop UI & Startup RPC Re-Convergence machine & real-use verified)`**.
-- Prior status: `OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_AND_FUNCTIONAL_SLICES_HUMAN_REVIEW_PENDING` (`08b8e81`).
+- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — PEER_SCHEMA_AND_DESKTOP_FIDELITY_SLICES_MACHINE_VERIFIED`**.
+- Phase marker: **`Official Client Convergence (M0–M5 + Functional Slices F1–F6 + Post-Review Desktop UI + Peer Schema/Runtime/Fidelity Revalidation machine & real-use verified)`**.
+- Prior status: `OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_RECONVERGED_AFTER_HUMAN_REVIEW_FEEDBACK` (`617da94`).
 - Per `AGENTS.md` (`### HUMAN_REVIEW`), Human real-use visual feedback on the initial `M3` Desktop UI slice superseded the earlier `M3` visual completion claim and returned the Desktop UI slice to active `SELF_ITERATION` for root-cause remediation against `/opt/codex-desktop/resources/app.asar` (`961657.97fdcc5e7d.js`, `943693.334f9bc224.js`, `634175.4437e0034c.js`, `634303.fe5bdc3dcb.js`, `319fe334fb93.css`) and live Linux desktop window verification.
 - While the updated Desktop UI slice and Functional Convergence slices (`F1–F6`) await fresh Human acceptance (`HUMAN_REVIEW_PENDING`), keep the repository in `SELF_ITERATION` for any remaining independent machine-actionable convergence work or Human feedback integration.
 - **Agent collaboration baseline**: Codex CLI and Antigravity/Gemini now operate as peer agents under `docs/AGENT_COLLABORATION.md`. Gemini is preferentially routed to UI/live visual/reverse work and Codex to architecture/protocol/Rust/state-hardening work, but neither is subordinate; ownership is slice-based, overlapping files have one writer, and disagreements are resolved by repository evidence/tests rather than model identity.
@@ -36,6 +36,13 @@ This file is the repository's durable project memory. Update it whenever a task 
      - Centered `_ConversationEmptyState` (`Let’s build` + clickable `<projectName> ⌄` directory selector), `_composer(controller, isHeroCentered: true)`, and `_StarterSuggestionRow` together in the `704px` reading column when `thread == null`.
      - Unified `CodexComposer` surface to Tier 2 `theme.elevatedSurface` (`#F4F4F4` light / `#2F2F2F` dark), aligned `CodexPalette` (`lib/src/app/theme_tokens.dart`) with `OfficialCodexThemeData`, and switched `_ConversationPanel.build` to `theme.workspaceBackground` to eliminate the two-tone surface seam below the header.
      - Serialized concurrent `stdin.write()` + `stdin.flush()` calls in `IoChildProcess` (`lib/src/transport/process/child_process.dart`) via `_writeQueue`, fixing a startup `StateError: Bad state: StreamSink is bound to a stream` when `thread/list` and `model/list` were dispatched concurrently in `_handleRuntimeState()`, and updated `_ComposerModelSummaryButton` so the model pill (`GPT-6.1-Sol · Low ⌄`) sits on the left next to `+` and never collapses to `SizedBox.shrink()`.
+  10. Official `agy` Peer Integration + Schema/Runtime/Fidelity Revalidation (`69fb363`, `8aa55d4`):
+      - Completed the required real interactive Codex↔Gemini peer handshake and post-sync slice negotiation in the official `agy` 1.4.0 TUI, then used isolated `agent/codex-schema-audit` and `agent/gemini-ui-audit` worktrees with one writer per overlapping surface. Both slice branches were pushed before integration.
+      - Regenerated the installed stock app-server schemas (`106` stable + `74` experimental-only = `180` `ClientRequest`; `10` stable + `1` experimental-only = `11` `ServerRequest`; `86` `ServerNotification`) and refreshed installed Desktop evidence (`19/25` preload/total IPC channels, `234` RPC-like strings, `175` endpoints). `thread/turns/list` and `thread/items/list` are now stable; `thread/items/read` remains experimental.
+      - Fixed `HistoryProtocolAdapter` to preserve upstream's outer `ThreadItemEntry.outputDeferred` field and fixed `ProcessTransport` so every request/notify/respond path rejects immediately once shutdown starts, preventing writes to closed child stdin (`69fb363`).
+      - Integrated the peer-owned Desktop slice: semantic focus/keyboard/disabled interaction states, consistent `CodexTooltip`, Codex-themed confirmation/output dialogs, live composer focus state, diff add/remove text tokens, and refined fenced-code copy presentation (`8aa55d4`).
+      - The first integrated full Flutter run exposed four stale E2E finders still targeting Material `TextButton`/`FilledButton`; the failures were preserved, the tests were moved to the actual `CodexButton` contract, and the full suite then passed `318/318`.
+      - Corrected the feature matrix so Track A is described as a bounded read-only history projection with sequenced lifecycle-notification projection, not full Remote write/lifecycle parity. No paused Android/relay feature expansion was performed.
 - Prior desktop UI marker (`c7cfda4`, preserved history): `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` — superseded by Human visual review on 2026-11-08 and re-converged above.
 - Prior foundation marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
 
@@ -2054,6 +2061,11 @@ specific evidence boundaries.
     generated JSON schemas (`105` stable + `74` experimental = `179`
     `ClientRequest` methods; `9` stable + `2` experimental = `11`
     `ServerRequest` methods; `82` `ServerNotification` methods).
+  - Those figures remain the preserved 2026-11-07 snapshot. The 2026-11-09
+    regeneration supersedes the current-state counts with `19` preload-exposed
+    of `25` total static IPC channels, `175` endpoints, `106 + 74 = 180`
+    `ClientRequest`, `10 + 1 = 11` `ServerRequest`, and `86`
+    `ServerNotification` methods; see `docs/RESEARCH.md` and the reverse maps.
   - Verified all 6 official history hydration/retention paths and their Statsig
     gates (`limit: 5` turns in `yU`/`bC`/`readLatestPreviewPage`, `limit: 2`
     items in `fI`, `limit: 28/30/100` in `loadTurnItems`, `limit: 500` items +
@@ -2124,8 +2136,8 @@ specific evidence boundaries.
   message truncated at character 401. Flutter's tool writes LSP
   `Content-Length` from Dart string characters rather than UTF-8 bytes; the
   multibyte `文档` path therefore undercounts the frame. The same source passes
-  `dart analyze` at the real path and `flutter analyze --no-pub` through a
-  temporary ASCII symlink. This is preserved as a toolchain/path issue, not
+  `dart analyze` at the real path and `flutter analyze --no-pub` from a
+  temporary ASCII path/physical source copy. This is preserved as a toolchain/path issue, not
   recorded as a clean direct-path run.
 - The same Unicode-path toolchain defect affects Android settings evaluation:
   ordinary `flutter build apk --debug` corrupts the Flutter SDK path before
@@ -2170,6 +2182,11 @@ specific evidence boundaries.
   `thread/items/list`, but the follow-up read is still whole-item. The Host can
   bound its own and Flutter's handling; it cannot remove app-server's preceding
   full-string serialization allocation.
+- Current installed app-server `0.167.0-alpha.3.2` accepts the forward-compatible
+  `deferOutput` request field, but sampled command items were not actually
+  deferred. Upstream's `outputDeferred` flag is on the outer item-list entry;
+  the adapter now preserves that shape. This improves readiness for deferral but
+  does not change the whole-item fallback or upstream serialization boundary.
 - The 3/30/300 MiB memory gate uses a purpose-built serializer-shaped fixture,
   not a real Codex thread containing a 300 MiB command result. Its strong
   sublinear Host/Dart evidence does not establish real app-server RSS, Windows or
@@ -2233,28 +2250,29 @@ specific evidence boundaries.
 
 ## Next action
 
-`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_AND_FUNCTIONAL_SLICES_HUMAN_REVIEW_PENDING` (`Mode: SELF_ITERATION`).
+`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — PEER_SCHEMA_AND_DESKTOP_FIDELITY_SLICES_MACHINE_VERIFIED — HUMAN_REVIEW_PENDING` (`Mode: SELF_ITERATION`).
 
 - **LOCAL MACHINE VERIFIED**:
   - `dart format --output=none --set-exit-if-changed lib test tool` (`155` files, `0` changed);
-  - `dart analyze` (`0` issues, `No issues found!`);
-  - `flutter test` (`314/314` unit, widget, protocol, and E2E tests passing with 0 failures, including `T1.6.6`–`T1.6.10`, `assistant_markdown_test.dart`, `history_protocol_test.dart`, `turn_protocol_test.dart`, `remote_transport_test.dart`, and `ecosystem_protocol_test.dart`);
+  - `flutter analyze --no-pub` from a temporary ASCII physical source copy (`0` issues, `No issues found!`); direct analysis from the Unicode repository path still hits the documented Flutter 3.47.1 LSP framing crash and is not recorded as passing;
+  - affected protocol/transport/UI gate (`59/59` passing), the four E2E files after finder reconciliation (`81/81` passing), and the complete `flutter test` suite (`318/318` unit, widget, protocol, and E2E tests passing with 0 failures);
   - `flutter test test/app/official_convergence_geometry_test.dart` (`5/5` viewports passing: 1920x1080 FHD, 1440x900 Laptop, 2560x1440 DPR 1.25 QHD, 2560x1440 DPR 2.0 Retina, 720x800 compact workspace);
-  - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (`98/98` Rust tests passing: 26 unit + 68 bin + 4 failure paths);
+  - current `cargo test -q remote_bridge --manifest-path native_host/Cargo.toml` (`2/2` targeted tests passing); the last unchanged full Rust gate remains `98/98` (26 unit + 68 bin + 4 failure paths);
   - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`);
   - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`).
 - **AGENT REAL-USE VERIFIED**:
+  - Fresh integrated Linux debug build launched on KDE Wayland, completed the real stock app-server handshake, hydrated the project/thread sidebar, rendered the 1713×1073 product shell without visible overflow, and exited with zero surviving app/app-server processes. The known ATK socket and missing cursor-theme warnings recurred without preventing the window.
   - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` on KDE Wayland (`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, Impeller OpenGLESSDF) against stock `codex app-server` (`0.167.0-alpha.3.2`).
   - Live stock `codex app-server` protocol integration test (`test/protocol/ecosystem_protocol_test.dart`) exercising `initialize`, `skills/list`, `plugin/list`, `mcpServerStatus/list`, `remoteControl/status/read`, `remoteControl/disable`, `thread/start`, `thread/name/set`, `thread/archive`, `thread/list(archived: true)`, `thread/unarchive`, and `thread/delete` against `/opt/codex-desktop/resources/codex`.
   - Real coding task executed against stock app-server: `CODING_TASK_SMOKE=PASS`, `TURN_STATUS=completed`, `CHANGED_FILES=1`, `ADDITIONS=1`, `UNEXPECTED_APPROVALS=0`, `SMOKE_THREAD_CLEANED=true`, `HOST_SHUTDOWN_MS=60`.
   - Clean application exit via VM service and clean process termination verified with zero orphaned processes (`ALL_CLEAN`).
 - **HOSTED CI VERIFIED**:
-  - Hosted GitHub Actions `CI` workflow (`verify`, `Desktop build (windows-x64)`, `Desktop build (macos-arm64)`) passing on `origin/main`.
+  - The latest previously observed hosted GitHub Actions `CI` workflow (`verify`, `Desktop build (windows-x64)`, `Desktop build (macos-arm64)`) passed on the pre-slice `origin/main`; the 2026-11-09 integrated slice had no hosted result at this status update and is not claimed green.
 - **HUMAN REVIEWED**:
   - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), `17f08f3` / `99e6141` were reviewed to authorize `ADR-032` (`683d431`), and `cb684b5` was reviewed to authorize the **Desktop Shared Conversation Foundation Correction & Evidence Tightening** recalibration.
   - Authoritative user instruction received (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorized the **`Official Client Convergence`** phase.
 - **NOT YET HUMAN VERIFIED**:
-  - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, bounded activity/diff/approval presentation, and functional convergence slices (`F1` thread lifecycle & `ProductMode`, `F2` active turn steering & structured attachments, `F3` Ecosystem & Dual-Track Remote, `F4` turn edit/regenerate/continue/search & structured writing/citations, `F5` `ConversationBackend` seam, mode capability gating & `ChatConversationDag`, `F6` rich Codex activity projection & Track A Remote history parity) against official client baselines.
+  - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, bounded activity/diff/approval presentation, and functional convergence slices (`F1` thread lifecycle & `ProductMode`, `F2` active turn steering & structured attachments, `F3` Ecosystem & Dual-Track Remote, `F4` turn edit/regenerate/continue/search & structured writing/citations, `F5` `ConversationBackend` seam, mode capability gating & `ChatConversationDag`, `F6` rich Codex activity projection & Track A bounded read-only history projection) against official client baselines.
 
 Blockers: None.
 
@@ -2301,4 +2319,4 @@ Blockers: None.
 - Stage 4: Multi-Viewport Geometry Verification (automated 1920x1080, 1440x900, 2560x1440 geometry tests): COMPLETE (`a4fbdaa`, `c7cfda4`);
 - Stage 7: Full Verification & Victory Audit (full machine gates, live Linux walkthrough, ADR-033 in `docs/DECISIONS.md`, green hosted CI): COMPLETE (M5);
 - Functional Convergence Slices F1–F3 (`ProductMode` seam, thread lifecycle/branch/revert/compact/pinning, `turn/steer` & structured composer attachments, Ecosystem `Skills`/`Plugins`/`MCP`, and Dual-Track Remote `Track A + Track B`, `ADR-034`): COMPLETE (`732b87d`, `7b01bfb`, `1084ba6`, `64b2566`);
-- Functional Convergence Slices F4–F6 (turn edit/regenerate/continue/retry, in-conversation search, structured writing/artifact/citation blocks, `ConversationBackend`/`ExecutionBackend` seam, mode-aware composer capability gating, `ChatConversationDag` `< 1/2 >` sibling branch navigation, rich Codex activity projection, and Track A Remote history/lifecycle parity, `ADR-035`): COMPLETE.
+- Functional Convergence Slices F4–F6 (turn edit/regenerate/continue/retry, in-conversation search, structured writing/artifact/citation blocks, `ConversationBackend`/`ExecutionBackend` seam, mode-aware composer capability gating, `ChatConversationDag` `< 1/2 >` sibling branch navigation, rich Codex activity projection, and Track A bounded read-only Remote history/lifecycle-notification projection, `ADR-035`): IMPLEMENTATION MACHINE COMPLETE — HUMAN REVIEW REQUIRED.

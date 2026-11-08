@@ -1,8 +1,8 @@
 # ChatGPT Desktop Full-Stack Architecture Map (Recalibrated)
 
 > **Target Binary Inspected**: ChatGPT Desktop (Linux/Electron Packaging of `@openai/codex-electron`)
-> **Package Version**: `26.326.51703` (`codexBuildNumber: 51703`, `codexBuildFlavor: "prod"`)
-> **Renderer Entry**: `webview/index.html` (`assets/index-Dup49xH6.js` + `assets/index-CSK6N93K.css` + 465 lazy chunks)
+> **Package Version**: `26.1103.32239` (`codexBuildNumber: 25471`, `codexBuildFlavor: "prod"`; revalidated 2026-11-09)
+> **Renderer Entry**: `webview/index.html` with hashed renderer assets; exact chunk names are build artifacts and are not treated as a stable contract.
 > **Main Process Bundle**: `.vite/build/main.js` + `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (~4.58 MB) + `.vite/build/early-bootstrap-339-10eda6b28d12299c.js` (~855 KB) + `.vite/build/early-bootstrap-133-3bca9e88e9a413b4.js` (~357 KB) + `.vite/build/worker.js` (~1.20 MB)
 > **Bundled Native Runtime**: `/opt/codex-desktop/resources/codex` (`codex-cli 0.167.0-alpha.3.2`, ~96.9 MB ELF binary)
 > **Bundled Sidecars (`app.asar.unpacked`)**: `codex-command-runner`, `codex-windows-sandbox-setup`, `native/sparkle.node`, `native/remote-control-device-key.node`, `better-sqlite3`, `node-pty`
@@ -26,8 +26,8 @@ Every technical claim in `docs/reverse/*.md` is tagged using two orthogonal axes
 - **`UNKNOWN`**: Not determinable from available machine evidence without server-side source or live account gating.
 
 ### B. Support & Contract Classifications (What we may depend on)
-- **`PUBLIC_SUPPORTED`**: Stable public API or open-source stock `codex app-server` protocol (`105` stable `ClientRequest`, `9` stable `ServerRequest`, `82` `ServerNotification`). Safe as a primary dependency.
-- **`EXPERIMENTAL_STOCK_SCHEMA`**: Present in stock `codex app-server generate-json-schema --experimental` (`74` experimental `ClientRequest`, `2` experimental `ServerRequest`, including `thread/turns/list`, `thread/items/list`, `thread/items/read`, `thread/timeline/list`, `remoteControl/*`). Safe for optional/adapter-isolated native features.
+- **`PUBLIC_SUPPORTED`**: Stable public API or open-source stock `codex app-server` protocol (`106` stable `ClientRequest`, `10` stable `ServerRequest`, `86` `ServerNotification`). Safe as a primary dependency.
+- **`EXPERIMENTAL_STOCK_SCHEMA`**: Present only in stock `codex app-server generate-json-schema --experimental` (`74` experimental-only `ClientRequest`, `1` experimental-only `ServerRequest`; current examples include `thread/items/read`, `thread/timeline/list`, `remoteControl/*`, queue/realtime/search families, and `currentTime/read`). Safe for optional/adapter-isolated native features. `thread/turns/list` and `thread/items/list` are stable in the current generated schema.
 - **`PRIVATE_WEB_SESSION`**: First-party ChatGPT web-session endpoints (`/backend-api/*`). Requires browser/session cookies + Sentinel/Turnstile anti-bot headers; **never** a default core dependency.
 - **`PRIVATE_INTERNAL_SERVICE`**: First-party internal Desktop/Cloud services (`/wham/*`, `/flora/cca/executor`, `wss://codex-cloud-backend.chatgpt.com/`, `wss://chatgpt.com/backend-api/wham/remote/control/server`, `thread/startAeon`, `thread/environmentReady`). Treated as reference architecture only unless explicitly unlocked by a future compatibility adapter.
 - **`INTERNAL_ELECTRON_IPC`**: Internal Electron `ipcMain`/`ipcRenderer` channels (`codex_desktop:*`).
@@ -36,7 +36,7 @@ Every technical claim in `docs/reverse/*.md` is tagged using two orthogonal axes
 
 ## 1. Executive Architectural Summary: Shared Shell vs Distinct Runtimes
 
-ChatGPT Desktop (`26.326.51703`) is a **unified multi-mode Electron shell** built on code originating from the `@openai/codex-electron` workspace (`STATIC_BUNDLE`).
+ChatGPT Desktop (`26.1103.32239`, build `25471`) is a **unified multi-mode Electron shell** built on code originating from the `@openai/codex-electron` workspace (`STATIC_BUNDLE`).
 
 ### Critical Distinction: Shared Presentation Shell != Identical Runtime Model
 While **Chat**, **Work**, and **Codex** share the **application shell, sidebar navigation, composer chrome, and renderer item/slot virtualization infrastructure**, they do **not** share a single backend source of truth (`STATIC_BUNDLE`, `LOCAL_SCHEMA`):
@@ -58,11 +58,11 @@ flowchart TB
     end
 
     subgraph Preload["Preload ContextBridge (.vite/build/preload.js)"]
-        ElectronBridge["window.electronBridge\n(10 exposed codex_desktop:* IPC channels)"]
+        ElectronBridge["window.electronBridge\n(19 exposed codex_desktop:* IPC channels)"]
     end
 
     subgraph Main["Electron Main Process (.vite/build/early-bootstrap-*.js)"]
-        IPCRouter["MessageHandler & AppView Services\n(19 total codex_desktop:* channels in bundle)"]
+        IPCRouter["MessageHandler & AppView Services\n(25 total codex_desktop:* channels in bundle)"]
         HostRegistry["AppServerConnectionRegistry & ExecutionHostRegistry\n(local | ssh | durable cloud | remote-control)"]
         TPPLocalExec["Local Work Executor (tpp-local-executor)\nSpawns: codex exec-server --remote ... --environment-id ..."]
         CatalogDB["LocalThreadCatalog Service\n(better-sqlite3 -> local_thread_catalog.sqlite)"]
@@ -71,7 +71,7 @@ flowchart TB
     end
 
     subgraph LocalRuntimes["Local Stock Codex Processes (/opt/codex-desktop/resources/codex)"]
-        AppServer["codex app-server\n(stdio JSON-RPC 2.0, 105 stable + 74 exp ClientRequests)"]
+        AppServer["codex app-server\n(stdio JSON-RPC 2.0, 106 stable + 74 exp-only ClientRequests)"]
         ExecServer["codex exec-server\n(Noise rendezvous tunnel for Work mode)"]
         StateDB[("~/.codex/state_5.sqlite\n~/.codex/logs_2.sqlite")]
     end
@@ -149,9 +149,9 @@ Reverse analysis of `early-bootstrap-920` (`@732731`, `@1168648`, `@1644000..166
 
 | IPC Category | Count | Channels | Evidence & Classification |
 |---|---|---|---|
-| **Preload-Exposed Renderer Channels** (`.vite/build/preload.js`) | **10** | `codex_desktop:message-for-view`<br>`codex_desktop:message-from-view`<br>`codex_desktop:get-initial-state`<br>`codex_desktop:get-sentry-init-options`<br>`codex_desktop:get-app-session-id`<br>`codex_desktop:get-build-flavor`<br>`codex_desktop:is-mas-build`<br>`codex_desktop:fetch-from-main`<br>`codex_desktop:cancel-fetch-from-main`<br>`codex_desktop:show-context-menu` | `STATIC_BUNDLE`, `LIVE_OBSERVED` / `INTERNAL_ELECTRON_IPC` |
-| **Main/Internal-Only IPC Strings** (`.vite/build/early-bootstrap-*.js`, `main.js`, `worker.js`) | **9** | `codex_desktop:Broadcast-state`<br>`codex_desktop:clear-Sentry-user`<br>`codex_desktop:get-custom-cli-executable`<br>`codex_desktop:get-locale-info`<br>`codex_desktop:log-from-view`<br>`codex_desktop: open-dev-tools`<br>`codex_desktop:report- fatal-error`<br>`codex_desktop: send-feedback`<br>`codex_desktop:set- telemetry-user` | `STATIC_BUNDLE` / `INTERNAL_ELECTRON_IPC` |
-| **Total Static `codex_desktop:*` Strings** | **19** | All 19 channels above | `STATIC_BUNDLE` |
+| **Preload-Exposed Renderer Channels** (`.vite/build/preload.js`) | **19** | Includes `message-for-view`, `message-from-view`, `connect-app-host`, `connect-git-worker`, `get-initial-sidebar-bootstrap`, `get-build-flavor`, `get-system-theme-variant`, `show-context-menu`, `start-file-drag`, `start-link-drag`, and chunked-message/MCP sandbox bridges. | `STATIC_BUNDLE`, `LIVE_OBSERVED` / `INTERNAL_ELECTRON_IPC` |
+| **Main/Internal-Only IPC Strings** (`.vite/build/early-bootstrap-*.js`, `main.js`, workers, specialized preloads) | **6** | `browser-page-event`, `browser-sidebar-runtime-message`, `check-for-updates`, `get-browser-annotation-api-policy`, `get-browser-webmcp-policy`, `mcp-app-sandbox-guest-message` | `STATIC_BUNDLE` / `INTERNAL_ELECTRON_IPC` |
+| **Total Static `codex_desktop:*` Strings** | **25** | All 25 channels above; the extractor reports per-channel bundle provenance. | `STATIC_BUNDLE` |
 
 ---
 
@@ -161,9 +161,9 @@ Cross-checking the bundled `/opt/codex-desktop/resources/codex app-server genera
 
 | Protocol Direction / Surface | Stock Stable Schema (`PUBLIC_SOURCE`) | Stock `--experimental` Only (`PUBLIC_SOURCE`) | Total Stock Schema (`0.167.0-alpha.3.2`) | Matched in Desktop ASAR (`STATIC_BUNDLE`) | ASAR-Only (Not in Local Stock Schema) |
 |---|---|---|---|---|---|
-| `ClientRequest` (Client -> Server) | **105** | **74** | **179** | **113** (`67` stable + `46` experimental) | **7** (`thread/startAeon`, `thread/environmentReady`, `thread/rollback` [legacy], `thread/stop`, `turn/addUserMessage`, `item/plan/requestImplementation`, `item/tool/requestOptionPicker`, `item/tool/requestSetupCodexContextPicker`) |
-| `ServerRequest` (Server -> Client) | **9** | **2** | **11** | **9** (`8` stable + `1` experimental) | Included above |
-| `ServerNotification` (Server -> Client) | **82** | **0** | **82** | **14** (matched by prefix regex; others dispatched via generic notification router) | `0` |
+| `ClientRequest` (Client -> Server) | **106** | **74** | **180** | **129** (`88` stable + `41` experimental) | **28 conservative unmatched strings across all RPC-like categories**, including genuine cloud extensions (`thread/startAeon`, `thread/environmentReady`) and static-match noise; inspect per-symbol evidence. |
+| `ServerRequest` (Server -> Client) | **10** | **1** | **11** | **7** stock methods matched in ASAR | Included in the conservative unmatched column above |
+| `ServerNotification` (Server -> Client) | **86** | **0** | **86** | **70** | `0` |
 | `ClientNotification` (Client -> Server) | **1** (`initialized`) | **0** | **1** | **1** (`initialized`) | `0` |
 
 ---

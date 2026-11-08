@@ -2955,3 +2955,83 @@ Following `ADR-032` and the `HEAD` (`99e6141`) audit in [`docs/reverse/ADOPTION_
 5. **`16.D` — `_RenderConversationViewport` audit and regression suite**:
    - Direct inspection of Flutter's `RenderViewportBase` (`packages/flutter/lib/src/rendering/viewport.dart:1703-1993`) confirmed that `paintOffset` on `SliverPhysicalParentData` is the single coordinate transform consumed by `paint`, `hitTestChildren`, `applyPaintTransform`, `describeSemanticsConfiguration`, and `showOnScreen`.
    - Added widget regression coverage in `test/app/bounded_timeline_test.dart` verifying pointer hit-testing, global transformed `SemanticsNode` rect geometry (`MatrixUtils.transformRect(node.transform, node.rect)`), `SelectableText` gesture selection in a shifted short viewport, `Scrollable.ensureVisible` focus alignment, and dynamic short-to-overflow viewport resizing without rewriting the working `RenderViewport` subclass.
+
+## Peer Schema/Runtime and Desktop Fidelity Revalidation
+
+_Reviewed: 2026-11-09_
+
+### Official peer workflow and evidence boundary
+
+- Codex and Antigravity/Gemini completed two real interactive round trips in the
+  official `agy` 1.4.0 TUI: the initial no-write handshake and the post-sync
+  slice-ownership negotiation. No unofficial Gemini API, wrapper, proxy, or
+  browser automation was used.
+- The peers worked from isolated branches/worktrees with one writer per
+  overlapping surface. Codex owned the stock app-server/protocol/process audit;
+  Gemini owned the Desktop static-fidelity/interaction audit. Gemini released
+  all shared governance/document surfaces before integration.
+- Gemini's UI conclusions were treated as peer input, then checked against its
+  actual commit and tests. They are calibrated static/machine evidence, not
+  Human visual acceptance.
+
+### Current stock schema and installed Desktop snapshot
+
+- Regenerated both stable and `--experimental` schemas from the installed
+  `/opt/codex-desktop/resources/codex` (`codex-cli 0.167.0-alpha.3.2`). The
+  current counts are `106` stable + `74` experimental-only = `180`
+  `ClientRequest` methods, `10` stable + `1` experimental-only = `11`
+  `ServerRequest` methods, `86` `ServerNotification` methods, and one
+  `ClientNotification` (`initialized`).
+- `thread/turns/list` and `thread/items/list` are now stable. The per-item
+  `thread/items/read` fallback, `thread/timeline/list`, `remoteControl/*`,
+  `collaborationMode/list`, and queue/realtime/search families remain
+  experimental-only. In the `ServerRequest` direction, `currentTime/read` is
+  the sole experimental-only method.
+- Re-running `tools/reverse/inspect_chatgpt_desktop.py --evidence-report`
+  against installed Desktop `26.1103.32239` / build `25471` found `19`
+  preload-exposed of `25` total static `codex_desktop:*` IPC channels, `234`
+  matched RPC-like strings, and `175` endpoints. Of the matched stock client
+  requests, `88` are stable and `41` are experimental-only; the conservative
+  extractor also reports `28` unmatched RPC-like strings, which mix genuine
+  cloud extensions with static-match noise and must be inspected individually.
+
+### Runtime findings and implemented corrections
+
+- A `thread/items/list` call against a nonexistent/unmaterialized thread can
+  return `-32601` (`not supported yet`), but the same installed binary returned
+  valid results for five of five calls against real materialized local threads.
+  The failure is therefore a thread/store availability boundary, not proof that
+  the method is globally absent. `thread/turns/list` also works on materialized
+  threads.
+- Current public upstream source for
+  [`ThreadItemsListParams`](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/v2/thread.rs)
+  places `outputDeferred` on the outer `ThreadItemEntry`, while the nested
+  command item contains `aggregatedOutput`. `HistoryProtocolAdapter` had checked
+  only the nested item and would silently discard real deferral state. The
+  adapter now propagates the outer field, keeps nested compatibility, and has a
+  regression fixture using the upstream shape.
+- The installed binary accepts the forward-compatible `deferOutput` request
+  field even though its locally generated experimental schema omits that field.
+  Sampled command results were not actually deferred, so this remains a useful
+  preference rather than a memory guarantee; `thread/items/read` still returns
+  a whole selected item.
+- `ProcessTransport` previously allowed protocol adapters to call the peer
+  directly after `close()` had started but before the peer fully closed. A late
+  request or approval response could therefore write to already-closed child
+  stdin. All request/notify/respond paths now pass through closing-state guards;
+  the regression fake rejects post-close writes and asserts zero writes after
+  input closure.
+
+### Desktop fidelity slice
+
+- Calibrated static inspection of the installed official bundle drove a bounded
+  Flutter presentation slice: semantic focus/keyboard/disabled state handling
+  for custom buttons, segments, menu/sidebar rows and work dividers; consistent
+  `CodexTooltip`; Codex-themed confirmation/output dialogs; composer focus-state
+  wiring; diff add/remove text tokens; and a tighter fenced-code surface/copy
+  interaction.
+- The slice preserves virtualized/bounded timeline behavior and does not change
+  controller, domain, transport, protocol, or lifecycle ownership. Focused
+  widget tests cover the new states. Subjective typography, motion, density,
+  color, and real long-session interaction remain `HUMAN_REVIEW_PENDING` until
+  a person inspects the integrated desktop build.
