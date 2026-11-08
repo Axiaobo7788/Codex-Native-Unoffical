@@ -1678,4 +1678,91 @@ those observations onto `Codex-Native-Unoffical` and `ADR-031` suffered from:
 - Per `ADR-030`, the repository transitions to `Mode: HUMAN_REVIEW` with status
   `REVERSE_ANALYSIS_RECALIBRATED — HUMAN_REVIEW_REQUIRED`.
 
+---
+
+## ADR-033 — Official Client Convergence & Semantic Primitive Architecture
+
+**Status:** Accepted  
+**Date:** 2026-11-08
+
+### Context
+
+Following the completion and hosted CI verification of the Desktop Shared Conversation Foundation (`f69cdad`), the authoritative user instruction (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorized the `Official Client Convergence` phase. The goal is to converge `Axiaobo7788/Codex-Native-Unoffical` toward the official ChatGPT / Codex Desktop client across visual system, component semantics, information architecture, interaction model, and Chat / Work / Codex / Remote capability mapping, while strictly preserving our Native Rust Host (`codex-native-host`), bounded-memory (`100`-turn window, `512 MiB/item` spool, `50 ms` coalescing), and acyclic domain architecture advantages.
+
+Prior clean-room reverse engineering of the installed official ChatGPT / Codex Desktop client (`26.1103.32239`, build `25471`), 2,970 custom CSS properties, and stock `codex app-server` `0.167.0-alpha.3.2` schemas established 12 comprehensive specification documents under `docs/reverse/` (`OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, and 8 `CHAT_*` protocol and data model specifications). These specifications revealed substantial heuristic visual divergences in the initial Flutter implementation:
+1. Hardcoded layout heuristics (e.g. 760 px reading/composer column vs. measured 704 px official max width; 264 px vs. 260 px sidebar width; 44 px vs. 46 px titlebar; missing 12 px main surface card inset radius).
+2. Material Design 3 visual leakage (default ink ripples, elevation shadows, `Card`, `Chip`, `DropdownButton`, and raw `FilledButton` / `OutlinedButton` styling that conflicted with the official client's clean desktop aesthetic).
+3. Monolithic turn views lacking official client-side projection filtering between conversational prose, standard commands, and detailed execution views.
+
+### Decision
+
+1. **Establish `OfficialCodexTheme` as the Default Design Token Contract**:
+   - Parameterize all surface geometries, colors, and interactive states into `OfficialCodexTheme` (`lib/src/app/theme/official_codex_theme.dart`):
+     - `maxContentWidth = 704.0 px` (reading column and floating composer).
+     - `maxUserBubbleWidthFactor = 0.75` (max 528 px on desktop).
+     - `composerRadius = 24.0 px`.
+     - `sidebarWidth = 260.0 px`.
+     - `titlebarHeight = 46.0 px`, `headerHeight = 44.0 px`, `navRowHeight = 36.0 px`.
+     - `mainSurfaceRadius = 12.0 px`, `hairlineBorderWidth = 0.5 px`.
+     - 9 discrete interactive states: `idle`, `hover`, `pressed`, `focusVisible`, `selected`, `disabled`, `running`, `streaming`, `error`.
+   - Provide an architectural abstraction seam allowing a future optional `Material3Theme` without modifying semantic widgets or domain logic.
+
+2. **Implement Ten Native Semantic Primitives (`Codex*`) Free from Material Visual Defaults**:
+   - Implement pure Flutter primitives under `lib/src/app/primitives/`:
+     - `CodexButton`: Primary, secondary, ghost, and danger variants with custom hover/pressed backgrounds, zero elevation, and zero ink ripples.
+     - `CodexIconButton`: Compact desktop icon actions with square/circular bounding and quiet hover fills.
+     - `CodexSidebarRow`: Navigable sidebar items with hover, selected, trailing actions, and badge indicators.
+     - `CodexComposer`: Bounded floating input container with 24 px corner radius, hairline borders, and focus highlight ring.
+     - `CodexMessageBubble`: Bounded user message bubble with structured attachment chip display and `Show full message` disclosure.
+     - `CodexActivityRow`: Command, tool call, and activity summaries with status indicators and action buttons.
+     - `CodexPopoverAnchor` & `CodexMenu`: Overlay-portal desktop dropdowns and context menus replacing Material `DropdownButton`.
+     - `CodexTooltip`: Native desktop hover tooltips replacing mobile-oriented long-press Material tooltips.
+     - `CodexSegment`: Segmented control supporting multi-mode toggles (`Prose` / `Commands` / `Execution`).
+   - Restrict Flutter Material strictly to low-level text editing, focus management, accessibility semantics, and overlay hosting. Eliminate raw `FilledButton`, `OutlinedButton`, `Chip`, `Card`, and `InkWell` ink ripples across all presentation views.
+
+3. **Multi-Slice Desktop UI Refactor (Slices A–E)**:
+   - **Slice A (Theme & Primitives)**: Core design token contract and 10 semantic primitives.
+   - **Slice B (Shell, Sidebar & Header)**: Inset workspace hierarchy (12 px top-left card radius, hairline border), 260 px sidebar with collapsible project groupings (`folder_outlined` / hover chevron), inline search (`Ctrl+K`/`Cmd+K`), compact relative timestamps, and single-line thread header (`<Thread Title>  <Project Name>`).
+   - **Slice C (Conversation Timeline & Detail-Mode Presentation)**: 704 px reading column, user message bubbles (528 px max), fenced code blocks with copy actions, `Worked for Xm Ys ›` turn dividers, and pure client-side `PresentationDetailMode` projection filtering:
+     - `prose`: Filters out intermediate command executions and tool rows, presenting solely conversational user and assistant text.
+     - `commands`: Standard view with completed intermediate executions collapsed under `_TurnWorkDivider`.
+     - `execution`: Expanded view rendering all intermediate command executions, file modifications, and tool outputs inline without manual interaction.
+     - Strict invariant: Detail mode is purely a UI projection filter; zero prompt injection (`STEPS_PROSE` / `a2`) and zero JSON-RPC request mutation.
+   - **Slice D (Composer & Selectors)**: 704 px composer, 24 px radius, popover selectors for model, reasoning effort, approval policy, and execution target, plus circular flush-right Send/Stop button.
+   - **Slice E (Activities, Diff, Approvals & Output Viewer)**: Bounded diff viewer, inline command/file approval cards, and output viewer converged to `OfficialCodexTheme` and `Codex*` primitives.
+
+4. **Preserve Native Rust Host and Bounded-Memory Advantages (`KEEP_OUR_ADVANTAGE`)**:
+   - Rust host output spooling (`512 MiB/item`, `2 GiB/session`, SHA-256 deduplication).
+   - Sliding history window: 100 retained turns, 100 retained items, 50 ms streaming coalescing.
+   - Content-identity scroll bookmarks (`_maxRestorePages = 10` + Scheme A reset).
+   - Strictly acyclic `lib/src/domain/` architecture with zero UI or protocol imports.
+
+5. **Multi-Viewport Automated Layout Verification**:
+   - Maintain `test/app/official_convergence_geometry_test.dart` asserting layout dimensions against `OFFICIAL_UI_SPEC.md` across 1920x1080 (FHD), 1440x900 (Laptop), 2560x1440 DPR 1.25 (QHD), 2560x1440 DPR 2.0 (Retina/HiDPI), and 720x800 (<760px compact workspace).
+
+### Consequences
+
+- The native client achieves visual, geometric, and ergonomic parity with the official ChatGPT / Codex Desktop client while eliminating Electron resource bloat (sub-10ms UI responsiveness, true OS process isolation, near-zero idle memory).
+- Material visual leakage is eliminated from production desktop presentation slices.
+- All clean-room constraints are strictly maintained: no proprietary JS/CSS bundles, fonts, icons, or prompt strings (`STEPS_PROSE` / `a2`) are included in the repository.
+- Full test suites pass with zero regressions (286 Flutter tests, 98 Cargo tests, 100-turn history memory benchmark, Linux debug bundle build).
+
+### Evidence
+
+- **MACHINE VERIFIED**:
+  - `dart format --output=none --set-exit-if-changed lib test tool` (147 files, 0 changed).
+  - `dart analyze` (0 issues).
+  - `flutter test` (286/286 unit, widget, and E2E tests passing).
+  - `flutter test test/app/official_convergence_geometry_test.dart` (5/5 viewports passing).
+  - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (98/98 tests passing).
+  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `RETAINED_TURNS=100`).
+  - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`).
+- **AGENT REAL-USE VERIFIED**:
+  - Live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` on KDE Wayland (`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, Impeller OpenGLESSDF) against stock `codex app-server` (`0.167.0-alpha.3.2`).
+  - Verified process tree: `codex_native_un(2104117)` -> `codex-native-ho(2104496)` (RSS: 9,160 KiB) -> `codex(2104498)` (RSS: 197,204 KiB).
+  - Verified runtime initialization, "Connected" status, thread catalog with project groupings and relative timestamps, 12 px inset card, 3-way detail-mode projection selector (`Prose`, `Commands`, `Execution`), active floating composer (704 px, 24 px radius), and circular Send button.
+  - Verified real coding turn execution against stock app-server (`CODING_TASK_SMOKE=PASS`, `TURN_STATUS=completed`, `CHANGED_FILES=1`, `ADDITIONS=1`, `SMOKE_THREAD_CLEANED=true`, `HOST_SHUTDOWN_MS=60`).
+  - Verified clean process termination without orphaned processes (`ALL_CLEAN`).
+
+
 

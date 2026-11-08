@@ -8,11 +8,18 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `SELF_ITERATION`**
 
-- Current status: **`OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`**.
-- Phase marker: **`Official Desktop UI Convergence (Milestone M3 Slices A–E)`**.
-- Prior status: `OFFICIAL_CLIENT_CONVERGENCE_IN_PROGRESS`.
-- Milestone M3 Completion Summary: Executed full measured desktop visual convergence against ChatGPT / Codex Desktop specification (`26.1103.32239`, build `25471`). Created `OfficialCodexTheme` and 10 desktop semantic zero-ink-ripple primitives (`CodexButton`, `CodexIconButton`, `CodexTooltip`, `CodexSidebarRow`, `CodexComposer`, `CodexMessageBubble`, `CodexActivityRow`, `CodexPopover`, `CodexMenu`, `CodexSegment`). Converged window titlebar (46px), sidebar (260px), inset workspace card (12px top-left radius), thread header bar (46px), reading column (bounded to <= 704px), user message bubble (<= 528px / 75%), floating composer (704px / 24px radius), circular Send button, and 3-way detail mode presentation projection (`Prose` / `Commands` / `Execution`) without client prompt injection. Added multi-viewport geometry test suite `test/app/official_convergence_geometry_test.dart` (1920x1080, 1440x900, 2560x1440 DPR 1.25/2.0). All 285 unit/widget/e2e tests pass; memory benchmark retains 100 turns; cargo workspace tests pass 98/98.
-- Prior phase marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
+- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_MACHINE_AND_REAL_USE_VERIFIED — HUMAN_REVIEW_REQUIRED`**.
+- Phase marker: **`Official Client Convergence (Milestones M0–M5 Complete)`**.
+- Prior status: `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`.
+- Convergence Phase Completion Summary: Successfully executed the full 6-stage Official Client Convergence roadmap authorized in `ORIGINAL_REQUEST.md`:
+  1. Stage 0 Hygiene & Security (`0858bb8`, `fd0db59`): Audited and pinned all GitHub Action workflows to verified 40-char commit SHAs with `# vX.Y.Z` comments across `.github/workflows/ci.yml` and `desktop-review-artifacts.yml`; de-identified all personal local Codex thread UUIDs in repository memory.
+  2. Stage 1 & 2 Evidence Refresh (`d1c4bb0`): Clean-room analysis of installed ChatGPT/Codex Desktop `26.1103.32239` (build `25471`), 2,970 custom CSS variables, and stock `codex app-server 0.167.0-alpha.3.2` schemas; clean web-sourced Android APK research; strict two-axis evidence confidence grading.
+  3. Stage 3, 5 & 6 Reverse Specifications (`d1c4bb0`): Delivered 12 specification documents under `docs/reverse/` (`OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, and 8 `CHAT_*` protocol/data model specifications).
+  4. Stage 3, 4 & 5 Desktop UI Refactor (`a4fbdaa`, `c7cfda4`): Built `OfficialCodexTheme` design token contract and 10 zero-ink-ripple native semantic primitives (`CodexButton`, `CodexIconButton`, `CodexTooltip`, `CodexSidebarRow`, `CodexComposer`, `CodexMessageBubble`, `CodexActivityRow`, `CodexPopoverAnchor`, `CodexMenu`, `CodexSegment`). Converged App Shell (12px card inset, hairline border), 260px sidebar with collapsible project groupings and compact relative timestamps, single-line thread header, 704px reading column, user message bubbles (max 528px / 75%), fenced code blocks with copy actions, `Worked for Xm Ys ›` turn dividers, 3-way client-side `PresentationDetailMode` projection filtering (`Prose` / `Commands` / `Execution` without prompt injection), floating composer (704px bounded, 24px corner radius, hairline border) with popover selectors, and bounded diff/approval/output viewers.
+  5. Stage 4 Multi-Viewport Geometry Verification (`a4fbdaa`, `c7cfda4`): Automated test suite `test/app/official_convergence_geometry_test.dart` asserting exact geometry across 1920x1080 (FHD), 1440x900 (Laptop), 2560x1440 DPR 1.25 (QHD), 2560x1440 DPR 2.0 (Retina), and 720x800 (<760px compact workspace).
+  6. Stage 7 Full Verification, Live Desktop Walkthrough & ADR (`M5`): Full machine test gates (format, analyze, 286 Flutter tests, 98 Rust host tests, memory benchmark retaining 100 turns, debug Linux bundle build); live Linux desktop walkthrough on KDE Wayland against stock `codex app-server` (`0.167.0-alpha.3.2`) exercising UI, streaming prose, and clean shutdown (`ALL_CLEAN`); ADR-033 documented in `docs/DECISIONS.md`.
+- Prior desktop UI marker (`c7cfda4`, preserved history): `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`.
+- Prior foundation marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
 
 ## Current phase
 
@@ -36,7 +43,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Desktop shared conversation foundation checkpoint (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol attachments bounding, envelope sanitization, semantics transform, and documentation reconciliation complete and verified on hosted CI.**
 
-**Current phase — Milestone M3: Official Desktop UI Convergence (Slices A–E): IMPLEMENTATION_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED.**
+**Current phase — Official Client Convergence (Milestones M0–M5 Complete): IMPLEMENTATION_MACHINE_AND_REAL_USE_COMPLETE — HUMAN_REVIEW_REQUIRED.**
 
 ## Current repository state
 
@@ -2208,26 +2215,31 @@ specific evidence boundaries.
 
 ## Next action
 
-`DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
+`OFFICIAL_CLIENT_CONVERGENCE_MACHINE_AND_REAL_USE_VERIFIED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).
 
 - **LOCAL MACHINE VERIFIED**:
-  - `dart format --output=none --set-exit-if-changed lib test tool` (`130` files, `0` changed);
-  - `dart analyze` (`0` issues);
-  - `flutter test` (`196/196` unit and widget tests passing, including new regressions for deep-history bookmark reset beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` normalization/caps/deduplication, prose false-positive & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, and `_RenderConversationViewport` global transformed `SemanticsNode` rect + `SelectableText` selection);
-  - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (`98/98` Rust tests passing);
-  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, `RSS_TURN_DELTA=1773568`);
+  - `dart format --output=none --set-exit-if-changed lib test tool` (`147` files, `0` changed);
+  - `dart analyze` (`0` issues, `No issues found!`);
+  - `flutter test` (`286/286` unit, widget, and E2E tests passing with 0 failures);
+  - `flutter test test/app/official_convergence_geometry_test.dart` (`5/5` viewports passing: 1920x1080 FHD, 1440x900 Laptop, 2560x1440 DPR 1.25 QHD, 2560x1440 DPR 2.0 Retina, 720x800 compact workspace);
+  - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (`98/98` Rust tests passing: 26 unit + 68 bin + 4 failure paths);
+  - `flutter test tool/history_memory_benchmark.dart` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, `RSS_TURN_DELTA=1519616`);
   - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`).
-- **HOSTED CI VERIFIED**:
-  - Hosted GitHub Actions `CI` workflow (`verify`, `windows`, `macos` jobs) on `origin/main` passing `dart format --output=none --set-exit-if-changed lib test tool`, `flutter analyze`, `flutter test`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, Linux/Windows/macOS desktop bundle builds, and Android debug APK gates.
 - **AGENT REAL-USE VERIFIED**:
-  - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` against `/opt/codex-desktop/resources/codex` and real user threads `<real-long-thread>` (`>140` turns, `287,442.9 px` scroll extent) and `<real-attachment-thread>` (`6` turns with pasted-file attachments), verifying `0.000 px` visual drift across `open latest -> scroll older (Pages 2..5) -> cross >100-turn boundary (Page 6) -> Jump to latest -> switch thread & attachment presentation -> return & multi-page content-identity scroll restoration -> streaming while scrolled up & at latest`, followed by clean process tree shutdown (`ALL_CLEAN`).
+  - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` on KDE Wayland (`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, Impeller OpenGLESSDF) against stock `codex app-server` (`0.167.0-alpha.3.2`).
+  - Process tree verified: `codex_native_un(2104117)` -> `codex-native-ho(2104496)` (RSS: 9,160 KiB) -> `codex(2104498)` (RSS: 197,204 KiB).
+  - Converged UI slices verified: window title `Codex Native`, 46 px titlebar, 260 px sidebar with collapsible project groupings (`Codex-Native-Unoffical`, `fura-project`, `libreoffice_modern`, etc.) and compact relative timestamps (`2d`, `3d`, `2w`, `4d`, `21h`, `1mo`), 12 px inset card, single-line header with 3-way `PresentationDetailMode` segment control (`Prose`, `Commands`, `Execution`), landing state `>_ Let's build`, floating composer (704 px bounded, 24 px radius), and circular flush-right Send button.
+  - Real coding task executed against stock app-server: `CODING_TASK_SMOKE=PASS`, `TURN_STATUS=completed`, `CHANGED_FILES=1`, `ADDITIONS=1`, `UNEXPECTED_APPROVALS=0`, `SMOKE_THREAD_CLEANED=true`, `HOST_SHUTDOWN_MS=60`.
+  - Clean application exit via VM service and clean process termination verified with zero orphaned processes (`ALL_CLEAN`).
+- **HOSTED CI VERIFIED**:
+  - Hosted GitHub Actions `CI` workflow (`verify`, `Desktop build (windows-x64)`, `Desktop build (macos-arm64)`) passing on `origin/main`.
 - **HUMAN REVIEWED**:
   - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), `17f08f3` / `99e6141` were reviewed to authorize `ADR-032` (`683d431`), and `cb684b5` was reviewed to authorize the **Desktop Shared Conversation Foundation Correction & Evidence Tightening** recalibration.
-  - Authoritative user instruction received (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorizing immediate transition to `Mode: SELF_ITERATION` for the new phase **`Official Client Convergence`**.
+  - Authoritative user instruction received (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorized the **`Official Client Convergence`** phase.
 - **NOT YET HUMAN VERIFIED**:
   - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, and bounded activity/diff/approval presentation against official client baselines.
 
-Active authorized phase: **`Official Client Convergence`** in **`Mode: SELF_ITERATION`**. Executing Milestone M0 hygiene & security audit.
+Blockers: None.
 
 ## Milestone outline
 
@@ -2265,9 +2277,9 @@ Active authorized phase: **`Official Client Convergence`** in **`Mode: SELF_ITER
 
 ### Phase 6 — Official client convergence
 
-- Stage 0: Repository Hygiene & Security Audit (40-char SHA action pinning, UUID de-identification, mode transition);
-- Stage 1 & 2: Official Evidence Refresh (Desktop installed package refresh + clean web-sourced Android APK research & cross-validation with evidence grading);
-- Stage 3, 5 & 6: Reverse Specification Suite (`docs/reverse/OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, `CHAT_*` architecture suite);
-- Stage 3, 4 & 5: Multi-Slice Desktop UI Refactor (Slices A–E: `OfficialCodexTheme` & `Codex*` primitives, Shell/Sidebar/Header, Timeline & detail-mode projection, Composer & selectors, Activities/Diff/Approvals);
-- Stage 4: Multi-Viewport Geometry Verification (automated 1920x1080, 1440x900, 2560x1440 geometry tests);
-- Stage 7: Full Verification & Victory Audit (full machine gates, live Linux walkthrough, ADR in `docs/DECISIONS.md`, green hosted CI).
+- Stage 0: Repository Hygiene & Security Audit (40-char SHA action pinning, UUID de-identification, mode transition): COMPLETE (`0858bb8`, `fd0db59`);
+- Stage 1 & 2: Official Evidence Refresh (Desktop installed package refresh + clean web-sourced Android APK research & cross-validation with evidence grading): COMPLETE (`d1c4bb0`);
+- Stage 3, 5 & 6: Reverse Specification Suite (`docs/reverse/OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, `CHAT_*` architecture suite): COMPLETE (`d1c4bb0`);
+- Stage 3, 4 & 5: Multi-Slice Desktop UI Refactor (Slices A–E: `OfficialCodexTheme` & `Codex*` primitives, Shell/Sidebar/Header, Timeline & detail-mode projection, Composer & selectors, Activities/Diff/Approvals): COMPLETE (`a4fbdaa`, `c7cfda4`);
+- Stage 4: Multi-Viewport Geometry Verification (automated 1920x1080, 1440x900, 2560x1440 geometry tests): COMPLETE (`a4fbdaa`, `c7cfda4`);
+- Stage 7: Full Verification & Victory Audit (full machine gates, live Linux walkthrough, ADR-033 in `docs/DECISIONS.md`, green hosted CI): COMPLETE (M5).
