@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
@@ -123,7 +124,7 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Done'));
       await tester.pumpAndSettle();
       await _send(tester, 'defaults remain inherited');
       expect(runtime.turnOptions.last.approvalPolicy, isNull);
@@ -145,7 +146,7 @@ void main() {
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Allow full access'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Done'));
       await tester.pumpAndSettle();
 
       await _send(tester, 'confirmed dangerous overrides');

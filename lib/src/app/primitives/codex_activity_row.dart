@@ -15,6 +15,8 @@ class CodexActivityRow extends StatelessWidget {
     this.isError = false,
     this.onViewOutput,
     this.actionLabel = 'View output',
+    this.trailingAction,
+    this.textWidget,
   });
 
   final String summary;
@@ -24,6 +26,8 @@ class CodexActivityRow extends StatelessWidget {
   final bool isError;
   final VoidCallback? onViewOutput;
   final String actionLabel;
+  final Widget? trailingAction;
+  final Widget? textWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -67,16 +71,18 @@ class CodexActivityRow extends StatelessWidget {
           ],
           const SizedBox(width: 8.0),
           Expanded(
-            child: Text(
-              summary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12.5,
-                color: isError ? theme.danger : theme.textPrimary,
-              ),
-            ),
+            child:
+                textWidget ??
+                Text(
+                  summary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12.5,
+                    color: isError ? theme.danger : theme.textPrimary,
+                  ),
+                ),
           ),
           if (statusText != null && statusText!.isNotEmpty) ...[
             const SizedBox(width: 8.0),
@@ -85,7 +91,10 @@ class CodexActivityRow extends StatelessWidget {
               style: TextStyle(fontSize: 11.5, color: theme.textMuted),
             ),
           ],
-          if (onViewOutput != null) ...[
+          if (trailingAction != null) ...[
+            const SizedBox(width: 8.0),
+            trailingAction!,
+          ] else if (onViewOutput != null) ...[
             const SizedBox(width: 8.0),
             CodexButton(
               onPressed: onViewOutput,
@@ -108,11 +117,13 @@ class CodexActivityDivider extends StatelessWidget {
     required this.label,
     required this.isExpanded,
     required this.onToggle,
+    this.isLoading = false,
   });
 
   final String label;
   final bool isExpanded;
   final VoidCallback onToggle;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -158,13 +169,28 @@ class CodexActivityDivider extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4.0),
-                    Icon(
-                      isExpanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_right_rounded,
-                      size: 14.0,
-                      color: theme.textMuted,
-                    ),
+                    if (isLoading)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2.0),
+                        child: SizedBox(
+                          width: 12.0,
+                          height: 12.0,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              theme.textMuted,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Icon(
+                        isExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_right_rounded,
+                        size: 14.0,
+                        color: theme.textMuted,
+                      ),
                   ],
                 ),
               ),

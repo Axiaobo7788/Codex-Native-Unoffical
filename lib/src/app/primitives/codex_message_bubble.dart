@@ -13,6 +13,7 @@ class CodexMessageBubble extends StatefulWidget {
     this.radius = OfficialCodexTheme.userMessageRadius,
     this.maxCollapsedLines = 12,
     this.collapseCharacterThreshold = 680,
+    this.expandKey,
   });
 
   final String text;
@@ -21,6 +22,7 @@ class CodexMessageBubble extends StatefulWidget {
   final double radius;
   final int maxCollapsedLines;
   final int collapseCharacterThreshold;
+  final Key? expandKey;
 
   @override
   State<CodexMessageBubble> createState() => _CodexMessageBubbleState();
@@ -85,6 +87,7 @@ class _CodexMessageBubbleState extends State<CodexMessageBubble> {
               if (isLong) ...[
                 const SizedBox(height: 6.0),
                 GestureDetector(
+                  key: widget.expandKey,
                   behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _isExpanded = !_isExpanded),
                   child: MouseRegion(

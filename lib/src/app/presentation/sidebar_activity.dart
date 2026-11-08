@@ -470,7 +470,7 @@ final class _ProjectHeading {
   final bool collapsed;
 }
 
-class _ProjectHeadingRow extends StatefulWidget {
+class _ProjectHeadingRow extends StatelessWidget {
   const _ProjectHeadingRow({
     required this.heading,
     required this.onToggleCollapse,
@@ -482,82 +482,44 @@ class _ProjectHeadingRow extends StatefulWidget {
   final VoidCallback? onNewThreadInProject;
 
   @override
-  State<_ProjectHeadingRow> createState() => _ProjectHeadingRowState();
-}
-
-class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
-  var _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final heading = widget.heading;
     final leadingIcon = heading.collapsed
         ? Icons.keyboard_arrow_right_rounded
-        : _hovered
-        ? Icons.keyboard_arrow_down_rounded
         : Icons.folder_outlined;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: CodexTooltip(
-        message: heading.directory,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onToggleCollapse,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(
-                OfficialCodexTheme.buttonRadius,
+
+    return CodexSidebarRow(
+      tooltip: heading.directory,
+      title: _projectName(heading.directory),
+      leading: Icon(leadingIcon, size: 15, color: palette.textSecondary),
+      onTap: onToggleCollapse,
+      trailingBuilder: (context, isHovered) {
+        if (isHovered && onNewThreadInProject != null) {
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onNewThreadInProject,
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                Icons.add_rounded,
+                size: 15,
+                color: palette.textSecondary,
               ),
-              color: _hovered
-                  ? palette.hover.withValues(alpha: 0.5)
-                  : Colors.transparent,
             ),
-            padding: const EdgeInsets.fromLTRB(8, 7, 6, 4),
-            child: Row(
-              children: [
-                Icon(leadingIcon, size: 15, color: palette.textSecondary),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    _projectName(heading.directory),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: palette.textPrimary,
-                    ),
-                  ),
-                ),
-                if (_hovered && widget.onNewThreadInProject != null)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.onNewThreadInProject,
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        Icons.add_rounded,
-                        size: 15,
-                        color: palette.textSecondary,
-                      ),
-                    ),
-                  )
-                else if (heading.collapsed)
-                  Text(
-                    '${heading.count}',
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
+          );
+        } else if (heading.collapsed) {
+          return Text(
+            '${heading.count}',
+            style: Theme.of(context).textTheme.labelSmall,
+          );
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 }
 
-class _ThreadRow extends StatefulWidget {
+class _ThreadRow extends StatelessWidget {
   const _ThreadRow({
     super.key,
     required this.thread,
@@ -574,114 +536,46 @@ class _ThreadRow extends StatefulWidget {
   final VoidCallback onResume;
 
   @override
-  State<_ThreadRow> createState() => _ThreadRowState();
-}
-
-class _ThreadRowState extends State<_ThreadRow> {
-  var _hovered = false;
-  var _focused = false;
-
-  @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final background = widget.selected
-        ? palette.selected
-        : _hovered
-        ? palette.hover
-        : Colors.transparent;
-    final statusColor = switch (widget.thread.status) {
+    final statusColor = switch (thread.status) {
       ThreadRuntimeStatus.active => palette.accent,
       ThreadRuntimeStatus.systemError => palette.danger,
       _ => null,
     };
-    return MouseRegion(
-      cursor: widget.enabled
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: FocusableActionDetector(
-        enabled: widget.enabled,
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              widget.onSelect();
-              return null;
-            },
-          ),
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.enabled ? widget.onSelect : null,
-          child: AnimatedContainer(
-            key: ValueKey('thread-row-${widget.thread.id}'),
-            duration: const Duration(milliseconds: 100),
-            height: OfficialCodexTheme.navRowHeight,
-            margin: EdgeInsets.zero,
-            decoration: BoxDecoration(
-              color: background,
-              border: Border.all(
-                color: _focused ? palette.accent : Colors.transparent,
-                width: _focused ? 2 : 1,
+
+    return CodexSidebarRow(
+      key: key,
+      containerKey: ValueKey('thread-row-${thread.id}'),
+      title: thread.displayTitle,
+      selected: selected,
+      onTap: enabled ? onSelect : null,
+      padding: EdgeInsets.only(left: statusColor != null ? 8 : 12, right: 8),
+      leading: statusColor != null
+          ? Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
               ),
-              borderRadius: BorderRadius.circular(10.0),
-            ),
-            child: Padding(
-              padding: EdgeInsets.only(
-                left: statusColor != null ? 8 : 12,
-                right: 8,
-              ),
-              child: Row(
-                children: [
-                  if (statusColor != null) ...[
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Expanded(
-                    child: Text(
-                      widget.thread.displayTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontSize: 13,
-                        fontWeight: widget.selected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: widget.selected
-                            ? palette.textPrimary
-                            : palette.textPrimary.withValues(alpha: 0.92),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  if (_hovered &&
-                      widget.thread.status == ThreadRuntimeStatus.notLoaded)
-                    CodexIconButton(
-                      tooltip: 'Resume thread',
-                      onPressed: widget.enabled ? widget.onResume : null,
-                      size: 24,
-                      icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                    )
-                  else
-                    Text(
-                      _shortTime(widget.thread.updatedAt),
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(fontSize: 11, color: palette.textMuted),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+            )
+          : null,
+      trailingBuilder: (context, isHovered) {
+        if (isHovered && thread.status == ThreadRuntimeStatus.notLoaded) {
+          return CodexIconButton(
+            tooltip: 'Resume thread',
+            onPressed: enabled ? onResume : null,
+            size: 24,
+            icon: const Icon(Icons.play_arrow_rounded, size: 16),
+          );
+        }
+        return Text(
+          _shortTime(thread.updatedAt),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(fontSize: 11, color: palette.textMuted),
+        );
+      },
     );
   }
 }

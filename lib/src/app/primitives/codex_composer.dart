@@ -7,13 +7,15 @@ import '../theme/official_codex_theme.dart';
 class CodexComposer extends StatelessWidget {
   const CodexComposer({
     super.key,
+    this.surfaceKey,
     required this.child,
     this.maxWidth = OfficialCodexTheme.maxContentWidth,
     this.radius = OfficialCodexTheme.composerRadius,
     this.isFocused = false,
-    this.padding = const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 10.0),
+    this.padding = const EdgeInsets.fromLTRB(14.0, 10.0, 8.0, 8.0),
   });
 
+  final Key? surfaceKey;
   final Widget child;
   final double maxWidth;
   final double radius;
@@ -28,15 +30,16 @@ class CodexComposer extends StatelessWidget {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: AnimatedContainer(
+        key: surfaceKey,
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         padding: padding,
         decoration: BoxDecoration(
-          color: theme.elevatedSurface,
+          color: theme.workspaceBackground,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: isFocused ? theme.focusRing : theme.hairlineBorder,
-            width: isFocused ? 1.5 : 1.0,
+            width: isFocused ? 1.5 : OfficialCodexTheme.hairlineBorderWidth,
           ),
           boxShadow: [
             BoxShadow(

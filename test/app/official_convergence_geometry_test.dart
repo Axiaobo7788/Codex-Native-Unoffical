@@ -132,17 +132,32 @@ void main() {
         );
         expect(bubbleSize.width, lessThanOrEqualTo(528.0));
 
-        // 8. Verify Presentation Detail Mode selector is present and functional
+        // 8. Verify Presentation Detail Mode selector is present and produces genuine visual differences
         expect(find.text('Prose'), findsOneWidget);
         expect(find.text('Commands'), findsOneWidget);
         expect(find.text('Execution'), findsOneWidget);
 
+        // In Commands (default): intermediate command 2 is collapsed under work divider
+        expect(find.text('Worked for 42s'), findsOneWidget);
+        expect(find.text('Command: flutter test'), findsOneWidget);
+        expect(find.text('Command: cargo test'), findsNothing);
+
+        // In Execution: intermediate command 2 expands inline
+        await tester.tap(find.text('Execution'));
+        await tester.pumpAndSettle();
+        expect(find.text('Command: flutter test'), findsOneWidget);
+        expect(find.text('Command: cargo test'), findsOneWidget);
+
+        // In Prose: both commands are filtered out, user and assistant messages remain
         await tester.tap(find.text('Prose'));
         await tester.pumpAndSettle();
+        expect(find.text('Command: flutter test'), findsNothing);
+        expect(find.text('Command: cargo test'), findsNothing);
         expect(
           find.text('Hello Codex from geometry test suite!'),
           findsOneWidget,
         );
+        expect(find.text('Acknowledged geometry verified.'), findsOneWidget);
 
         // 9. Verify composer accepts input and send button is rendered
         await tester.enterText(
@@ -156,6 +171,29 @@ void main() {
         );
       });
     }
+
+    testWidgets(
+      'validates compact workspace geometry on 720x800 compact viewport (< 760px breakpoint)',
+      (tester) async {
+        tester.view.physicalSize = const Size(720.0, 800.0);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final runtime = _GeometryTestRuntimeController();
+        addTearDown(runtime.closeStreams);
+
+        await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+        await tester.pumpAndSettle();
+
+        // Below 760px breakpoint, desktop split workspace is inactive and compact workspace is active
+        expect(
+          find.byKey(const ValueKey('desktop-split-workspace')),
+          findsNothing,
+        );
+        expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
+      },
+    );
   });
 }
 
@@ -176,16 +214,32 @@ class _GeometryTestRuntimeController extends RuntimeController {
     ephemeral: false,
   );
 
-  List<HistoryTurn> get historyTurns => const [
+  List<HistoryTurn> get historyTurns => [
     HistoryTurn(
       id: 'turn-geom-1',
       status: TurnRuntimeStatus.completed,
-      items: [
+      startedAt: DateTime.utc(2026, 1, 1, 12, 0, 0),
+      completedAt: DateTime.utc(2026, 1, 1, 12, 0, 42),
+      items: const [
         HistoryItem(
           id: 'item-user-1',
           turnId: 'turn-geom-1',
           kind: HistoryItemKind.user,
           text: 'Hello Codex from geometry test suite!',
+        ),
+        HistoryItem(
+          id: 'item-cmd-1',
+          turnId: 'turn-geom-1',
+          kind: HistoryItemKind.activity,
+          text: 'Command: flutter test',
+          isCommand: true,
+        ),
+        HistoryItem(
+          id: 'item-cmd-2',
+          turnId: 'turn-geom-1',
+          kind: HistoryItemKind.activity,
+          text: 'Command: cargo test',
+          isCommand: true,
         ),
         HistoryItem(
           id: 'item-assistant-1',

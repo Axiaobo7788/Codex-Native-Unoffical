@@ -328,7 +328,21 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   e.kind == ConversationEntryKind.assistant,
             )
             .toList(growable: false),
-      _ => rawLiveEntries,
+      PresentationDetailMode.commands =>
+        rawLiveEntries
+            .where(
+              (e) =>
+                  e.kind == ConversationEntryKind.user ||
+                  e.kind == ConversationEntryKind.assistant ||
+                  !e.completed ||
+                  e ==
+                      rawLiveEntries.lastWhere(
+                        (item) => item.kind == ConversationEntryKind.activity,
+                        orElse: () => e,
+                      ),
+            )
+            .toList(growable: false),
+      PresentationDetailMode.execution => rawLiveEntries,
     };
     final liveIds = liveEntries.map((entry) => entry.id).toSet();
     final rawHistoryItems = widget.historyController.timelineItems
@@ -343,7 +357,25 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   item.kind == HistoryItemKind.assistant,
             )
             .toList(growable: false),
-      _ => rawHistoryItems,
+      PresentationDetailMode.commands =>
+        rawHistoryItems
+            .where((item) {
+              if (item.kind == HistoryItemKind.user ||
+                  item.kind == HistoryItemKind.assistant) {
+                return true;
+              }
+              final turn = widget.historyController.turnForId(item.turnId);
+              final hasWorkDivider =
+                  turn?.formattedWorkDuration != null &&
+                  widget.historyController.isFirstNonUserItemInTurn(item);
+              final isTurnExpanded =
+                  widget.historyController.selectedTurnId == item.turnId;
+              return isTurnExpanded ||
+                  hasWorkDivider ||
+                  turn?.formattedWorkDuration == null;
+            })
+            .toList(growable: false),
+      PresentationDetailMode.execution => rawHistoryItems,
     };
     if (liveEntries.isEmpty && historyItems.isEmpty) {
       _currentTimelineItemKeys = const [];
@@ -441,6 +473,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         item: item,
                         historyController: widget.historyController,
                         outputGateway: widget.outputGateway,
+                        detailMode: _detailMode,
                       ),
                     );
                   }
@@ -490,152 +523,124 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       color: palette.canvas,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
       child: Center(
-        child: ConstrainedBox(
+        child: CodexComposer(
           key: const ValueKey('floating_composer'),
-          constraints: const BoxConstraints(
-            maxWidth: OfficialCodexTheme.maxContentWidth,
-          ),
-          child: DecoratedBox(
-            key: const ValueKey('composer-surface'),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              border: Border.all(
-                color: palette.borderStrong,
-                width: OfficialCodexTheme.hairlineBorderWidth,
-              ),
-              borderRadius: BorderRadius.circular(ThemeTokens.radiusComposer),
-              boxShadow: [
-                BoxShadow(
-                  color: palette.shadow,
-                  blurRadius: 16,
-                  offset: const Offset(0, 5),
+          surfaceKey: const ValueKey('composer-surface'),
+          isFocused: _composerFocusNode.hasFocus,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter): () {
+                    if (enabled) {
+                      unawaited(_send());
+                    }
+                  },
+                  const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                      _insertComposerNewline,
+                },
+                child: TextField(
+                  key: const ValueKey('conversation-composer'),
+                  controller: _composerController,
+                  focusNode: _composerFocusNode,
+                  enabled: enabled,
+                  minLines: 1,
+                  maxLines: 6,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: thread == null && !canCreateOnSend
+                        ? 'Select or create a thread'
+                        : 'Send a message to Codex',
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
+                  ),
                 ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CallbackShortcuts(
-                    bindings: {
-                      const SingleActivator(LogicalKeyboardKey.enter): () {
-                        if (enabled) {
-                          unawaited(_send());
-                        }
-                      },
-                      const SingleActivator(
-                        LogicalKeyboardKey.enter,
-                        shift: true,
-                      ): _insertComposerNewline,
-                    },
-                    child: TextField(
-                      key: const ValueKey('conversation-composer'),
-                      controller: _composerController,
-                      focusNode: _composerFocusNode,
-                      enabled: enabled,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        hintText: thread == null && !canCreateOnSend
-                            ? 'Select or create a thread'
-                            : 'Send a message to Codex',
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        disabledBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
-                      ),
-                    ),
-                  ),
-                  LayoutBuilder(
-                    builder: (context, rowConstraints) {
-                      final compactComposer = rowConstraints.maxWidth < 560;
-                      final showModelPill = rowConstraints.maxWidth >= 340;
-                      final maxModelLabelWidth =
-                          (rowConstraints.maxWidth -
-                                  (compactComposer ? 210 : 370))
-                              .clamp(72.0, 190.0);
-                      return Row(
-                        children: [
-                          _ExecutionSettingsButton(
-                            controller: widget.settingsController,
-                          ),
-                          if (projectCwd.isNotEmpty && !compactComposer) ...[
-                            const SizedBox(width: 4),
-                            CodexTooltip(
-                              message: projectCwd,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: palette.surfaceRaised,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.folder_outlined,
-                                      size: 13,
-                                      color: palette.textMuted,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 140,
-                                      ),
-                                      child: Text(
-                                        _projectName(projectCwd),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                          const Spacer(),
-                          if (showModelPill)
-                            _ComposerModelSummaryButton(
-                              controller: widget.settingsController,
-                              maxLabelWidth: maxModelLabelWidth,
-                            ),
-                          if (controller.busy)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: Text(
-                                'Working…',
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                            ),
-                          CodexIconButton(
-                            key: const ValueKey('composer-send-button'),
-                            tooltip: 'Send (Enter)',
-                            size: 34.0,
-                            shape: BoxShape.circle,
-                            variant: CodexButtonVariant.primary,
-                            onPressed: enabled ? _send : null,
-                            icon: const Icon(
-                              Icons.arrow_upward_rounded,
-                              size: 18,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
               ),
-            ),
+              LayoutBuilder(
+                builder: (context, rowConstraints) {
+                  final compactComposer = rowConstraints.maxWidth < 560;
+                  final showModelPill = rowConstraints.maxWidth >= 340;
+                  final maxModelLabelWidth =
+                      (rowConstraints.maxWidth - (compactComposer ? 210 : 370))
+                          .clamp(72.0, 190.0);
+                  return Row(
+                    children: [
+                      _ExecutionSettingsButton(
+                        controller: widget.settingsController,
+                      ),
+                      if (projectCwd.isNotEmpty && !compactComposer) ...[
+                        const SizedBox(width: 4),
+                        CodexTooltip(
+                          message: projectCwd,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.surfaceRaised,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder_outlined,
+                                  size: 13,
+                                  color: palette.textMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 140,
+                                  ),
+                                  child: Text(
+                                    _projectName(projectCwd),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      if (showModelPill)
+                        _ComposerModelSummaryButton(
+                          controller: widget.settingsController,
+                          maxLabelWidth: maxModelLabelWidth,
+                        ),
+                      if (controller.busy)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text(
+                            'Working…',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ),
+                      CodexIconButton(
+                        key: const ValueKey('composer-send-button'),
+                        tooltip: 'Send (Enter)',
+                        size: 34.0,
+                        shape: BoxShape.circle,
+                        variant: CodexButtonVariant.primary,
+                        onPressed: enabled ? _send : null,
+                        icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -1836,133 +1841,36 @@ String? _nonNominalStatus(String? status) {
   return normalized;
 }
 
-class _UserMessageEntryView extends StatefulWidget {
+class _UserMessageEntryView extends StatelessWidget {
   const _UserMessageEntryView({required this.entry, required this.attachments});
 
   final ConversationEntry entry;
   final List<UserAttachment> attachments;
 
   @override
-  State<_UserMessageEntryView> createState() => _UserMessageEntryViewState();
-}
-
-class _UserMessageEntryViewState extends State<_UserMessageEntryView> {
-  static const _collapseLineLimit = 12;
-  static const _collapseCharLimit = 680;
-  var _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
     final presentation = parseUserMessagePresentation(
-      widget.entry.text,
-      attachments: widget.attachments,
+      entry.text,
+      attachments: attachments,
     );
     final fullText = presentation.bodyText.trim();
-    final lines = fullText.isEmpty ? const <String>[] : fullText.split('\n');
-    final isCollapsible =
-        lines.length > _collapseLineLimit ||
-        fullText.length > _collapseCharLimit;
-    final displayedText = !isCollapsible || _expanded
-        ? fullText
-        : _collapsedPreview(fullText, lines);
+    final attachmentWidgets = [
+      for (var index = 0; index < presentation.attachments.length; index += 1)
+        _UserAttachmentChip(
+          key: ValueKey('user-attachment-${entry.id}-$index'),
+          attachment: presentation.attachments[index],
+        ),
+    ];
 
-    return Align(
-      alignment: Alignment.centerRight,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: OfficialCodexTheme.maxContentWidth * 0.75,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (presentation.attachments.isNotEmpty) ...[
-                Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (
-                      var index = 0;
-                      index < presentation.attachments.length;
-                      index += 1
-                    )
-                      _UserAttachmentChip(
-                        key: ValueKey(
-                          'user-attachment-${widget.entry.id}-$index',
-                        ),
-                        attachment: presentation.attachments[index],
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-              ],
-              if (displayedText.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 15,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: palette.userBubble,
-                    border: Border.all(
-                      color: palette.border,
-                      width: OfficialCodexTheme.hairlineBorderWidth,
-                    ),
-                    borderRadius: BorderRadius.circular(
-                      OfficialCodexTheme.userMessageRadius,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SelectableText(
-                        displayedText,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: palette.onUserBubble,
-                          height: 1.48,
-                        ),
-                      ),
-                      if (isCollapsible) ...[
-                        const SizedBox(height: 6),
-                        GestureDetector(
-                          key: ValueKey('user-expand-${widget.entry.id}'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _expanded = !_expanded),
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 2,
-                                horizontal: 4,
-                              ),
-                              child: Text(
-                                _expanded ? 'Show less' : 'Show full message',
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(color: palette.accent),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
+      child: CodexMessageBubble(
+        key: ValueKey('user-message-bubble-${entry.id}'),
+        text: fullText,
+        attachments: attachmentWidgets,
+        expandKey: ValueKey('user-expand-${entry.id}'),
       ),
     );
-  }
-
-  static String _collapsedPreview(String fullText, List<String> lines) {
-    final limitedLines = lines.take(10).join('\n');
-    final clipped = limitedLines.length > _collapseCharLimit
-        ? limitedLines.substring(0, _collapseCharLimit)
-        : limitedLines;
-    return '${clipped.trimRight()}…';
   }
 }
 
@@ -2062,9 +1970,9 @@ class _UserAttachmentChip extends StatelessWidget {
           ),
         ),
         actions: [
-          FilledButton(
+          CodexButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            label: 'Close',
           ),
         ],
       ),
@@ -2143,37 +2051,13 @@ class _ActivityContent extends StatelessWidget {
         ? palette.textSecondary
         : palette.success;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Icon(icon, size: 15, color: iconColor),
-        const SizedBox(width: ThemeTokens.space2),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (statusBadge != null)
-                Text(
-                  statusBadge,
-                  style: Theme.of(context).textTheme.labelSmall
-                      ?.copyWith(color: palette.warning),
-                ),
-              SelectableText(
-                entry.text,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: palette.textPrimary,
-                  fontFamily: effectiveCommand ? 'monospace' : null,
-                  fontSize: effectiveCommand ? 12.2 : null,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (trailingAction case final action?) ...[
-          const SizedBox(width: ThemeTokens.space2),
-          action,
-        ],
-      ],
+    return CodexActivityRow(
+      summary: entry.text,
+      icon: Icon(icon, size: 14, color: iconColor),
+      statusText: statusBadge,
+      isRunning: !entry.completed,
+      isError: statusBadge != null,
+      trailingAction: trailingAction,
     );
   }
 }
@@ -2355,10 +2239,11 @@ class _ConversationErrorState extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: ThemeTokens.space4),
-              OutlinedButton.icon(
+              CodexButton(
+                variant: CodexButtonVariant.secondary,
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh_rounded, size: 17),
-                label: const Text('Try again'),
+                label: 'Try again',
               ),
             ],
           ),
@@ -2492,6 +2377,117 @@ class _ComposerModelSummaryButton extends StatelessWidget {
   }
 }
 
+class _ExecutionDropdownItem {
+  const _ExecutionDropdownItem({required this.value, required this.label});
+  final String value;
+  final String label;
+}
+
+class _ExecutionDropdown extends StatefulWidget {
+  const _ExecutionDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<_ExecutionDropdownItem> items;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ExecutionDropdown> createState() => _ExecutionDropdownState();
+}
+
+class _ExecutionDropdownState extends State<_ExecutionDropdown> {
+  final _popoverController = CodexPopoverController();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final currentItem = widget.items.firstWhere(
+      (item) => item.value == widget.value,
+      orElse: () => widget.items.isNotEmpty
+          ? widget.items.first
+          : _ExecutionDropdownItem(value: widget.value, label: widget.value),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          widget.label,
+          style: TextStyle(
+            fontSize: 12.0,
+            fontWeight: FontWeight.w500,
+            color: theme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6.0),
+        CodexPopoverAnchor(
+          controller: _popoverController,
+          popoverBuilder: (context, close) => CodexMenu<String>(
+            items: [
+              for (final item in widget.items)
+                CodexMenuItem<String>(value: item.value, label: item.label),
+            ],
+            selectedValue: widget.value,
+            onSelected: (val) {
+              widget.onChanged(val);
+              close();
+            },
+          ),
+          child: GestureDetector(
+            key: ValueKey('execution-${widget.label}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: _popoverController.toggle,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                height: 38.0,
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                decoration: BoxDecoration(
+                  color: theme.elevatedSurface,
+                  borderRadius: BorderRadius.circular(
+                    OfficialCodexTheme.buttonRadius,
+                  ),
+                  border: Border.all(
+                    color: theme.hairlineBorder,
+                    width: OfficialCodexTheme.hairlineBorderWidth,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        currentItem.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13.0,
+                          color: theme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Icon(
+                      Icons.unfold_more_rounded,
+                      size: 16.0,
+                      color: theme.textMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ExecutionSettingsDialog extends StatelessWidget {
   const _ExecutionSettingsDialog({required this.controller});
 
@@ -2503,153 +2499,161 @@ class _ExecutionSettingsDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: controller,
-      builder: (context, _) => AlertDialog(
-        title: const Text('Execution settings'),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Overrides apply only when explicitly selected. Defaults '
-                  'continue to come from Codex configuration.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: ThemeTokens.space4),
-                _dropdown(
-                  label: 'Model',
-                  value: controller.selectedModelId ?? _inherit,
-                  items: [
-                    const DropdownMenuItem(
-                      value: _inherit,
-                      child: Text('Codex default'),
-                    ),
-                    for (final model in controller.models)
-                      DropdownMenuItem(
-                        value: model.id,
-                        child: Text(model.displayName),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      controller.selectModel(value == _inherit ? null : value),
-                ),
-                const SizedBox(height: ThemeTokens.space3),
-                _dropdown(
-                  label: 'Reasoning effort',
-                  value: controller.selectedReasoningEffort ?? _inherit,
-                  items: [
-                    const DropdownMenuItem(
-                      value: _inherit,
-                      child: Text('Model default'),
-                    ),
-                    for (final effort in controller.availableReasoningEfforts)
-                      DropdownMenuItem(
-                        value: effort.value,
-                        child: Text(effort.value),
-                      ),
-                  ],
-                  onChanged: (value) => controller.selectReasoningEffort(
-                    value == _inherit ? null : value,
-                  ),
-                ),
-                const SizedBox(height: ThemeTokens.space3),
-                _dropdown(
-                  label: 'Approval mode',
-                  value: _approvalValue(controller.approvalPolicy),
-                  items: const [
-                    DropdownMenuItem(
-                      value: _inherit,
-                      child: Text('Codex default'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'untrusted',
-                      child: Text('Ask for untrusted commands'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'on-request',
-                      child: Text('Ask when Codex requests'),
-                    ),
-                    DropdownMenuItem(value: 'never', child: Text('Never ask')),
-                  ],
-                  onChanged: (value) => _setApproval(context, value),
-                ),
-                const SizedBox(height: ThemeTokens.space3),
-                _dropdown(
-                  label: 'Sandbox',
-                  value: _sandboxValue(controller.sandbox),
-                  items: const [
-                    DropdownMenuItem(
-                      value: _inherit,
-                      child: Text('Codex default'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'read-only',
-                      child: Text('Read only'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'workspace-write',
-                      child: Text('Workspace write'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'danger-full-access',
-                      child: Text('Danger: full access'),
-                    ),
-                  ],
-                  onChanged: (value) => _setSandbox(context, value),
-                ),
-                if (controller.errorMessage case final error?) ...[
-                  const SizedBox(height: ThemeTokens.space3),
-                  SelectableText(
-                    error,
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: ThemeTokens.of(context).danger),
-                  ),
-                ],
-              ],
+      builder: (context, _) {
+        final theme = OfficialCodexTheme.of(context);
+        return Dialog(
+          backgroundColor: theme.modalSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              OfficialCodexTheme.popoverRadius,
+            ),
+            side: BorderSide(
+              color: theme.hairlineBorder,
+              width: OfficialCodexTheme.hairlineBorderWidth,
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: controller.refreshModels,
-            child: const Text('Refresh models'),
+          child: SizedBox(
+            width: 480,
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Execution settings',
+                    style: TextStyle(
+                      fontSize: 16.0,
+                      fontWeight: FontWeight.w600,
+                      color: theme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  Text(
+                    'Overrides apply only when explicitly selected. Defaults '
+                    'continue to come from Codex configuration.',
+                    style: TextStyle(
+                      fontSize: 12.0,
+                      color: theme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: ThemeTokens.space4),
+                  _ExecutionDropdown(
+                    label: 'Model',
+                    value: controller.selectedModelId ?? _inherit,
+                    items: [
+                      const _ExecutionDropdownItem(
+                        value: _inherit,
+                        label: 'Codex default',
+                      ),
+                      for (final model in controller.models)
+                        _ExecutionDropdownItem(
+                          value: model.id,
+                          label: model.displayName,
+                        ),
+                    ],
+                    onChanged: (value) => controller.selectModel(
+                      value == _inherit ? null : value,
+                    ),
+                  ),
+                  const SizedBox(height: ThemeTokens.space3),
+                  _ExecutionDropdown(
+                    label: 'Reasoning effort',
+                    value: controller.selectedReasoningEffort ?? _inherit,
+                    items: [
+                      const _ExecutionDropdownItem(
+                        value: _inherit,
+                        label: 'Model default',
+                      ),
+                      for (final effort in controller.availableReasoningEfforts)
+                        _ExecutionDropdownItem(
+                          value: effort.value,
+                          label: effort.value,
+                        ),
+                    ],
+                    onChanged: (value) => controller.selectReasoningEffort(
+                      value == _inherit ? null : value,
+                    ),
+                  ),
+                  const SizedBox(height: ThemeTokens.space3),
+                  _ExecutionDropdown(
+                    label: 'Approval mode',
+                    value: _approvalValue(controller.approvalPolicy),
+                    items: const [
+                      _ExecutionDropdownItem(
+                        value: _inherit,
+                        label: 'Codex default',
+                      ),
+                      _ExecutionDropdownItem(
+                        value: 'untrusted',
+                        label: 'Ask for untrusted commands',
+                      ),
+                      _ExecutionDropdownItem(
+                        value: 'on-request',
+                        label: 'Ask when Codex requests',
+                      ),
+                      _ExecutionDropdownItem(
+                        value: 'never',
+                        label: 'Never ask',
+                      ),
+                    ],
+                    onChanged: (value) => _setApproval(context, value),
+                  ),
+                  const SizedBox(height: ThemeTokens.space3),
+                  _ExecutionDropdown(
+                    label: 'Sandbox',
+                    value: _sandboxValue(controller.sandbox),
+                    items: const [
+                      _ExecutionDropdownItem(
+                        value: _inherit,
+                        label: 'Codex default',
+                      ),
+                      _ExecutionDropdownItem(
+                        value: 'read-only',
+                        label: 'Read only',
+                      ),
+                      _ExecutionDropdownItem(
+                        value: 'workspace-write',
+                        label: 'Workspace write',
+                      ),
+                      _ExecutionDropdownItem(
+                        value: 'danger-full-access',
+                        label: 'Danger: full access',
+                      ),
+                    ],
+                    onChanged: (value) => _setSandbox(context, value),
+                  ),
+                  if (controller.errorMessage case final error?) ...[
+                    const SizedBox(height: ThemeTokens.space3),
+                    SelectableText(
+                      error,
+                      style: TextStyle(fontSize: 12.0, color: theme.danger),
+                    ),
+                  ],
+                  const SizedBox(height: ThemeTokens.space4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      CodexButton(
+                        variant: CodexButtonVariant.ghost,
+                        onPressed: controller.refreshModels,
+                        label: 'Refresh models',
+                      ),
+                      const SizedBox(width: 8.0),
+                      CodexButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        label: 'Done',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
-
-  static Widget _dropdown({
-    required String label,
-    required String value,
-    required List<DropdownMenuItem<String>> items,
-    required ValueChanged<String> onChanged,
-  }) => InputDecorator(
-    decoration: InputDecoration(
-      labelText: label,
-      border: const OutlineInputBorder(),
-    ),
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        key: ValueKey('execution-$label'),
-        value: value,
-        isDense: true,
-        isExpanded: true,
-        items: items,
-        onChanged: (next) {
-          if (next != null) {
-            onChanged(next);
-          }
-        },
-      ),
-    ),
-  );
 
   Future<void> _setApproval(BuildContext context, String value) async {
     final policy = switch (value) {

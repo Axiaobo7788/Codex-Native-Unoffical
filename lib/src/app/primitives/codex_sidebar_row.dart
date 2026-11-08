@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/official_codex_theme.dart';
+import '../theme_tokens.dart';
 
 /// Semantic navigation and thread row primitive conforming to official
 /// Codex desktop specifications (36px height, 10px radius, 0 10px padding, no ink ripple).
 class CodexSidebarRow extends StatefulWidget {
   const CodexSidebarRow({
     super.key,
+    this.containerKey,
     required this.title,
     this.leading,
     this.trailing,
+    this.trailingBuilder,
     this.selected = false,
     this.onTap,
     this.onLongPress,
@@ -20,9 +23,11 @@ class CodexSidebarRow extends StatefulWidget {
     this.tooltip,
   });
 
+  final Key? containerKey;
   final String title;
   final Widget? leading;
   final Widget? trailing;
+  final Widget Function(BuildContext context, bool isHovered)? trailingBuilder;
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -54,12 +59,13 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
+    final palette = ThemeTokens.of(context);
 
     Color background = Colors.transparent;
     if (widget.selected) {
-      background = theme.selectedTint;
+      background = palette.selected;
     } else if (_isHovered) {
-      background = theme.hoverTint;
+      background = palette.hover;
     }
 
     final textColor = widget.selected
@@ -98,16 +104,25 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
                 ),
               ),
             ),
-            if (widget.trailing != null) ...[
-              const SizedBox(width: 6.0),
-              widget.trailing!,
-            ],
+            () {
+              final trailing = widget.trailingBuilder != null
+                  ? widget.trailingBuilder!(context, _isHovered)
+                  : widget.trailing;
+              if (trailing != null) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [const SizedBox(width: 6.0), trailing],
+                );
+              }
+              return const SizedBox.shrink();
+            }(),
           ],
         ),
       ),
     );
 
     content = AnimatedContainer(
+      key: widget.containerKey,
       duration: const Duration(milliseconds: 80),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
@@ -120,7 +135,7 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
       child: content,
     );
 
-    return Semantics(
+    Widget result = Semantics(
       button: true,
       selected: widget.selected,
       label: widget.title,
@@ -142,6 +157,8 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
           onTap: widget.onTap,
           onLongPress: widget.onLongPress,
           child: MouseRegion(
+            onEnter: (_) => _handleHover(true),
+            onExit: (_) => _handleHover(false),
             cursor: widget.onTap != null
                 ? SystemMouseCursors.click
                 : SystemMouseCursors.basic,
@@ -150,5 +167,15 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
         ),
       ),
     );
+
+    if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
+      result = Tooltip(
+        message: widget.tooltip!,
+        waitDuration: const Duration(milliseconds: 500),
+        child: result,
+      );
+    }
+
+    return result;
   }
 }

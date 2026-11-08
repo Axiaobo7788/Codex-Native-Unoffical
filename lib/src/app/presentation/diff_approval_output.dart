@@ -1,5 +1,97 @@
 part of '../codex_native_app.dart';
 
+class _DiffFilePicker extends StatefulWidget {
+  const _DiffFilePicker({
+    required this.files,
+    required this.selectedPath,
+    required this.onSelected,
+  });
+
+  final List<DiffFile> files;
+  final String selectedPath;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_DiffFilePicker> createState() => _DiffFilePickerState();
+}
+
+class _DiffFilePickerState extends State<_DiffFilePicker> {
+  final _popoverController = CodexPopoverController();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final selectedFile = widget.files.firstWhere(
+      (f) => f.path == widget.selectedPath,
+      orElse: () => widget.files.first,
+    );
+    final label =
+        '${selectedFile.path}  +${selectedFile.additions} -${selectedFile.deletions}';
+
+    return CodexPopoverAnchor(
+      controller: _popoverController,
+      popoverBuilder: (context, close) => CodexMenu<String>(
+        items: [
+          for (final file in widget.files)
+            CodexMenuItem<String>(
+              value: file.path,
+              label: '${file.path}  +${file.additions} -${file.deletions}',
+            ),
+        ],
+        selectedValue: widget.selectedPath,
+        onSelected: (path) {
+          widget.onSelected(path);
+          close();
+        },
+      ),
+      child: GestureDetector(
+        key: const ValueKey('diff-file-picker'),
+        behavior: HitTestBehavior.opaque,
+        onTap: _popoverController.toggle,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            height: 36.0,
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            decoration: BoxDecoration(
+              color: theme.elevatedSurface,
+              borderRadius: BorderRadius.circular(
+                OfficialCodexTheme.buttonRadius,
+              ),
+              border: Border.all(
+                color: theme.hairlineBorder,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.0,
+                      color: theme.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6.0),
+                Icon(
+                  Icons.unfold_more_rounded,
+                  size: 16.0,
+                  color: theme.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DiffView extends StatelessWidget {
   const _DiffView({required this.controller});
 
@@ -27,28 +119,10 @@ class _DiffView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  key: const ValueKey('diff-file-picker'),
-                  value: selected.path,
-                  isExpanded: true,
-                  items: [
-                    for (final file in snapshot.files)
-                      DropdownMenuItem(
-                        value: file.path,
-                        child: Text(
-                          '${file.path}  +${file.additions} -${file.deletions}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: (path) {
-                    if (path != null) {
-                      controller.selectFile(path);
-                    }
-                  },
-                ),
+              _DiffFilePicker(
+                files: snapshot.files,
+                selectedPath: selected.path,
+                onSelected: controller.selectFile,
               ),
               Text(
                 '${snapshot.files.length} file(s)  '
@@ -241,11 +315,13 @@ class _HistoryEntryView extends StatelessWidget {
     required this.item,
     required this.historyController,
     required this.outputGateway,
+    this.detailMode = PresentationDetailMode.commands,
   });
 
   final HistoryItem item;
   final HistoryController historyController;
   final OutputGateway outputGateway;
+  final PresentationDetailMode detailMode;
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +337,9 @@ class _HistoryEntryView extends StatelessWidget {
     final showWorkDivider =
         durationLabel != null &&
         historyController.isFirstNonUserItemInTurn(item);
-    final expanded = historyController.selectedTurnId == item.turnId;
+    final expanded =
+        detailMode == PresentationDetailMode.execution ||
+        historyController.selectedTurnId == item.turnId;
     return _ConversationEntryView(
       entry: ConversationEntry(
         id: item.id,
@@ -357,60 +435,11 @@ class _TurnWorkDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: ThemeTokens.space3),
-      child: Row(
-        children: [
-          Expanded(child: Divider(height: 1, color: palette.border)),
-          const SizedBox(width: ThemeTokens.space2),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  color: Colors.transparent,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: palette.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    if (loading)
-                      SizedBox.square(
-                        dimension: 11,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          color: palette.textSecondary,
-                        ),
-                      )
-                    else
-                      Icon(
-                        expanded
-                            ? Icons.keyboard_arrow_down_rounded
-                            : Icons.chevron_right_rounded,
-                        size: 14,
-                        color: palette.textSecondary,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: ThemeTokens.space2),
-          Expanded(child: Divider(height: 1, color: palette.border)),
-        ],
-      ),
+    return CodexActivityDivider(
+      label: label,
+      isExpanded: expanded,
+      isLoading: loading,
+      onToggle: onTap ?? () {},
     );
   }
 }
