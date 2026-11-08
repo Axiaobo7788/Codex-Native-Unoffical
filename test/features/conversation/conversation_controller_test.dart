@@ -405,6 +405,110 @@ void main() {
     expect(controller.latestTurnPlan, isNull);
     expect(controller.entries, isEmpty);
   });
+
+  test('bounds oversized telemetry strings at controller ingress and finalizes only matching or unassigned turn entries on turn/completed', () async {
+    controller.bindThread(_thread());
+    final huge = 'z' * 2000;
+
+    // 1. Oversized reasoning deltas, MCP base summary, model reroute, and warning
+    gateway.events
+      ..add(
+        ReasoningSummaryDeltaEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'reason-huge',
+          summaryIndex: 0,
+          delta: huge,
+        ),
+      )
+      ..add(
+        ReasoningSummaryDeltaEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'reason-huge',
+          summaryIndex: 0,
+          delta: huge,
+        ),
+      )
+      ..add(
+        ActivityEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'mcp-huge',
+          summary: 'MCP: $huge/$huge',
+          status: 'inProgress',
+          completed: false,
+        ),
+      )
+      ..add(
+        McpToolCallProgressEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'mcp-huge',
+          message: huge,
+        ),
+      )
+      ..add(
+        ModelReroutedEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          fromModel: huge,
+          toModel: huge,
+          reason: huge,
+        ),
+      )
+      ..add(TurnWarningEvent(threadId: 'thread-1', message: huge))
+      ..add(
+        const ActivityEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-2',
+          itemId: 'other-turn-activity',
+          summary: 'Command: cargo test',
+          status: 'inProgress',
+          completed: false,
+        ),
+      );
+
+    expect(controller.latestModelReroute!.fromModel.length, 121);
+    expect(controller.latestModelReroute!.toModel.length, 121);
+    expect(controller.latestModelReroute!.reason.length, 161);
+    expect(controller.latestWarning!.length, 321);
+
+    final mcpEntryBeforeComplete = controller.entries.singleWhere(
+      (e) => e.id == 'mcp-huge',
+    );
+    expect(mcpEntryBeforeComplete.text.length, lessThanOrEqualTo(410));
+    expect(mcpEntryBeforeComplete.completed, isFalse);
+
+    // 2. Completing turn-1 flushes and finalizes turn-1 entries without mutating turn-2
+    gateway.events.add(
+      const TurnCompletedEvent(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        status: TurnRuntimeStatus.completed,
+      ),
+    );
+
+    final reasoningEntry = controller.entries.singleWhere(
+      (e) => e.id == 'reason-huge',
+    );
+    expect(reasoningEntry.text.length, lessThanOrEqualTo(260));
+    expect(reasoningEntry.completed, isTrue);
+    expect(reasoningEntry.status, 'completed');
+
+    final mcpEntryAfterComplete = controller.entries.singleWhere(
+      (e) => e.id == 'mcp-huge',
+    );
+    expect(mcpEntryAfterComplete.completed, isTrue);
+    expect(mcpEntryAfterComplete.status, 'completed');
+
+    final otherTurnEntry = controller.entries.singleWhere(
+      (e) => e.id == 'other-turn-activity',
+    );
+    expect(otherTurnEntry.completed, isFalse);
+    expect(otherTurnEntry.status, 'inProgress');
+    expect(otherTurnEntry.turnId, 'turn-2');
+  });
 }
 
 class _FakeTurnGateway implements TurnGateway {

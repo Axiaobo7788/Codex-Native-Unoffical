@@ -9,8 +9,12 @@ final class TurnProtocolAdapter {
   static const _maxTurnPlanSteps = 50;
   static const _maxPlanStepLength = 240;
   static const _maxPlanExplanationLength = 320;
+  static const _maxReasoningDeltaLength = 240;
   static const _maxProgressMessageLength = 240;
   static const _maxHookMessageLength = 240;
+  static const _maxModelIdentifierLength = 120;
+  static const _maxRerouteReasonLength = 160;
+  static const _maxToolIdentifierLength = 80;
   static const _maxWarningMessageLength = 320;
 
   TurnProtocolAdapter({
@@ -243,7 +247,10 @@ final class TurnProtocolAdapter {
       turnId: _requiredString(params, 'turnId'),
       itemId: _requiredString(params, 'itemId'),
       summaryIndex: rawIndex,
-      delta: _requiredString(params, 'delta'),
+      delta: _truncate(
+        _requiredString(params, 'delta'),
+        _maxReasoningDeltaLength,
+      ),
     );
   }
 
@@ -317,9 +324,18 @@ final class TurnProtocolAdapter {
     return ModelReroutedEvent(
       threadId: _requiredString(params, 'threadId'),
       turnId: _requiredString(params, 'turnId'),
-      fromModel: _requiredString(params, 'fromModel'),
-      toModel: _requiredString(params, 'toModel'),
-      reason: _requiredString(params, 'reason'),
+      fromModel: _truncate(
+        _requiredString(params, 'fromModel').trim(),
+        _maxModelIdentifierLength,
+      ),
+      toModel: _truncate(
+        _requiredString(params, 'toModel').trim(),
+        _maxModelIdentifierLength,
+      ),
+      reason: _truncate(
+        _requiredString(params, 'reason').trim(),
+        _maxRerouteReasonLength,
+      ),
     );
   }
 
@@ -413,11 +429,14 @@ final class TurnProtocolAdapter {
       'Command: ${_truncate(_requiredString(item, 'command'), 240)}',
     'fileChange' => _fileChangeSummary(item['changes']),
     'mcpToolCall' =>
-      'MCP: ${_requiredString(item, 'server')}/${_requiredString(item, 'tool')}',
-    'dynamicToolCall' => 'Tool: ${_requiredString(item, 'tool')}',
-    'collabAgentToolCall' => 'Collaboration: ${_requiredString(item, 'tool')}',
+      'MCP: ${_truncate(_requiredString(item, 'server').trim(), _maxToolIdentifierLength)}/${_truncate(_requiredString(item, 'tool').trim(), _maxToolIdentifierLength)}',
+    'dynamicToolCall' =>
+      'Tool: ${_truncate(_requiredString(item, 'tool').trim(), _maxToolIdentifierLength)}',
+    'collabAgentToolCall' =>
+      'Collaboration: ${_truncate(_requiredString(item, 'tool').trim(), _maxToolIdentifierLength)}',
     'subAgentActivity' => 'Sub-agent activity',
-    'functionCallOutput' => 'Function output: ${_requiredString(item, 'name')}',
+    'functionCallOutput' =>
+      'Function output: ${_truncate(_requiredString(item, 'name').trim(), _maxToolIdentifierLength)}',
     'plan' || 'todo' || 'todoList' => _planSummary(item),
     'reasoning' => 'Reasoning',
     'webSearch' => () {

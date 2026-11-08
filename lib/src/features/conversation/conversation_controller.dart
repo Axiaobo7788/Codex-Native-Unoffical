@@ -65,6 +65,14 @@ class ConversationController extends ChangeNotifier {
 
   static const _omittedPrefix = '[Earlier text omitted]\n';
   static const _maxReasoningSummaryChars = 240;
+  static const _maxMcpBaseSummaryChars = 160;
+  static const _maxMcpProgressMessageChars = 240;
+  static const _maxModelIdentifierChars = 120;
+  static const _maxRerouteReasonChars = 160;
+  static const _maxWarningChars = 320;
+  static const _maxTurnPlanSteps = 50;
+  static const _maxPlanStepChars = 240;
+  static const _maxPlanExplanationChars = 320;
 
   final TurnGateway gateway;
   final ExecutionSettingsController settings;
@@ -380,7 +388,11 @@ class ConversationController extends ChangeNotifier {
         _bufferReasoningDelta(event.itemId, event.turnId, event.delta);
       case McpToolCallProgressEvent():
         final base = _mcpBaseSummaries[event.itemId] ?? 'MCP';
-        final text = event.message.isEmpty ? base : '$base — ${event.message}';
+        final progress = _truncate(
+          event.message.trim(),
+          _maxMcpProgressMessageChars,
+        );
+        final text = progress.isEmpty ? base : '$base — $progress';
         _upsert(
           ConversationEntry(
             id: event.itemId,
@@ -393,8 +405,29 @@ class ConversationController extends ChangeNotifier {
         );
         _notify();
       case TurnPlanUpdatedEvent():
-        _latestTurnPlan = event.plan;
-        final plan = event.plan;
+        final rawPlan = event.plan;
+        final rawExplanation = rawPlan.explanation?.trim();
+        final boundedExplanation =
+            rawExplanation == null || rawExplanation.isEmpty
+            ? null
+            : _truncate(rawExplanation, _maxPlanExplanationChars);
+        final boundedSteps = List<TurnPlanStepModel>.unmodifiable(
+          rawPlan.steps
+              .take(_maxTurnPlanSteps)
+              .map(
+                (s) => TurnPlanStepModel(
+                  step: _truncate(s.step.trim(), _maxPlanStepChars),
+                  status: s.status,
+                ),
+              ),
+        );
+        final plan = TurnPlanSnapshot(
+          threadId: rawPlan.threadId,
+          turnId: rawPlan.turnId,
+          steps: boundedSteps,
+          explanation: boundedExplanation,
+        );
+        _latestTurnPlan = plan;
         final activeStep = plan.steps
             .where((s) => s.status == TurnPlanStepStatus.inProgress)
             .map((s) => s.step)
@@ -436,13 +469,23 @@ class ConversationController extends ChangeNotifier {
         );
         _notify();
       case ModelReroutedEvent():
-        _latestModelReroute = event;
+        final boundedReroute = ModelReroutedEvent(
+          threadId: event.threadId,
+          turnId: event.turnId,
+          fromModel: _truncate(
+            event.fromModel.trim(),
+            _maxModelIdentifierChars,
+          ),
+          toModel: _truncate(event.toModel.trim(), _maxModelIdentifierChars),
+          reason: _truncate(event.reason.trim(), _maxRerouteReasonChars),
+        );
+        _latestModelReroute = boundedReroute;
         _upsert(
           ConversationEntry(
             id: 'model-reroute-${event.turnId}',
             kind: ConversationEntryKind.activity,
             text: _bounded(
-              'Model rerouted: ${event.fromModel} → ${event.toModel} (${event.reason})',
+              'Model rerouted: ${boundedReroute.fromModel} → ${boundedReroute.toModel} (${boundedReroute.reason})',
             ),
             completed: true,
             turnId: event.turnId,
@@ -451,7 +494,7 @@ class ConversationController extends ChangeNotifier {
         );
         _notify();
       case TurnWarningEvent():
-        _latestWarning = _bounded(event.message);
+        _latestWarning = _truncate(event.message.trim(), _maxWarningChars);
         _notify();
       case ActivityEvent():
         final bufferedReasoning = _reasoningDeltaBuffers.remove(event.itemId);
@@ -465,7 +508,11 @@ class ConversationController extends ChangeNotifier {
             summary = 'Reasoning: $accumulated';
           }
         } else if (summary.startsWith('MCP: ')) {
-          _rememberBounded(_mcpBaseSummaries, event.itemId, summary);
+          _rememberBounded(
+            _mcpBaseSummaries,
+            event.itemId,
+            _truncate(summary, _maxMcpBaseSummaryChars),
+          );
         }
         _upsert(
           ConversationEntry(
@@ -533,9 +580,20 @@ class ConversationController extends ChangeNotifier {
       pending = (turnId: turnId, buffer: StringBuffer());
       _reasoningDeltaBuffers[itemId] = pending;
     }
-    pending.buffer.write(delta);
+    final existingLength = _reasoningSummaries[itemId]?.length ?? 0;
+    final remaining =
+        (_maxReasoningSummaryChars + 1) -
+        (existingLength + pending.buffer.length);
+    if (remaining > 0 && delta.isNotEmpty) {
+      pending.buffer.write(
+        delta.length <= remaining ? delta : delta.substring(0, remaining),
+      );
+    }
     _flushTimer ??= Timer(coalesceInterval, _flushDeltas);
   }
+
+  static String _truncate(String value, int maxChars) =>
+      value.length <= maxChars ? value : '${value.substring(0, maxChars)}…';
 
   void _completeAssistantMessage(AssistantMessageEvent event) {
     final buffered = _deltaBuffers.remove(event.itemId);

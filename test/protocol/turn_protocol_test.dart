@@ -618,6 +618,70 @@ void main() {
     expect(warning.threadId, 'thread-1');
     expect(warning.message, 'Approaching workspace rate limit window.');
   });
+
+  test('truncates oversized reasoning delta, model reroute fields, and MCP tool identifiers at parser ingress', () async {
+    final events = <TurnEvent>[];
+    final sub = adapter.events.listen(events.add);
+    addTearDown(sub.cancel);
+
+    final longText = 'x' * 500;
+    notifications
+      ..add(
+        CodexNotification(
+          method: 'item/reasoning/summaryTextDelta',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'itemId': 'reason-oversized',
+            'summaryIndex': 0,
+            'delta': longText,
+          },
+        ),
+      )
+      ..add(
+        CodexNotification(
+          method: 'model/rerouted',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'fromModel': longText,
+            'toModel': longText,
+            'reason': longText,
+          },
+        ),
+      )
+      ..add(
+        CodexNotification(
+          method: 'item/started',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'item': {
+              'type': 'mcpToolCall',
+              'id': 'mcp-oversized',
+              'server': longText,
+              'tool': longText,
+              'status': 'inProgress',
+            },
+          },
+        ),
+      );
+    await pumpEventQueue();
+
+    expect(events, hasLength(3));
+    final reasoning = events[0] as ReasoningSummaryDeltaEvent;
+    expect(reasoning.delta.length, 241);
+    expect(reasoning.delta.endsWith('…'), isTrue);
+
+    final reroute = events[1] as ModelReroutedEvent;
+    expect(reroute.fromModel.length, 121);
+    expect(reroute.toModel.length, 121);
+    expect(reroute.reason.length, 161);
+
+    final mcpActivity = events[2] as ActivityEvent;
+    expect(mcpActivity.summary.length, lessThanOrEqualTo(170));
+    expect(mcpActivity.summary.endsWith('…'), isTrue);
+  });
 }
 
 class _Request {
