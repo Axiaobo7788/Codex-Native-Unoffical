@@ -162,6 +162,9 @@ class E2ERuntimeHarness extends RuntimeController {
       StreamController<ApprovalEvent>.broadcast(sync: true);
   final StreamController<McpElicitationEvent> _mcpElicitationsController =
       StreamController<McpElicitationEvent>.broadcast(sync: true);
+  final StreamController<RuntimeDiagnosticsEvent>
+  _runtimeDiagnosticsController =
+      StreamController<RuntimeDiagnosticsEvent>.broadcast(sync: true);
 
   RuntimeSnapshot _snapshot;
   RemoteHostStatus _hostStatus;
@@ -213,8 +216,156 @@ class E2ERuntimeHarness extends RuntimeController {
     structuredContentPreview: '{"changed":true}',
   );
   var catalogSupported = true;
+  var runtimeDiagnosticsSupported = true;
+  var remoteModeOverride = false;
   int? catalogPageSizeOverride;
   Future<AppListPage> Function(AppListQuery query)? listAppsOverride;
+  AccountDiagnosticsSnapshot accountDiagnostics =
+      const AccountDiagnosticsSnapshot(
+        requiresOpenaiAuth: true,
+        accountType: 'chatgpt',
+        planType: 'plus',
+        email: 'dev@example.test',
+        workspaceName: 'Synthetic Workspace',
+      );
+  RateLimitsDiagnosticsSnapshot rateLimitsDiagnostics =
+      RateLimitsDiagnosticsSnapshot(
+        primaryBucket: const RateLimitBucketSnapshot(
+          limitId: 'codex',
+          limitName: 'Codex Primary',
+          normalModelSlug: 'o3-mini',
+          planType: 'plus',
+          primary: RateLimitWindowSnapshot(
+            usedPercent: 42,
+            windowDurationMins: 300,
+            resetsAtEpochSeconds: 1790000000,
+          ),
+          credits: CreditsDiagnosticsSnapshot(
+            hasCredits: true,
+            unlimited: false,
+            balance: '25.00',
+          ),
+        ),
+        bucketsById: const [
+          RateLimitBucketSnapshot(
+            limitId: 'codex',
+            primary: RateLimitWindowSnapshot(
+              usedPercent: 42,
+              windowDurationMins: 300,
+            ),
+          ),
+        ],
+        ordinaryUsageAllowed: true,
+        availableResetCreditsCount: 2,
+      );
+  PermissionProfileListSnapshot permissionProfilesSnapshot =
+      PermissionProfileListSnapshot(
+        profiles: const [
+          PermissionProfileSummaryModel(
+            id: ':read-only',
+            allowed: true,
+            description: 'Read-only workspace inspection',
+          ),
+          PermissionProfileSummaryModel(
+            id: ':workspace',
+            allowed: true,
+            description: 'Standard workspace writes',
+          ),
+          PermissionProfileSummaryModel(
+            id: ':danger-full-access',
+            allowed: false,
+            description: 'Unrestricted host access',
+          ),
+        ],
+      );
+  ConfigDiagnosticsSnapshot configDiagnostics = ConfigDiagnosticsSnapshot(
+    configKeyCount: 48,
+    originCount: 12,
+    model: 'o3-mini',
+    reviewModel: 'o3-mini',
+    modelProvider: 'openai',
+    modelReasoningEffort: 'medium',
+    modelReasoningSummary: 'concise',
+    modelVerbosity: 'medium',
+    approvalPolicy: 'on-request',
+    approvalsReviewer: 'user',
+    sandboxMode: 'workspace-write',
+    webSearchMode: 'cached',
+    defaultPermissions: ':workspace',
+    serviceTier: 'default',
+    profile: 'dev-profile',
+    modelContextWindow: 200000,
+    modelAutoCompactTokenLimit: 160000,
+    layers: const [
+      ConfigLayerSummaryModel(
+        sourceType: 'user',
+        version: 'v1',
+        configEntryCount: 6,
+        sourceLocation: '/workspace/.codex/config.toml',
+        profile: 'dev-profile',
+      ),
+      ConfigLayerSummaryModel(
+        sourceType: 'project',
+        version: 'v1',
+        configEntryCount: 3,
+        sourceLocation: '/workspace/project/.codex',
+      ),
+    ],
+  );
+  ConfigRequirementsSummaryModel configRequirements =
+      ConfigRequirementsSummaryModel(
+        hasRequirements: true,
+        supportsIndependentSpeedModes: true,
+        allowedApprovalPolicies: const ['untrusted', 'on-request'],
+        allowedSandboxModes: const ['read-only', 'workspace-write'],
+        allowedWebSearchModes: const ['disabled', 'cached'],
+        allowedLoginMethods: const ['chatgpt'],
+        enforceResidency: 'us',
+        allowRemoteControl: true,
+        allowManagedHooksOnly: false,
+        allowLoginShell: true,
+      );
+  ModelProviderCapabilitiesSnapshot modelProviderCapabilities =
+      const ModelProviderCapabilitiesSnapshot(
+        imageGeneration: true,
+        webSearch: true,
+      );
+  HooksDiagnosticsSnapshot hooksDiagnostics = HooksDiagnosticsSnapshot(
+    entries: [
+      WorkspaceHooksEntrySummary(
+        cwd: '/workspace/test',
+        hooks: const [
+          HookSummaryModel(
+            key: 'pre-tool-lint',
+            eventName: 'preToolUse',
+            handlerType: 'command',
+            enabled: true,
+            isManaged: false,
+            source: 'project',
+            sourcePath: '/workspace/test/.codex/hooks.toml',
+            trustStatus: 'trusted',
+            timeoutSec: 15,
+            targetSummary: 'Command handler',
+            matcher: 'Edit|Write',
+            statusMessage: 'Running analyzer hook',
+          ),
+        ],
+        errors: const [],
+        warnings: const ['Hook timeout exceeds 10s recommendation'],
+      ),
+    ],
+    totalHookCount: 1,
+    totalErrorCount: 0,
+    totalWarningCount: 1,
+  );
+  Object? accountDiagnosticsError;
+  var accountReadCount = 0;
+  var rateLimitsReadCount = 0;
+  var permissionProfilesListCount = 0;
+  var configReadCount = 0;
+  var configRequirementsReadCount = 0;
+  var providerCapabilitiesReadCount = 0;
+  var hooksListCount = 0;
   OfficialRemoteControlStatus officialRemoteStatus =
       const OfficialRemoteControlStatus(
         supported: true,
@@ -286,11 +437,23 @@ class E2ERuntimeHarness extends RuntimeController {
   Stream<ApprovalEvent> get approvalEvents => _approvalsController.stream;
 
   @override
-  bool get supportsMcpCapabilities => mcpCapabilitiesSupported;
+  bool get usesRemote => remoteModeOverride;
+
+  @override
+  bool get supportsMcpCapabilities =>
+      mcpCapabilitiesSupported && !remoteModeOverride;
 
   @override
   Stream<McpElicitationEvent> get mcpElicitationEvents =>
       _mcpElicitationsController.stream;
+
+  @override
+  bool get supportsRuntimeDiagnostics =>
+      runtimeDiagnosticsSupported && !remoteModeOverride;
+
+  @override
+  Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
+      _runtimeDiagnosticsController.stream;
 
   @override
   Future<void> start() async {
@@ -871,6 +1034,101 @@ class E2ERuntimeHarness extends RuntimeController {
   }
 
   @override
+  Future<AccountDiagnosticsSnapshot> readAccountDiagnostics({
+    bool refreshToken = false,
+  }) async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Account diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    accountReadCount++;
+    if (accountDiagnosticsError case final error?) {
+      throw error;
+    }
+    return accountDiagnostics;
+  }
+
+  @override
+  Future<RateLimitsDiagnosticsSnapshot> readAccountRateLimits({
+    bool excludeResetCreditDetails = false,
+  }) async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Rate-limit diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    rateLimitsReadCount++;
+    return rateLimitsDiagnostics;
+  }
+
+  @override
+  Future<PermissionProfileListSnapshot> listPermissionProfiles({
+    String? cwd,
+    int? limit,
+    String? cursor,
+  }) async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Permission profile diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    permissionProfilesListCount++;
+    return permissionProfilesSnapshot;
+  }
+
+  @override
+  Future<ConfigDiagnosticsSnapshot> readConfigDiagnostics({
+    String? cwd,
+    bool includeLayers = true,
+  }) async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Configuration diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    configReadCount++;
+    return configDiagnostics;
+  }
+
+  @override
+  Future<ConfigRequirementsSummaryModel> readConfigRequirements() async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Configuration requirement diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    configRequirementsReadCount++;
+    return configRequirements;
+  }
+
+  @override
+  Future<ModelProviderCapabilitiesSnapshot>
+  readModelProviderCapabilities() async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Model provider capabilities are unavailable on read-only Remote.',
+      );
+    }
+    providerCapabilitiesReadCount++;
+    return modelProviderCapabilities;
+  }
+
+  @override
+  Future<HooksDiagnosticsSnapshot> listHooks({
+    List<String> cwds = const [],
+    String? threadId,
+  }) async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Workspace hook diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    hooksListCount++;
+    return hooksDiagnostics;
+  }
+
+  @override
   Future<void> shutdown() async {}
 
   // Test manipulation helpers
@@ -954,6 +1212,22 @@ class E2ERuntimeHarness extends RuntimeController {
     );
   }
 
+  void emitAccountUpdated({String? authMode, String? planType}) {
+    _runtimeDiagnosticsController.add(
+      AccountUpdatedDiagnosticsEvent(authMode: authMode, planType: planType),
+    );
+  }
+
+  void emitAccountRateLimitsUpdated(RateLimitBucketSnapshot rateLimits) {
+    _runtimeDiagnosticsController.add(
+      AccountRateLimitsUpdatedDiagnosticsEvent(rateLimits: rateLimits),
+    );
+  }
+
+  void emitDiagnosticsStreamError(Object error) {
+    _runtimeDiagnosticsController.addError(error);
+  }
+
   void storeOutput(String reference, String content, {int? totalLength}) {
     final bytes = Uint8List.fromList(utf8.encode(content));
     outputStore[reference] = bytes;
@@ -972,6 +1246,7 @@ class E2ERuntimeHarness extends RuntimeController {
     await _threadsController.close();
     await _approvalsController.close();
     await _mcpElicitationsController.close();
+    await _runtimeDiagnosticsController.close();
     dispose();
   }
 
