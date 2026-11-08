@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/approval_models.dart';
+import '../../domain/ecosystem_models.dart';
 import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
@@ -10,6 +11,7 @@ import '../../domain/remote_admin_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../protocol/approval_protocol.dart';
+import '../../protocol/ecosystem_protocol.dart';
 import '../../protocol/history_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
@@ -49,6 +51,7 @@ class ProcessTransport implements CodexTransport {
     _modelProtocol = ModelProtocolAdapter(request: _peer.request);
     _outputProtocol = OutputProtocolAdapter(request: _peer.request);
     _remoteAdminProtocol = RemoteAdminProtocolAdapter(request: _peer.request);
+    _ecosystemProtocol = EcosystemProtocolAdapter(request: _peer.request);
     _turnProtocol = TurnProtocolAdapter(
       request: _peer.request,
       notifications: _peer.notifications,
@@ -77,6 +80,7 @@ class ProcessTransport implements CodexTransport {
   late final ModelProtocolAdapter _modelProtocol;
   late final OutputProtocolAdapter _outputProtocol;
   late final RemoteAdminProtocolAdapter _remoteAdminProtocol;
+  late final EcosystemProtocolAdapter _ecosystemProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ApprovalProtocolAdapter _approvalProtocol;
   late final StreamSubscription<String> _stderrSubscription;
@@ -271,6 +275,40 @@ class ProcessTransport implements CodexTransport {
 
   Future<bool> revokeRemotePairedDevice(String deviceId) =>
       _remoteAdminProtocol.revokeDevice(deviceId);
+
+  @override
+  Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) =>
+      _ecosystemProtocol.listSkills(cwds: cwds);
+
+  @override
+  Future<bool> setSkillEnabled({required String path, required bool enabled}) =>
+      _ecosystemProtocol.setSkillEnabled(path: path, enabled: enabled);
+
+  @override
+  Future<List<PluginSummaryModel>> listPlugins({
+    List<String> cwds = const [],
+  }) => _ecosystemProtocol.listPlugins(cwds: cwds);
+
+  @override
+  Future<List<McpServerStatusModel>> listMcpServerStatus() =>
+      _ecosystemProtocol.listMcpServerStatus();
+
+  @override
+  Future<OfficialRemoteControlStatus> readOfficialRemoteControlStatus() =>
+      _ecosystemProtocol.readOfficialRemoteControlStatus();
+
+  @override
+  Future<OfficialRemoteControlStatus> setOfficialRemoteControlEnabled(
+    bool enabled,
+  ) => _ecosystemProtocol.setOfficialRemoteControlEnabled(enabled);
+
+  @override
+  Future<OfficialRemoteControlPairing> startOfficialRemoteControlPairing() =>
+      _ecosystemProtocol.startOfficialRemoteControlPairing();
+
+  @override
+  Future<bool> disconnectOfficialRemoteControlClient(String clientId) =>
+      _ecosystemProtocol.disconnectOfficialRemoteControlClient(clientId);
 
   void _captureStderr(String chunk) {
     _stderrTail += chunk;

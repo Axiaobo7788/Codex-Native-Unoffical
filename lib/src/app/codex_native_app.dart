@@ -8,6 +8,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/diff_models.dart';
+import '../domain/ecosystem_gateway.dart';
+import '../domain/ecosystem_models.dart';
 import '../domain/execution_settings.dart';
 import '../domain/history_models.dart';
 import '../domain/output_gateway.dart';

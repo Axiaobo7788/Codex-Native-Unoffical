@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/approval_gateway.dart';
 import '../domain/approval_models.dart';
+import '../domain/ecosystem_gateway.dart';
+import '../domain/ecosystem_models.dart';
 import '../domain/history_gateway.dart';
 import '../domain/history_models.dart';
 import '../domain/model_gateway.dart';
@@ -43,7 +45,8 @@ class RuntimeController extends ChangeNotifier
         ModelGateway,
         OutputGateway,
         HistoryGateway,
-        RemoteAdminGateway {
+        RemoteAdminGateway,
+        EcosystemGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     this.hostLocator = const HostExecutableLocator(),
@@ -304,6 +307,40 @@ class RuntimeController extends ChangeNotifier
     requestId: requestId,
     decision: decision,
   );
+
+  @override
+  Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) =>
+      _connectedTransport().listSkills(cwds: cwds);
+
+  @override
+  Future<bool> setSkillEnabled({required String path, required bool enabled}) =>
+      _connectedTransport().setSkillEnabled(path: path, enabled: enabled);
+
+  @override
+  Future<List<PluginSummaryModel>> listPlugins({
+    List<String> cwds = const [],
+  }) => _connectedTransport().listPlugins(cwds: cwds);
+
+  @override
+  Future<List<McpServerStatusModel>> listMcpServerStatus() =>
+      _connectedTransport().listMcpServerStatus();
+
+  @override
+  Future<OfficialRemoteControlStatus> readOfficialRemoteControlStatus() =>
+      _connectedTransport().readOfficialRemoteControlStatus();
+
+  @override
+  Future<OfficialRemoteControlStatus> setOfficialRemoteControlEnabled(
+    bool enabled,
+  ) => _connectedTransport().setOfficialRemoteControlEnabled(enabled);
+
+  @override
+  Future<OfficialRemoteControlPairing> startOfficialRemoteControlPairing() =>
+      _connectedTransport().startOfficialRemoteControlPairing();
+
+  @override
+  Future<bool> disconnectOfficialRemoteControlClient(String clientId) =>
+      _connectedTransport().disconnectOfficialRemoteControlClient(clientId);
 
   ProcessTransport _connectedTransport() {
     if (_usesRemote) {

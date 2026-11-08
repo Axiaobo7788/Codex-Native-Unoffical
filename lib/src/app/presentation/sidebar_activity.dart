@@ -436,12 +436,26 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           ),
           const SizedBox(width: ThemeTokens.space1),
           CodexIconButton(
+            key: const ValueKey('ecosystem-button'),
+            tooltip: 'Skills, Plugins & MCP',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => _EcosystemDialog(
+                gateway: widget.runtimeController,
+                cwd: widget.controller.selectedThread?.cwd ?? _workingDirectory,
+              ),
+            ),
+            icon: const Icon(Icons.extension_outlined, size: 17),
+          ),
+          CodexIconButton(
             key: const ValueKey('remote-setup-button'),
             tooltip: 'Remote setup',
             onPressed: () => showDialog<void>(
               context: context,
-              builder: (context) =>
-                  _RemoteSetupDialog(gateway: widget.runtimeController),
+              builder: (context) => _RemoteSetupDialog(
+                gateway: widget.runtimeController,
+                ecosystemGateway: widget.runtimeController,
+              ),
             ),
             icon: const Icon(Icons.devices_outlined, size: 18),
           ),
@@ -917,4 +931,371 @@ String _shortTime(DateTime time) {
     return '${(days / 30).floor()}mo';
   }
   return '${(days / 365).floor()}y';
+}
+
+enum _EcosystemSection { skills, plugins, mcp }
+
+class _EcosystemDialog extends StatefulWidget {
+  const _EcosystemDialog({required this.gateway, required this.cwd});
+
+  final EcosystemGateway gateway;
+  final String cwd;
+
+  @override
+  State<_EcosystemDialog> createState() => _EcosystemDialogState();
+}
+
+class _EcosystemDialogState extends State<_EcosystemDialog> {
+  var _section = _EcosystemSection.skills;
+  var _loading = true;
+  String? _error;
+  List<SkillSummary> _skills = const [];
+  List<PluginSummaryModel> _plugins = const [];
+  List<McpServerStatusModel> _mcpServers = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final cwds = widget.cwd.trim().isEmpty
+        ? const <String>[]
+        : <String>[widget.cwd.trim()];
+    try {
+      final results = await Future.wait<Object>([
+        widget.gateway.listSkills(cwds: cwds),
+        widget.gateway.listPlugins(cwds: cwds),
+        widget.gateway.listMcpServerStatus(),
+      ]);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _skills = results[0] as List<SkillSummary>;
+        _plugins = results[1] as List<PluginSummaryModel>;
+        _mcpServers = results[2] as List<McpServerStatusModel>;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = '$error';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleSkill(SkillSummary skill) async {
+    try {
+      final effective = await widget.gateway.setSkillEnabled(
+        path: skill.path,
+        enabled: !skill.enabled,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _skills = [
+          for (final item in _skills)
+            if (item.path == skill.path)
+              item.copyWith(enabled: effective)
+            else
+              item,
+        ];
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = '$error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 680),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                ThemeTokens.space6,
+                ThemeTokens.space4,
+                ThemeTokens.space3,
+                ThemeTokens.space3,
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.extension_outlined, size: 20),
+                  const SizedBox(width: ThemeTokens.space2),
+                  Expanded(
+                    child: Text(
+                      'Skills, Plugins & MCP',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  CodexSegment<_EcosystemSection>(
+                    key: const ValueKey('ecosystem-section-selector'),
+                    items: [
+                      CodexSegmentItem(
+                        value: _EcosystemSection.skills,
+                        label: 'Skills (${_skills.length})',
+                      ),
+                      CodexSegmentItem(
+                        value: _EcosystemSection.plugins,
+                        label: 'Plugins (${_plugins.length})',
+                      ),
+                      CodexSegmentItem(
+                        value: _EcosystemSection.mcp,
+                        label: 'MCP (${_mcpServers.length})',
+                      ),
+                    ],
+                    selectedValue: _section,
+                    onSelected: (next) => setState(() => _section = next),
+                  ),
+                  const SizedBox(width: ThemeTokens.space2),
+                  CodexIconButton(
+                    key: const ValueKey('ecosystem-refresh-button'),
+                    tooltip: 'Refresh',
+                    onPressed: _loading ? null : _refresh,
+                    icon: const Icon(Icons.refresh_rounded, size: 17),
+                  ),
+                  CodexIconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: palette.border),
+            if (_error case final error?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: _InlineNotice(
+                  icon: Icons.error_outline_rounded,
+                  color: palette.danger,
+                  text: error,
+                ),
+              ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(ThemeTokens.space5),
+                      child: switch (_section) {
+                        _EcosystemSection.skills => _buildSkillsList(context),
+                        _EcosystemSection.plugins => _buildPluginsList(context),
+                        _EcosystemSection.mcp => _buildMcpList(context),
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkillsList(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    if (_skills.isEmpty) {
+      return Text(
+        'No skills discovered in this workspace.',
+        key: const ValueKey('ecosystem-skills-empty'),
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final skill in _skills)
+          Container(
+            key: ValueKey('skill-row-${skill.name}'),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: palette.surfaceRaised,
+              border: Border.all(
+                color: palette.border,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '\$${skill.name}',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            skill.scope,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: palette.textMuted),
+                          ),
+                        ],
+                      ),
+                      if (skill.description.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          skill.description,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        skill.path,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: palette.textMuted,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                CodexButton(
+                  key: ValueKey('skill-toggle-${skill.name}'),
+                  size: CodexButtonSize.sm,
+                  variant: skill.enabled
+                      ? CodexButtonVariant.secondary
+                      : CodexButtonVariant.ghost,
+                  onPressed: () => _toggleSkill(skill),
+                  label: skill.enabled ? 'Enabled' : 'Disabled',
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPluginsList(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    if (_plugins.isEmpty) {
+      return Text(
+        'No plugins installed.',
+        key: const ValueKey('ecosystem-plugins-empty'),
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final plugin in _plugins)
+          Container(
+            key: ValueKey('plugin-row-${plugin.id}'),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: palette.surfaceRaised,
+              border: Border.all(
+                color: palette.border,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        plugin.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      if (plugin.description.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          plugin.description,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Text(
+                  plugin.enabled ? 'Enabled' : 'Disabled',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMcpList(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    if (_mcpServers.isEmpty) {
+      return Text(
+        'No MCP servers configured.',
+        key: const ValueKey('ecosystem-mcp-empty'),
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final server in _mcpServers)
+          Container(
+            key: ValueKey('mcp-row-${server.name}'),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: palette.surfaceRaised,
+              border: Border.all(
+                color: palette.border,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        server.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${server.toolCount} tools · ${server.resourceCount} resources',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  server.status,
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: palette.textSecondary),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 }

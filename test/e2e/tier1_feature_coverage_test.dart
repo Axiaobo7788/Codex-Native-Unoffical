@@ -1239,5 +1239,98 @@ void main() {
         expect(harness.steeredTurns.single.text, 'Also check edge cases');
       },
     );
+
+    testWidgets(
+      'T1.6.8: Ecosystem dialog (Skills, Plugins, MCP) and Dual-Track Remote Setup (Direct Host vs Official Relay)',
+      (tester) async {
+        final harness = E2ERuntimeHarness();
+        await pumpE2EApp(tester, harness: harness);
+
+        // 1. Open Ecosystem dialog from sidebar footer
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('skill-row-frontend-design')),
+          findsOneWidget,
+        );
+
+        // Toggle skill enabled state
+        await tester.tap(
+          find.byKey(const ValueKey('skill-toggle-frontend-design')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.toggledSkills, [
+          (
+            path: '/workspace/.agents/skills/frontend-design/SKILL.md',
+            enabled: false,
+          ),
+        ]);
+
+        // Switch to Plugins tab
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+
+        // Switch to MCP tab
+        await tester.tap(find.text('MCP (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('mcp-row-filesystem-mcp')),
+          findsOneWidget,
+        );
+
+        // Close Ecosystem dialog
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+
+        // 2. Open Remote Setup dialog and switch between Track A and Track B
+        await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('remote-track-selector')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('remote-listener-enabled')),
+          findsOneWidget,
+        );
+
+        // Switch to Track B: Official Relay
+        await tester.tap(find.text('Official Relay'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('official-remote-control-panel')),
+          findsOneWidget,
+        );
+        expect(find.text('env-local-1'), findsOneWidget);
+
+        // Enable Official Remote Control and start official pairing
+        await tester.tap(
+          find.byKey(const ValueKey('official-remote-toggle-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.officialRemoteEnabledToggles, [true]);
+
+        await tester.tap(
+          find.byKey(const ValueKey('official-remote-pair-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('PAIR-7788-CODEX'), findsOneWidget);
+
+        // Disconnect connected official client
+        await tester.tap(
+          find.byKey(const ValueKey('official-remote-disconnect-client-ios-1')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.disconnectedOfficialClients, ['client-ios-1']);
+      },
+    );
   });
 }

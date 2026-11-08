@@ -1,4 +1,5 @@
 import '../domain/approval_models.dart';
+import '../domain/ecosystem_gateway.dart';
 import '../domain/history_models.dart';
 import '../domain/model_models.dart';
 import '../domain/output_gateway.dart';
@@ -6,7 +7,8 @@ import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
 import '../protocol/protocol_models.dart';
 
-abstract interface class CodexTransport implements OutputGateway {
+abstract interface class CodexTransport
+    implements OutputGateway, EcosystemGateway {
   Stream<CodexNotification> get notifications;
   Stream<CodexServerRequest> get serverRequests;
   Stream<ProtocolViolation> get protocolErrors;

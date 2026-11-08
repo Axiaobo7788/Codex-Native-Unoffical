@@ -1,9 +1,10 @@
 part of '../codex_native_app.dart';
 
 class _RemoteSetupDialog extends StatefulWidget {
-  const _RemoteSetupDialog({required this.gateway});
+  const _RemoteSetupDialog({required this.gateway, this.ecosystemGateway});
 
   final RemoteAdminGateway gateway;
+  final EcosystemGateway? ecosystemGateway;
 
   @override
   State<_RemoteSetupDialog> createState() => _RemoteSetupDialogState();
@@ -11,6 +12,7 @@ class _RemoteSetupDialog extends StatefulWidget {
 
 class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
   late final RemoteAdminController _controller;
+  var _track = RemoteArchitectureTrack.directHostBridge;
 
   @override
   void initState() {
@@ -27,6 +29,7 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final ecosystemGateway = widget.ecosystemGateway;
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
@@ -42,21 +45,51 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
                   ThemeTokens.space3,
                   ThemeTokens.space3,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.devices_other),
-                    const SizedBox(width: ThemeTokens.space2),
-                    Expanded(
-                      child: Text(
-                        'Remote setup',
-                        style: Theme.of(context).textTheme.titleLarge,
+                    Row(
+                      children: [
+                        const Icon(Icons.devices_other),
+                        const SizedBox(width: ThemeTokens.space2),
+                        Expanded(
+                          child: Text(
+                            'Remote setup',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    if (ecosystemGateway != null) ...[
+                      const SizedBox(height: ThemeTokens.space2),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: CodexSegment<RemoteArchitectureTrack>(
+                          key: const ValueKey('remote-track-selector'),
+                          items: const [
+                            CodexSegmentItem(
+                              value: RemoteArchitectureTrack.directHostBridge,
+                              label: 'Direct Host',
+                              tooltip:
+                                  'Self-hosted LAN/Tailscale WebSocket bridge',
+                            ),
+                            CodexSegmentItem(
+                              value: RemoteArchitectureTrack
+                                  .officialAppServerRelay,
+                              label: 'Official Relay',
+                              tooltip: 'Stock app-server remoteControl/* host',
+                            ),
+                          ],
+                          selectedValue: _track,
+                          onSelected: (next) => setState(() => _track = next),
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -64,7 +97,14 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(ThemeTokens.space6),
-                  child: _RemoteSetupContent(controller: _controller),
+                  child:
+                      _track ==
+                              RemoteArchitectureTrack.officialAppServerRelay &&
+                          ecosystemGateway != null
+                      ? _OfficialRemoteControlTrackView(
+                          gateway: ecosystemGateway,
+                        )
+                      : _RemoteSetupContent(controller: _controller),
                 ),
               ),
             ],
@@ -569,3 +609,261 @@ String _scopeLabels(Set<RemoteDeviceScope> scopes) => scopes
       },
     )
     .join(' · ');
+
+class _OfficialRemoteControlTrackView extends StatefulWidget {
+  const _OfficialRemoteControlTrackView({required this.gateway});
+
+  final EcosystemGateway gateway;
+
+  @override
+  State<_OfficialRemoteControlTrackView> createState() =>
+      _OfficialRemoteControlTrackViewState();
+}
+
+class _OfficialRemoteControlTrackViewState
+    extends State<_OfficialRemoteControlTrackView> {
+  OfficialRemoteControlStatus? _status;
+  OfficialRemoteControlPairing? _pairing;
+  var _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final status = await widget.gateway.readOfficialRemoteControlStatus();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _status = status;
+      _loading = false;
+    });
+  }
+
+  Future<void> _toggleEnabled(bool enabled) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final status = await widget.gateway.setOfficialRemoteControlEnabled(
+      enabled,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _status = status;
+      _loading = false;
+    });
+  }
+
+  Future<void> _startPairing() async {
+    try {
+      final pairing = await widget.gateway.startOfficialRemoteControlPairing();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _pairing = pairing);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = '$error');
+    }
+  }
+
+  Future<void> _disconnectClient(String clientId) async {
+    try {
+      await widget.gateway.disconnectOfficialRemoteControlClient(clientId);
+      if (mounted) {
+        await _refresh();
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _error = '$error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final status = _status;
+    return Column(
+      key: const ValueKey('official-remote-control-panel'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Official App-Server Remote Control (Track B)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: ThemeTokens.space2),
+        Text(
+          'Controls the stock codex app-server remoteControl/* host surface. '
+          'Note: Mobile client relay enrollment on this track depends on '
+          'first-party ChatGPT account infrastructure; use Direct Host Bridge '
+          '(Track A) for self-hosted LAN/Tailscale connections.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: ThemeTokens.space4),
+        if (_loading)
+          const Center(child: CircularProgressIndicator())
+        else if (status == null || !status.supported)
+          Container(
+            key: const ValueKey('official-remote-unsupported'),
+            padding: const EdgeInsets.all(ThemeTokens.space3),
+            decoration: BoxDecoration(
+              color: palette.surfaceRaised,
+              border: Border.all(color: palette.border),
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+            ),
+            child: Text(
+              status?.errorMessage ?? 'Official remoteControl/* RPCs are not supported by the current runtime.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          )
+        else ...[
+          Container(
+            padding: const EdgeInsets.all(ThemeTokens.space3),
+            decoration: BoxDecoration(
+              border: Border.all(color: palette.border),
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Detail(label: 'Enabled', value: status.enabled ? 'Yes' : 'No'),
+                const SizedBox(height: ThemeTokens.space2),
+                _Detail(
+                  label: 'Relay connection',
+                  value: status.connected ? 'Connected' : 'Disconnected',
+                ),
+                if (status.environmentId case final envId?) ...[
+                  const SizedBox(height: ThemeTokens.space2),
+                  _Detail(label: 'Environment ID', value: envId),
+                ],
+              ],
+            ),
+          ),
+          if (_error case final error?) ...[
+            const SizedBox(height: ThemeTokens.space3),
+            Text(error, style: TextStyle(color: palette.danger)),
+          ],
+          const SizedBox(height: ThemeTokens.space4),
+          Wrap(
+            spacing: ThemeTokens.space2,
+            runSpacing: ThemeTokens.space2,
+            children: [
+              CodexButton(
+                key: const ValueKey('official-remote-toggle-button'),
+                variant: CodexButtonVariant.secondary,
+                onPressed: () => _toggleEnabled(!status.enabled),
+                label: status.enabled
+                    ? 'Disable Remote Control'
+                    : 'Enable Remote Control',
+              ),
+              CodexButton(
+                key: const ValueKey('official-remote-pair-button'),
+                variant: CodexButtonVariant.primary,
+                onPressed: status.enabled ? _startPairing : null,
+                label: 'Start official pairing',
+              ),
+              CodexButton(
+                variant: CodexButtonVariant.ghost,
+                onPressed: _refresh,
+                label: 'Refresh',
+              ),
+            ],
+          ),
+          if (_pairing case final pairing?) ...[
+            const SizedBox(height: ThemeTokens.space4),
+            Container(
+              key: const ValueKey('official-remote-pairing-card'),
+              padding: const EdgeInsets.all(ThemeTokens.space3),
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                border: Border.all(color: palette.border),
+                borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Official pairing code',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    pairing.code,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (pairing.qrPayload case final qr? when qr.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      qr,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: ThemeTokens.space5),
+          Text(
+            'Connected official clients (${status.clients.length})',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          if (status.clients.isEmpty)
+            Text(
+              'No official relay clients connected.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            for (final client in status.clients)
+              Container(
+                key: ValueKey('official-remote-client-${client.id}'),
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
+                  border: Border.all(color: palette.border),
+                  borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        client.platform != null
+                            ? '${client.name} (${client.platform})'
+                            : client.name,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    CodexButton(
+                      key: ValueKey('official-remote-disconnect-${client.id}'),
+                      size: CodexButtonSize.sm,
+                      variant: CodexButtonVariant.ghost,
+                      onPressed: () => _disconnectClient(client.id),
+                      label: 'Disconnect',
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ],
+    );
+  }
+}

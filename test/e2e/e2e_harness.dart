@@ -6,6 +6,7 @@ import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
+import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/output_models.dart';
@@ -64,7 +65,39 @@ class E2ERuntimeHarness extends RuntimeController {
     if (initialPairedDevices != null) {
       pairedDevices.addAll(initialPairedDevices);
     }
+    skills.addAll(_defaultSkills);
+    plugins.addAll(_defaultPlugins);
+    mcpServers.addAll(_defaultMcpServers);
   }
+
+  static const _defaultSkills = [
+    SkillSummary(
+      name: 'frontend-design',
+      description: 'Desktop UI design and typography skill',
+      path: '/workspace/.agents/skills/frontend-design/SKILL.md',
+      enabled: true,
+      scope: 'repo',
+    ),
+  ];
+
+  static const _defaultPlugins = [
+    PluginSummaryModel(
+      id: 'git-workflow',
+      name: 'Git Workflow',
+      description: 'Branch and PR helpers',
+      enabled: true,
+      version: '1.0.0',
+    ),
+  ];
+
+  static const _defaultMcpServers = [
+    McpServerStatusModel(
+      name: 'filesystem-mcp',
+      status: 'ready',
+      toolCount: 4,
+      resourceCount: 2,
+    ),
+  ];
 
   static const _defaultModels = [
     CodexModel(
@@ -107,6 +140,23 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<HistoryTurn> historyTurns = [];
   final List<HistoryItem> historyItems = [];
   final List<RemotePairedDevice> pairedDevices = [];
+  final List<SkillSummary> skills = [];
+  final List<PluginSummaryModel> plugins = [];
+  final List<McpServerStatusModel> mcpServers = [];
+  OfficialRemoteControlStatus officialRemoteStatus =
+      const OfficialRemoteControlStatus(
+        supported: true,
+        enabled: false,
+        connected: false,
+        environmentId: 'env-local-1',
+        clients: [
+          OfficialRemoteControlClient(
+            id: 'client-ios-1',
+            name: 'iPhone 16 Pro',
+            platform: 'iOS',
+          ),
+        ],
+      );
   final Map<String, Uint8List> outputStore = {};
   final Map<String, OutputDescriptor> outputDescriptors = {};
 
@@ -121,6 +171,9 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<ThreadForkOptions> forkedThreads = [];
   final List<({String threadId, String beforeTurnId})> revertedThreads = [];
   final List<String> compactedThreadIds = [];
+  final List<({String path, bool enabled})> toggledSkills = [];
+  final List<bool> officialRemoteEnabledToggles = [];
+  final List<String> disconnectedOfficialClients = [];
   final List<({String threadId, String turnId})> interruptedTurns = [];
   final List<({Object requestId, ApprovalDecision decision})>
   approvalDecisions = [];
@@ -433,6 +486,80 @@ class E2ERuntimeHarness extends RuntimeController {
     revokedDeviceIds.add(deviceId);
     pairedDevices.removeWhere((d) => d.id == deviceId);
     notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) async {
+    return List.unmodifiable(skills);
+  }
+
+  @override
+  Future<bool> setSkillEnabled({
+    required String path,
+    required bool enabled,
+  }) async {
+    toggledSkills.add((path: path, enabled: enabled));
+    final idx = skills.indexWhere((s) => s.path == path);
+    if (idx != -1) {
+      skills[idx] = skills[idx].copyWith(enabled: enabled);
+    }
+    return enabled;
+  }
+
+  @override
+  Future<List<PluginSummaryModel>> listPlugins({
+    List<String> cwds = const [],
+  }) async {
+    return List.unmodifiable(plugins);
+  }
+
+  @override
+  Future<List<McpServerStatusModel>> listMcpServerStatus() async {
+    return List.unmodifiable(mcpServers);
+  }
+
+  @override
+  Future<OfficialRemoteControlStatus> readOfficialRemoteControlStatus() async {
+    return officialRemoteStatus;
+  }
+
+  @override
+  Future<OfficialRemoteControlStatus> setOfficialRemoteControlEnabled(
+    bool enabled,
+  ) async {
+    officialRemoteEnabledToggles.add(enabled);
+    officialRemoteStatus = OfficialRemoteControlStatus(
+      supported: officialRemoteStatus.supported,
+      enabled: enabled,
+      connected: enabled,
+      environmentId: officialRemoteStatus.environmentId,
+      clients: officialRemoteStatus.clients,
+    );
+    return officialRemoteStatus;
+  }
+
+  @override
+  Future<OfficialRemoteControlPairing>
+  startOfficialRemoteControlPairing() async {
+    return const OfficialRemoteControlPairing(
+      code: 'PAIR-7788-CODEX',
+      qrPayload: 'codex://remote-control/pair?code=PAIR-7788-CODEX',
+    );
+  }
+
+  @override
+  Future<bool> disconnectOfficialRemoteControlClient(String clientId) async {
+    disconnectedOfficialClients.add(clientId);
+    officialRemoteStatus = OfficialRemoteControlStatus(
+      supported: officialRemoteStatus.supported,
+      enabled: officialRemoteStatus.enabled,
+      connected: officialRemoteStatus.connected,
+      environmentId: officialRemoteStatus.environmentId,
+      clients: officialRemoteStatus.clients
+          .where((c) => c.id != clientId)
+          .toList(growable: false),
+    );
     return true;
   }
 

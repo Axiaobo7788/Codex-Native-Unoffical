@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/approval_models.dart';
+import '../../domain/ecosystem_models.dart';
 import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
@@ -412,6 +413,45 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
     required String reference,
     required int length,
   }) => _unsupported('Remote output reads');
+
+  @override
+  Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) =>
+      Future.value(const []);
+
+  @override
+  Future<bool> setSkillEnabled({required String path, required bool enabled}) =>
+      _unsupported('Skill configuration');
+
+  @override
+  Future<List<PluginSummaryModel>> listPlugins({
+    List<String> cwds = const [],
+  }) => Future.value(const []);
+
+  @override
+  Future<List<McpServerStatusModel>> listMcpServerStatus() =>
+      Future.value(const []);
+
+  @override
+  Future<OfficialRemoteControlStatus> readOfficialRemoteControlStatus() =>
+      Future.value(
+        const OfficialRemoteControlStatus(
+          supported: false,
+          errorMessage: 'Not available while connected as a remote client.',
+        ),
+      );
+
+  @override
+  Future<OfficialRemoteControlStatus> setOfficialRemoteControlEnabled(
+    bool enabled,
+  ) => _unsupported('Official Remote Control administration');
+
+  @override
+  Future<OfficialRemoteControlPairing> startOfficialRemoteControlPairing() =>
+      _unsupported('Official Remote Control pairing');
+
+  @override
+  Future<bool> disconnectOfficialRemoteControlClient(String clientId) =>
+      _unsupported('Official Remote Control administration');
 
   Future<T> _unsupported<T>(String operation) => Future.error(
     UnsupportedError('$operation is not available on read-only Remote.'),
