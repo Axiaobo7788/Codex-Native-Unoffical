@@ -6,11 +6,14 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Operating mode
 
-**Mode: `HUMAN_REVIEW`**
+**Mode: `SELF_ITERATION`**
 
-- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_MACHINE_AND_REAL_USE_VERIFIED — HUMAN_REVIEW_REQUIRED`**.
-- Phase marker: **`Official Client Convergence (Milestones M0–M5 Complete)`**.
+- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_HUMAN_REVIEW_PENDING`**.
+- Phase marker: **`Official Client Convergence (M0–M5 checkpoint complete; program continues)`**.
 - Prior status: `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`.
+- The Desktop fidelity / semantic-primitives slice is now **`HUMAN_REVIEW_PENDING` only**. Its subjective visual/interaction acceptance remains with the user, but that review does **not** block the larger Official Client Convergence program.
+- While that slice awaits Human review, keep the repository in `SELF_ITERATION` and continue independent machine-actionable convergence work. Use `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` plus the current code/reverse evidence to choose the highest-value supported `MISSING` / `PARTIAL` capability that does not depend on private unsupported APIs or the pending visual judgment.
+- A completed milestone, green CI, Victory Auditor approval, or pending Human review must not be treated as a global stop signal. Only switch the whole project to `HUMAN_REVIEW` when all remaining authorized material work is blocked on Human input or the user explicitly asks to pause.
 - Convergence Phase Completion Summary: Successfully executed the full 6-stage Official Client Convergence roadmap authorized in `ORIGINAL_REQUEST.md`:
   1. Stage 0 Hygiene & Security (`0858bb8`, `fd0db59`): Audited and pinned all GitHub Action workflows to verified 40-char commit SHAs with `# vX.Y.Z` comments across `.github/workflows/ci.yml` and `desktop-review-artifacts.yml`; de-identified all personal local Codex thread UUIDs in repository memory.
   2. Stage 1 & 2 Evidence Refresh (`d1c4bb0`): Clean-room analysis of installed ChatGPT/Codex Desktop `26.1103.32239` (build `25471`), 2,970 custom CSS variables, and stock `codex app-server 0.167.0-alpha.3.2` schemas; clean web-sourced Android APK research; strict two-axis evidence confidence grading.
@@ -43,7 +46,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Desktop shared conversation foundation checkpoint (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol attachments bounding, envelope sanitization, semantics transform, and documentation reconciliation complete and verified on hosted CI.**
 
-**Current phase — Official Client Convergence (Milestones M0–M5 Complete): IMPLEMENTATION_MACHINE_AND_REAL_USE_COMPLETE — HUMAN_REVIEW_REQUIRED.**
+**Current phase — Official Client Convergence: M0–M5 is a verified checkpoint; Desktop UI fidelity is `HUMAN_REVIEW_PENDING`, while the larger program remains `SELF_ITERATION` and must continue through independent functional/reverse/compatibility slices.**
 
 ## Current repository state
 

@@ -17,10 +17,12 @@ Before finishing any task that materially changes the repository:
 
 ## Operating modes
 
-Every non-trivial task operates in exactly one explicit project mode. Read the
-current mode from `PROJECT_STATUS.md` before starting. If the status file does
-not name a mode, do not guess from an old completion marker; treat the latest
-explicit user instruction as authoritative and update the status file.
+Every non-trivial task has one explicit **program-level** operating mode. Read
+the current mode from `PROJECT_STATUS.md` before starting. Individual slices
+may additionally be marked `HUMAN_REVIEW_PENDING` without changing the larger
+program out of `SELF_ITERATION`. If the status file does not name a mode, do
+not guess from an old completion marker; treat the latest explicit user
+instruction as authoritative and update the status file.
 
 ### `SELF_ITERATION`
 
@@ -50,26 +52,69 @@ decision, production/private-API dependency, or unrelated infrastructure work.
 
 ### `HUMAN_REVIEW`
 
-Enter `HUMAN_REVIEW` only when the remaining material question cannot be
-reliably resolved by machine/agent evidence, including:
+Human review is **slice-scoped by default, not program-scoped**.
+
+Mark an individual slice `HUMAN_REVIEW_PENDING` when a material question
+cannot be reliably resolved by machine/agent evidence, including:
 
 - subjective product quality, visual fidelity, interaction feel, or long-session
   usability that genuinely requires a person;
 - physical-device/platform behavior unavailable to the current environment;
 - a high-impact or irreversible choice that requires explicit user approval;
 - multiple technically valid product directions where user preference is the
-  deciding constraint;
-- an explicit user instruction to stop for review.
+  deciding constraint.
 
-Before switching from `SELF_ITERATION` to `HUMAN_REVIEW`, exhaust the
-reasonable machine-actionable work within scope. "It would be nice for the user
-to look at this" is not by itself a stop condition.
+When one slice reaches `HUMAN_REVIEW_PENDING`:
+
+- freeze further **subjective** changes to that slice unless a test, clear defect,
+  or new objective evidence requires correction;
+- keep the overall authorized program in `SELF_ITERATION`;
+- continue every independent machine-actionable slice that does not depend on
+  the pending Human decision;
+- select the next highest-priority independent item from the active roadmap,
+  feature matrix, or status file and proceed without asking whether to continue.
+
+Switch the **whole project** to `HUMAN_REVIEW` only when:
+
+- every remaining authorized material task is genuinely blocked by Human input;
+  or
+- the user explicitly instructs the agent to pause for review.
+
+A successful milestone, commit, test suite, CI run, Victory Auditor approval, or
+`HUMAN_REVIEW_PENDING` slice is **not** a stop condition for the larger
+authorized program.
+
+Before switching the whole program from `SELF_ITERATION` to `HUMAN_REVIEW`,
+exhaust the reasonable independent machine-actionable work within scope. "It
+would be nice for the user to look at this" is not by itself a stop condition.
 
 Human feedback is new high-priority evidence. Unless the user explicitly asks
 to remain paused, a reported defect/rejection automatically returns the affected
-authorized phase to `SELF_ITERATION`: diagnose, fix, regression-test, exercise
-the real path, update project memory, and continue until a genuine Human gate is
-reached again.
+authorized slice to active `SELF_ITERATION`: diagnose, fix, regression-test,
+exercise the real path, update project memory, and continue.
+
+### Blocking, permission, and decision rules
+
+Do not let a routine permission gate or reversible engineering choice silently
+stall a long-running `SELF_ITERATION` program.
+
+- Resolve ordinary reversible implementation choices autonomously from source,
+  tests, measurements, architecture rules, and existing ADRs.
+- Do not stop to ask the user to choose between multiple safe, reversible
+  technical approaches when one can be selected on engineering evidence.
+- If several permission-sensitive operations are foreseeable, batch or surface
+  them as early as practical rather than discovering them hours into execution.
+- If one optional operation is blocked on permission or unavailable tooling,
+  continue all independent unblocked work first.
+- Stop for a permission only when that permission is genuinely on the critical
+  path for **all** remaining authorized material work.
+- Destructive user-data operations, force-push/history rewriting, credential or
+  account-security actions, releases/signing, production/private-API
+  dependencies, and other irreversible/high-impact actions still require the
+  appropriate Human authorization.
+- Never reinterpret a completed subagent/teamwork milestone as permission to
+  idle. Integrate its result, update durable status, and continue to the next
+  authorized independent slice.
 
 ### Evidence labels and completion claims
 
