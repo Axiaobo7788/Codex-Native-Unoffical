@@ -351,6 +351,7 @@ class ConversationController extends ChangeNotifier {
         _notify();
       case TurnCompletedEvent():
         _flushDeltas();
+        _finalizeTurnEntries(event.turnId, event.status);
         _activeTurnId = null;
         _busy = false;
         _steering = false;
@@ -635,6 +636,35 @@ class ConversationController extends ChangeNotifier {
       completed: false,
       turnId: existing.turnId ?? _activeTurnId,
     );
+  }
+
+  void _finalizeTurnEntries(String turnId, TurnRuntimeStatus turnStatus) {
+    final fallbackStatus = switch (turnStatus) {
+      TurnRuntimeStatus.interrupted => 'interrupted',
+      TurnRuntimeStatus.failed => 'failed',
+      _ => 'completed',
+    };
+    for (var i = 0; i < _entries.length; i++) {
+      final entry = _entries[i];
+      if (entry.completed) {
+        continue;
+      }
+      if (turnId.isNotEmpty && entry.turnId != null && entry.turnId != turnId) {
+        continue;
+      }
+      final currentStatus = entry.status;
+      final resolvedStatus =
+          currentStatus == null ||
+              currentStatus == 'inProgress' ||
+              currentStatus == 'running'
+          ? fallbackStatus
+          : currentStatus;
+      _entries[i] = entry.copyWith(
+        completed: true,
+        turnId: entry.turnId ?? (turnId.isEmpty ? null : turnId),
+        status: resolvedStatus,
+      );
+    }
   }
 
   void _upsert(ConversationEntry entry) {
