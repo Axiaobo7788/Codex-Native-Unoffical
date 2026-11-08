@@ -1847,3 +1847,45 @@ With Slices `F1–F3` (`ADR-034`, `64b2566`) complete and verified, three additi
 
 - Completes Slices `F4–F6` of the `Official Client Convergence` functional roadmap while keeping `lib/src/domain/` strictly acyclic (`0` Flutter or protocol imports) and preserving all `5/5` M3 Desktop UI geometry viewports.
 - Expands automated verification to `314/314` Flutter tests (`T1.6.9`, `T1.6.10`, `assistant_markdown_test`, `history_protocol_test`, `turn_protocol_test`, `remote_transport_test`) and `98/98` Rust Host tests.
+
+---
+
+## ADR-036 — Unified Bounded App-Server Request Handling and Evidence-Driven Living Backlog
+
+**Status:** Accepted
+
+**Date:** 2026-11-09
+
+### Context
+
+The installed stock `codex app-server 0.167.0-alpha.3.2` schema exposes ten stable server-initiated request methods plus experimental-only `currentTime/read`. The client previously handled approval requests separately and had no typed path for `item/tool/requestUserInput`; unsupported or malformed server requests could therefore remain unresolved. A fresh schema/reverse audit also confirmed that schema availability is not implementation parity: Track A Remote is still read-only, sampled `deferOutput` requests did not produce deferred command output, and `thread/items/read` still returns a whole item rather than a byte range.
+
+The same audit identified three next supported convergence slices (`F7`–`F9`) and a correctness gap in `F7`: `thread/unarchived` and `thread/reverted` carry only a `threadId`, so a bounded Remote thread row cannot be reconstructed accurately from the notification alone.
+
+### Decision
+
+1. **Single bounded dispatcher for every app-server initiated request**:
+   - `ServerRequestProtocolAdapter` is the sole owner of the app-server server-request stream. It preserves the existing command/file/legacy approval response shapes, answers `currentTime/read`, and projects `item/tool/requestUserInput` into typed domain events.
+   - Unsupported, unknown, duplicate-pending, and malformed requests receive deterministic JSON-RPC errors. The client never leaves a request pending merely because the presentation layer does not understand it.
+   - Pending approvals and user-input requests share one cap of `32`. Each user-input request is limited to `3` questions, `20` options per question, and bounded identifiers, headers, labels, descriptions, and answers.
+
+2. **Exact response correlation and value preservation**:
+   - Request IDs are atomically reserved in `_inFlightRequestIds` before awaiting `respond` / `respondError`. Concurrent resolutions fail locally; duplicate incoming IDs cannot create a second correlated response; local completion and `serverRequest/resolved` emit at most one resolved event and cannot remove a newly reused pending ID.
+   - Declared option labels are matched verbatim. Secret answers preserve leading/trailing whitespace; non-secret free text may be normalized only where the typed validation contract allows it.
+   - `currentTime/read` validates its required bounded `threadId`, returns exact Unix seconds from the injected clock, and responds with `-32602` when params are absent or invalid.
+
+3. **Native presentation without weakening memory bounds**:
+   - The Desktop conversation surface presents a native bounded user-input card with declared choices, optional alternate input, free text, secret input, submit, and cancel. No raw JSON reaches widgets, no unbounded request history is retained, and the card remains height-bounded with internal scrolling.
+   - The Remote transport exposes no server-request response surface in this slice. Track A remains `readOnlyCodex`; Remote writes, approvals, user-input responses, and command-output reads continue to fail closed.
+
+4. **Living convergence backlog and calibrated evidence**:
+   - `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` remains a living backlog, not a finite completion checklist. The next supported `READY` items are `F7` bounded Remote lifecycle projection parity, `F8` stable MCP resource/tool/reload/elicitation, and `F9` stable Apps/Plugins lifecycle.
+   - `F7` is Medium cost and spans `remote_projection.dart`, `remote_lifecycle_coordinator.dart`, `remote_session.dart`, and their tests. Rename/archive may update or remove known rows in place; metadata-incomplete unarchive/revert must trigger authoritative resync/rehydration rather than fabricate thread metadata.
+   - Preserve negative evidence: current binary acceptance of `deferOutput` is not proof that output was deferred, and `thread/items/read` remains a whole-item fallback. The Host spool bounds downstream retention but does not make the upstream app-server history response range-lazy.
+
+### Consequences
+
+- Desktop can complete every currently supported app-server request deterministically without duplicating approval dispatch or leaking raw protocol objects into presentation code.
+- Response races, secret/option whitespace corruption, invalid `currentTime/read` params, bounded queue overflow, and UI submission/cancellation paths have direct regression coverage.
+- A stock model did not naturally emit `item/tool/requestUserInput` during the available live probe. Protocol-level real-process response correlation was exercised, but model-driven user-input invocation remains unobserved and is not claimed.
+- `F7`–`F9` remain active machine-actionable work under `SELF_ITERATION`; integration of this ADR is a checkpoint, not a program stop.
