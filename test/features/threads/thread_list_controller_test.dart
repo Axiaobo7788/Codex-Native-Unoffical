@@ -212,6 +212,37 @@ void main() {
     );
     expect(controller.selectedThread?.status, ThreadRuntimeStatus.active);
 
+    gateway.events.add(
+      const ThreadGoalUpdatedEvent(
+        threadId: '1',
+        turnId: 'turn-1',
+        goal: ThreadGoal(
+          objective: 'Converge the supported thread surface',
+          status: ThreadGoalStatus.active,
+          createdAtSeconds: 100,
+          updatedAtSeconds: 120,
+          tokensUsed: 42,
+          timeUsedSeconds: 20,
+          tokenBudget: 500,
+        ),
+      ),
+    );
+    expect(
+      controller.selectedThread?.goal?.objective,
+      'Converge the supported thread surface',
+    );
+    expect(controller.threads.first.goal?.tokensUsed, 42);
+
+    await controller.resumeThread('1');
+    expect(
+      controller.selectedThread?.goal?.objective,
+      'Converge the supported thread surface',
+    );
+
+    gateway.events.add(const ThreadGoalClearedEvent(threadId: '1'));
+    expect(controller.selectedThread?.goal, isNull);
+    expect(controller.threads.first.goal, isNull);
+
     gateway.events.add(const ThreadArchivedEvent(threadId: '1'));
     expect(controller.threads.map((t) => t.id), ['2']);
     expect(controller.selectedThread?.id, '2');

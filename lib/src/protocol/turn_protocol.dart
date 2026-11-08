@@ -142,6 +142,9 @@ final class TurnProtocolAdapter {
       'hook/completed' => _parseHookNotification(params, completed: true),
       'model/rerouted' => _parseModelRerouted(params),
       'warning' => _parseWarning(params),
+      'guardianWarning' => _parseWarning(params),
+      'configWarning' => _parseSummaryWarning(params, label: 'Config'),
+      'deprecationNotice' => _parseSummaryWarning(params, label: 'Deprecation'),
       'error' => _parseError(params),
       _ => null,
     };
@@ -347,6 +350,27 @@ final class TurnProtocolAdapter {
     return TurnWarningEvent(
       threadId: _optionalString(params, 'threadId') ?? '',
       message: message,
+    );
+  }
+
+  static TurnWarningEvent _parseSummaryWarning(
+    JsonObject params, {
+    required String label,
+  }) {
+    final summary = _truncate(
+      _requiredString(params, 'summary').trim(),
+      _maxWarningMessageLength,
+    );
+    final rawDetails = _optionalString(params, 'details')?.trim();
+    final details = rawDetails == null
+        ? null
+        : _truncate(rawDetails, _maxWarningMessageLength);
+    final message = details == null || details.isEmpty
+        ? '$label: $summary'
+        : '$label: $summary — $details';
+    return TurnWarningEvent(
+      threadId: '',
+      message: _truncate(message, _maxWarningMessageLength),
     );
   }
 

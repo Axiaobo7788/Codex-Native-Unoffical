@@ -58,6 +58,120 @@ void main() {
   });
 
   test(
+    'bounds git metadata and removes URL credentials and query data',
+    () async {
+      responses['thread/list'] = {
+        'data': [
+          {
+            ..._threadJson(id: 'thread-git'),
+            'gitInfo': {
+              'branch': 'b' * 600,
+              'originUrl': 'https://user:secret@example.test/owner/repo.git?token=secret#fragment',
+              'sha': 'a' * 200,
+            },
+          },
+        ],
+        'nextCursor': null,
+      };
+
+      final page = await adapter.listThreads(const ThreadListQuery());
+      final gitInfo = page.threads.single.gitInfo!;
+
+      expect(gitInfo.branch, hasLength(513));
+      expect(gitInfo.branch, endsWith('…'));
+      expect(gitInfo.sha, hasLength(129));
+      expect(gitInfo.sha, endsWith('…'));
+      expect(gitInfo.originUrl, 'https://example.test/owner/repo.git');
+    },
+  );
+
+  test(
+    'drops credential-bearing git origins that cannot be sanitized',
+    () async {
+      responses['thread/list'] = {
+        'data': [
+          {
+            ..._threadJson(id: 'thread-git-malformed'),
+            'gitInfo': {
+              'branch': 'main',
+              'originUrl': 'https://user:secret@',
+              'sha': 'abc123',
+            },
+          },
+          {
+            ..._threadJson(id: 'thread-git-scp-credentials'),
+            'gitInfo': {
+              'branch': 'main',
+              'originUrl': 'user:secret@example.test:owner/repo.git',
+              'sha': 'def456',
+            },
+          },
+        ],
+        'nextCursor': null,
+      };
+
+      final page = await adapter.listThreads(const ThreadListQuery());
+
+      expect(page.threads, hasLength(2));
+      expect(page.threads[0].gitInfo?.originUrl, isNull);
+      expect(page.threads[1].gitInfo?.originUrl, isNull);
+    },
+  );
+
+  test('preserves normal SCP-like git origins without suffix data', () async {
+    responses['thread/list'] = {
+      'data': [
+        {
+          ..._threadJson(id: 'thread-git-scp'),
+          'gitInfo': {
+            'branch': 'main',
+            'originUrl':
+                'git@example.test:owner/repo.git?token=secret#fragment',
+            'sha': 'abc123',
+          },
+        },
+      ],
+      'nextCursor': null,
+    };
+
+    final page = await adapter.listThreads(const ThreadListQuery());
+
+    expect(
+      page.threads.single.gitInfo?.originUrl,
+      'git@example.test:owner/repo.git',
+    );
+  });
+
+  test('drops overlong git origins before parsing or reconstruction', () async {
+    responses['thread/list'] = {
+      'data': [
+        {
+          ..._threadJson(id: 'thread-git-overlong-url'),
+          'gitInfo': {
+            'branch': 'main',
+            'originUrl': 'https://example.test/${'a' * 1100}',
+            'sha': 'abc123',
+          },
+        },
+        {
+          ..._threadJson(id: 'thread-git-overlong-scp'),
+          'gitInfo': {
+            'branch': 'main',
+            'originUrl': 'git@example.test:${'b' * 1100}',
+            'sha': 'def456',
+          },
+        },
+      ],
+      'nextCursor': null,
+    };
+
+    final page = await adapter.listThreads(const ThreadListQuery());
+
+    expect(page.threads[0].gitInfo?.originUrl, isNull);
+    expect(page.threads[1].gitInfo?.originUrl, isNull);
+  });
+
+  test(
     'passes archived filter and trimmed searchTerm in thread/list',
     () async {
       responses['thread/list'] = {
@@ -233,8 +347,33 @@ void main() {
         },
       ),
     );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/goal/updated',
+        params: {
+          'threadId': 't-1',
+          'turnId': 'turn-1',
+          'goal': {
+            'threadId': 't-1',
+            'objective': 'Ship the supported projection',
+            'status': 'active',
+            'createdAt': 100,
+            'updatedAt': 120,
+            'tokensUsed': 42,
+            'timeUsedSeconds': 20,
+            'tokenBudget': 500,
+          },
+        },
+      ),
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/goal/cleared',
+        params: {'threadId': 't-1'},
+      ),
+    );
 
-    expect(received, hasLength(5));
+    expect(received, hasLength(7));
     expect(
       received[0],
       isA<ThreadNameUpdatedEvent>()
@@ -265,6 +404,78 @@ void main() {
           .having((e) => e.threadId, 'threadId', 't-1')
           .having((e) => e.status, 'status', ThreadRuntimeStatus.active),
     );
+    expect(
+      received[5],
+      isA<ThreadGoalUpdatedEvent>()
+          .having((e) => e.threadId, 'threadId', 't-1')
+          .having((e) => e.turnId, 'turnId', 'turn-1')
+          .having(
+            (e) => e.goal.objective,
+            'objective',
+            'Ship the supported projection',
+          )
+          .having((e) => e.goal.status, 'status', ThreadGoalStatus.active)
+          .having((e) => e.goal.tokenBudget, 'tokenBudget', 500),
+    );
+    expect(received[6], isA<ThreadGoalClearedEvent>());
+  });
+
+  test('bounds goal objectives at parser ingress', () async {
+    final received = <ThreadLifecycleEvent>[];
+    final sub = adapter.events.listen(received.add);
+    addTearDown(sub.cancel);
+
+    notifications.add(
+      CodexNotification(
+        method: 'thread/goal/updated',
+        params: {
+          'threadId': 't-1',
+          'goal': {
+            'threadId': 't-1',
+            'objective': 'x' * 4096,
+            'status': 'paused',
+            'createdAt': 100,
+            'updatedAt': 120,
+            'tokensUsed': 42,
+            'timeUsedSeconds': 20,
+            'tokenBudget': null,
+          },
+        },
+      ),
+    );
+
+    final event = received.single as ThreadGoalUpdatedEvent;
+    expect(event.goal.objective, hasLength(2049));
+    expect(event.goal.objective, endsWith('…'));
+    expect(event.goal.status, ThreadGoalStatus.paused);
+  });
+
+  test('rejects a goal routed to a different thread', () async {
+    final error = expectLater(
+      adapter.events,
+      emitsError(isA<ProtocolViolation>()),
+    );
+
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/goal/updated',
+        params: {
+          'threadId': 't-1',
+          'goal': {
+            'threadId': 't-2',
+            'objective': 'Wrong target',
+            'status': 'active',
+            'createdAt': 100,
+            'updatedAt': 120,
+            'tokensUsed': 42,
+            'timeUsedSeconds': 20,
+            'tokenBudget': null,
+          },
+        },
+      ),
+    );
+
+    await error;
   });
 
   test('deletes only the explicitly identified thread', () async {

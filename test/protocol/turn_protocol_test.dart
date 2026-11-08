@@ -565,10 +565,35 @@ void main() {
             'message': 'Approaching workspace rate limit window.',
           },
         ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'guardianWarning',
+          params: {
+            'threadId': 'thread-1',
+            'message': 'Approval review requires extra caution.',
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'configWarning',
+          params: {
+            'summary': 'Project config contains a deprecated key.',
+            'details': 'Use the supported replacement.',
+            'path': '/private/workspace/.codex/config.toml',
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'deprecationNotice',
+          params: {'summary': 'Legacy option is deprecated.', 'details': null},
+        ),
       );
     await pumpEventQueue();
 
-    expect(events, hasLength(8));
+    expect(events, hasLength(11));
 
     final planEvent = events[0] as TurnPlanUpdatedEvent;
     expect(planEvent.plan.steps, hasLength(50));
@@ -617,6 +642,48 @@ void main() {
     final warning = events[7] as TurnWarningEvent;
     expect(warning.threadId, 'thread-1');
     expect(warning.message, 'Approaching workspace rate limit window.');
+
+    final guardianWarning = events[8] as TurnWarningEvent;
+    expect(guardianWarning.threadId, 'thread-1');
+    expect(guardianWarning.message, 'Approval review requires extra caution.');
+
+    final configWarning = events[9] as TurnWarningEvent;
+    expect(configWarning.threadId, isEmpty);
+    expect(
+      configWarning.message,
+      'Config: Project config contains a deprecated key. — Use the supported replacement.',
+    );
+    expect(configWarning.message, isNot(contains('/private/workspace')));
+
+    final deprecationNotice = events[10] as TurnWarningEvent;
+    expect(deprecationNotice.threadId, isEmpty);
+    expect(
+      deprecationNotice.message,
+      'Deprecation: Legacy option is deprecated.',
+    );
+  });
+
+  test('bounds config warning content at parser ingress', () async {
+    final events = <TurnEvent>[];
+    final sub = adapter.events.listen(events.add);
+    addTearDown(sub.cancel);
+
+    notifications.add(
+      CodexNotification(
+        method: 'configWarning',
+        params: {
+          'summary': 's' * 500,
+          'details': 'd' * 500,
+          'path': '/private/path/that/must/not/be/projected',
+        },
+      ),
+    );
+    await pumpEventQueue();
+
+    final warning = events.single as TurnWarningEvent;
+    expect(warning.message, hasLength(321));
+    expect(warning.message, endsWith('…'));
+    expect(warning.message, isNot(contains('/private/path')));
   });
 
   test('truncates oversized reasoning delta, model reroute fields, and MCP tool identifiers at parser ingress', () async {

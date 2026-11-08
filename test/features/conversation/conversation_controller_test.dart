@@ -143,6 +143,35 @@ void main() {
     expect(controller.thread?.id, 'thread-2');
   });
 
+  test('retains bounded process warnings emitted before a thread is bound', () {
+    final localGateway = _FakeTurnGateway();
+    final localSettings = ExecutionSettingsController(
+      gateway: _FakeModelGateway(),
+    );
+    final localController = ConversationController(
+      gateway: localGateway,
+      settings: localSettings,
+      coalesceInterval: Duration.zero,
+    );
+    addTearDown(() async {
+      localController.dispose();
+      localSettings.dispose();
+      await localGateway.dispose();
+    });
+
+    localGateway.events.add(TurnWarningEvent(threadId: '', message: 'w' * 500));
+
+    expect(localController.latestWarning, hasLength(321));
+    localController.bindThread(_thread());
+    expect(localController.latestWarning, hasLength(321));
+    localController.clearEntries();
+    expect(localController.latestWarning, hasLength(321));
+
+    localController.dismissTelemetryNotice();
+    localController.bindThread(_thread(id: 'thread-2'));
+    expect(localController.latestWarning, isNull);
+  });
+
   test('steers an active turn when turn/started has been observed', () async {
     await controller.submit(
       'Initial instruction',

@@ -106,7 +106,7 @@ class ThreadListController extends ChangeNotifier {
       for (final thread in page.threads) {
         if (seenIds.add(thread.id)) {
           if (uniqueThreads.length < maxRetainedThreads) {
-            uniqueThreads.add(thread);
+            uniqueThreads.add(_preserveTransientState(thread));
           }
         } else {
           hadDuplicates = true;
@@ -133,7 +133,7 @@ class ThreadListController extends ChangeNotifier {
         for (final thread in nextPage.threads) {
           if (seenIds.add(thread.id) &&
               uniqueThreads.length < maxRetainedThreads) {
-            uniqueThreads.add(thread);
+            uniqueThreads.add(_preserveTransientState(thread));
           }
         }
         cursor = nextPage.nextCursor;
@@ -233,9 +233,9 @@ class ThreadListController extends ChangeNotifier {
         return null;
       }
       _unmaterializedThreadIds.remove(threadId);
-      _replaceInPlace(thread);
-      _selectedThread = thread;
-      return thread;
+      final retainedThread = _replaceInPlace(thread);
+      _selectedThread = retainedThread;
+      return retainedThread;
     } catch (error) {
       _errorMessage = error.toString();
       return null;
@@ -258,9 +258,9 @@ class ThreadListController extends ChangeNotifier {
         return null;
       }
       _unmaterializedThreadIds.remove(threadId);
-      _replaceInPlace(thread);
-      _selectedThread = thread;
-      return thread;
+      final retainedThread = _replaceInPlace(thread);
+      _selectedThread = retainedThread;
+      return retainedThread;
     } catch (error) {
       _errorMessage = error.toString();
       return null;
@@ -407,13 +407,13 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return null;
       }
-      _replaceInPlace(thread);
-      if (_selectedThread?.id == thread.id) {
-        _selectedThread = thread;
+      final retainedThread = _replaceInPlace(thread);
+      if (_selectedThread?.id == retainedThread.id) {
+        _selectedThread = retainedThread;
       }
-      _lastRevertedThreadId = thread.id;
+      _lastRevertedThreadId = retainedThread.id;
       _revertVersion += 1;
-      return thread;
+      return retainedThread;
     } catch (error) {
       _errorMessage = error.toString();
       return null;
@@ -507,6 +507,12 @@ class ThreadListController extends ChangeNotifier {
         }
         _applyStatusUpdate(threadId, status);
         _notify();
+      case ThreadGoalUpdatedEvent(:final threadId, :final goal):
+        _applyGoalUpdate(threadId, goal);
+        _notify();
+      case ThreadGoalClearedEvent(:final threadId):
+        _clearGoal(threadId);
+        _notify();
       case ThreadArchivedEvent(:final threadId):
         if (!_showArchived) {
           final wasSelected = _selectedThread?.id == threadId;
@@ -560,22 +566,61 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
-  void _replaceOrPrepend(ThreadSummary thread) {
+  void _applyGoalUpdate(String threadId, ThreadGoal goal) {
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index != -1) {
+      _threads[index] = _threads[index].copyWith(goal: goal);
+    }
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = _selectedThread!.copyWith(goal: goal);
+    }
+  }
+
+  void _clearGoal(String threadId) {
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index != -1) {
+      _threads[index] = _threads[index].copyWith(clearGoal: true);
+    }
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = _selectedThread!.copyWith(clearGoal: true);
+    }
+  }
+
+  ThreadSummary _replaceOrPrepend(ThreadSummary thread) {
+    thread = _preserveTransientState(thread);
     _threads.removeWhere((candidate) => candidate.id == thread.id);
     _threads.insert(0, thread);
     if (_threads.length > maxRetainedThreads) {
       _threads.removeRange(maxRetainedThreads, _threads.length);
     }
     _synchronizeSelection();
+    return thread;
   }
 
-  void _replaceInPlace(ThreadSummary thread) {
+  ThreadSummary _replaceInPlace(ThreadSummary thread) {
+    thread = _preserveTransientState(thread);
     final index = _threads.indexWhere((candidate) => candidate.id == thread.id);
     if (index == -1) {
-      _replaceOrPrepend(thread);
+      return _replaceOrPrepend(thread);
     } else {
       _threads[index] = thread;
     }
+    return thread;
+  }
+
+  ThreadSummary _preserveTransientState(ThreadSummary thread) {
+    if (thread.goal != null) {
+      return thread;
+    }
+    ThreadSummary? retained;
+    final index = _threads.indexWhere((candidate) => candidate.id == thread.id);
+    if (index != -1) {
+      retained = _threads[index];
+    } else if (_selectedThread?.id == thread.id) {
+      retained = _selectedThread;
+    }
+    final goal = retained?.goal;
+    return goal == null ? thread : thread.copyWith(goal: goal);
   }
 
   void _synchronizeSelection() {
