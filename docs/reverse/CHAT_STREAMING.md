@@ -23,13 +23,13 @@ This specification details the wire event formats, the **50 ms Stream Coalescing
 In the stock `codex app-server` runtime, streaming events are dispatched as asynchronous server notifications over stdout:
 
 ```json
-{"jsonrpc":"2.0","method":"thread/token/delta","params":{"threadId":"th-8291","turnId":"tu-0192","delta":"\n```dart\n"}}
-{"jsonrpc":"2.0","method":"command/exec/outputDelta","params":{"threadId":"th-8291","turnId":"tu-0192","itemId":"it-4410","delta":"Compiling codex_native v0.1.0\n"}}
+{"jsonrpc":"2.0","method":"item/agentMessage/delta","params":{"threadId":"th-8291","turnId":"tu-0192","itemId":"it-1001","delta":"\n```dart\n"}}
+{"jsonrpc":"2.0","method":"item/completed","params":{"threadId":"th-8291","turnId":"tu-0192","item":{"id":"it-4410","type":"commandExecution","command":"cargo build","status":"completed"}}}
 ```
 
-- **Notification Method**: `thread/token/delta` (for assistant markdown prose)
-- **Output Notification**: `command/exec/outputDelta` (for raw terminal outputs)
-- **Completion Event**: `turn/completed` with turn metrics and final status
+- **Notification Method**: `item/agentMessage/delta` (for assistant markdown prose token deltas; `TurnProtocolAdapter` parses into `AssistantTextDeltaEvent`)
+- **Activity & Output Notification**: `item/started` / `item/completed` (with large `aggregatedOutput` replaced by `_codexNativeOutput` spool descriptors in `codex-native-host`)
+- **Completion Event**: `turn/completed` with turn status and optional error summary
 
 ### 2.2 Server-Sent Events (SSE) Stream (`https://api.openai.com/v1`)
 

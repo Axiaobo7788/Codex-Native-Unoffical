@@ -62,24 +62,35 @@ The official desktop client bundles `codex app-server` (`codex-cli 0.167.0-alpha
 | RPC Method | Parameters | Return Type | Role in Client Architecture |
 |---|---|---|---|
 | `initialize` | `clientInfo: { name, version }`, `capabilities` | `InitializeResult` | Handshake establishing protocol version and client capabilities. |
-| `thread/list` | `cursor?: string`, `limit?: number` | `{ threads: ThreadSummary[], nextCursor }` | Paginated catalog enumeration; bounded to 100 threads in native client. |
-| `thread/read` | `threadId: string` | `ThreadDetail` | Hydrates top-level thread metadata without loading unbounded turns. |
-| `thread/start` | `model?: string`, `effort?: string`, `cwd?: string` | `{ threadId: string }` | Spawns a new active Codex session in target workspace. |
-| `turn/start` | `threadId: string`, `input: UserInput` | `{ turnId: string }` | Dispatches user prompt, attachments, and configuration. |
-| `turn/interrupt`| `threadId: string`, `turnId: string` | `void` | Requests immediate cancellation/abortion of running turn. |
-| `thread/items/list` | `threadId`, `turnId`, `deferOutput` | `{ items: ThreadItem[] }` | On-demand lazy fetch of turn items and command outputs. |
-| `remoteControl/pairing/start` | `{}` | `{ pairingCode, expiresAt }` | Initiates pairing handshake for mobile remote control. |
-| `remoteControl/pairing/status`| `pairingId: string` | `{ status: 'pending' \| 'paired' }` | Polls/subscribes to remote device pairing resolution. |
+| `thread/list` | `cursor?: string`, `limit?: number`, `archived?: boolean` | `{ data: ThreadSummary[], nextCursor }` | Paginated catalog enumeration; bounded to 100 threads in native client. |
+| `thread/read` | `threadId: string`, `includeTurns: false` | `{ thread: Thread }` | Hydrates top-level thread metadata without loading unbounded turns. |
+| `thread/start` | `model?: string`, `cwd: string`, `ephemeral: boolean` | `{ thread: Thread }` | Spawns a new active Codex session in target workspace. |
+| `thread/name/set` | `threadId: string`, `name: string` | `{}` | Renames a thread (`PUBLIC_SOURCE` stable). |
+| `thread/archive` / `thread/unarchive` | `threadId: string` | `{}` / `{ thread: Thread }` | Archives or restores a thread (`PUBLIC_SOURCE` stable). |
+| `thread/fork` | `threadId: string`, `beforeTurnId?`, `lastTurnId?`, `excludeTurns: true` | `{ thread: Thread, ... }` | Branches a thread or forks from a specific turn (`PUBLIC_SOURCE` stable). |
+| `thread/revert` | `threadId: string`, `beforeTurnId: string` | `{ thread: Thread, ... }` | Truncates persisted turn history before a selected turn (`PUBLIC_SOURCE` stable). |
+| `thread/compact/start` | `threadId: string` | `{}` | Triggers server-side context compaction (`PUBLIC_SOURCE` stable). |
+| `turn/start` | `threadId: string`, `input: UserInput[]` | `{ turn: Turn }` | Dispatches user prompt, structured attachments, and configuration. |
+| `turn/steer` | `threadId: string`, `expectedTurnId: string`, `input: UserInput[]` | `{ turnId: string }` | Steers an active in-progress turn with follow-up input (`PUBLIC_SOURCE` stable). |
+| `turn/interrupt`| `threadId: string`, `turnId: string` | `{}` | Requests immediate cancellation/abortion of running turn. |
+| `thread/items/list` | `threadId`, `turnId`, `deferOutput` | `{ data: ThreadItemEntry[], nextCursor }` | On-demand lazy fetch of turn items and command outputs. |
+| `skills/list` / `skills/config/write` | `cwds: string[]` / `path, enabled` | `{ data: SkillsListEntry[] }` / `{ effectiveEnabled }` | Discovers and enables/disables workspace and bundled skills (`PUBLIC_SOURCE` stable). |
+| `plugin/list` / `mcpServerStatus/list` | `cwds?: string[]` / `cursor?, limit?` | `{ marketplaces: ... }` / `{ data: McpServerStatus[] }` | Discovers installed plugins and MCP server connection/tool status (`PUBLIC_SOURCE` stable). |
+| `remoteControl/pairing/start` | `{ manualCode?: boolean }` | `{ pairingCode, manualPairingCode?, environmentId, expiresAt }` | Initiates pairing handshake for official remote control (`EXPERIMENTAL_STOCK_SCHEMA`). |
+| `remoteControl/pairing/status`| `{ pairingCode?, manualPairingCode? }` | `{ claimed: boolean }` | Polls remote device pairing resolution (`EXPERIMENTAL_STOCK_SCHEMA`). |
 
 ### 3.2 Key Server Notifications (`ServerNotification.json`)
 
 | Notification Method | Payload Schema | Client Handling |
 |---|---|---|
-| `thread/token/delta` | `{ threadId, turnId, delta: string }` | Streaming prose delta; coalesced over 50 ms window before UI update. |
-| `command/exec/outputDelta` | `{ threadId, turnId, itemId, delta }` | Raw terminal stdout/stderr stream; spooled to disk by Native Host. |
-| `turn/completed` | `{ threadId, turnId, status, error? }` | Finalizes turn; updates relative time; unlocks composer. |
-| `thread/diff/updated` | `{ threadId, diffSummary, hunks }` | Updates inline diff pill (`+A -D`) and refreshes diff center-mode. |
-| `account/rateLimits/updated` | `{ plan, tokensRemaining, resetAt }` | Surfaces rate-limit warnings or plan quota in footer. |
+| `item/agentMessage/delta` | `{ threadId, turnId, itemId, delta: string }` | Streaming prose delta; coalesced over 50 ms window before UI update. |
+| `item/started` / `item/completed` | `{ threadId, turnId, item: ThreadItem }` | Lifecycle of user messages, assistant messages, commands, file changes, and MCP tool calls (`_codexNativeOutput` spooled by Native Host). |
+| `turn/started` / `turn/completed` | `{ threadId, turn: { id, status, error? } }` | Tracks active turn lifecycle, enables `turn/interrupt` & `turn/steer`, and finalizes turn state. |
+| `turn/diff/updated` | `{ threadId, turnId, diff: string }` | Updates bounded unified diff projection (`+A -D`) and refreshes diff view. |
+| `thread/name/updated` | `{ threadId, threadName: string? }` | Synchronizes renamed thread title in sidebar and conversation header. |
+| `thread/archived` / `thread/unarchived` | `{ threadId }` | Synchronizes archived state across active/archived sidebar lists. |
+| `thread/reverted` | `{ threadId, ... }` | Notifies client that turn history was truncated via `thread/revert`. |
+| `account/rateLimits/updated` | `{ rateLimits: ... }` | Surfaces rate-limit warnings or plan quota in status views. |
 
 ### 3.3 Key Server Requests (`ServerRequest.json`)
 
