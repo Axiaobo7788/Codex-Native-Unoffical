@@ -3058,3 +3058,49 @@ _Reviewed: 2026-11-09_
 
 - Reconciled [`docs/ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/reverse/CHAT_COMPATIBILITY_MATRIX.md`](reverse/CHAT_COMPATIBILITY_MATRIX.md), [`docs/reverse/DATA_FLOW.md`](reverse/DATA_FLOW.md), [`docs/reverse/ADOPTION_MATRIX.md`](reverse/ADOPTION_MATRIX.md), [`docs/reverse/PLUGIN_HOST_MAP.md`](reverse/PLUGIN_HOST_MAP.md), [`docs/reverse/CODEX_INTEGRATION_MAP.md`](reverse/CODEX_INTEGRATION_MAP.md), and [`docs/reverse/OFFICIAL_FEATURE_MATRIX.md`](reverse/OFFICIAL_FEATURE_MATRIX.md) with actual `HEAD` (`4a530d2`), preserving the upstream whole-item `thread/items/read` boundary (`deferOutput` accepted as preference, sampled items not deferred by current binary, Host spool sanitizing before Dart decode).
 - **Concrete Code Audit Finding Queued in `READY` (`Slice F7`)**: While Slice F6 added `thread/name/updated`, `thread/archived`, `thread/unarchived`, and `thread/reverted` to `native_host/src/transform.rs` (`is_remote_notification`) and `lib/src/transport/remote/remote_transport.dart` (`_eventMethods`), [`BoundedRemoteProjection.apply()`](../lib/src/transport/remote/remote_projection.dart) (`lines 86–97`) only handles `turn/started`, `turn/completed`, `thread/status/changed`, `item/started`, `item/completed`, and `error`, throwing `ProtocolViolation('Remote projection cannot apply ${notification.method}.')` if any of the 4 thread lifecycle notifications arrives while `RemoteLifecycleCoordinator` is active.
+
+## Peer Round 3: F7 Remote Lifecycle and F9 Apps/Plugins Closure
+
+_Reviewed: 2026-11-09_
+
+### Remote lifecycle evidence
+
+- `thread/name/updated` includes sufficient bounded metadata for an in-place
+  rename, and `thread/archived` can remove a known row. In contrast,
+  `thread/unarchived` and `thread/reverted` identify a thread but do not carry a
+  complete `ThreadSummary`; authoritative `model/list` + `thread/list`
+  rehydration is required to avoid invented metadata.
+- Transport-buffered events are synchronously released by `completeResync`, but
+  coordinator application is serialized asynchronously. Readiness must wait for
+  that event tail and repeat hydration if a released event requests a new
+  generation.
+- A same-connection resync can advance while an earlier projection mutation is
+  awaiting. Capturing the resync generation and checking it before and after
+  cursor persistence prevents the older event from regressing the applied
+  cursor. `RemoteAppliedCursorStore` serializes saves in invocation order; a
+  later authoritative hydration remains the durable winner even if an older
+  save had already started before resync.
+- `RemoteTransport.resumeCursor` represents received/buffered transport
+  progress. The coordinator does not use it for reconnect; it uses its own
+  exact persisted projection-applied cursor. No current correctness consumer
+  needs a new cross-layer applied-event acknowledgement API.
+
+### Stable Apps/Plugins evidence and availability boundary
+
+- The installed stock `0.167.0-alpha.3.2` schema confirms stable
+  `app/list`, `app/installed`, `app/read`, `plugin/read`, `plugin/install`, and
+  `plugin/uninstall`. Live integration against the installed binary verified
+  plugin list/read, installed Apps, and `app/read` on available local state.
+- `app/list` is catalog/network dependent and can time out in an offline
+  environment. This is an operational availability boundary, not evidence that
+  the stable RPC is absent. Native therefore loads catalog state independently
+  and preserves installed Apps plus the other ecosystem sections on catalog
+  failure.
+- Protocol parsing caps and deduplicates catalog items at `100`. Presentation
+  uses lazy `SliverList.builder` rows; an automated scroll regression proves an
+  offscreen row is not initially constructed, becomes visible after scrolling,
+  and the first row is no longer built at the bottom. Refresh regressions also
+  prove disappeared plugin/app IDs do not resurrect stale detail, expansion,
+  missing-ID, or in-flight state.
+- These are `MACHINE VERIFIED` and protocol `LIVE_CALLED` findings. The Apps and
+  Plugins visual/interaction quality has not received Human acceptance.

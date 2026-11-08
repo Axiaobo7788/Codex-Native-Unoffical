@@ -1889,3 +1889,75 @@ The same audit identified three next supported convergence slices (`F7`–`F9`) 
 - Response races, secret/option whitespace corruption, invalid `currentTime/read` params, bounded queue overflow, and UI submission/cancellation paths have direct regression coverage.
 - A stock model did not naturally emit `item/tool/requestUserInput` during the available live probe. Protocol-level real-process response correlation was exercised, but model-driven user-input invocation remains unobserved and is not claimed.
 - `F7`–`F9` remain active machine-actionable work under `SELF_ITERATION`; integration of this ADR is a checkpoint, not a program stop.
+
+---
+
+## ADR-037 — Authoritative Remote Lifecycle Generations and Independently Bounded Ecosystem Catalogs
+
+**Status:** Accepted
+
+**Date:** 2026-11-09
+
+### Context
+
+Track A already forwarded stable thread lifecycle notifications, but its bounded
+projection could only apply turn/status events. `thread/unarchived` and
+`thread/reverted` carry only an identifier, so synthesizing a row would invent
+metadata. The lifecycle coordinator also had two coupled races: it could publish
+`ready` before transport-buffered events had been classified, and an event that
+started before a same-connection resync could persist or publish an older cursor
+after the authoritative generation advanced.
+
+The stable Apps and Plugins RPCs exposed a separate presentation risk. A remote
+`app/list` catalog can be slow or unavailable while local installed Apps,
+Plugins, Skills, and MCP state are usable. Eagerly constructing every catalog
+card and retaining detail/expansion caches for disappeared IDs would violate the
+project's bounded native projection rules.
+
+### Decision
+
+1. **Authoritative lifecycle rehydration**:
+   - Apply `thread/name/updated` and `thread/archived` in place when their
+     bounded payload is sufficient.
+   - Classify metadata-incomplete `thread/unarchived` and `thread/reverted` as
+     requiring authoritative hydration. Do not fabricate thread summaries.
+   - After `completeResync`, await the serialized event tail inside the
+     hydration loop. If a released event requests another generation, hydrate
+     again before publishing `RemoteLifecyclePhase.ready`.
+
+2. **Generation-fenced applied cursor**:
+   - Capture `session.resyncGeneration` when an event begins.
+   - Before persisting its cursor, and again after the asynchronous save,
+     require the same current connection, no active resync, and the same resync
+     generation. Publish only a same-session monotonic applied cursor.
+   - `RemoteTransport.resumeCursor` remains a transport receipt/buffer
+     diagnostic. Coordinator reconnects use only
+     `RemoteAppliedCursorStore`/`_appliedCursor`; widening the transport API with
+     a second acknowledgement contract is not justified without a correctness
+     consumer.
+
+3. **Independent, bounded Apps/Plugins presentation**:
+   - Keep stable `app/list`, `app/installed`, `app/read`, `plugin/read`,
+     `plugin/install`, and `plugin/uninstall` behind typed ecosystem models and
+     gateway methods. Parse/deduplicate at most `100` catalog items.
+   - Load the network-dependent catalog independently from core ecosystem state
+     with a generation guard. A delayed/failing `app/list` must not block Skills,
+     Plugins, MCP, or installed Apps and must not replace usable installed state.
+   - Render installed and catalog collections with lazy slivers and responsive
+     cards. On refresh, prune detail, expansion, missing-ID, and in-flight read
+     caches to currently reachable identifiers.
+
+### Consequences
+
+- Track A remains `readOnlyCodex`: this decision improves freshness and cursor
+  correctness but does not add thread/turn writes, approvals, command-output
+  reads, or physical-mobile parity.
+- F7 has deterministic regressions for metadata-incomplete lifecycle events,
+  buffered event release, stale hydration, and same-connection generation races.
+- F9 exposes stable Apps/Plugins lifecycle without allowing offline catalog
+  availability or large eager Flutter trees to degrade the rest of the dialog.
+- Plugin reconcile/skill/share methods and optional `ui://` WebView hosting are
+  not implied by this decision. F9 visual quality remains
+  `HUMAN_REVIEW_PENDING`.
+- F8 (stable MCP resource/tool/reload/elicitation) remains machine-actionable;
+  closing F7/F9 and their CI run is not a program stop.

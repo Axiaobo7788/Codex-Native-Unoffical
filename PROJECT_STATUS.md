@@ -8,11 +8,11 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `SELF_ITERATION`**
 
-- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — BOUNDED_SERVER_REQUEST_PARITY_INTEGRATED`**.
-- Phase marker: **`Official Client Convergence (M0–M5 + Functional Slices F1–F6 + bounded stock ServerRequest handling + Post-Review Desktop UI; continued SELF_ITERATION)`**.
+- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — F7_REMOTE_LIFECYCLE_AND_F9_ECOSYSTEM_INTEGRATED`**.
+- Phase marker: **`Official Client Convergence (M0–M5 + Functional Slices F1–F7/F9 + bounded stock ServerRequest handling + Post-Review Desktop UI; continued SELF_ITERATION)`**.
 - Prior status: `OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — DESKTOP_UI_RECONVERGED_AFTER_HUMAN_REVIEW_FEEDBACK` (`617da94`).
 - Per `AGENTS.md` (`### HUMAN_REVIEW`), Human real-use visual feedback on the initial `M3` Desktop UI slice superseded the earlier `M3` visual completion claim and returned the Desktop UI slice to active `SELF_ITERATION` for root-cause remediation against `/opt/codex-desktop/resources/app.asar` (`961657.97fdcc5e7d.js`, `943693.334f9bc224.js`, `634175.4437e0034c.js`, `634303.fe5bdc3dcb.js`, `319fe334fb93.css`) and live Linux desktop window verification.
-- While the updated Desktop UI slice and Functional Convergence slices (`F1–F6`) await fresh Human acceptance (`HUMAN_REVIEW_PENDING`), keep the repository in `SELF_ITERATION` for any remaining independent machine-actionable convergence work or Human feedback integration.
+- While the updated Desktop UI slice and presentation-bearing Functional Convergence slices (`F1–F7`, `F9`) await fresh Human acceptance where applicable (`HUMAN_REVIEW_PENDING`), keep the repository in `SELF_ITERATION` for every remaining independent machine-actionable convergence item or Human feedback integration.
 - **Agent collaboration baseline**: Codex CLI and Antigravity/Gemini now operate as peer agents under `docs/AGENT_COLLABORATION.md`. Gemini is preferentially routed to UI/live visual/reverse work and Codex to architecture/protocol/Rust/state-hardening work, but neither is subordinate; ownership is slice-based, overlapping files have one writer, and disagreements are resolved by repository evidence/tests rather than model identity.
 - **Continuous peer-loop rule**: closing a Codex/Gemini coordinated slice is only a checkpoint. After integration/validation, the peers must re-enter the official `agy` TUI, negotiate the next non-overlapping slices, and continue. An empty `READY` list promotes machine-progressable `RESEARCH_MORE` or a fresh convergence audit; it is not a program stop condition.
 - Convergence Phase Completion Summary:
@@ -51,6 +51,10 @@ This file is the repository's durable project memory. Update it whenever a task 
       - Reconciled reverse/schema documentation with installed stock `codex app-server 0.167.0-alpha.3.2` (`106` stable + `74` experimental-only `ClientRequest`, `10` stable + `1` experimental-only `ServerRequest`, `86` `ServerNotification`) and preserved the negative lazy-output boundary: `deferOutput` is accepted but sampled command output was not deferred, while `thread/items/read` remains a whole-item fallback.
       - Rebuilt the living convergence queue with `F7` Remote lifecycle projection parity, `F8` stable MCP resource/tool/reload/elicitation, and `F9` stable Apps/Plugins lifecycle. `F7` is explicitly Medium cost because metadata-incomplete unarchive/revert events require authoritative resync/rehydration; they cannot be synthesized safely in place.
       - Gemini's targeted follow-up audit of `10ee8df` reported no P0/P1/P2 findings and confirmed all three original findings closed. Track A Remote remains explicitly read-only; this slice did not add Remote writes, approvals, user-input responses, or command-output reads.
+  12. F7 Remote Lifecycle Correctness + F9 Apps/Plugins Lifecycle (`44f49c6`, `4fe3cb5`, `895d474`, `129541a`, `dc22e5e`, `ADR-037`):
+      - Rehydrated metadata-incomplete `thread/unarchived` and `thread/reverted` notifications authoritatively, held coordinator readiness until released buffered events finish applying, and fenced persisted projection cursors across same-connection resync generations. Track A remains bounded and read-only; physical mobile reconnect is not claimed.
+      - Added typed bounded Apps/Plugins list, detail, install, and uninstall paths with independent catalog failure isolation, lazy list construction, refresh-generation guards, and cache pruning. Installed Apps, app detail, and plugin list/read were called successfully against the installed stock app-server; `app/list` remains dependent on external catalog/network availability.
+      - Integrated peer-owned work through isolated branches and targeted audits. Shared validation passed `dart analyze`, `345/345` Flutter tests, `98/98` Rust tests, the bounded history memory benchmark, and a Linux debug build. Apps/Plugins presentation remains `HUMAN_REVIEW_PENDING`; Slice F8 remains machine-actionable.
 - Prior desktop UI marker (`c7cfda4`, preserved history): `OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED` — superseded by Human visual review on 2026-11-08 and re-converged above.
 - Prior foundation marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
 
@@ -2255,34 +2259,43 @@ specific evidence boundaries.
   Turn/item/live-entry/output-window/Markdown caps and Linux synthetic memory
   evidence now exist, but real app-server RSS and cross-platform installed-build
   profiling remain required Phase 3 evidence.
+- `RemoteTransport.resumeCursor` is a transport receipt/buffer diagnostic. The
+  lifecycle coordinator deliberately reconnects only from its separately
+  persisted, projection-applied cursor. Do not expose the transport cursor as
+  proof that Flutter has applied an event without adding an explicit cross-layer
+  acknowledgement contract.
+- Stock `app/list` depends on catalog/network availability and can time out while
+  `app/installed`, `app/read`, and local plugin discovery continue to work. The
+  Apps catalog therefore loads independently and cannot block Skills, Plugins,
+  MCP, or installed-app administration.
 
 ## Next action
 
-`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — BOUNDED_SERVER_REQUEST_PARITY_INTEGRATED — HUMAN_REVIEW_PENDING` (`Mode: SELF_ITERATION`).
+`OFFICIAL_CLIENT_CONVERGENCE_CONTINUING — F7_REMOTE_LIFECYCLE_AND_F9_ECOSYSTEM_INTEGRATED — HUMAN_REVIEW_PENDING` (`Mode: SELF_ITERATION`).
 
 - **LOCAL MACHINE VERIFIED**:
-  - `dart format --output=none --set-exit-if-changed lib test tool` (`161` files, `0` changed);
+  - integrated commits: `44f49c6` (`F7` authoritative lifecycle hydration),
+    `4fe3cb5` (buffered-event readiness fence), `895d474` (resync-generation
+    cursor fence), `129541a` (`F9` Apps/Plugins lifecycle), and `dc22e5e`
+    (non-blocking catalog, lazy rows, and cache pruning);
+  - `dart format --output=none --set-exit-if-changed lib test tool` (`162` files, `0` changed);
   - direct `dart analyze` from the real Unicode repository path (`0` issues, `No issues found!`). This does not supersede the separately preserved Flutter 3.47.1 `flutter analyze` LSP framing failure from that path;
-  - complete `flutter test` suite (`332/332` unit, widget, protocol, and E2E tests passing with 0 failures), including the bounded server-request adapter, response races, user-input card, and stock ecosystem protocol integration;
-  - `flutter test test/app/official_convergence_geometry_test.dart` (`5/5` viewports passing: 1920x1080 FHD, 1440x900 Laptop, 2560x1440 DPR 1.25 QHD, 2560x1440 DPR 2.0 Retina, 720x800 compact workspace);
+  - complete `flutter test` suite (`345/345` unit, widget, protocol, and E2E tests passing with 0 failures), including authoritative Remote rehydration, same-connection resync races, plugin detail/install/uninstall flows, non-blocking Apps catalog failure, lazy 100-row catalog virtualization, and refresh cache pruning;
   - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and full `cargo test --workspace` (`98/98`: 26 library + 68 binary + 4 failure-path tests);
-  - `flutter test tool/history_memory_benchmark.dart --reporter expanded` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, ten discarded 3 MiB heavy-output iterations, `RSS_TURN_DELTA=1454080`, `RSS_HEAVY_OUTPUT_DELTA=28459008`);
+  - `flutter test tool/history_memory_benchmark.dart --reporter expanded` (`HISTORY_MEMORY_BENCHMARK=PASS`, `SOURCE_TURNS=1000`, `RETAINED_TURNS=100`, ten discarded 3 MiB heavy-output iterations, `RSS_TURN_DELTA=1417216`, `RSS_HEAVY_OUTPUT_DELTA=32378880`);
   - `flutter build linux --debug` (`build/linux/x64/debug/bundle/codex_native_unofficial`).
 - **AGENT REAL-USE VERIFIED**:
-  - Fresh integrated Linux debug build at `d1b66a1` launched on KDE Wayland, completed the real stock app-server handshake, displayed `Connected`, hydrated the project/thread sidebar, rendered the product shell at 1920×1080 without visible overflow, and exited through its PTY with zero surviving app, Host, or app-server processes. The known ATK socket and missing cursor-theme warnings recurred without preventing the window.
-  - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` on KDE Wayland (`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, Impeller OpenGLESSDF) against stock `codex app-server` (`0.167.0-alpha.3.2`).
-  - Live stock `codex app-server` protocol integration test (`test/protocol/ecosystem_protocol_test.dart`) exercising `initialize`, `skills/list`, `plugin/list`, `mcpServerStatus/list`, `remoteControl/status/read`, `remoteControl/disable`, `thread/start`, `thread/name/set`, `thread/archive`, `thread/list(archived: true)`, `thread/unarchive`, and `thread/delete` against `/opt/codex-desktop/resources/codex`.
-  - Real coding task executed against stock app-server: `CODING_TASK_SMOKE=PASS`, `TURN_STATUS=completed`, `CHANGED_FILES=1`, `ADDITIONS=1`, `UNEXPECTED_APPROVALS=0`, `SMOKE_THREAD_CLEANED=true`, `HOST_SHUTDOWN_MS=60`.
-  - Clean application exit via VM service and clean process termination verified with zero orphaned processes (`ALL_CLEAN`).
+  - The full test run executed the live stock `codex app-server` integration test against `/opt/codex-desktop/resources/codex` (`0.167.0-alpha.3.2`): initialize, Skills, plugin list/read, installed Apps, `app/read`, MCP status, Remote Control status/disable, and thread start/rename/archive/list/unarchive/delete all passed.
+  - Current F9 Apps UI behavior is machine/widget verified, not claimed as a new Human or agent visual walkthrough. The previously recorded KDE Wayland product-shell walkthrough remains valid historical evidence for the shared shell only.
 - **HOSTED CI VERIFIED**:
-  - The latest previously observed hosted GitHub Actions `CI` workflow (`verify`, `Desktop build (windows-x64)`, `Desktop build (macos-arm64)`) passed on the pre-slice `origin/main`; the bounded server-request integration has not been pushed yet at this status update and therefore has no hosted result claimed.
+  - Exact `bac5c04` passed all hosted jobs before this integration. The new F7/F9 documentation-bearing shared HEAD has not been pushed yet and therefore has no hosted result claimed at this checkpoint.
 - **HUMAN REVIEWED**:
   - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), `17f08f3` / `99e6141` were reviewed to authorize `ADR-032` (`683d431`), and `cb684b5` was reviewed to authorize the **Desktop Shared Conversation Foundation Correction & Evidence Tightening** recalibration.
   - Authoritative user instruction received (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorized the **`Official Client Convergence`** phase.
 - **NOT YET HUMAN VERIFIED**:
-  - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, bounded activity/diff/approval/user-input presentation, and functional convergence slices (`F1` thread lifecycle & `ProductMode`, `F2` active turn steering & structured attachments, `F3` Ecosystem & Dual-Track Remote, `F4` turn edit/regenerate/continue/search & structured writing/citations, `F5` `ConversationBackend` seam, mode capability gating & `ChatConversationDag`, `F6` rich Codex activity projection & Track A bounded read-only history projection) against official client baselines.
+  - Human review and acceptance of the converged Desktop client visual system and functional convergence UI, now including F9 Plugins/Apps catalog/detail/install-state presentation, remain pending.
 
-Machine-actionable next queue: `F7` bounded Remote lifecycle projection parity with authoritative resync for metadata-incomplete unarchive/revert, `F8` stable MCP resource/tool/reload/elicitation, and `F9` stable Apps/Plugins lifecycle. A stock model did not naturally emit `item/tool/requestUserInput` during the available real-process probe, so model-driven invocation remains unobserved rather than claimed complete. The program remains in `SELF_ITERATION`; this integrated checkpoint, the next peer round, and later CI success are not stop conditions.
+Machine-actionable next queue: `F8` stable MCP resource/tool/reload/elicitation remains `READY`. After this shared HEAD is pushed and its exact CI result is observed, reopen the official `agy` TUI, exchange the compact F7/F9 handoff, refresh the living backlog, and negotiate the next non-overlapping peer pair. Candidate independent research/implementation includes supported account/rate-limit/permission diagnostics, but ownership and support classification must be re-anchored against the current schema before writing. A stock model still has not naturally emitted `item/tool/requestUserInput`; model-driven invocation remains unobserved rather than claimed complete. The program remains in `SELF_ITERATION`; this checkpoint, peer review, integration, push, CI, and the next handoff are not stop conditions.
 
 Blockers: None.
 
