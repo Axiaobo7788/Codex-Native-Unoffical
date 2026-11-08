@@ -68,5 +68,5 @@ When an MCP tool returns a resource URI with scheme `ui://`, the protocol bounda
      - `openai/requestModal` & `openai/requestClose`
      - `openai/openExternal` (`ui/open-link`)
 - **Policy & Reclassification for `Codex-Native-Unoffical`**:
-  - Layer A (`mcpServer/resource/read`, `mcpServer/tool/call`, `mcpServer/elicitation/request`) is `PUBLIC_SUPPORTED` stable schema.
+  - Layer A (`mcpServer/resource/read`, `mcpServer/tool/call`, `mcpServer/elicitation/request`, plus `app/list`, `app/installed`, `app/read` and `config/mcpServer/reload`) is `PUBLIC_SUPPORTED` stable schema in `0.167.0-alpha.3.2`. Because Native `HEAD` currently implements only `mcpServerStatus/list`, `plugin/list`, `skills/list`, and `skills/config/write`, these independent stable protocol surfaces are classified as `MISSING` / `PARTIAL` and queued in the active `READY` backlog (`OFFICIAL_FEATURE_MATRIX.md` §3.1).
   - Layer B (`ui://` WebView host) is classified as `RESEARCH_EXHAUSTED` / `DEFERRED_OPTIONAL_WEBVIEW` per `AGENTS.md` Rule #5 (*"No Electron or Node requirement for the core client. Optional plugin web UI may use a system/embedded WebView later, only when required"*). Core client needs no WebView until a user-configured third-party MCP server actively emits `ui://` interactive widget resources.
