@@ -89,9 +89,12 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text('1 workspaces · 1 hooks · 0 errors · 1 warnings'),
+          find.text(
+            '1 shown workspaces · 1 shown hooks · 0 shown errors · 1 shown warnings',
+          ),
           findsOneWidget,
         );
+        expect(find.textContaining('Command handler'), findsOneWidget);
         expect(find.textContaining('pre-tool-lint'), findsOneWidget);
 
         // Emit rolling account/rateLimits/updated notification -> merges in place.
@@ -152,11 +155,12 @@ void main() {
     );
 
     testWidgets(
-      'isolates partial RPC failure while rendering remaining diagnostic sections',
+      'isolates and bounds oversized partial RPC failure, clears stale error on targeted refresh, and handles stream errors cleanly',
       (tester) async {
+        final oversizedTail = 'X' * 4000;
         final harness = E2ERuntimeHarness()
           ..accountDiagnosticsError = StateError(
-            'Simulated account/read failure',
+            'Simulated account/read failure $oversizedTail',
           );
 
         await pumpE2EApp(tester, harness: harness);
@@ -164,14 +168,23 @@ void main() {
         await tester.tap(find.text('Connected'));
         await tester.pumpAndSettle();
 
+        final errorFinder = find.byKey(
+          const ValueKey('runtime-diagnostics-error'),
+        );
+        expect(errorFinder, findsOneWidget);
         expect(
-          find.byKey(const ValueKey('runtime-diagnostics-error')),
+          find.textContaining('Account: Bad state: Simulated account/read'),
           findsOneWidget,
         );
-        expect(
-          find.textContaining('Simulated account/read failure'),
-          findsOneWidget,
+        final errorSelectable = tester.widget<SelectableText>(
+          find.descendant(
+            of: errorFinder,
+            matching: find.byType(SelectableText),
+          ),
         );
+        expect(errorSelectable.data, isNotNull);
+        expect(errorSelectable.data!.length, lessThanOrEqualTo(481));
+        expect(errorSelectable.data!, endsWith('…'));
         expect(
           find.byKey(const ValueKey('runtime-diagnostics-account-card')),
           findsNothing,
@@ -189,6 +202,49 @@ void main() {
           find.byKey(const ValueKey('runtime-diagnostics-hooks-card')),
           findsOneWidget,
         );
+
+        // Recover account/read and trigger a targeted refresh via account/updated:
+        // stale Account error must clear and the Account card must render.
+        harness.accountDiagnosticsError = null;
+        harness.emitAccountUpdated(authMode: 'chatgpt', planType: 'plus');
+        await tester.pumpAndSettle();
+
+        expect(errorFinder, findsNothing);
+        expect(
+          find.byKey(const ValueKey('runtime-diagnostics-account-card')),
+          findsOneWidget,
+        );
+
+        // Emit a malformed notification error on runtimeDiagnosticsEvents:
+        // must be caught and bounded in the dialog without unhandled async exception,
+        // and cleared when a valid diagnostics event arrives.
+        harness.emitDiagnosticsStreamError(
+          FormatException('Malformed account notification $oversizedTail'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(errorFinder, findsOneWidget);
+        expect(
+          find.textContaining(
+            'Diagnostics stream: FormatException: Malformed account notification',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        harness.emitAccountRateLimitsUpdated(
+          const RateLimitBucketSnapshot(
+            limitId: 'codex',
+            primary: RateLimitWindowSnapshot(
+              usedPercent: 55,
+              windowDurationMins: 300,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(errorFinder, findsNothing);
+        expect(find.textContaining('55% used · 300m window'), findsOneWidget);
       },
     );
 

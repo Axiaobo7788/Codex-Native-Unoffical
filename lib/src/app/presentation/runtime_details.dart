@@ -10,12 +10,16 @@ class _RuntimeDetailsDialog extends StatefulWidget {
 }
 
 class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
+  static const int _maxSectionErrorChars = 160;
+  static const int _maxAggregateErrorChars = 480;
+
   StreamSubscription<RuntimeDiagnosticsEvent>? _diagnosticsEventSubscription;
   RuntimeConnectionState? _lastConnectionState;
   var _loading = false;
   var _refreshGeneration = 0;
   var _accountRefreshGeneration = 0;
-  String? _errorMessage;
+  final LinkedHashMap<String, String> _sectionErrors =
+      LinkedHashMap<String, String>();
 
   AccountDiagnosticsSnapshot? _account;
   RateLimitsDiagnosticsSnapshot? _rateLimits;
@@ -24,6 +28,14 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
   ConfigRequirementsSummaryModel? _configRequirements;
   ModelProviderCapabilitiesSnapshot? _providerCapabilities;
   HooksDiagnosticsSnapshot? _hooks;
+
+  String? get _errorMessage {
+    if (_sectionErrors.isEmpty) {
+      return null;
+    }
+    final joined = _sectionErrors.values.join('\n');
+    return _truncateDiagnosticsText(joined, _maxAggregateErrorChars);
+  }
 
   bool get _isRemoteOrUnsupported =>
       widget.controller.usesRemote ||
@@ -84,7 +96,50 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       return;
     }
     _diagnosticsEventSubscription = widget.controller.runtimeDiagnosticsEvents
-        .listen(_handleDiagnosticsEvent);
+        .listen(
+          _handleDiagnosticsEvent,
+          onError: _handleDiagnosticsStreamError,
+        );
+  }
+
+  void _handleDiagnosticsStreamError(Object error, [StackTrace? _]) {
+    if (!mounted || !_canReadLocalDiagnostics) {
+      return;
+    }
+    setState(() {
+      _setSectionError('Diagnostics stream', error);
+    });
+  }
+
+  void _setSectionError(String section, Object? error) {
+    if (error == null) {
+      _sectionErrors.remove(section);
+      return;
+    }
+    _sectionErrors.remove(section);
+    _sectionErrors[section] = _formatBoundedSectionError(section, error);
+  }
+
+  static String _formatBoundedSectionError(String section, Object error) {
+    final normalized = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    final detail = normalized.isEmpty
+        ? 'Request failed.'
+        : _truncateDiagnosticsText(normalized, _maxSectionErrorChars);
+    return '$section: $detail';
+  }
+
+  static String _truncateDiagnosticsText(String value, int maxChars) {
+    if (value.length <= maxChars) {
+      return value;
+    }
+    var end = maxChars;
+    if (end > 0) {
+      final lastUnit = value.codeUnitAt(end - 1);
+      if (lastUnit >= 0xD800 && lastUnit <= 0xDBFF) {
+        end -= 1;
+      }
+    }
+    return '${value.substring(0, end)}…';
   }
 
   void _handleControllerChanged() {
@@ -111,7 +166,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
     _accountRefreshGeneration++;
     setState(() {
       _loading = false;
-      _errorMessage = null;
+      _sectionErrors.clear();
       _account = null;
       _rateLimits = null;
       _permissionProfiles = null;
@@ -129,6 +184,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
     switch (event) {
       case AccountUpdatedDiagnosticsEvent():
         setState(() {
+          _sectionErrors.remove('Diagnostics stream');
           if (_account != null) {
             _account = _account!.applyAccountUpdated(event);
           }
@@ -142,6 +198,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       case AccountRateLimitsUpdatedDiagnosticsEvent():
         if (_rateLimits != null) {
           setState(() {
+            _sectionErrors.remove('Diagnostics stream');
             _rateLimits = _rateLimits!.applyRateLimitsUpdated(event.rateLimits);
           });
         } else {
@@ -158,20 +215,21 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       return;
     }
     final generation = ++_accountRefreshGeneration;
-    final errors = <String>[];
+    Object? accountError;
+    Object? rateLimitsError;
 
     AccountDiagnosticsSnapshot? nextAccount;
     try {
       nextAccount = await widget.controller.readAccountDiagnostics();
     } on Object catch (error) {
-      errors.add('$error');
+      accountError = error;
     }
 
     RateLimitsDiagnosticsSnapshot? nextRateLimits;
     try {
       nextRateLimits = await widget.controller.readAccountRateLimits();
     } on Object catch (error) {
-      errors.add('$error');
+      rateLimitsError = error;
     }
 
     if (!mounted ||
@@ -190,9 +248,8 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       if (nextRateLimits != null) {
         _rateLimits = nextRateLimits;
       }
-      if (errors.isNotEmpty) {
-        _errorMessage = errors.join('\n');
-      }
+      _setSectionError('Account', accountError);
+      _setSectionError('Rate limits', rateLimitsError);
     });
   }
 
@@ -204,27 +261,36 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
     final accountGeneration = ++_accountRefreshGeneration;
     setState(() {
       _loading = true;
-      _errorMessage = null;
+      _sectionErrors.clear();
     });
 
-    final errors = <String>[];
-    Future<T?> safeLoad<T>(Future<T> Function() loader) async {
+    final sectionFailures = <String, Object?>{};
+    Future<T?> safeLoad<T>(String section, Future<T> Function() loader) async {
       try {
         return await loader();
       } on Object catch (error) {
-        errors.add('$error');
+        sectionFailures[section] = error;
         return null;
       }
     }
 
     final results = await Future.wait<Object?>([
-      safeLoad(() => widget.controller.readAccountDiagnostics()),
-      safeLoad(() => widget.controller.readAccountRateLimits()),
-      safeLoad(() => widget.controller.listPermissionProfiles()),
-      safeLoad(() => widget.controller.readConfigDiagnostics()),
-      safeLoad(() => widget.controller.readConfigRequirements()),
-      safeLoad(() => widget.controller.readModelProviderCapabilities()),
-      safeLoad(() => widget.controller.listHooks()),
+      safeLoad('Account', () => widget.controller.readAccountDiagnostics()),
+      safeLoad('Rate limits', () => widget.controller.readAccountRateLimits()),
+      safeLoad(
+        'Permission profiles',
+        () => widget.controller.listPermissionProfiles(),
+      ),
+      safeLoad('Config', () => widget.controller.readConfigDiagnostics()),
+      safeLoad(
+        'Config requirements',
+        () => widget.controller.readConfigRequirements(),
+      ),
+      safeLoad(
+        'Provider capabilities',
+        () => widget.controller.readModelProviderCapabilities(),
+      ),
+      safeLoad('Hooks', () => widget.controller.listHooks()),
     ]);
 
     if (!mounted ||
@@ -251,6 +317,8 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
         if (nextRateLimits != null) {
           _rateLimits = nextRateLimits;
         }
+        _setSectionError('Account', sectionFailures['Account']);
+        _setSectionError('Rate limits', sectionFailures['Rate limits']);
       }
       if (nextProfiles != null) {
         _permissionProfiles = nextProfiles;
@@ -267,7 +335,20 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       if (nextHooks != null) {
         _hooks = nextHooks;
       }
-      _errorMessage = errors.isEmpty ? null : errors.join('\n');
+      _setSectionError(
+        'Permission profiles',
+        sectionFailures['Permission profiles'],
+      );
+      _setSectionError('Config', sectionFailures['Config']);
+      _setSectionError(
+        'Config requirements',
+        sectionFailures['Config requirements'],
+      );
+      _setSectionError(
+        'Provider capabilities',
+        sectionFailures['Provider capabilities'],
+      );
+      _setSectionError('Hooks', sectionFailures['Hooks']);
       _loading = false;
     });
   }
@@ -775,10 +856,12 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
   List<Widget> _buildHooksDetails(HooksDiagnosticsSnapshot hooks) {
     final rows = <Widget>[
       _Detail(
-        label: 'Summary',
+        label: 'Shown counts',
         value:
-            '${hooks.entries.length} workspaces · ${hooks.totalHookCount} hooks · '
-            '${hooks.totalErrorCount} errors · ${hooks.totalWarningCount} warnings',
+            '${hooks.entries.length} shown workspaces · '
+            '${hooks.totalHookCount} shown hooks · '
+            '${hooks.totalErrorCount} shown errors · '
+            '${hooks.totalWarningCount} shown warnings',
       ),
     ];
     for (final entry in hooks.entries) {
@@ -786,7 +869,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
         const SizedBox(height: ThemeTokens.space2),
         _Detail(
           label: 'Workspace',
-          value: '${entry.cwd} (${entry.hooks.length} hooks)',
+          value: '${entry.cwd} (${entry.hooks.length} shown hooks)',
         ),
       ]);
       for (final hook in entry.hooks) {

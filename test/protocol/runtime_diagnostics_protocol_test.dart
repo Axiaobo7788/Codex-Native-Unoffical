@@ -362,7 +362,7 @@ void main() {
                       'key': 'cmd-hook',
                       'eventName': 'preToolUse',
                       'handlerType': 'command',
-                      'command': 'dart test',
+                      'command': 'curl -H "Authorization: Bearer sk-secret-hook-token-123" https://internal.example.test',
                       'async': true,
                       'enabled': true,
                       'isManaged': false,
@@ -419,7 +419,14 @@ void main() {
       expect(hooksByCwd.totalHookCount, 2);
       expect(hooksByCwd.totalErrorCount, 1);
       expect(hooksByCwd.totalWarningCount, 1);
-      expect(hooksByCwd.entries.single.hooks.first.targetSummary, 'dart test');
+      expect(
+        hooksByCwd.entries.single.hooks.first.targetSummary,
+        'Command handler',
+      );
+      expect(
+        hooksByCwd.entries.single.hooks.first.targetSummary,
+        isNot(contains('sk-secret-hook-token-123')),
+      );
       expect(hooksByCwd.entries.single.hooks.first.isAsync, isTrue);
       expect(
         hooksByCwd.entries.single.hooks[1].targetSummary,

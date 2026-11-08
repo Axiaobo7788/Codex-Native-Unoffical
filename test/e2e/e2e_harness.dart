@@ -345,7 +345,7 @@ class E2ERuntimeHarness extends RuntimeController {
             sourcePath: '/workspace/test/.codex/hooks.toml',
             trustStatus: 'trusted',
             timeoutSec: 15,
-            targetSummary: 'dart analyze',
+            targetSummary: 'Command handler',
             matcher: 'Edit|Write',
             statusMessage: 'Running analyzer hook',
           ),
@@ -1222,6 +1222,10 @@ class E2ERuntimeHarness extends RuntimeController {
     _runtimeDiagnosticsController.add(
       AccountRateLimitsUpdatedDiagnosticsEvent(rateLimits: rateLimits),
     );
+  }
+
+  void emitDiagnosticsStreamError(Object error) {
+    _runtimeDiagnosticsController.addError(error);
   }
 
   void storeOutput(String reference, String content, {int? totalLength}) {

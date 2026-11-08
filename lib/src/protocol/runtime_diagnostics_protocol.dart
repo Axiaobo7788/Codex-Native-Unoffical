@@ -959,12 +959,18 @@ final class RuntimeDiagnosticsProtocolAdapter {
       context: 'hooks/list.hook',
     );
     final String? targetSummary = switch (handlerType) {
-      'command' => _requiredBoundedString(
-        hook,
-        'command',
-        maxDiagnosticsDescriptionLength,
-        context: 'hooks/list.hook',
-      ),
+      'command' => () {
+        // Validate that command is a non-empty string per schema, then
+        // discard the raw command string so embedded tokens, credentials, or
+        // sensitive CLI arguments never enter UI state.
+        _requiredBoundedString(
+          hook,
+          'command',
+          maxDiagnosticsDescriptionLength,
+          context: 'hooks/list.hook',
+        );
+        return 'Command handler';
+      }(),
       'mcpTool' =>
         '${_requiredBoundedString(hook, 'server', maxDiagnosticsIdentifierLength, context: 'hooks/list.hook')}/'
             '${_requiredBoundedString(hook, 'tool', maxDiagnosticsIdentifierLength, context: 'hooks/list.hook')}',
