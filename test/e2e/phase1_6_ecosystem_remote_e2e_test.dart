@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
 import 'package:flutter/material.dart';
@@ -201,6 +203,11 @@ void main() {
           find.byKey(const ValueKey('app-row-connector_github')),
           findsOneWidget,
         );
+        // Virtualization check: offscreen row at the end of the 25-item page is not built initially.
+        expect(
+          find.byKey(const ValueKey('app-row-connector_app_24')),
+          findsNothing,
+        );
 
         // Inspect catalog app details via app/read
         await tester.tap(
@@ -226,23 +233,317 @@ void main() {
           findsOneWidget,
         );
 
+        final appsScrollable = find.descendant(
+          of: find.byKey(const ValueKey('ecosystem-apps-scroll')),
+          matching: find.byType(Scrollable),
+        );
+
+        // Scroll until offscreen row 24 is lazily built.
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('app-row-connector_app_24')),
+          240,
+          scrollable: appsScrollable,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('app-row-connector_app_24')),
+          findsOneWidget,
+        );
+
         // Paginate catalog apps up to the 100-item bound
         for (var page = 0; page < 3; page++) {
           final loadMore = find.byKey(
             const ValueKey('ecosystem-apps-load-more'),
           );
-          await tester.ensureVisible(loadMore);
+          await tester.scrollUntilVisible(
+            loadMore,
+            240,
+            scrollable: appsScrollable,
+          );
           await tester.tap(loadMore);
           await tester.pumpAndSettle();
         }
 
         expect(find.text('Apps (100)'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('ecosystem-apps-bound-notice')),
+          300,
+          scrollable: appsScrollable,
+        );
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('ecosystem-apps-bound-notice')),
           findsOneWidget,
         );
         expect(
+          find.byKey(const ValueKey('app-row-connector_app_99')),
+          findsOneWidget,
+        );
+        // Virtualization check: top row is no longer mounted when scrolled to bottom.
+        expect(
+          find.byKey(const ValueKey('app-row-connector_github')),
+          findsNothing,
+        );
+        expect(
           find.byKey(const ValueKey('ecosystem-apps-load-more')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'delayed or offline app/list does not block Skills, Plugins, or MCP sections',
+      (tester) async {
+        final harness = E2ERuntimeHarness();
+        final appListCompleter = Completer<AppListPage>();
+        harness.listAppsOverride = (_) => appListCompleter.future;
+
+        await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        // Skills, Plugins, and MCP render immediately while app/list is still pending.
+        expect(
+          find.byKey(const ValueKey('skill-row-frontend-design')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('MCP (1)'));
+        await tester.pumpAndSettle();
+        expect(find.text('filesystem-mcp'), findsOneWidget);
+
+        // Switching to Apps shows already-loaded installed runtime apps plus non-blocking catalog loading.
+        await tester.tap(find.text('Apps (1)'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('installed-app-row-connector_github')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-apps-loading')),
+          findsOneWidget,
+        );
+
+        // Completing app/list with an offline timeout error updates Apps without affecting other sections.
+        appListCompleter.completeError(
+          StateError('app/list offline network timeout'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('ecosystem-apps-loading')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-apps-error')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('app/list offline network timeout'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('installed-app-row-connector_github')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'prunes detail, missing, and expansion caches across catalog refreshes when IDs change',
+      (tester) async {
+        final harness = E2ERuntimeHarness();
+        harness.plugins
+          ..clear()
+          ..add(
+            const PluginSummaryModel(
+              id: 'plugin_alpha@local',
+              name: 'Plugin Alpha',
+              pluginName: 'plugin_alpha',
+              description: 'Alpha plugin',
+              enabled: true,
+              installed: true,
+              marketplaceName: 'local',
+              marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+            ),
+          );
+        harness.installedApps
+          ..clear()
+          ..add(
+            const InstalledAppSnapshotModel(
+              id: 'connector_missing_alpha',
+              runtimeName: 'Missing Alpha',
+              enabled: true,
+              callable: false,
+            ),
+          );
+        harness.catalogApps
+          ..clear()
+          ..add(
+            const AppSummaryModel(
+              id: 'connector_alpha',
+              name: 'Alpha Connector',
+              description: 'Initial alpha description',
+              isAccessible: true,
+              isEnabled: true,
+            ),
+          );
+
+        await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        // Expand plugin_alpha details
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('plugin-read-plugin_alpha@local')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-detail-plugin_alpha@local')),
+          findsOneWidget,
+        );
+
+        // Expand catalog app connector_alpha details and missing installed app connector_missing_alpha
+        await tester.tap(find.text('Apps (1)'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('app-read-connector_alpha')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('app-detail-connector_alpha')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(
+            const ValueKey('installed-app-read-connector_missing_alpha'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(
+            const ValueKey('app-detail-missing-connector_missing_alpha'),
+          ),
+          findsOneWidget,
+        );
+
+        // Replace catalog with completely new IDs and refresh
+        harness.plugins
+          ..clear()
+          ..add(
+            const PluginSummaryModel(
+              id: 'plugin_beta@local',
+              name: 'Plugin Beta',
+              pluginName: 'plugin_beta',
+              description: 'Beta plugin',
+              enabled: true,
+              installed: true,
+              marketplaceName: 'local',
+              marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+            ),
+          );
+        harness.installedApps.clear();
+        harness.catalogApps
+          ..clear()
+          ..add(
+            const AppSummaryModel(
+              id: 'connector_beta',
+              name: 'Beta Connector',
+              description: 'Beta description',
+              isAccessible: true,
+              isEnabled: true,
+            ),
+          );
+
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('app-detail-connector_alpha')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(
+            const ValueKey('app-detail-missing-connector_missing_alpha'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('app-row-connector_beta')),
+          findsOneWidget,
+        );
+
+        // Re-introduce alpha IDs on a subsequent refresh: pruned expansion/detail state must not resurrect.
+        harness.plugins
+          ..clear()
+          ..add(
+            const PluginSummaryModel(
+              id: 'plugin_alpha@local',
+              name: 'Plugin Alpha',
+              pluginName: 'plugin_alpha',
+              description: 'Alpha plugin v2',
+              enabled: true,
+              installed: true,
+              marketplaceName: 'local',
+              marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+            ),
+          );
+        harness.installedApps
+          ..clear()
+          ..add(
+            const InstalledAppSnapshotModel(
+              id: 'connector_missing_alpha',
+              runtimeName: 'Missing Alpha',
+              enabled: true,
+              callable: false,
+            ),
+          );
+        harness.catalogApps
+          ..clear()
+          ..add(
+            const AppSummaryModel(
+              id: 'connector_alpha',
+              name: 'Alpha Connector',
+              description: 'Updated alpha description',
+              isAccessible: true,
+              isEnabled: true,
+            ),
+          );
+
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('app-detail-connector_alpha')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(
+            const ValueKey('app-detail-missing-connector_missing_alpha'),
+          ),
+          findsNothing,
+        );
+
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-detail-plugin_alpha@local')),
           findsNothing,
         );
       },

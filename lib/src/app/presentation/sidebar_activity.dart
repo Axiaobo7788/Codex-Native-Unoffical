@@ -1018,7 +1018,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   var _section = _EcosystemSection.skills;
   var _loading = true;
+  var _appsLoading = false;
   var _loadingMoreApps = false;
+  var _appsRefreshGeneration = 0;
   String? _error;
   String? _appsError;
   String? _pluginActionNotice;
@@ -1055,12 +1057,54 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     unawaited(_refresh());
   }
 
+  void _prunePluginCaches(
+    List<PluginSummaryModel> plugins, {
+    required bool forceRefetch,
+  }) {
+    final reachableIds = plugins.map((p) => p.id).toSet();
+    _expandedPluginIds.retainAll(reachableIds);
+    _readingPluginIds.retainAll(reachableIds);
+    _mutatingPluginIds.retainAll(reachableIds);
+    _pluginDetails.removeWhere(
+      (id, _) =>
+          !reachableIds.contains(id) ||
+          (forceRefetch && !_expandedPluginIds.contains(id)),
+    );
+  }
+
+  void _pruneAppCaches(
+    List<InstalledAppSnapshotModel> installedApps,
+    List<AppSummaryModel> catalogApps, {
+    required bool forceRefetch,
+  }) {
+    final installedIds = installedApps.map((a) => a.id).toSet();
+    final catalogIds = catalogApps.map((a) => a.id).toSet();
+    final reachableIds = <String>{...installedIds, ...catalogIds};
+    _expandedInstalledAppIds.retainAll(installedIds);
+    _expandedCatalogAppIds.retainAll(catalogIds);
+    _readingAppIds.retainAll(reachableIds);
+    final expandedIds = <String>{
+      ..._expandedInstalledAppIds,
+      ..._expandedCatalogAppIds,
+    };
+    _appDetails.removeWhere(
+      (id, _) =>
+          !reachableIds.contains(id) ||
+          (forceRefetch && !expandedIds.contains(id)),
+    );
+    _missingAppIds.removeWhere(
+      (id) =>
+          !reachableIds.contains(id) ||
+          (forceRefetch && !expandedIds.contains(id)),
+    );
+  }
+
   Future<void> _refresh({bool forceRefetch = false}) async {
     setState(() {
       _loading = true;
       _error = null;
-      _appsError = null;
     });
+    unawaited(_refreshApps(forceRefetch: forceRefetch));
     final cwds = widget.cwd.trim().isEmpty
         ? const <String>[]
         : <String>[widget.cwd.trim()];
@@ -1071,43 +1115,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         widget.gateway.listPlugins(cwds: cwds),
         widget.gateway.listMcpServerStatus(),
       ]);
-      var installedApps = _installedApps;
-      var catalogApps = _catalogApps;
-      String? nextCursor = _appsNextCursor;
-      String? appsError;
-
-      if (catalog != null) {
-        try {
-          installedApps = await catalog.listInstalledApps(
-            threadId: widget.threadId,
-            forceRefresh: forceRefetch,
-          );
-        } catch (error) {
-          appsError = '$error';
-        }
-        try {
-          final page = await catalog.listApps(
-            AppListQuery(
-              limit: _appsPageSize,
-              threadId: widget.threadId,
-              forceRefetch: forceRefetch,
-            ),
-          );
-          catalogApps = page.apps
-              .take(maxBoundedEcosystemItems)
-              .toList(growable: false);
-          nextCursor = catalogApps.length >= maxBoundedEcosystemItems
-              ? null
-              : page.nextCursor;
-        } catch (error) {
-          appsError = appsError == null ? '$error' : '$appsError\n$error';
-        }
-      } else {
-        installedApps = const [];
-        catalogApps = const [];
-        nextCursor = null;
-      }
-
       if (!mounted) {
         return;
       }
@@ -1115,13 +1122,33 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       setState(() {
         _skills = results[0] as List<SkillSummary>;
         _plugins = nextPlugins;
-        _installedApps = installedApps;
-        _catalogApps = catalogApps;
-        _appsNextCursor = nextCursor;
-        _appsError = appsError;
+        _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
         _mcpServers = results[2] as List<McpServerStatusModel>;
         _loading = false;
       });
+      if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
+        final expandedPlugins = nextPlugins
+            .where((p) => _expandedPluginIds.contains(p.id))
+            .toList(growable: false);
+        for (final plugin in expandedPlugins) {
+          try {
+            final updatedDetail = await catalog.readPlugin(
+              pluginName: plugin.effectivePluginName,
+              marketplacePath: plugin.marketplacePath,
+              remoteMarketplaceName: plugin.marketplacePath == null
+                  ? plugin.marketplaceName
+                  : null,
+            );
+            if (mounted && _expandedPluginIds.contains(plugin.id)) {
+              setState(() {
+                _pluginDetails[plugin.id] = updatedDetail;
+              });
+            }
+          } on Object {
+            // Keep existing detail if refresh re-read fails.
+          }
+        }
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -1130,6 +1157,113 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _error = '$error';
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _refreshApps({required bool forceRefetch}) async {
+    final generation = ++_appsRefreshGeneration;
+    final catalog = _catalogGateway;
+    if (catalog == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _installedApps = const [];
+        _catalogApps = const [];
+        _appsNextCursor = null;
+        _appsError = null;
+        _appsLoading = false;
+        _loadingMoreApps = false;
+        _pruneAppCaches(const [], const [], forceRefetch: true);
+      });
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _appsLoading = true;
+        _loadingMoreApps = false;
+        _appsError = null;
+      });
+    }
+
+    var installedApps = _installedApps;
+    var catalogApps = _catalogApps;
+    String? nextCursor = _appsNextCursor;
+    String? appsError;
+
+    try {
+      installedApps = await catalog.listInstalledApps(
+        threadId: widget.threadId,
+        forceRefresh: forceRefetch,
+      );
+      if (mounted && generation == _appsRefreshGeneration) {
+        setState(() {
+          _installedApps = installedApps;
+        });
+      }
+    } catch (error) {
+      appsError = '$error';
+    }
+
+    try {
+      final page = await catalog.listApps(
+        AppListQuery(
+          limit: _appsPageSize,
+          threadId: widget.threadId,
+          forceRefetch: forceRefetch,
+        ),
+      );
+      catalogApps = page.apps
+          .take(maxBoundedEcosystemItems)
+          .toList(growable: false);
+      nextCursor = catalogApps.length >= maxBoundedEcosystemItems
+          ? null
+          : page.nextCursor;
+    } catch (error) {
+      appsError = appsError == null ? '$error' : '$appsError\n$error';
+    }
+
+    if (!mounted || generation != _appsRefreshGeneration) {
+      return;
+    }
+    setState(() {
+      _installedApps = installedApps;
+      _catalogApps = catalogApps;
+      _appsNextCursor = nextCursor;
+      _appsError = appsError;
+      _appsLoading = false;
+      _pruneAppCaches(installedApps, catalogApps, forceRefetch: forceRefetch);
+    });
+
+    if (forceRefetch) {
+      final expandedIds = <String>{
+        ..._expandedInstalledAppIds,
+        ..._expandedCatalogAppIds,
+      };
+      if (expandedIds.isNotEmpty) {
+        try {
+          final result = await catalog.readApps(
+            appIds: expandedIds.toList(growable: false),
+            includeTools: true,
+            threadId: widget.threadId,
+          );
+          if (!mounted || generation != _appsRefreshGeneration) {
+            return;
+          }
+          setState(() {
+            for (final detail in result.apps) {
+              _appDetails[detail.id] = detail;
+              _missingAppIds.remove(detail.id);
+            }
+            for (final missing in result.missingAppIds) {
+              _missingAppIds.add(missing);
+            }
+          });
+        } on Object {
+          // Keep existing detail if refresh re-read fails.
+        }
+      }
     }
   }
 
@@ -1279,25 +1413,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           ? 'Installed ${plugin.name} (${result.authPolicy}). Connector authentication required: $authApps.'
           : 'Installed ${plugin.name}.';
       await _refresh(forceRefetch: true);
-      if (!mounted) {
-        return;
-      }
-      if (_expandedPluginIds.contains(plugin.id)) {
-        try {
-          final updatedDetail = await catalog.readPlugin(
-            pluginName: plugin.effectivePluginName,
-            marketplacePath: plugin.marketplacePath,
-            remoteMarketplaceName: plugin.marketplacePath == null
-                ? plugin.marketplaceName
-                : null,
-          );
-          if (mounted) {
-            _pluginDetails[plugin.id] = updatedDetail;
-          }
-        } on Object {
-          // Keep refreshed summary state if detail re-read fails.
-        }
-      }
       if (!mounted) {
         return;
       }
@@ -1507,12 +1622,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
+                  : _section == _EcosystemSection.apps
+                  ? _buildAppsList(context)
                   : SingleChildScrollView(
                       padding: const EdgeInsets.all(ThemeTokens.space5),
                       child: switch (_section) {
                         _EcosystemSection.skills => _buildSkillsList(context),
                         _EcosystemSection.plugins => _buildPluginsList(context),
-                        _EcosystemSection.apps => _buildAppsList(context),
+                        _EcosystemSection.apps => const SizedBox.shrink(),
                         _EcosystemSection.mcp => _buildMcpList(context),
                       },
                     ),
@@ -1861,251 +1978,362 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   Widget _buildAppsList(BuildContext context) {
     final palette = ThemeTokens.of(context);
     if (_catalogGateway == null) {
-      return KeyedSubtree(
-        key: const ValueKey('ecosystem-catalog-unsupported'),
-        child: _InlineNotice(
-          icon: Icons.lock_outline_rounded,
-          color: palette.textSecondary,
-          text: 'Apps catalog and connector runtime inspection are unavailable on this backend.',
+      return Padding(
+        padding: const EdgeInsets.all(ThemeTokens.space5),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: KeyedSubtree(
+            key: const ValueKey('ecosystem-catalog-unsupported'),
+            child: _InlineNotice(
+              icon: Icons.lock_outline_rounded,
+              color: palette.textSecondary,
+              text: 'Apps catalog and connector runtime inspection are unavailable on this backend.',
+            ),
+          ),
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_appsError case final appsError?)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: KeyedSubtree(
-              key: const ValueKey('ecosystem-apps-error'),
-              child: _InlineNotice(
-                icon: Icons.error_outline_rounded,
-                color: palette.danger,
-                text: appsError,
+    return CustomScrollView(
+      key: const ValueKey('ecosystem-apps-scroll'),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            ThemeTokens.space5,
+            ThemeTokens.space5,
+            ThemeTokens.space5,
+            0,
+          ),
+          sliver: SliverList.list(
+            children: [
+              if (_appsError case final appsError?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: KeyedSubtree(
+                    key: const ValueKey('ecosystem-apps-error'),
+                    child: _InlineNotice(
+                      icon: Icons.error_outline_rounded,
+                      color: palette.danger,
+                      text: appsError,
+                    ),
+                  ),
+                ),
+              Text(
+                'Installed Connector Runtime (${_installedApps.length})',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
+              const SizedBox(height: 8),
+              if (_installedApps.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    _appsLoading ? 'Loading installed connector runtime...' : 'No installed connector runtime apps in the committed snapshot.',
+                    key: ValueKey(
+                      _appsLoading
+                          ? 'ecosystem-installed-apps-loading'
+                          : 'ecosystem-installed-apps-empty',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (_installedApps.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              ThemeTokens.space5,
+              0,
+              ThemeTokens.space5,
+              12,
+            ),
+            sliver: SliverList.builder(
+              itemCount: _installedApps.length,
+              itemBuilder: (context, index) =>
+                  _buildInstalledAppCard(context, _installedApps[index]),
             ),
           ),
-        Text(
-          'Installed Connector Runtime (${_installedApps.length})',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        const SizedBox(height: 8),
-        if (_installedApps.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Text(
-              'No installed connector runtime apps in the committed snapshot.',
-              key: const ValueKey('ecosystem-installed-apps-empty'),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          )
-        else ...[
-          for (final installed in _installedApps)
-            Container(
-              key: ValueKey('installed-app-row-${installed.id}'),
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: palette.surfaceRaised,
-                border: Border.all(
-                  color: palette.border,
-                  width: OfficialCodexTheme.hairlineBorderWidth,
-                ),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space5),
+          sliver: SliverList.list(
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              installed.displayName,
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              installed.id,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: palette.textMuted,
-                                    fontFamily: 'monospace',
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        '${installed.enabled ? 'Enabled' : 'Disabled'} · '
-                        '${installed.callable ? 'Callable' : 'Not callable'}',
-                        style: Theme.of(context).textTheme.labelSmall
-                            ?.copyWith(color: palette.textSecondary),
-                      ),
-                      const SizedBox(width: 8),
-                      CodexButton(
-                        key: ValueKey('installed-app-read-${installed.id}'),
-                        size: CodexButtonSize.sm,
-                        variant: CodexButtonVariant.ghost,
-                        loading: _readingAppIds.contains(installed.id),
-                        onPressed: _readingAppIds.contains(installed.id)
-                            ? null
-                            : () => _toggleAppDetails(
-                                installed.id,
-                                installedSection: true,
-                              ),
-                        label: _expandedInstalledAppIds.contains(installed.id)
-                            ? 'Hide details'
-                            : 'Details',
-                      ),
-                    ],
+                  Expanded(
+                    child: Text(
+                      'App Catalog (${_catalogApps.length})',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                   ),
-                  if (_expandedInstalledAppIds.contains(installed.id))
-                    _buildAppDetailSection(context, installed.id),
+                  if (_appsLoading)
+                    const SizedBox(
+                      key: ValueKey('ecosystem-apps-loading'),
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                 ],
               ),
+              const SizedBox(height: 8),
+              if (_catalogApps.isEmpty && !_appsLoading)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: ThemeTokens.space5),
+                  child: Text(
+                    'No catalog apps returned.',
+                    key: const ValueKey('ecosystem-apps-empty'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              else if (_catalogApps.isEmpty && _appsLoading)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: ThemeTokens.space5),
+                  child: Text(
+                    'Loading app catalog...',
+                    key: const ValueKey('ecosystem-apps-loading-label'),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textMuted),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (_catalogApps.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space5),
+            sliver: SliverList.builder(
+              itemCount: _catalogApps.length,
+              itemBuilder: (context, index) =>
+                  _buildCatalogAppCard(context, _catalogApps[index]),
             ),
-          const SizedBox(height: 12),
+          ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            ThemeTokens.space5,
+            0,
+            ThemeTokens.space5,
+            ThemeTokens.space5,
+          ),
+          sliver: SliverList.list(
+            children: [
+              if (_appsNextCursor != null &&
+                  _catalogApps.length < maxBoundedEcosystemItems)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Center(
+                    child: CodexButton(
+                      key: const ValueKey('ecosystem-apps-load-more'),
+                      size: CodexButtonSize.sm,
+                      variant: CodexButtonVariant.secondary,
+                      loading: _loadingMoreApps,
+                      onPressed: _loadingMoreApps ? null : _loadMoreApps,
+                      label: 'Load more apps',
+                    ),
+                  ),
+                )
+              else if (_catalogApps.length >= maxBoundedEcosystemItems)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Showing first $maxBoundedEcosystemItems catalog apps.',
+                    key: const ValueKey('ecosystem-apps-bound-notice'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: palette.textMuted),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInstalledAppCard(
+    BuildContext context,
+    InstalledAppSnapshotModel installed,
+  ) {
+    final palette = ThemeTokens.of(context);
+    final summaryColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          installed.displayName,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          installed.id,
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: palette.textMuted, fontFamily: 'monospace'),
+        ),
+      ],
+    );
+    final trailingControls = Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          '${installed.enabled ? 'Enabled' : 'Disabled'} · '
+          '${installed.callable ? 'Callable' : 'Not callable'}',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: palette.textSecondary),
+        ),
+        CodexButton(
+          key: ValueKey('installed-app-read-${installed.id}'),
+          size: CodexButtonSize.sm,
+          variant: CodexButtonVariant.ghost,
+          loading: _readingAppIds.contains(installed.id),
+          onPressed: _readingAppIds.contains(installed.id)
+              ? null
+              : () => _toggleAppDetails(installed.id, installedSection: true),
+          label: _expandedInstalledAppIds.contains(installed.id)
+              ? 'Hide details'
+              : 'Details',
+        ),
+      ],
+    );
+
+    return Container(
+      key: ValueKey('installed-app-row-${installed.id}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 460) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    summaryColumn,
+                    const SizedBox(height: 8),
+                    trailingControls,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: summaryColumn),
+                  const SizedBox(width: 12),
+                  trailingControls,
+                ],
+              );
+            },
+          ),
+          if (_expandedInstalledAppIds.contains(installed.id))
+            _buildAppDetailSection(context, installed.id),
         ],
-        Text(
-          'App Catalog (${_catalogApps.length})',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        const SizedBox(height: 8),
-        if (_catalogApps.isEmpty)
-          Text(
-            'No catalog apps returned.',
-            key: const ValueKey('ecosystem-apps-empty'),
-            style: Theme.of(context).textTheme.bodySmall,
-          )
-        else ...[
-          for (final app in _catalogApps)
-            Container(
-              key: ValueKey('app-row-${app.id}'),
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: palette.surfaceRaised,
-                border: Border.all(
-                  color: palette.border,
-                  width: OfficialCodexTheme.hairlineBorderWidth,
-                ),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text(
-                                  app.name,
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                ),
-                                if (app.category case final category?
-                                    when category.isNotEmpty)
-                                  Text(
-                                    category,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(color: palette.textMuted),
-                                  ),
-                                if (app.developer case final developer?
-                                    when developer.isNotEmpty)
-                                  Text(
-                                    developer,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(color: palette.textMuted),
-                                  ),
-                              ],
-                            ),
-                            if (app.description.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                app.description,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${app.isAccessible ? 'Accessible' : 'Unlinked'} · '
-                            '${app.isEnabled ? 'Enabled' : 'Disabled'}',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(color: palette.textSecondary),
-                          ),
-                          const SizedBox(width: 8),
-                          CodexButton(
-                            key: ValueKey('app-read-${app.id}'),
-                            size: CodexButtonSize.sm,
-                            variant: CodexButtonVariant.ghost,
-                            loading: _readingAppIds.contains(app.id),
-                            onPressed: _readingAppIds.contains(app.id)
-                                ? null
-                                : () => _toggleAppDetails(
-                                    app.id,
-                                    installedSection: false,
-                                  ),
-                            label: _expandedCatalogAppIds.contains(app.id)
-                                ? 'Hide details'
-                                : 'Details',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  if (_expandedCatalogAppIds.contains(app.id))
-                    _buildAppDetailSection(context, app.id),
-                ],
-              ),
-            ),
-          if (_appsNextCursor != null &&
-              _catalogApps.length < maxBoundedEcosystemItems)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Center(
-                child: CodexButton(
-                  key: const ValueKey('ecosystem-apps-load-more'),
-                  size: CodexButtonSize.sm,
-                  variant: CodexButtonVariant.secondary,
-                  loading: _loadingMoreApps,
-                  onPressed: _loadingMoreApps ? null : _loadMoreApps,
-                  label: 'Load more apps',
-                ),
-              ),
-            )
-          else if (_catalogApps.length >= maxBoundedEcosystemItems)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Showing first $maxBoundedEcosystemItems catalog apps.',
-                key: const ValueKey('ecosystem-apps-bound-notice'),
-                textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  Widget _buildCatalogAppCard(BuildContext context, AppSummaryModel app) {
+    final palette = ThemeTokens.of(context);
+    final summaryColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(app.name, style: Theme.of(context).textTheme.titleSmall),
+            if (app.category case final category? when category.isNotEmpty)
+              Text(
+                category,
                 style: Theme.of(context).textTheme.labelSmall
                     ?.copyWith(color: palette.textMuted),
               ),
-            ),
+            if (app.developer case final developer? when developer.isNotEmpty)
+              Text(
+                developer,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+          ],
+        ),
+        if (app.description.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(app.description, style: Theme.of(context).textTheme.bodySmall),
         ],
       ],
+    );
+    final trailingControls = Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          '${app.isAccessible ? 'Accessible' : 'Unlinked'} · '
+          '${app.isEnabled ? 'Enabled' : 'Disabled'}',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: palette.textSecondary),
+        ),
+        CodexButton(
+          key: ValueKey('app-read-${app.id}'),
+          size: CodexButtonSize.sm,
+          variant: CodexButtonVariant.ghost,
+          loading: _readingAppIds.contains(app.id),
+          onPressed: _readingAppIds.contains(app.id)
+              ? null
+              : () => _toggleAppDetails(app.id, installedSection: false),
+          label: _expandedCatalogAppIds.contains(app.id)
+              ? 'Hide details'
+              : 'Details',
+        ),
+      ],
+    );
+
+    return Container(
+      key: ValueKey('app-row-${app.id}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 460) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    summaryColumn,
+                    const SizedBox(height: 8),
+                    trailingControls,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: summaryColumn),
+                  const SizedBox(width: 12),
+                  trailingControls,
+                ],
+              );
+            },
+          ),
+          if (_expandedCatalogAppIds.contains(app.id))
+            _buildAppDetailSection(context, app.id),
+        ],
+      ),
     );
   }
 

@@ -180,6 +180,7 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<McpServerStatusModel> mcpServers = [];
   var catalogSupported = true;
   int? catalogPageSizeOverride;
+  Future<AppListPage> Function(AppListQuery query)? listAppsOverride;
   OfficialRemoteControlStatus officialRemoteStatus =
       const OfficialRemoteControlStatus(
         supported: true,
@@ -663,6 +664,9 @@ class E2ERuntimeHarness extends RuntimeController {
     AppListQuery query = const AppListQuery(),
   ]) async {
     appListQueries.add(query);
+    if (listAppsOverride case final override?) {
+      return override(query);
+    }
     final startIndex = int.tryParse(query.cursor ?? '') ?? 0;
     if (startIndex < 0 || startIndex >= catalogApps.length) {
       return const AppListPage(apps: []);
