@@ -14,17 +14,26 @@ typedef ProtocolRequest = Future<JsonObject> Function(
 /// belongs to separate adapters so metadata screens cannot accidentally hydrate
 /// an entire thread.
 final class ThreadProtocolAdapter {
-  const ThreadProtocolAdapter({required this.request});
+  ThreadProtocolAdapter({
+    required this.request,
+    Stream<CodexNotification> notifications = const Stream.empty(),
+  }) : events = notifications
+           .map(_parseNotification)
+           .where((event) => event != null)
+           .cast<ThreadLifecycleEvent>();
 
   final ProtocolRequest request;
+  final Stream<ThreadLifecycleEvent> events;
 
   Future<ThreadPage> listThreads(ThreadListQuery query) async {
+    final searchTerm = query.searchTerm?.trim();
     final response = await request('thread/list', {
       if (query.cursor != null) 'cursor': query.cursor,
       'limit': query.limit,
       'sortKey': _sortKey(query.sortKey),
       'sortDirection': _sortDirection(query.sortDirection),
-      'archived': false,
+      'archived': query.archived,
+      if (searchTerm != null && searchTerm.isNotEmpty) 'searchTerm': searchTerm,
     });
     final data = response['data'];
     if (data is! List<Object?>) {
@@ -65,8 +74,93 @@ final class ThreadProtocolAdapter {
     return _parseThreadContainer(response, 'thread/resume');
   }
 
+  Future<void> renameThread({
+    required String threadId,
+    required String name,
+  }) async {
+    await request('thread/name/set', {'threadId': threadId, 'name': name});
+  }
+
+  Future<void> archiveThread(String threadId) async {
+    await request('thread/archive', {'threadId': threadId});
+  }
+
+  Future<ThreadSummary> unarchiveThread(String threadId) async {
+    final response = await request('thread/unarchive', {'threadId': threadId});
+    return _parseThreadContainer(response, 'thread/unarchive');
+  }
+
+  Future<ThreadSummary> forkThread(ThreadForkOptions options) async {
+    final response = await request('thread/fork', {
+      'threadId': options.threadId,
+      'excludeTurns': true,
+      'ephemeral': options.ephemeral,
+      if (options.beforeTurnId != null) 'beforeTurnId': options.beforeTurnId,
+      if (options.lastTurnId != null) 'lastTurnId': options.lastTurnId,
+      if (options.cwd != null) 'cwd': options.cwd,
+      if (options.model != null) 'model': options.model,
+      if (options.approvalPolicy case final approvalPolicy?)
+        'approvalPolicy': _approvalPolicy(approvalPolicy),
+      if (options.sandbox case final sandbox?) 'sandbox': _sandbox(sandbox),
+    });
+    return _parseThreadContainer(response, 'thread/fork');
+  }
+
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) async {
+    final response = await request('thread/revert', {
+      'threadId': threadId,
+      'beforeTurnId': beforeTurnId,
+    });
+    return _parseThreadContainer(response, 'thread/revert');
+  }
+
+  Future<void> compactThread(String threadId) async {
+    await request('thread/compact/start', {'threadId': threadId});
+  }
+
   Future<void> deleteThread(String threadId) async {
     await request('thread/delete', {'threadId': threadId});
+  }
+
+  static ThreadLifecycleEvent? _parseNotification(
+    CodexNotification notification,
+  ) {
+    final params = notification.params;
+    return switch (notification.method) {
+      'thread/name/updated' => ThreadNameUpdatedEvent(
+        threadId: _requiredString(params, 'threadId'),
+        threadName: params.containsKey('threadName')
+            ? _optionalString(params, 'threadName')
+            : _optionalString(params, 'name'),
+      ),
+      'thread/archived' => ThreadArchivedEvent(
+        threadId: _requiredString(params, 'threadId'),
+      ),
+      'thread/unarchived' => ThreadUnarchivedEvent(
+        threadId: _requiredString(params, 'threadId'),
+      ),
+      'thread/reverted' => ThreadRevertedEvent(
+        threadId: _requiredString(params, 'threadId'),
+        turnsBackwardsCursor: _optionalString(params, 'turnsBackwardsCursor'),
+        itemsBackwardsCursor: _optionalString(params, 'itemsBackwardsCursor'),
+      ),
+      'thread/status/changed' => _parseStatusChanged(params),
+      _ => null,
+    };
+  }
+
+  static ThreadStatusChangedEvent _parseStatusChanged(JsonObject params) {
+    final statusValue = params['status'];
+    if (statusValue is! Map<String, Object?>) {
+      throw const ProtocolViolation('Thread status must be an object.');
+    }
+    return ThreadStatusChangedEvent(
+      threadId: _requiredString(params, 'threadId'),
+      status: _status(_requiredString(statusValue, 'type')),
+    );
   }
 
   static ThreadSummary _parseThreadContainer(

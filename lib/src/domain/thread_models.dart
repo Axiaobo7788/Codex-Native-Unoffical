@@ -34,6 +34,29 @@ class ThreadSummary {
   final String? model;
   final String? projectId;
 
+  ThreadSummary copyWith({
+    String? preview,
+    String? cwd,
+    DateTime? updatedAt,
+    ThreadRuntimeStatus? status,
+    String? name,
+    bool clearName = false,
+    String? model,
+    String? projectId,
+  }) => ThreadSummary(
+    id: id,
+    sessionId: sessionId,
+    preview: preview ?? this.preview,
+    cwd: cwd ?? this.cwd,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    status: status ?? this.status,
+    ephemeral: ephemeral,
+    name: clearName ? null : (name ?? this.name),
+    model: model ?? this.model,
+    projectId: projectId ?? this.projectId,
+  );
+
   String get displayTitle {
     final explicitName = name?.trim();
     if (explicitName != null && explicitName.isNotEmpty) {
@@ -64,12 +87,16 @@ class ThreadListQuery {
     this.limit = 25,
     this.sortKey = ThreadSortKey.recencyAt,
     this.sortDirection = SortDirection.descending,
+    this.archived = false,
+    this.searchTerm,
   }) : assert(limit > 0 && limit <= 100);
 
   final String? cursor;
   final int limit;
   final ThreadSortKey sortKey;
   final SortDirection sortDirection;
+  final bool archived;
+  final String? searchTerm;
 }
 
 class ThreadStartOptions {
@@ -86,4 +113,72 @@ class ThreadStartOptions {
   final String? model;
   final ApprovalPolicyOverride? approvalPolicy;
   final SandboxModeOverride? sandbox;
+}
+
+class ThreadForkOptions {
+  const ThreadForkOptions({
+    required this.threadId,
+    this.beforeTurnId,
+    this.lastTurnId,
+    this.cwd,
+    this.ephemeral = false,
+    this.model,
+    this.approvalPolicy,
+    this.sandbox,
+  }) : assert(
+         beforeTurnId == null || lastTurnId == null,
+         'beforeTurnId and lastTurnId are mutually exclusive.',
+       );
+
+  final String threadId;
+  final String? beforeTurnId;
+  final String? lastTurnId;
+  final String? cwd;
+  final bool ephemeral;
+  final String? model;
+  final ApprovalPolicyOverride? approvalPolicy;
+  final SandboxModeOverride? sandbox;
+}
+
+sealed class ThreadLifecycleEvent {
+  const ThreadLifecycleEvent({required this.threadId});
+
+  final String threadId;
+}
+
+final class ThreadNameUpdatedEvent extends ThreadLifecycleEvent {
+  const ThreadNameUpdatedEvent({
+    required super.threadId,
+    required this.threadName,
+  });
+
+  final String? threadName;
+}
+
+final class ThreadArchivedEvent extends ThreadLifecycleEvent {
+  const ThreadArchivedEvent({required super.threadId});
+}
+
+final class ThreadUnarchivedEvent extends ThreadLifecycleEvent {
+  const ThreadUnarchivedEvent({required super.threadId});
+}
+
+final class ThreadRevertedEvent extends ThreadLifecycleEvent {
+  const ThreadRevertedEvent({
+    required super.threadId,
+    this.turnsBackwardsCursor,
+    this.itemsBackwardsCursor,
+  });
+
+  final String? turnsBackwardsCursor;
+  final String? itemsBackwardsCursor;
+}
+
+final class ThreadStatusChangedEvent extends ThreadLifecycleEvent {
+  const ThreadStatusChangedEvent({
+    required super.threadId,
+    required this.status,
+  });
+
+  final ThreadRuntimeStatus status;
 }

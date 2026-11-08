@@ -60,7 +60,10 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
       notifications: _notifications.stream,
     );
     _modelProtocol = ModelProtocolAdapter(request: _request);
-    _threadProtocol = ThreadProtocolAdapter(request: _request);
+    _threadProtocol = ThreadProtocolAdapter(
+      request: _request,
+      notifications: _notifications.stream,
+    );
     _ensureReader();
   }
 
@@ -282,6 +285,9 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
   Stream<TurnEvent> get turnEvents => _turnProtocol.events;
 
   @override
+  Stream<ThreadLifecycleEvent> get threadEvents => _threadProtocol.events;
+
+  @override
   Stream<ApprovalEvent> get approvalEvents => const Stream.empty();
 
   @override
@@ -340,6 +346,32 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
   @override
   Future<ThreadSummary> resumeThread(String threadId) =>
       _unsupported('Thread resume');
+
+  @override
+  Future<void> renameThread({required String threadId, required String name}) =>
+      _unsupported('Thread rename');
+
+  @override
+  Future<void> archiveThread(String threadId) =>
+      _unsupported('Thread archiving');
+
+  @override
+  Future<ThreadSummary> unarchiveThread(String threadId) =>
+      _unsupported('Thread unarchiving');
+
+  @override
+  Future<ThreadSummary> forkThread(ThreadForkOptions options) =>
+      _unsupported('Thread forking');
+
+  @override
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) => _unsupported('Thread revert');
+
+  @override
+  Future<void> compactThread(String threadId) =>
+      _unsupported('Thread compaction');
 
   @override
   Future<void> deleteThread(String threadId) => _unsupported('Thread deletion');

@@ -41,7 +41,10 @@ class ProcessTransport implements CodexTransport {
       input: process.stdout.transform(const JsonlDecoder()),
       writer: process.write,
     );
-    _threadProtocol = ThreadProtocolAdapter(request: _peer.request);
+    _threadProtocol = ThreadProtocolAdapter(
+      request: _peer.request,
+      notifications: _peer.notifications,
+    );
     _historyProtocol = HistoryProtocolAdapter(request: _peer.request);
     _modelProtocol = ModelProtocolAdapter(request: _peer.request);
     _outputProtocol = OutputProtocolAdapter(request: _peer.request);
@@ -129,6 +132,9 @@ class ProcessTransport implements CodexTransport {
   Stream<TurnEvent> get turnEvents => _turnProtocol.events;
 
   @override
+  Stream<ThreadLifecycleEvent> get threadEvents => _threadProtocol.events;
+
+  @override
   Stream<ApprovalEvent> get approvalEvents => _approvalProtocol.events;
 
   @override
@@ -200,6 +206,35 @@ class ProcessTransport implements CodexTransport {
   @override
   Future<ThreadSummary> resumeThread(String threadId) =>
       _threadProtocol.resumeThread(threadId);
+
+  @override
+  Future<void> renameThread({required String threadId, required String name}) =>
+      _threadProtocol.renameThread(threadId: threadId, name: name);
+
+  @override
+  Future<void> archiveThread(String threadId) =>
+      _threadProtocol.archiveThread(threadId);
+
+  @override
+  Future<ThreadSummary> unarchiveThread(String threadId) =>
+      _threadProtocol.unarchiveThread(threadId);
+
+  @override
+  Future<ThreadSummary> forkThread(ThreadForkOptions options) =>
+      _threadProtocol.forkThread(options);
+
+  @override
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) => _threadProtocol.revertThread(
+    threadId: threadId,
+    beforeTurnId: beforeTurnId,
+  );
+
+  @override
+  Future<void> compactThread(String threadId) =>
+      _threadProtocol.compactThread(threadId);
 
   @override
   Future<void> deleteThread(String threadId) =>

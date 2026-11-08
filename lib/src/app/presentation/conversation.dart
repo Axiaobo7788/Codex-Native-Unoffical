@@ -88,6 +88,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _showJumpToLatest = false;
   var _showChanges = false;
   var _detailMode = PresentationDetailMode.commands;
+  var _productMode = ProductMode.codex;
+  final _threadActionsPopoverController = CodexPopoverController();
 
   String get _activeProjectDirectory {
     final selectedCwd = widget.controller.thread?.cwd;
@@ -138,6 +140,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _scrollController
       ..removeListener(_handleScrollPositionChanged)
       ..dispose();
+    _threadActionsPopoverController.dispose();
     _composerFocusNode.dispose();
     _composerController.dispose();
     super.dispose();
@@ -179,6 +182,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
     final thread = controller.thread;
+    final threadController = widget.threadController;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
     return Container(
       key: const ValueKey('thread_header_bar'),
@@ -281,8 +285,114 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ),
                   ],
                   selectedValue: _detailMode,
-                  onSelected: (mode) => setState(() => _detailMode = mode),
+                  onSelected: (mode) {
+                    setState(() {
+                      _detailMode = mode;
+                      _productMode = switch (mode) {
+                        PresentationDetailMode.prose => ProductMode.chat,
+                        PresentationDetailMode.commands => ProductMode.work,
+                        PresentationDetailMode.execution => ProductMode.codex,
+                      };
+                    });
+                  },
                 ),
+              if (thread != null && threadController != null) ...[
+                const SizedBox(width: ThemeTokens.space1),
+                CodexPopoverAnchor(
+                  controller: _threadActionsPopoverController,
+                  targetAnchor: Alignment.bottomRight,
+                  followerAnchor: Alignment.topRight,
+                  width: 196,
+                  popoverBuilder: (context, close) {
+                    final pinned = threadController.isPinned(thread.id);
+                    final archived = threadController.showArchived;
+                    return CodexMenu<String>(
+                      items: [
+                        CodexMenuItem(
+                          value: 'pin',
+                          label: pinned ? 'Unpin thread' : 'Pin thread',
+                          icon: Icon(
+                            pinned
+                                ? Icons.push_pin_rounded
+                                : Icons.push_pin_outlined,
+                          ),
+                        ),
+                        const CodexMenuItem(
+                          value: 'rename',
+                          label: 'Rename thread',
+                          icon: Icon(Icons.drive_file_rename_outline_rounded),
+                        ),
+                        const CodexMenuItem(
+                          value: 'fork',
+                          label: 'Fork thread',
+                          icon: Icon(Icons.call_split_rounded),
+                        ),
+                        const CodexMenuItem(
+                          value: 'compact',
+                          label: 'Compact context',
+                          icon: Icon(Icons.compress_rounded),
+                        ),
+                        CodexMenuItem(
+                          value: 'archive',
+                          label: archived
+                              ? 'Unarchive thread'
+                              : 'Archive thread',
+                          icon: Icon(
+                            archived
+                                ? Icons.unarchive_outlined
+                                : Icons.inventory_2_outlined,
+                          ),
+                        ),
+                      ],
+                      onSelected: (action) {
+                        close();
+                        switch (action) {
+                          case 'pin':
+                            threadController.togglePinThread(thread.id);
+                          case 'rename':
+                            unawaited(
+                              _renameActiveThreadDialog(
+                                threadController,
+                                thread,
+                              ),
+                            );
+                          case 'fork':
+                            unawaited(
+                              threadController.forkThread(
+                                ThreadForkOptions(
+                                  threadId: thread.id,
+                                  cwd: thread.cwd,
+                                ),
+                              ),
+                            );
+                          case 'compact':
+                            unawaited(
+                              threadController.compactThread(thread.id),
+                            );
+                          case 'archive':
+                            if (archived) {
+                              unawaited(
+                                threadController.unarchiveThread(thread.id),
+                              );
+                            } else {
+                              unawaited(
+                                threadController.archiveThread(thread.id),
+                              );
+                            }
+                        }
+                      },
+                    );
+                  },
+                  child: CodexIconButton(
+                    key: const ValueKey('thread-actions-menu-button'),
+                    tooltip: 'Thread actions (${_productMode.label})',
+                    onPressed: threadController.mutating
+                        ? null
+                        : _threadActionsPopoverController.toggle,
+                    icon: const Icon(Icons.more_horiz_rounded, size: 17),
+                  ),
+                ),
+              ],
               if (controller.canInterrupt) ...[
                 const SizedBox(width: ThemeTokens.space2),
                 CodexButton(
@@ -298,6 +408,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         },
       ),
     );
+  }
+
+  Future<void> _renameActiveThreadDialog(
+    ThreadListController threadController,
+    ThreadSummary thread,
+  ) async {
+    final next = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameThreadDialog(thread: thread),
+    );
+    if (next != null && mounted) {
+      await threadController.renameThread(thread.id, next);
+    }
   }
 
   Widget _timeline(ConversationController controller) {

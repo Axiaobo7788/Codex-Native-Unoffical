@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../domain/thread_gateway.dart';
@@ -9,16 +11,31 @@ class ThreadListController extends ChangeNotifier {
     this.pageSize = 25,
     this.maxRetainedThreads = 100,
   }) : assert(pageSize > 0 && pageSize <= 100),
-       assert(maxRetainedThreads >= pageSize);
+       assert(maxRetainedThreads >= pageSize) {
+    _threadEventSubscription = gateway.threadEvents.listen(
+      _handleThreadEvent,
+      onError: (Object error, StackTrace _) {
+        if (!_disposed) {
+          _errorMessage = error.toString();
+          _notify();
+        }
+      },
+    );
+  }
+
+  static const maxPinnedThreads = 32;
 
   final ThreadGateway gateway;
   final int pageSize;
   final int maxRetainedThreads;
   final List<ThreadSummary> _threads = [];
   final Set<String> _unmaterializedThreadIds = {};
+  final Set<String> _pinnedThreadIds = {};
+  StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
   String? _nextCursor;
   ThreadSummary? _selectedThread;
   String? _errorMessage;
+  var _showArchived = false;
   var _initialLoadStarted = false;
   var _loading = false;
   var _loadingMore = false;
@@ -26,8 +43,10 @@ class ThreadListController extends ChangeNotifier {
   var _disposed = false;
 
   List<ThreadSummary> get threads => List.unmodifiable(_threads);
+  Set<String> get pinnedThreadIds => Set.unmodifiable(_pinnedThreadIds);
   ThreadSummary? get selectedThread => _selectedThread;
   String? get errorMessage => _errorMessage;
+  bool get showArchived => _showArchived;
   bool get initialLoadStarted => _initialLoadStarted;
   bool get loading => _loading;
   bool get loadingMore => _loadingMore;
@@ -36,6 +55,29 @@ class ThreadListController extends ChangeNotifier {
       _nextCursor != null && _threads.length < maxRetainedThreads;
   bool get retentionLimitReached =>
       _nextCursor != null && _threads.length >= maxRetainedThreads;
+
+  bool isPinned(String threadId) => _pinnedThreadIds.contains(threadId);
+
+  void togglePinThread(String threadId) {
+    if (_pinnedThreadIds.contains(threadId)) {
+      _pinnedThreadIds.remove(threadId);
+    } else {
+      if (_pinnedThreadIds.length >= maxPinnedThreads) {
+        _pinnedThreadIds.remove(_pinnedThreadIds.first);
+      }
+      _pinnedThreadIds.add(threadId);
+    }
+    _notify();
+  }
+
+  Future<void> setShowArchived(bool value) async {
+    if (_showArchived == value) {
+      return;
+    }
+    _showArchived = value;
+    _selectedThread = null;
+    await refresh();
+  }
 
   Future<void> refresh() async {
     if (_loading || _mutating) {
@@ -46,7 +88,9 @@ class ThreadListController extends ChangeNotifier {
     _errorMessage = null;
     _notify();
     try {
-      final page = await gateway.listThreads(ThreadListQuery(limit: pageSize));
+      final page = await gateway.listThreads(
+        ThreadListQuery(limit: pageSize, archived: _showArchived),
+      );
       if (_disposed) {
         return;
       }
@@ -71,7 +115,11 @@ class ThreadListController extends ChangeNotifier {
           uniqueThreads.length < maxRetainedThreads) {
         extraPages += 1;
         final nextPage = await gateway.listThreads(
-          ThreadListQuery(cursor: cursor, limit: pageSize),
+          ThreadListQuery(
+            cursor: cursor,
+            limit: pageSize,
+            archived: _showArchived,
+          ),
         );
         if (_disposed) {
           return;
@@ -111,6 +159,7 @@ class ThreadListController extends ChangeNotifier {
         ThreadListQuery(
           cursor: cursor,
           limit: remaining < pageSize ? remaining : pageSize,
+          archived: _showArchived,
         ),
       );
       if (_disposed) {
@@ -213,6 +262,174 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
+  Future<bool> renameThread(String threadId, String name) async {
+    if (_mutating) {
+      return false;
+    }
+    final trimmed = name.trim();
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      await gateway.renameThread(threadId: threadId, name: trimmed);
+      if (_disposed) {
+        return false;
+      }
+      _applyNameUpdate(threadId, trimmed.isEmpty ? null : trimmed);
+      return true;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<bool> archiveThread(String threadId) async {
+    if (_mutating) {
+      return false;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      await gateway.archiveThread(threadId);
+      if (_disposed) {
+        return false;
+      }
+      if (!_showArchived) {
+        final wasSelected = _selectedThread?.id == threadId;
+        _threads.removeWhere((thread) => thread.id == threadId);
+        if (wasSelected) {
+          _selectedThread = _threads.isEmpty ? null : _threads.first;
+        }
+        _synchronizeSelection();
+      }
+      return true;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<ThreadSummary?> unarchiveThread(String threadId) async {
+    if (_mutating) {
+      return null;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final thread = await gateway.unarchiveThread(threadId);
+      if (_disposed) {
+        return null;
+      }
+      if (_showArchived) {
+        final wasSelected = _selectedThread?.id == threadId;
+        _threads.removeWhere((candidate) => candidate.id == threadId);
+        if (wasSelected) {
+          _selectedThread = _threads.isEmpty ? null : _threads.first;
+        }
+        _synchronizeSelection();
+      } else {
+        _replaceOrPrepend(thread);
+        _selectedThread = thread;
+      }
+      return thread;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return null;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<ThreadSummary?> forkThread(ThreadForkOptions options) async {
+    if (_mutating) {
+      return null;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final thread = await gateway.forkThread(options);
+      if (_disposed) {
+        return null;
+      }
+      if (_showArchived) {
+        _showArchived = false;
+      }
+      _replaceOrPrepend(thread);
+      _selectedThread = thread;
+      return thread;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return null;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<ThreadSummary?> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) async {
+    if (_mutating) {
+      return null;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final thread = await gateway.revertThread(
+        threadId: threadId,
+        beforeTurnId: beforeTurnId,
+      );
+      if (_disposed) {
+        return null;
+      }
+      _replaceInPlace(thread);
+      if (_selectedThread?.id == thread.id) {
+        _selectedThread = thread;
+      }
+      return thread;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return null;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<bool> compactThread(String threadId) async {
+    if (_mutating) {
+      return false;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      await gateway.compactThread(threadId);
+      if (_disposed) {
+        return false;
+      }
+      return true;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
   Future<bool> ensureSelectedThreadLoaded() async {
     final current = _selectedThread;
     if (current == null) {
@@ -224,6 +441,68 @@ class ThreadListController extends ChangeNotifier {
     }
     final resumed = await resumeThread(current.id);
     return resumed != null;
+  }
+
+  void _handleThreadEvent(ThreadLifecycleEvent event) {
+    if (_disposed) {
+      return;
+    }
+    switch (event) {
+      case ThreadNameUpdatedEvent(:final threadId, :final threadName):
+        _applyNameUpdate(threadId, threadName);
+        _notify();
+      case ThreadStatusChangedEvent(:final threadId, :final status):
+        _applyStatusUpdate(threadId, status);
+        _notify();
+      case ThreadArchivedEvent(:final threadId):
+        if (!_showArchived) {
+          final wasSelected = _selectedThread?.id == threadId;
+          _threads.removeWhere((thread) => thread.id == threadId);
+          if (wasSelected) {
+            _selectedThread = _threads.isEmpty ? null : _threads.first;
+          }
+          _synchronizeSelection();
+          _notify();
+        }
+      case ThreadUnarchivedEvent(:final threadId):
+        if (_showArchived) {
+          final wasSelected = _selectedThread?.id == threadId;
+          _threads.removeWhere((thread) => thread.id == threadId);
+          if (wasSelected) {
+            _selectedThread = _threads.isEmpty ? null : _threads.first;
+          }
+          _synchronizeSelection();
+          _notify();
+        }
+      case ThreadRevertedEvent():
+        break;
+    }
+  }
+
+  void _applyNameUpdate(String threadId, String? threadName) {
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index != -1) {
+      _threads[index] = _threads[index].copyWith(
+        name: threadName,
+        clearName: threadName == null,
+      );
+    }
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = _selectedThread!.copyWith(
+        name: threadName,
+        clearName: threadName == null,
+      );
+    }
+  }
+
+  void _applyStatusUpdate(String threadId, ThreadRuntimeStatus status) {
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index != -1) {
+      _threads[index] = _threads[index].copyWith(status: status);
+    }
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = _selectedThread!.copyWith(status: status);
+    }
   }
 
   void _replaceOrPrepend(ThreadSummary thread) {
@@ -264,6 +543,7 @@ class ThreadListController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(_threadEventSubscription?.cancel());
     super.dispose();
   }
 }

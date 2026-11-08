@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
@@ -8,17 +10,24 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late List<_Request> requests;
   late Map<String, JsonObject> responses;
+  late StreamController<CodexNotification> notifications;
   late ThreadProtocolAdapter adapter;
 
   setUp(() {
     requests = [];
     responses = {};
+    notifications = StreamController<CodexNotification>.broadcast(sync: true);
     adapter = ThreadProtocolAdapter(
       request: (method, [params = const {}]) async {
         requests.add(_Request(method, params));
         return responses[method] ?? const {};
       },
+      notifications: notifications.stream,
     );
+  });
+
+  tearDown(() async {
+    await notifications.close();
   });
 
   test('lists a bounded metadata page with an opaque cursor', () async {
@@ -47,6 +56,33 @@ void main() {
     expect(page.threads.single.status, ThreadRuntimeStatus.idle);
     expect(page.threads.single.displayTitle, 'First task');
   });
+
+  test(
+    'passes archived filter and trimmed searchTerm in thread/list',
+    () async {
+      responses['thread/list'] = {
+        'data': [_threadJson(id: 'archived-1')],
+        'nextCursor': null,
+      };
+
+      await adapter.listThreads(
+        const ThreadListQuery(
+          limit: 10,
+          archived: true,
+          searchTerm: '  migration  ',
+        ),
+      );
+
+      expect(requests.single.method, 'thread/list');
+      expect(requests.single.params, {
+        'limit': 10,
+        'sortKey': 'recency_at',
+        'sortDirection': 'desc',
+        'archived': true,
+        'searchTerm': 'migration',
+      });
+    },
+  );
 
   test('never requests full turns for read or resume', () async {
     responses['thread/read'] = {'thread': _threadJson(id: 'thread-2')};
@@ -104,6 +140,130 @@ void main() {
         'approvalPolicy': 'untrusted',
         'sandbox': 'read-only',
       }),
+    );
+  });
+
+  test(
+    'renames, archives, unarchives, forks, reverts, and compacts threads',
+    () async {
+      responses['thread/name/set'] = const {};
+      responses['thread/archive'] = const {};
+      responses['thread/unarchive'] = {'thread': _threadJson(id: 'thread-5')};
+      responses['thread/fork'] = {'thread': _threadJson(id: 'thread-fork-5')};
+      responses['thread/revert'] = {'thread': _threadJson(id: 'thread-5')};
+      responses['thread/compact/start'] = const {};
+
+      await adapter.renameThread(threadId: 'thread-5', name: 'Renamed task');
+      await adapter.archiveThread('thread-5');
+      final unarchived = await adapter.unarchiveThread('thread-5');
+      final forked = await adapter.forkThread(
+        const ThreadForkOptions(
+          threadId: 'thread-5',
+          beforeTurnId: 'turn-3',
+          cwd: '/workspace/fork',
+        ),
+      );
+      final reverted = await adapter.revertThread(
+        threadId: 'thread-5',
+        beforeTurnId: 'turn-2',
+      );
+      await adapter.compactThread('thread-5');
+
+      expect(unarchived.id, 'thread-5');
+      expect(forked.id, 'thread-fork-5');
+      expect(reverted.id, 'thread-5');
+      expect(requests, [
+        _Request('thread/name/set', {
+          'threadId': 'thread-5',
+          'name': 'Renamed task',
+        }),
+        _Request('thread/archive', {'threadId': 'thread-5'}),
+        _Request('thread/unarchive', {'threadId': 'thread-5'}),
+        _Request('thread/fork', {
+          'threadId': 'thread-5',
+          'excludeTurns': true,
+          'ephemeral': false,
+          'beforeTurnId': 'turn-3',
+          'cwd': '/workspace/fork',
+        }),
+        _Request('thread/revert', {
+          'threadId': 'thread-5',
+          'beforeTurnId': 'turn-2',
+        }),
+        _Request('thread/compact/start', {'threadId': 'thread-5'}),
+      ]);
+    },
+  );
+
+  test('parses thread lifecycle notifications into typed events', () async {
+    final received = <ThreadLifecycleEvent>[];
+    final sub = adapter.events.listen(received.add);
+    addTearDown(sub.cancel);
+
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/name/updated',
+        params: {'threadId': 't-1', 'threadName': 'Updated Name'},
+      ),
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/archived',
+        params: {'threadId': 't-1'},
+      ),
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/unarchived',
+        params: {'threadId': 't-1'},
+      ),
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/reverted',
+        params: {'threadId': 't-1', 'turnsBackwardsCursor': 'cur-1'},
+      ),
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/status/changed',
+        params: {
+          'threadId': 't-1',
+          'status': {'type': 'active'},
+        },
+      ),
+    );
+
+    expect(received, hasLength(5));
+    expect(
+      received[0],
+      isA<ThreadNameUpdatedEvent>()
+          .having((e) => e.threadId, 'threadId', 't-1')
+          .having((e) => e.threadName, 'threadName', 'Updated Name'),
+    );
+    expect(
+      received[1],
+      isA<ThreadArchivedEvent>().having((e) => e.threadId, 'threadId', 't-1'),
+    );
+    expect(
+      received[2],
+      isA<ThreadUnarchivedEvent>().having((e) => e.threadId, 'threadId', 't-1'),
+    );
+    expect(
+      received[3],
+      isA<ThreadRevertedEvent>()
+          .having((e) => e.threadId, 'threadId', 't-1')
+          .having(
+            (e) => e.turnsBackwardsCursor,
+            'turnsBackwardsCursor',
+            'cur-1',
+          ),
+    );
+    expect(
+      received[4],
+      isA<ThreadStatusChangedEvent>()
+          .having((e) => e.threadId, 'threadId', 't-1')
+          .having((e) => e.status, 'status', ThreadRuntimeStatus.active),
     );
   });
 

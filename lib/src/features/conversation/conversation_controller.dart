@@ -79,7 +79,14 @@ class ConversationController extends ChangeNotifier {
 
   void bindThread(ThreadSummary? thread) {
     if (_thread?.id == thread?.id) {
+      final metadataChanged =
+          _thread?.name != thread?.name ||
+          _thread?.status != thread?.status ||
+          _thread?.preview != thread?.preview;
       _thread = thread;
+      if (metadataChanged) {
+        _notify();
+      }
       return;
     }
     _flushTimer?.cancel();

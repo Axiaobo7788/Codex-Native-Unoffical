@@ -134,12 +134,29 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Threads',
+                          controller.showArchived ? 'Archived' : 'Threads',
                           style: Theme.of(context).textTheme.labelMedium
                               ?.copyWith(
                                 color: palette.textSecondary,
                                 fontWeight: FontWeight.w600,
                               ),
+                        ),
+                      ),
+                      CodexIconButton(
+                        key: const ValueKey('thread-archive-toggle'),
+                        tooltip: controller.showArchived
+                            ? 'Show active threads'
+                            : 'Show archived threads',
+                        onPressed: controller.loading || controller.mutating
+                            ? null
+                            : () => controller.setShowArchived(
+                                !controller.showArchived,
+                              ),
+                        icon: Icon(
+                          controller.showArchived
+                              ? Icons.inventory_2_rounded
+                              : Icons.inventory_2_outlined,
+                          size: 16,
                         ),
                       ),
                       CodexIconButton(
@@ -295,11 +312,27 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       );
     }
 
+    final showPinnedGroup = !controller.showArchived && query.isEmpty;
+    final pinnedThreads = showPinnedGroup
+        ? filteredThreads
+              .where((thread) => controller.isPinned(thread.id))
+              .toList(growable: false)
+        : const <ThreadSummary>[];
+    final unpinnedThreads = showPinnedGroup
+        ? filteredThreads
+              .where((thread) => !controller.isPinned(thread.id))
+              .toList(growable: false)
+        : filteredThreads;
+
     final projects = <String, List<ThreadSummary>>{};
-    for (final thread in filteredThreads) {
+    for (final thread in unpinnedThreads) {
       projects.putIfAbsent(thread.cwd, () => <ThreadSummary>[]).add(thread);
     }
     final rows = <Object>[];
+    if (pinnedThreads.isNotEmpty) {
+      rows.add(_PinnedHeading(count: pinnedThreads.length));
+      rows.addAll(pinnedThreads);
+    }
     for (final project in projects.entries) {
       final collapsed =
           query.isEmpty && _collapsedProjects.contains(project.key);
@@ -344,6 +377,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           );
         }
         final row = rows[index];
+        if (row is _PinnedHeading) {
+          return _PinnedHeadingRow(heading: row);
+        }
         if (row is _ProjectHeading) {
           return _ProjectHeadingRow(
             heading: row,
@@ -364,9 +400,23 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           key: ValueKey(thread.id),
           thread: thread,
           selected: controller.selectedThread?.id == thread.id,
+          pinned: controller.isPinned(thread.id),
+          archived: controller.showArchived,
           enabled: !controller.mutating,
           onSelect: () => controller.selectThread(thread.id),
           onResume: () => controller.resumeThread(thread.id),
+          onTogglePin: () => controller.togglePinThread(thread.id),
+          onRename: () => _renameThreadDialog(thread),
+          onFork: () => controller.forkThread(
+            ThreadForkOptions(threadId: thread.id, cwd: thread.cwd),
+          ),
+          onArchiveToggle: () {
+            if (controller.showArchived) {
+              unawaited(controller.unarchiveThread(thread.id));
+            } else {
+              unawaited(controller.archiveThread(thread.id));
+            }
+          },
         );
       },
     );
@@ -456,6 +506,107 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       setState(() => _workingDirectory = next.trim());
     }
   }
+
+  Future<void> _renameThreadDialog(ThreadSummary thread) async {
+    final next = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameThreadDialog(thread: thread),
+    );
+    if (next != null && mounted) {
+      await widget.controller.renameThread(thread.id, next);
+    }
+  }
+}
+
+class _RenameThreadDialog extends StatefulWidget {
+  const _RenameThreadDialog({required this.thread});
+
+  final ThreadSummary thread;
+
+  @override
+  State<_RenameThreadDialog> createState() => _RenameThreadDialogState();
+}
+
+class _RenameThreadDialogState extends State<_RenameThreadDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.thread.name ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final thread = widget.thread;
+    return AlertDialog(
+      title: const Text('Rename thread'),
+      content: SizedBox(
+        width: 420,
+        child: TextField(
+          key: const ValueKey('rename-thread-field'),
+          controller: _controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Thread title',
+            hintText: thread.preview.trim().isEmpty
+                ? 'Untitled thread'
+                : thread.preview.trim(),
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+      ),
+      actions: [
+        CodexButton(
+          variant: CodexButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+        ),
+        CodexButton(
+          key: const ValueKey('rename-thread-save-button'),
+          variant: CodexButtonVariant.primary,
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          label: 'Save',
+        ),
+      ],
+    );
+  }
+}
+
+final class _PinnedHeading {
+  const _PinnedHeading({required this.count});
+
+  final int count;
+}
+
+class _PinnedHeadingRow extends StatelessWidget {
+  const _PinnedHeadingRow({required this.heading});
+
+  final _PinnedHeading heading;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    return CodexSidebarRow(
+      key: const ValueKey('pinned-threads-heading'),
+      title: 'Pinned',
+      leading: Icon(
+        Icons.push_pin_outlined,
+        size: 14,
+        color: palette.textSecondary,
+      ),
+      trailingBuilder: (context, _) => Text(
+        '${heading.count}',
+        style: Theme.of(context).textTheme.labelSmall,
+      ),
+    );
+  }
 }
 
 final class _ProjectHeading {
@@ -519,25 +670,51 @@ class _ProjectHeadingRow extends StatelessWidget {
   }
 }
 
-class _ThreadRow extends StatelessWidget {
+class _ThreadRow extends StatefulWidget {
   const _ThreadRow({
     super.key,
     required this.thread,
     required this.selected,
+    required this.pinned,
+    required this.archived,
     required this.enabled,
     required this.onSelect,
     required this.onResume,
+    required this.onTogglePin,
+    required this.onRename,
+    required this.onFork,
+    required this.onArchiveToggle,
   });
 
   final ThreadSummary thread;
   final bool selected;
+  final bool pinned;
+  final bool archived;
   final bool enabled;
   final VoidCallback onSelect;
   final VoidCallback onResume;
+  final VoidCallback onTogglePin;
+  final VoidCallback onRename;
+  final VoidCallback onFork;
+  final VoidCallback onArchiveToggle;
+
+  @override
+  State<_ThreadRow> createState() => _ThreadRowState();
+}
+
+class _ThreadRowState extends State<_ThreadRow> {
+  final _menuController = CodexPopoverController();
+
+  @override
+  void dispose() {
+    _menuController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final thread = widget.thread;
     final statusColor = switch (thread.status) {
       ThreadRuntimeStatus.active => palette.accent,
       ThreadRuntimeStatus.systemError => palette.danger,
@@ -545,11 +722,10 @@ class _ThreadRow extends StatelessWidget {
     };
 
     return CodexSidebarRow(
-      key: key,
       containerKey: ValueKey('thread-row-${thread.id}'),
       title: thread.displayTitle,
-      selected: selected,
-      onTap: enabled ? onSelect : null,
+      selected: widget.selected,
+      onTap: widget.enabled ? widget.onSelect : null,
       padding: EdgeInsets.only(left: statusColor != null ? 8 : 12, right: 8),
       leading: statusColor != null
           ? Container(
@@ -562,18 +738,93 @@ class _ThreadRow extends StatelessWidget {
             )
           : null,
       trailingBuilder: (context, isHovered) {
-        if (isHovered && thread.status == ThreadRuntimeStatus.notLoaded) {
-          return CodexIconButton(
-            tooltip: 'Resume thread',
-            onPressed: enabled ? onResume : null,
-            size: 24,
-            icon: const Icon(Icons.play_arrow_rounded, size: 16),
+        if (isHovered || _menuController.isOpen) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (thread.status == ThreadRuntimeStatus.notLoaded)
+                CodexIconButton(
+                  tooltip: 'Resume thread',
+                  onPressed: widget.enabled ? widget.onResume : null,
+                  size: 24,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                ),
+              CodexPopoverAnchor(
+                controller: _menuController,
+                targetAnchor: Alignment.bottomRight,
+                followerAnchor: Alignment.topRight,
+                width: 184,
+                popoverBuilder: (context, close) => CodexMenu<String>(
+                  items: [
+                    CodexMenuItem(
+                      value: 'pin',
+                      label: widget.pinned ? 'Unpin thread' : 'Pin thread',
+                      icon: Icon(
+                        widget.pinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                      ),
+                    ),
+                    const CodexMenuItem(
+                      value: 'rename',
+                      label: 'Rename thread',
+                      icon: Icon(Icons.drive_file_rename_outline_rounded),
+                    ),
+                    const CodexMenuItem(
+                      value: 'fork',
+                      label: 'Fork thread',
+                      icon: Icon(Icons.call_split_rounded),
+                    ),
+                    CodexMenuItem(
+                      value: 'archive',
+                      label: widget.archived
+                          ? 'Unarchive thread'
+                          : 'Archive thread',
+                      icon: Icon(
+                        widget.archived
+                            ? Icons.unarchive_outlined
+                            : Icons.inventory_2_outlined,
+                      ),
+                    ),
+                  ],
+                  onSelected: (action) {
+                    close();
+                    switch (action) {
+                      case 'pin':
+                        widget.onTogglePin();
+                      case 'rename':
+                        widget.onRename();
+                      case 'fork':
+                        widget.onFork();
+                      case 'archive':
+                        widget.onArchiveToggle();
+                    }
+                  },
+                ),
+                child: CodexIconButton(
+                  key: ValueKey('thread-menu-${thread.id}'),
+                  tooltip: 'Thread actions',
+                  onPressed: widget.enabled ? _menuController.toggle : null,
+                  size: 24,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 15),
+                ),
+              ),
+            ],
           );
         }
-        return Text(
-          _shortTime(thread.updatedAt),
-          style: Theme.of(context).textTheme.labelSmall
-              ?.copyWith(fontSize: 11, color: palette.textMuted),
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.pinned) ...[
+              Icon(Icons.push_pin_rounded, size: 12, color: palette.textMuted),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              _shortTime(thread.updatedAt),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(fontSize: 11, color: palette.textMuted),
+            ),
+          ],
         );
       },
     );

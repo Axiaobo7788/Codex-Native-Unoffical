@@ -1066,5 +1066,88 @@ void main() {
         expect(find.text('New thread'), findsNothing);
       },
     );
+
+    testWidgets(
+      'T1.6.6: Thread lifecycle actions (pin, rename, compact, fork, archive, unarchive)',
+      (tester) async {
+        final thread = createTestThread(
+          id: 'lifecycle-thread',
+          preview: 'Original lifecycle thread',
+        );
+        final harness = E2ERuntimeHarness(initialThreads: [thread]);
+        await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.text('Original lifecycle thread'));
+        await tester.pumpAndSettle();
+
+        final headerMenuBtn = find.byKey(
+          const ValueKey('thread-actions-menu-button'),
+        );
+        expect(headerMenuBtn, findsOneWidget);
+
+        // 1. Pin thread
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Pin thread'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('pinned-threads-heading')),
+          findsOneWidget,
+        );
+
+        // 2. Rename thread
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Rename thread'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('rename-thread-field')),
+          'Renamed Convergence Thread',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('rename-thread-save-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.renamedThreads, [
+          (threadId: 'lifecycle-thread', name: 'Renamed Convergence Thread'),
+        ]);
+        expect(find.text('Renamed Convergence Thread'), findsWidgets);
+
+        // 3. Compact context
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Compact context'));
+        await tester.pumpAndSettle();
+        expect(harness.compactedThreadIds, ['lifecycle-thread']);
+
+        // 4. Fork thread
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Fork thread'));
+        await tester.pumpAndSettle();
+        expect(harness.forkedThreads, hasLength(1));
+        expect(find.text('Renamed Convergence Thread (fork)'), findsWidgets);
+
+        // 5. Archive forked thread and verify Archived view + Unarchive
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Archive thread'));
+        await tester.pumpAndSettle();
+        expect(harness.archivedThreadIds, ['thread-fork-1']);
+
+        await tester.tap(find.byKey(const ValueKey('thread-archive-toggle')));
+        await tester.pumpAndSettle();
+        expect(find.text('Archived'), findsOneWidget);
+        expect(find.text('Renamed Convergence Thread (fork)'), findsOneWidget);
+
+        await tester.tap(find.text('Renamed Convergence Thread (fork)'));
+        await tester.pumpAndSettle();
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Unarchive thread'));
+        await tester.pumpAndSettle();
+        expect(harness.unarchivedThreadIds, ['thread-fork-1']);
+      },
+    );
   });
 }

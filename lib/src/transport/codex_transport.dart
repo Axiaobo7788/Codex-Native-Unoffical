@@ -11,6 +11,7 @@ abstract interface class CodexTransport implements OutputGateway {
   Stream<CodexServerRequest> get serverRequests;
   Stream<ProtocolViolation> get protocolErrors;
   Stream<TurnEvent> get turnEvents;
+  Stream<ThreadLifecycleEvent> get threadEvents;
   Stream<ApprovalEvent> get approvalEvents;
 
   Future<InitializeResult> initialize(InitializeRequest request);
@@ -26,6 +27,15 @@ abstract interface class CodexTransport implements OutputGateway {
   Future<ThreadSummary> startThread(ThreadStartOptions options);
   Future<ThreadSummary> readThread(String threadId);
   Future<ThreadSummary> resumeThread(String threadId);
+  Future<void> renameThread({required String threadId, required String name});
+  Future<void> archiveThread(String threadId);
+  Future<ThreadSummary> unarchiveThread(String threadId);
+  Future<ThreadSummary> forkThread(ThreadForkOptions options);
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  });
+  Future<void> compactThread(String threadId);
   Future<void> deleteThread(String threadId);
   Future<TurnHandle> startTurn(TurnStartOptions options);
   Future<void> interruptTurn({

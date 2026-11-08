@@ -11,6 +11,7 @@ import '../domain/model_gateway.dart';
 import '../domain/model_models.dart';
 import '../domain/output_gateway.dart';
 import '../domain/output_models.dart';
+import '../domain/product_mode.dart';
 import '../domain/remote_admin_gateway.dart';
 import '../domain/remote_admin_models.dart';
 import '../domain/runtime_snapshot.dart';
@@ -95,11 +96,14 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<ProcessExit>? _exitSubscription;
   StreamSubscription<ProtocolViolation>? _protocolErrorSubscription;
   StreamSubscription<TurnEvent>? _turnEventSubscription;
+  StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
   final StreamController<TurnEvent> _turnEvents =
       StreamController<TurnEvent>.broadcast();
+  final StreamController<ThreadLifecycleEvent> _threadEvents =
+      StreamController<ThreadLifecycleEvent>.broadcast();
   final StreamController<ApprovalEvent> _approvalEvents =
       StreamController<ApprovalEvent>.broadcast();
   Future<void>? _startOperation;
@@ -108,6 +112,9 @@ class RuntimeController extends ChangeNotifier
 
   RuntimeSnapshot get snapshot => _snapshot;
   bool get usesRemote => _usesRemote;
+  BackendCapabilities get capabilities => _usesRemote
+      ? const BackendCapabilities.directHostRemoteReadOnly()
+      : const BackendCapabilities.stockCodexLocal();
   List<CodexModel> get remoteModels =>
       _remoteLifecycle?.projection?.models ?? const [];
   List<ThreadSummary> get remoteThreads =>
@@ -120,6 +127,9 @@ class RuntimeController extends ChangeNotifier
 
   @override
   Stream<TurnEvent> get turnEvents => _turnEvents.stream;
+
+  @override
+  Stream<ThreadLifecycleEvent> get threadEvents => _threadEvents.stream;
 
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvalEvents.stream;
@@ -240,6 +250,35 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().resumeThread(threadId);
 
   @override
+  Future<void> renameThread({required String threadId, required String name}) =>
+      _connectedTransport().renameThread(threadId: threadId, name: name);
+
+  @override
+  Future<void> archiveThread(String threadId) =>
+      _connectedTransport().archiveThread(threadId);
+
+  @override
+  Future<ThreadSummary> unarchiveThread(String threadId) =>
+      _connectedTransport().unarchiveThread(threadId);
+
+  @override
+  Future<ThreadSummary> forkThread(ThreadForkOptions options) =>
+      _connectedTransport().forkThread(options);
+
+  @override
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) => _connectedTransport().revertThread(
+    threadId: threadId,
+    beforeTurnId: beforeTurnId,
+  );
+
+  @override
+  Future<void> compactThread(String threadId) =>
+      _connectedTransport().compactThread(threadId);
+
+  @override
   Future<void> deleteThread(String threadId) =>
       _connectedTransport().deleteThread(threadId);
 
@@ -325,6 +364,10 @@ class RuntimeController extends ChangeNotifier
       _turnEventSubscription = transport.turnEvents.listen(
         _turnEvents.add,
         onError: _handleTurnStreamError,
+      );
+      _threadEventSubscription = transport.threadEvents.listen(
+        _threadEvents.add,
+        onError: _threadEvents.addError,
       );
       _approvalEventSubscription = transport.approvalEvents.listen(
         _approvalEvents.add,
@@ -498,6 +541,7 @@ class RuntimeController extends ChangeNotifier
     await _exitSubscription?.cancel();
     await _protocolErrorSubscription?.cancel();
     await _turnEventSubscription?.cancel();
+    await _threadEventSubscription?.cancel();
     await _approvalEventSubscription?.cancel();
     await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
@@ -505,6 +549,7 @@ class RuntimeController extends ChangeNotifier
     await _remoteOnboardingSubscription?.cancel();
     await _transport?.close();
     await _turnEvents.close();
+    await _threadEvents.close();
     await _approvalEvents.close();
     if (!_disposed) {
       _setSnapshot(

@@ -93,6 +93,8 @@ class E2ERuntimeHarness extends RuntimeController {
 
   final StreamController<TurnEvent> _turnsController =
       StreamController<TurnEvent>.broadcast(sync: true);
+  final StreamController<ThreadLifecycleEvent> _threadsController =
+      StreamController<ThreadLifecycleEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvalsController =
       StreamController<ApprovalEvent>.broadcast(sync: true);
 
@@ -100,6 +102,7 @@ class E2ERuntimeHarness extends RuntimeController {
   RemoteHostStatus _hostStatus;
 
   final List<ThreadSummary> threads = [];
+  final List<ThreadSummary> archivedThreads = [];
   final List<CodexModel> models = [];
   final List<HistoryTurn> historyTurns = [];
   final List<HistoryItem> historyItems = [];
@@ -111,6 +114,12 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<String> startedThreadCwds = [];
   final List<TurnStartOptions> startedTurns = [];
   final List<String> deletedThreadIds = [];
+  final List<({String threadId, String name})> renamedThreads = [];
+  final List<String> archivedThreadIds = [];
+  final List<String> unarchivedThreadIds = [];
+  final List<ThreadForkOptions> forkedThreads = [];
+  final List<({String threadId, String beforeTurnId})> revertedThreads = [];
+  final List<String> compactedThreadIds = [];
   final List<({String threadId, String turnId})> interruptedTurns = [];
   final List<({Object requestId, ApprovalDecision decision})>
   approvalDecisions = [];
@@ -122,6 +131,9 @@ class E2ERuntimeHarness extends RuntimeController {
 
   @override
   Stream<TurnEvent> get turnEvents => _turnsController.stream;
+
+  @override
+  Stream<ThreadLifecycleEvent> get threadEvents => _threadsController.stream;
 
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvalsController.stream;
@@ -143,14 +155,18 @@ class E2ERuntimeHarness extends RuntimeController {
 
   @override
   Future<ThreadPage> listThreads(ThreadListQuery query) async {
-    return ThreadPage(threads: List.unmodifiable(threads), nextCursor: null);
+    final source = query.archived ? archivedThreads : threads;
+    return ThreadPage(threads: List.unmodifiable(source), nextCursor: null);
   }
 
   @override
   Future<ThreadSummary> readThread(String threadId) async {
     return threads.firstWhere(
       (t) => t.id == threadId,
-      orElse: () => _buildDefaultThread(threadId),
+      orElse: () => archivedThreads.firstWhere(
+        (t) => t.id == threadId,
+        orElse: () => _buildDefaultThread(threadId),
+      ),
     );
   }
 
@@ -175,6 +191,94 @@ class E2ERuntimeHarness extends RuntimeController {
     threads.insert(0, newThread);
     notifyListeners();
     return newThread;
+  }
+
+  @override
+  Future<void> renameThread({
+    required String threadId,
+    required String name,
+  }) async {
+    renamedThreads.add((threadId: threadId, name: name));
+    final index = threads.indexWhere((t) => t.id == threadId);
+    if (index != -1) {
+      threads[index] = threads[index].copyWith(
+        name: name.isEmpty ? null : name,
+        clearName: name.isEmpty,
+      );
+    }
+    _threadsController.add(
+      ThreadNameUpdatedEvent(
+        threadId: threadId,
+        threadName: name.isEmpty ? null : name,
+      ),
+    );
+    notifyListeners();
+  }
+
+  @override
+  Future<void> archiveThread(String threadId) async {
+    archivedThreadIds.add(threadId);
+    final index = threads.indexWhere((t) => t.id == threadId);
+    if (index != -1) {
+      archivedThreads.insert(0, threads.removeAt(index));
+    }
+    _threadsController.add(ThreadArchivedEvent(threadId: threadId));
+    notifyListeners();
+  }
+
+  @override
+  Future<ThreadSummary> unarchiveThread(String threadId) async {
+    unarchivedThreadIds.add(threadId);
+    final index = archivedThreads.indexWhere((t) => t.id == threadId);
+    final restored = index != -1
+        ? archivedThreads.removeAt(index)
+        : _buildDefaultThread(threadId);
+    threads.insert(0, restored);
+    _threadsController.add(ThreadUnarchivedEvent(threadId: threadId));
+    notifyListeners();
+    return restored;
+  }
+
+  @override
+  Future<ThreadSummary> forkThread(ThreadForkOptions options) async {
+    forkedThreads.add(options);
+    final source = await readThread(options.threadId);
+    final forked = ThreadSummary(
+      id: 'thread-fork-${forkedThreads.length}',
+      sessionId: 'session-fork-${forkedThreads.length}',
+      preview: '${source.displayTitle} (fork)',
+      cwd: options.cwd ?? source.cwd,
+      createdAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, 1),
+      status: ThreadRuntimeStatus.idle,
+      ephemeral: options.ephemeral,
+      name: source.name != null ? '${source.name} (fork)' : null,
+      model: options.model ?? source.model,
+    );
+    threads.insert(0, forked);
+    notifyListeners();
+    return forked;
+  }
+
+  @override
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) async {
+    revertedThreads.add((threadId: threadId, beforeTurnId: beforeTurnId));
+    final beforeIndex = historyTurns.indexWhere((t) => t.id == beforeTurnId);
+    if (beforeIndex != -1) {
+      historyTurns.removeRange(beforeIndex, historyTurns.length);
+    }
+    _threadsController.add(ThreadRevertedEvent(threadId: threadId));
+    notifyListeners();
+    return readThread(threadId);
+  }
+
+  @override
+  Future<void> compactThread(String threadId) async {
+    compactedThreadIds.add(threadId);
+    notifyListeners();
   }
 
   @override
@@ -418,6 +522,7 @@ class E2ERuntimeHarness extends RuntimeController {
 
   Future<void> disposeHarness() async {
     await _turnsController.close();
+    await _threadsController.close();
     await _approvalsController.close();
     dispose();
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codex_native_unofficial/src/domain/thread_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/features/threads/thread_list_controller.dart';
@@ -16,6 +18,7 @@ void main() {
       maxRetainedThreads: 3,
     );
     addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
 
     await controller.refresh();
     await controller.loadMore();
@@ -38,6 +41,7 @@ void main() {
       maxRetainedThreads: 2,
     );
     addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
 
     await controller.refresh();
     await controller.startThread(const ThreadStartOptions(cwd: '/new-project'));
@@ -76,6 +80,7 @@ void main() {
         maxRetainedThreads: 10,
       );
       addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
 
       await controller.refresh();
 
@@ -91,13 +96,144 @@ void main() {
       expect(controller.canLoadMore, isFalse);
     },
   );
+
+  test(
+    'rename, archive, unarchive, fork, revert, and compact update projection',
+    () async {
+      final gateway = _FakeThreadGateway()
+        ..pages.addAll([
+          ThreadPage(threads: [_thread('1'), _thread('2')], nextCursor: null),
+          ThreadPage(threads: [_thread('1')], nextCursor: null),
+        ]);
+      final controller = ThreadListController(
+        gateway: gateway,
+        pageSize: 5,
+        maxRetainedThreads: 10,
+      );
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+
+      await controller.refresh();
+      await controller.selectThread('1');
+
+      final renamed = await controller.renameThread('1', '  Custom Title  ');
+      expect(renamed, isTrue);
+      expect(gateway.renamedThreads, [('1', 'Custom Title')]);
+      expect(controller.selectedThread?.displayTitle, 'Custom Title');
+      expect(controller.threads.first.displayTitle, 'Custom Title');
+
+      final compacted = await controller.compactThread('1');
+      expect(compacted, isTrue);
+      expect(gateway.compactedIds, ['1']);
+
+      final archived = await controller.archiveThread('1');
+      expect(archived, isTrue);
+      expect(gateway.archivedIds, ['1']);
+      expect(controller.threads.map((t) => t.id), ['2']);
+      expect(controller.selectedThread?.id, '2');
+
+      await controller.setShowArchived(true);
+      expect(controller.showArchived, isTrue);
+      expect(gateway.queries.last.archived, isTrue);
+      expect(controller.threads.map((t) => t.id), ['1']);
+
+      final unarchived = await controller.unarchiveThread('1');
+      expect(unarchived?.id, '1');
+      expect(gateway.unarchivedIds, ['1']);
+      expect(controller.threads, isEmpty);
+
+      final forked = await controller.forkThread(
+        const ThreadForkOptions(threadId: '2', beforeTurnId: 'turn-1'),
+      );
+      expect(forked?.id, 'fork-2');
+      expect(controller.showArchived, isFalse);
+      expect(controller.selectedThread?.id, 'fork-2');
+
+      final reverted = await controller.revertThread(
+        threadId: 'fork-2',
+        beforeTurnId: 'turn-1',
+      );
+      expect(reverted?.id, 'fork-2');
+      expect(gateway.revertedThreads, [('fork-2', 'turn-1')]);
+    },
+  );
+
+  test('bounds pinnedThreadIds to maxPinnedThreads (32)', () {
+    final gateway = _FakeThreadGateway();
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+
+    for (var i = 0; i < ThreadListController.maxPinnedThreads + 5; i++) {
+      controller.togglePinThread('t-$i');
+    }
+
+    expect(
+      controller.pinnedThreadIds.length,
+      ThreadListController.maxPinnedThreads,
+    );
+    expect(controller.isPinned('t-0'), isFalse);
+    expect(controller.isPinned('t-4'), isFalse);
+    expect(controller.isPinned('t-5'), isTrue);
+    expect(
+      controller.isPinned('t-${ThreadListController.maxPinnedThreads + 4}'),
+      isTrue,
+    );
+
+    controller.togglePinThread('t-5');
+    expect(controller.isPinned('t-5'), isFalse);
+  });
+
+  test('applies live ThreadLifecycleEvents to retained threads', () async {
+    final gateway = _FakeThreadGateway()
+      ..pages.add(
+        ThreadPage(threads: [_thread('1'), _thread('2')], nextCursor: null),
+      );
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+
+    await controller.refresh();
+    await controller.selectThread('1');
+
+    gateway.events.add(
+      const ThreadNameUpdatedEvent(
+        threadId: '1',
+        threadName: 'Server Generated Title',
+      ),
+    );
+    expect(controller.selectedThread?.displayTitle, 'Server Generated Title');
+
+    gateway.events.add(
+      const ThreadStatusChangedEvent(
+        threadId: '1',
+        status: ThreadRuntimeStatus.active,
+      ),
+    );
+    expect(controller.selectedThread?.status, ThreadRuntimeStatus.active);
+
+    gateway.events.add(const ThreadArchivedEvent(threadId: '1'));
+    expect(controller.threads.map((t) => t.id), ['2']);
+    expect(controller.selectedThread?.id, '2');
+  });
 }
 
 class _FakeThreadGateway implements ThreadGateway {
+  final StreamController<ThreadLifecycleEvent> events =
+      StreamController<ThreadLifecycleEvent>.broadcast(sync: true);
   final List<ThreadPage> pages = [];
   final List<ThreadListQuery> queries = [];
   final List<String> readIds = [];
   final List<String> resumeIds = [];
+  final List<(String, String)> renamedThreads = [];
+  final List<String> archivedIds = [];
+  final List<String> unarchivedIds = [];
+  final List<ThreadForkOptions> forkedOptions = [];
+  final List<(String, String)> revertedThreads = [];
+  final List<String> compactedIds = [];
+
+  @override
+  Stream<ThreadLifecycleEvent> get threadEvents => events.stream;
 
   @override
   Future<void> deleteThread(String threadId) async {}
@@ -123,6 +259,51 @@ class _FakeThreadGateway implements ThreadGateway {
     resumeIds.add(threadId);
     return _thread(threadId, status: ThreadRuntimeStatus.idle);
   }
+
+  @override
+  Future<void> renameThread({
+    required String threadId,
+    required String name,
+  }) async {
+    renamedThreads.add((threadId, name));
+  }
+
+  @override
+  Future<void> archiveThread(String threadId) async {
+    archivedIds.add(threadId);
+  }
+
+  @override
+  Future<ThreadSummary> unarchiveThread(String threadId) async {
+    unarchivedIds.add(threadId);
+    return _thread(threadId, status: ThreadRuntimeStatus.idle);
+  }
+
+  @override
+  Future<ThreadSummary> forkThread(ThreadForkOptions options) async {
+    forkedOptions.add(options);
+    return _thread(
+      'fork-${options.threadId}',
+      cwd: options.cwd ?? '/workspace',
+      status: ThreadRuntimeStatus.idle,
+    );
+  }
+
+  @override
+  Future<ThreadSummary> revertThread({
+    required String threadId,
+    required String beforeTurnId,
+  }) async {
+    revertedThreads.add((threadId, beforeTurnId));
+    return _thread(threadId, status: ThreadRuntimeStatus.idle);
+  }
+
+  @override
+  Future<void> compactThread(String threadId) async {
+    compactedIds.add(threadId);
+  }
+
+  Future<void> dispose() => events.close();
 }
 
 ThreadSummary _thread(
