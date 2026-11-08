@@ -64,6 +64,7 @@ class ConversationController extends ChangeNotifier {
   }
 
   static const _omittedPrefix = '[Earlier text omitted]\n';
+  static const _maxReasoningSummaryChars = 240;
 
   final TurnGateway gateway;
   final ExecutionSettingsController settings;
@@ -73,10 +74,18 @@ class ConversationController extends ChangeNotifier {
   final Duration coalesceInterval;
   final List<ConversationEntry> _entries = [];
   final LinkedHashMap<String, StringBuffer> _deltaBuffers = LinkedHashMap();
+  final LinkedHashMap<String, ({String turnId, StringBuffer buffer})>
+  _reasoningDeltaBuffers = LinkedHashMap();
+  final LinkedHashMap<String, String> _reasoningSummaries = LinkedHashMap();
+  final LinkedHashMap<String, String> _mcpBaseSummaries = LinkedHashMap();
   late final StreamSubscription<TurnEvent> _eventSubscription;
   Timer? _flushTimer;
   ThreadSummary? _thread;
   String? _activeTurnId;
+  TurnPlanSnapshot? _latestTurnPlan;
+  ThreadTokenUsageSnapshot? _tokenUsage;
+  ModelReroutedEvent? _latestModelReroute;
+  String? _latestWarning;
   var _busy = false;
   var _steering = false;
   var _interruptReady = false;
@@ -86,10 +95,31 @@ class ConversationController extends ChangeNotifier {
   List<ConversationEntry> get entries => List.unmodifiable(_entries);
   ThreadSummary? get thread => _thread;
   String? get activeTurnId => _activeTurnId;
+  TurnPlanSnapshot? get latestTurnPlan => _latestTurnPlan;
+  ThreadTokenUsageSnapshot? get tokenUsage => _tokenUsage;
+  ModelReroutedEvent? get latestModelReroute => _latestModelReroute;
+  String? get latestWarning => _latestWarning;
   bool get busy => _busy;
   bool get canInterrupt => _busy && _interruptReady;
   bool get canSteer =>
       _busy && _interruptReady && _activeTurnId != null && !_steering;
+
+  void dismissTelemetryNotice() {
+    if (_latestWarning == null && _latestModelReroute == null) {
+      return;
+    }
+    _latestWarning = null;
+    _latestModelReroute = null;
+    _notify();
+  }
+
+  void dismissTurnPlan() {
+    if (_latestTurnPlan == null) {
+      return;
+    }
+    _latestTurnPlan = null;
+    _notify();
+  }
 
   void bindThread(ThreadSummary? thread) {
     if (_thread?.id == thread?.id) {
@@ -106,9 +136,16 @@ class ConversationController extends ChangeNotifier {
     _flushTimer?.cancel();
     _flushTimer = null;
     _deltaBuffers.clear();
+    _reasoningDeltaBuffers.clear();
+    _reasoningSummaries.clear();
+    _mcpBaseSummaries.clear();
     _entries.clear();
     _thread = thread;
     _activeTurnId = null;
+    _latestTurnPlan = null;
+    _tokenUsage = null;
+    _latestModelReroute = null;
+    _latestWarning = null;
     _busy = false;
     _steering = false;
     _interruptReady = false;
@@ -119,11 +156,24 @@ class ConversationController extends ChangeNotifier {
     _flushTimer?.cancel();
     _flushTimer = null;
     _deltaBuffers.clear();
-    if (_entries.isEmpty && !_busy && _activeTurnId == null) {
+    _reasoningDeltaBuffers.clear();
+    _reasoningSummaries.clear();
+    _mcpBaseSummaries.clear();
+    if (_entries.isEmpty &&
+        !_busy &&
+        _activeTurnId == null &&
+        _latestTurnPlan == null &&
+        _tokenUsage == null &&
+        _latestModelReroute == null &&
+        _latestWarning == null) {
       return;
     }
     _entries.clear();
     _activeTurnId = null;
+    _latestTurnPlan = null;
+    _tokenUsage = null;
+    _latestModelReroute = null;
+    _latestWarning = null;
     _busy = false;
     _steering = false;
     _interruptReady = false;
@@ -286,7 +336,10 @@ class ConversationController extends ChangeNotifier {
   }
 
   void _handleEvent(TurnEvent event) {
-    if (_disposed || event.threadId != _thread?.id) {
+    if (_disposed || _thread == null) {
+      return;
+    }
+    if (event.threadId.isNotEmpty && event.threadId != _thread!.id) {
       return;
     }
     switch (event) {
@@ -322,17 +375,111 @@ class ConversationController extends ChangeNotifier {
         _bufferDelta(event.itemId, event.delta);
       case AssistantMessageEvent():
         _completeAssistantMessage(event);
-      case ActivityEvent():
+      case ReasoningSummaryDeltaEvent():
+        _bufferReasoningDelta(event.itemId, event.turnId, event.delta);
+      case McpToolCallProgressEvent():
+        final base = _mcpBaseSummaries[event.itemId] ?? 'MCP';
+        final text = event.message.isEmpty ? base : '$base — ${event.message}';
         _upsert(
           ConversationEntry(
             id: event.itemId,
             kind: ConversationEntryKind.activity,
-            text: _bounded(event.summary),
+            text: _bounded(text),
+            completed: false,
+            turnId: event.turnId,
+            status: 'inProgress',
+          ),
+        );
+        _notify();
+      case TurnPlanUpdatedEvent():
+        _latestTurnPlan = event.plan;
+        final plan = event.plan;
+        final activeStep = plan.steps
+            .where((s) => s.status == TurnPlanStepStatus.inProgress)
+            .map((s) => s.step)
+            .firstOrNull;
+        final headline =
+            activeStep ??
+            plan.explanation ??
+            (plan.steps.isNotEmpty ? plan.steps.first.step : null);
+        final summary = headline == null || headline.isEmpty
+            ? 'Plan updated (${plan.completedCount}/${plan.steps.length} completed)'
+            : 'Plan (${plan.completedCount}/${plan.steps.length} completed): $headline';
+        _upsert(
+          ConversationEntry(
+            id: 'turn-plan-${event.turnId}',
+            kind: ConversationEntryKind.activity,
+            text: _bounded(summary),
+            completed: plan.allCompleted,
+            turnId: event.turnId,
+            status: plan.allCompleted ? 'completed' : 'inProgress',
+          ),
+        );
+        _notify();
+      case ThreadTokenUsageUpdatedEvent():
+        _tokenUsage = event.usage;
+        _notify();
+      case HookActivityEvent():
+        final effectiveTurnId = event.turnId.isEmpty
+            ? _activeTurnId
+            : event.turnId;
+        _upsert(
+          ConversationEntry(
+            id: 'hook-${event.runId}',
+            kind: ConversationEntryKind.activity,
+            text: _bounded(event.formattedSummary),
+            completed: event.completed,
+            turnId: effectiveTurnId,
+            status: event.status,
+          ),
+        );
+        _notify();
+      case ModelReroutedEvent():
+        _latestModelReroute = event;
+        _upsert(
+          ConversationEntry(
+            id: 'model-reroute-${event.turnId}',
+            kind: ConversationEntryKind.activity,
+            text: _bounded(
+              'Model rerouted: ${event.fromModel} → ${event.toModel} (${event.reason})',
+            ),
+            completed: true,
+            turnId: event.turnId,
+            status: 'completed',
+          ),
+        );
+        _notify();
+      case TurnWarningEvent():
+        _latestWarning = _bounded(event.message);
+        _notify();
+      case ActivityEvent():
+        final bufferedReasoning = _reasoningDeltaBuffers.remove(event.itemId);
+        if (bufferedReasoning != null) {
+          _flushReasoningDelta(event.itemId, bufferedReasoning);
+        }
+        var summary = event.summary;
+        if (summary == 'Reasoning') {
+          final accumulated = _reasoningSummaries[event.itemId];
+          if (accumulated != null && accumulated.isNotEmpty) {
+            summary = 'Reasoning: $accumulated';
+          }
+        } else if (summary.startsWith('MCP: ')) {
+          _rememberBounded(_mcpBaseSummaries, event.itemId, summary);
+        }
+        _upsert(
+          ConversationEntry(
+            id: event.itemId,
+            kind: ConversationEntryKind.activity,
+            text: _bounded(summary),
             completed: event.completed,
             turnId: event.turnId,
             status: event.status,
           ),
         );
+        if (_deltaBuffers.isEmpty && _reasoningDeltaBuffers.isEmpty) {
+          _flushTimer?.cancel();
+          _flushTimer = null;
+        }
         _notify();
       case TurnErrorEvent():
         _appendError(
@@ -343,6 +490,18 @@ class ConversationController extends ChangeNotifier {
         _notify();
       case TurnDiffUpdatedEvent():
       // Diff state has its own bounded projection and view controller.
+    }
+  }
+
+  void _rememberBounded(
+    LinkedHashMap<String, String> map,
+    String key,
+    String value,
+  ) {
+    map.remove(key);
+    map[key] = value;
+    while (map.length > maxEntries) {
+      map.remove(map.keys.first);
     }
   }
 
@@ -357,6 +516,23 @@ class ConversationController extends ChangeNotifier {
       _deltaBuffers[itemId] = buffer;
     }
     buffer.write(delta);
+    _flushTimer ??= Timer(coalesceInterval, _flushDeltas);
+  }
+
+  void _bufferReasoningDelta(String itemId, String turnId, String delta) {
+    var pending = _reasoningDeltaBuffers[itemId];
+    if (pending == null) {
+      if (_reasoningDeltaBuffers.length >= maxPendingDeltaItems) {
+        final oldestId = _reasoningDeltaBuffers.keys.first;
+        _flushReasoningDelta(
+          oldestId,
+          _reasoningDeltaBuffers.remove(oldestId)!,
+        );
+      }
+      pending = (turnId: turnId, buffer: StringBuffer());
+      _reasoningDeltaBuffers[itemId] = pending;
+    }
+    pending.buffer.write(delta);
     _flushTimer ??= Timer(coalesceInterval, _flushDeltas);
   }
 
@@ -378,7 +554,7 @@ class ConversationController extends ChangeNotifier {
         turnId: event.turnId,
       ),
     );
-    if (_deltaBuffers.isEmpty) {
+    if (_deltaBuffers.isEmpty && _reasoningDeltaBuffers.isEmpty) {
       _flushTimer?.cancel();
       _flushTimer = null;
     }
@@ -388,7 +564,7 @@ class ConversationController extends ChangeNotifier {
   void _flushDeltas() {
     _flushTimer?.cancel();
     _flushTimer = null;
-    if (_deltaBuffers.isEmpty) {
+    if (_deltaBuffers.isEmpty && _reasoningDeltaBuffers.isEmpty) {
       return;
     }
     final buffered = Map<String, StringBuffer>.from(_deltaBuffers);
@@ -396,7 +572,46 @@ class ConversationController extends ChangeNotifier {
     for (final entry in buffered.entries) {
       _flushDelta(entry.key, entry.value);
     }
+    final bufferedReasoning =
+        Map<String, ({String turnId, StringBuffer buffer})>.from(
+          _reasoningDeltaBuffers,
+        );
+    _reasoningDeltaBuffers.clear();
+    for (final entry in bufferedReasoning.entries) {
+      _flushReasoningDelta(entry.key, entry.value);
+    }
     _notify();
+  }
+
+  void _flushReasoningDelta(
+    String itemId,
+    ({String turnId, StringBuffer buffer}) pending,
+  ) {
+    final existingSummary = _reasoningSummaries[itemId] ?? '';
+    final combined = '$existingSummary${pending.buffer}'
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final boundedSummary = combined.length <= _maxReasoningSummaryChars
+        ? combined
+        : '${combined.substring(0, _maxReasoningSummaryChars)}…';
+    _rememberBounded(_reasoningSummaries, itemId, boundedSummary);
+    final index = _entries.indexWhere((entry) => entry.id == itemId);
+    final isAlreadyCompleted = index != -1 && _entries[index].completed;
+    final status = index != -1
+        ? (_entries[index].status ?? 'inProgress')
+        : 'inProgress';
+    _upsert(
+      ConversationEntry(
+        id: itemId,
+        kind: ConversationEntryKind.activity,
+        text: boundedSummary.isEmpty
+            ? 'Reasoning'
+            : 'Reasoning: $boundedSummary',
+        completed: isAlreadyCompleted,
+        turnId: pending.turnId.isEmpty ? _activeTurnId : pending.turnId,
+        status: status,
+      ),
+    );
   }
 
   void _flushDelta(String itemId, StringBuffer buffer) {
@@ -482,6 +697,9 @@ class ConversationController extends ChangeNotifier {
     _disposed = true;
     _flushTimer?.cancel();
     _deltaBuffers.clear();
+    _reasoningDeltaBuffers.clear();
+    _reasoningSummaries.clear();
+    _mcpBaseSummaries.clear();
     unawaited(_eventSubscription.cancel());
     super.dispose();
   }

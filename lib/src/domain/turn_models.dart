@@ -130,3 +130,205 @@ class TurnDiffUpdatedEvent extends TurnEvent {
 
   final DiffSnapshot snapshot;
 }
+
+enum TurnPlanStepStatus { pending, inProgress, completed, unknown }
+
+class TurnPlanStepModel {
+  const TurnPlanStepModel({required this.step, required this.status});
+
+  final String step;
+  final TurnPlanStepStatus status;
+}
+
+class TurnPlanSnapshot {
+  const TurnPlanSnapshot({
+    required this.threadId,
+    required this.turnId,
+    required this.steps,
+    this.explanation,
+  });
+
+  final String threadId;
+  final String turnId;
+  final List<TurnPlanStepModel> steps;
+  final String? explanation;
+
+  int get completedCount =>
+      steps.where((step) => step.status == TurnPlanStepStatus.completed).length;
+
+  bool get allCompleted => steps.isNotEmpty && completedCount == steps.length;
+}
+
+class TurnPlanUpdatedEvent extends ActivityEvent {
+  TurnPlanUpdatedEvent({required this.plan})
+    : super(
+        threadId: plan.threadId,
+        turnId: plan.turnId,
+        itemId: 'turn-plan-${plan.turnId}',
+        summary:
+            'Plan updated (${plan.completedCount}/${plan.steps.length} completed)',
+        status: plan.allCompleted ? 'completed' : 'inProgress',
+        completed: plan.allCompleted,
+      );
+
+  final TurnPlanSnapshot plan;
+}
+
+class TokenUsageBreakdownModel {
+  const TokenUsageBreakdownModel({
+    required this.inputTokens,
+    required this.cachedInputTokens,
+    this.cacheWriteInputTokens = 0,
+    required this.outputTokens,
+    required this.reasoningOutputTokens,
+    required this.totalTokens,
+  });
+
+  final int inputTokens;
+  final int cachedInputTokens;
+  final int cacheWriteInputTokens;
+  final int outputTokens;
+  final int reasoningOutputTokens;
+  final int totalTokens;
+}
+
+class ThreadTokenUsageSnapshot {
+  const ThreadTokenUsageSnapshot({
+    required this.threadId,
+    required this.turnId,
+    required this.last,
+    required this.total,
+    this.modelContextWindow,
+  });
+
+  final String threadId;
+  final String turnId;
+  final TokenUsageBreakdownModel last;
+  final TokenUsageBreakdownModel total;
+  final int? modelContextWindow;
+
+  double? get contextWindowUtilization {
+    final window = modelContextWindow;
+    if (window == null || window <= 0) {
+      return null;
+    }
+    return (total.totalTokens / window).clamp(0.0, 1.0);
+  }
+}
+
+class ThreadTokenUsageUpdatedEvent extends ActivityEvent {
+  ThreadTokenUsageUpdatedEvent({required this.usage})
+    : super(
+        threadId: usage.threadId,
+        turnId: usage.turnId,
+        itemId: 'token-usage-${usage.turnId}',
+        summary: 'Token usage: ${usage.total.totalTokens} total',
+        status: 'completed',
+        completed: true,
+      );
+
+  final ThreadTokenUsageSnapshot usage;
+}
+
+class ReasoningSummaryDeltaEvent extends ActivityEvent {
+  const ReasoningSummaryDeltaEvent({
+    required super.threadId,
+    required super.turnId,
+    required super.itemId,
+    required this.summaryIndex,
+    required this.delta,
+  }) : super(summary: 'Reasoning', status: 'inProgress', completed: false);
+
+  final int summaryIndex;
+  final String delta;
+}
+
+class McpToolCallProgressEvent extends ActivityEvent {
+  const McpToolCallProgressEvent({
+    required super.threadId,
+    required super.turnId,
+    required super.itemId,
+    required this.message,
+  }) : super(
+         summary: 'MCP progress: $message',
+         status: 'inProgress',
+         completed: false,
+       );
+
+  final String message;
+}
+
+class HookActivityEvent extends ActivityEvent {
+  const HookActivityEvent({
+    required super.threadId,
+    required super.turnId,
+    required this.runId,
+    required this.eventName,
+    required this.handlerType,
+    required this.executionMode,
+    required this.scope,
+    required super.status,
+    required super.completed,
+    this.statusMessage,
+    this.durationMs,
+    this.entrySummary,
+  }) : super(itemId: 'hook-$runId', summary: 'Hook: $eventName ($handlerType)');
+
+  final String runId;
+  final String eventName;
+  final String handlerType;
+  final String executionMode;
+  final String scope;
+  final String? statusMessage;
+  final int? durationMs;
+  final String? entrySummary;
+
+  String get formattedSummary {
+    final base = 'Hook: $eventName ($handlerType)';
+    final details = <String>[
+      if (statusMessage != null && statusMessage!.trim().isNotEmpty)
+        statusMessage!.trim()
+      else if (entrySummary != null && entrySummary!.trim().isNotEmpty)
+        entrySummary!.trim(),
+      if (durationMs != null && durationMs! >= 0) '${durationMs}ms',
+    ];
+    if (details.isEmpty) {
+      return base;
+    }
+    return '$base — ${details.join(' · ')}';
+  }
+}
+
+class ModelReroutedEvent extends ActivityEvent {
+  const ModelReroutedEvent({
+    required super.threadId,
+    required super.turnId,
+    required this.fromModel,
+    required this.toModel,
+    required this.reason,
+  }) : super(
+         itemId: 'model-reroute-$turnId',
+         summary: 'Model rerouted: $fromModel → $toModel ($reason)',
+         status: 'completed',
+         completed: true,
+       );
+
+  final String fromModel;
+  final String toModel;
+  final String reason;
+}
+
+class TurnWarningEvent extends ActivityEvent {
+  const TurnWarningEvent({
+    required super.threadId,
+    super.turnId = '',
+    required this.message,
+  }) : super(
+         itemId: 'warning-$turnId',
+         summary: 'Warning: $message',
+         status: 'warning',
+         completed: true,
+       );
+
+  final String message;
+}

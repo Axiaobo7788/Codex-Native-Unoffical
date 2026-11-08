@@ -238,6 +238,173 @@ void main() {
     expect(controller.busy, isFalse);
     expect(controller.activeTurnId, isNull);
   });
+
+  test('projects and coalesces reasoning summary deltas, MCP tool progress, turn plan, token usage, hooks, model reroute, and warnings with thread-switch reset', () async {
+    var listenerCalls = 0;
+    controller.addListener(() => listenerCalls += 1);
+
+    // 1. Coalesce 20 reasoning summary deltas into a single 50ms flush and preserve summary on item/completed.
+    for (var i = 0; i < 20; i++) {
+      gateway.events.add(
+        const ReasoningSummaryDeltaEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'reason-1',
+          summaryIndex: 0,
+          delta: 'step ',
+        ),
+      );
+    }
+    expect(listenerCalls, 0);
+    await Future<void>.delayed(Duration.zero);
+    expect(listenerCalls, 1);
+    expect(
+      controller.entries.single.text,
+      startsWith('Reasoning: step step step'),
+    );
+    expect(controller.entries.single.completed, isFalse);
+
+    gateway.events.add(
+      const ActivityEvent(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId: 'reason-1',
+        summary: 'Reasoning',
+        status: 'completed',
+        completed: true,
+      ),
+    );
+    expect(
+      controller.entries.single.text,
+      startsWith('Reasoning: step step step'),
+    );
+    expect(controller.entries.single.completed, isTrue);
+
+    // 2. MCP tool call progress updates in-flight MCP activity item in place.
+    gateway.events
+      ..add(
+        const ActivityEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'mcp-1',
+          summary: 'MCP: github/list_issues',
+          status: 'inProgress',
+          completed: false,
+        ),
+      )
+      ..add(
+        const McpToolCallProgressEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'mcp-1',
+          message: 'Loaded 25 issues',
+        ),
+      );
+    final mcpEntry = controller.entries.firstWhere((e) => e.id == 'mcp-1');
+    expect(mcpEntry.text, 'MCP: github/list_issues — Loaded 25 issues');
+    expect(mcpEntry.completed, isFalse);
+
+    // 3. Turn plan, token usage, hooks, model reroute, and warnings update bounded state.
+    gateway.events
+      ..add(
+        TurnPlanUpdatedEvent(
+          plan: const TurnPlanSnapshot(
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            explanation: 'Execute validation suite',
+            steps: [
+              TurnPlanStepModel(
+                step: 'Parse notifications',
+                status: TurnPlanStepStatus.completed,
+              ),
+              TurnPlanStepModel(
+                step: 'Verify UI banners',
+                status: TurnPlanStepStatus.inProgress,
+              ),
+            ],
+          ),
+        ),
+      )
+      ..add(
+        ThreadTokenUsageUpdatedEvent(
+          usage: const ThreadTokenUsageSnapshot(
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            last: TokenUsageBreakdownModel(
+              inputTokens: 500,
+              cachedInputTokens: 100,
+              outputTokens: 200,
+              reasoningOutputTokens: 50,
+              totalTokens: 700,
+            ),
+            total: TokenUsageBreakdownModel(
+              inputTokens: 6000,
+              cachedInputTokens: 2000,
+              outputTokens: 400,
+              reasoningOutputTokens: 100,
+              totalTokens: 6400,
+            ),
+            modelContextWindow: 64000,
+          ),
+        ),
+      )
+      ..add(
+        const HookActivityEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          runId: 'hook-1',
+          eventName: 'preToolUse',
+          handlerType: 'command',
+          executionMode: 'sync',
+          scope: 'turn',
+          status: 'completed',
+          completed: true,
+          statusMessage: 'Checked permissions',
+          durationMs: 18,
+        ),
+      )
+      ..add(
+        const ModelReroutedEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          fromModel: 'gpt-5-codex',
+          toModel: 'o3-mini',
+          reason: 'highRiskCyberActivity',
+        ),
+      )
+      ..add(
+        const TurnWarningEvent(
+          threadId: 'thread-1',
+          message: 'Approaching rate limit window.',
+        ),
+      );
+
+    expect(controller.latestTurnPlan?.completedCount, 1);
+    expect(controller.tokenUsage?.total.totalTokens, 6400);
+    expect(controller.latestModelReroute?.toModel, 'o3-mini');
+    expect(controller.latestWarning, 'Approaching rate limit window.');
+    expect(
+      controller.entries.any(
+        (e) =>
+            e.id == 'hook-hook-1' &&
+            e.text.contains('Hook: preToolUse (command)'),
+      ),
+      isTrue,
+    );
+
+    controller.dismissTelemetryNotice();
+    expect(controller.latestWarning, isNull);
+    expect(controller.latestModelReroute, isNull);
+
+    controller.dismissTurnPlan();
+    expect(controller.latestTurnPlan, isNull);
+
+    // 4. Switching threads resets all per-thread telemetry state.
+    controller.bindThread(_thread(id: 'thread-2'));
+    expect(controller.tokenUsage, isNull);
+    expect(controller.latestTurnPlan, isNull);
+    expect(controller.entries, isEmpty);
+  });
 }
 
 class _FakeTurnGateway implements TurnGateway {

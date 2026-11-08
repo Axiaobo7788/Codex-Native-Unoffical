@@ -6,6 +6,13 @@ import 'thread_protocol.dart';
 import 'unified_diff_parser.dart';
 
 final class TurnProtocolAdapter {
+  static const _maxTurnPlanSteps = 50;
+  static const _maxPlanStepLength = 240;
+  static const _maxPlanExplanationLength = 320;
+  static const _maxProgressMessageLength = 240;
+  static const _maxHookMessageLength = 240;
+  static const _maxWarningMessageLength = 320;
+
   TurnProtocolAdapter({
     required this.request,
     required Stream<CodexNotification> notifications,
@@ -123,9 +130,208 @@ final class TurnProtocolAdapter {
           diff: _requiredString(params, 'diff'),
         ),
       ),
+      'turn/plan/updated' => _parseTurnPlanUpdated(params),
+      'thread/tokenUsage/updated' => _parseThreadTokenUsageUpdated(params),
+      'item/reasoning/summaryTextDelta' => _parseReasoningSummaryDelta(params),
+      'item/mcpToolCall/progress' => _parseMcpToolCallProgress(params),
+      'hook/started' => _parseHookNotification(params, completed: false),
+      'hook/completed' => _parseHookNotification(params, completed: true),
+      'model/rerouted' => _parseModelRerouted(params),
+      'warning' => _parseWarning(params),
       'error' => _parseError(params),
       _ => null,
     };
+  }
+
+  static TurnPlanUpdatedEvent _parseTurnPlanUpdated(JsonObject params) {
+    final threadId = _requiredString(params, 'threadId');
+    final turnId = _requiredString(params, 'turnId');
+    final rawPlan = params['plan'];
+    if (rawPlan is! List<Object?>) {
+      throw const ProtocolViolation('turn/plan/updated plan must be an array.');
+    }
+    final rawExplanation = _optionalString(params, 'explanation')?.trim();
+    final explanation = rawExplanation == null || rawExplanation.isEmpty
+        ? null
+        : _truncate(rawExplanation, _maxPlanExplanationLength);
+    final steps = <TurnPlanStepModel>[];
+    for (final item in rawPlan) {
+      if (steps.length >= _maxTurnPlanSteps) {
+        break;
+      }
+      if (item is! Map<String, Object?>) {
+        throw const ProtocolViolation('TurnPlanStep must be an object.');
+      }
+      final stepText = _requiredString(item, 'step').trim();
+      final statusRaw = _requiredString(item, 'status');
+      steps.add(
+        TurnPlanStepModel(
+          step: _truncate(stepText, _maxPlanStepLength),
+          status: _planStepStatus(statusRaw),
+        ),
+      );
+    }
+    return TurnPlanUpdatedEvent(
+      plan: TurnPlanSnapshot(
+        threadId: threadId,
+        turnId: turnId,
+        steps: List<TurnPlanStepModel>.unmodifiable(steps),
+        explanation: explanation,
+      ),
+    );
+  }
+
+  static ThreadTokenUsageUpdatedEvent _parseThreadTokenUsageUpdated(
+    JsonObject params,
+  ) {
+    final threadId = _requiredString(params, 'threadId');
+    final turnId = _requiredString(params, 'turnId');
+    final tokenUsage = _requiredObject(
+      params,
+      'tokenUsage',
+      'thread/tokenUsage/updated',
+    );
+    final last = _parseTokenUsageBreakdown(
+      _requiredObject(tokenUsage, 'last', 'ThreadTokenUsage'),
+    );
+    final total = _parseTokenUsageBreakdown(
+      _requiredObject(tokenUsage, 'total', 'ThreadTokenUsage'),
+    );
+    final rawWindow = tokenUsage['modelContextWindow'];
+    if (rawWindow != null && rawWindow is! int) {
+      throw const ProtocolViolation(
+        'ThreadTokenUsage field modelContextWindow must be an integer or null.',
+      );
+    }
+    return ThreadTokenUsageUpdatedEvent(
+      usage: ThreadTokenUsageSnapshot(
+        threadId: threadId,
+        turnId: turnId,
+        last: last,
+        total: total,
+        modelContextWindow: rawWindow is int && rawWindow > 0
+            ? rawWindow
+            : null,
+      ),
+    );
+  }
+
+  static TokenUsageBreakdownModel _parseTokenUsageBreakdown(JsonObject raw) {
+    return TokenUsageBreakdownModel(
+      inputTokens: _nonNegativeInt(raw, 'inputTokens'),
+      cachedInputTokens: _nonNegativeInt(raw, 'cachedInputTokens'),
+      cacheWriteInputTokens: raw['cacheWriteInputTokens'] == null
+          ? 0
+          : _nonNegativeInt(raw, 'cacheWriteInputTokens'),
+      outputTokens: _nonNegativeInt(raw, 'outputTokens'),
+      reasoningOutputTokens: _nonNegativeInt(raw, 'reasoningOutputTokens'),
+      totalTokens: _nonNegativeInt(raw, 'totalTokens'),
+    );
+  }
+
+  static ReasoningSummaryDeltaEvent _parseReasoningSummaryDelta(
+    JsonObject params,
+  ) {
+    final rawIndex = params['summaryIndex'];
+    if (rawIndex is! int || rawIndex < 0) {
+      throw const ProtocolViolation(
+        'ReasoningSummaryTextDelta field summaryIndex must be a non-negative integer.',
+      );
+    }
+    return ReasoningSummaryDeltaEvent(
+      threadId: _requiredString(params, 'threadId'),
+      turnId: _requiredString(params, 'turnId'),
+      itemId: _requiredString(params, 'itemId'),
+      summaryIndex: rawIndex,
+      delta: _requiredString(params, 'delta'),
+    );
+  }
+
+  static McpToolCallProgressEvent _parseMcpToolCallProgress(JsonObject params) {
+    return McpToolCallProgressEvent(
+      threadId: _requiredString(params, 'threadId'),
+      turnId: _requiredString(params, 'turnId'),
+      itemId: _requiredString(params, 'itemId'),
+      message: _truncate(
+        _requiredString(params, 'message').trim(),
+        _maxProgressMessageLength,
+      ),
+    );
+  }
+
+  static HookActivityEvent _parseHookNotification(
+    JsonObject params, {
+    required bool completed,
+  }) {
+    final threadId = _requiredString(params, 'threadId');
+    final turnId = _optionalString(params, 'turnId') ?? '';
+    final run = _requiredObject(
+      params,
+      'run',
+      completed ? 'hook/completed' : 'hook/started',
+    );
+    final runId = _requiredString(run, 'id');
+    final eventName = _requiredString(run, 'eventName');
+    final handlerType = _requiredString(run, 'handlerType');
+    final executionMode = _requiredString(run, 'executionMode');
+    final scope = _requiredString(run, 'scope');
+    final status = _requiredString(run, 'status');
+    final rawStatusMessage = _optionalString(run, 'statusMessage')?.trim();
+    final statusMessage = rawStatusMessage == null || rawStatusMessage.isEmpty
+        ? null
+        : _truncate(rawStatusMessage, _maxHookMessageLength);
+    final rawDuration = run['durationMs'];
+    if (rawDuration != null && rawDuration is! int) {
+      throw const ProtocolViolation(
+        'HookRunSummary field durationMs must be an integer or null.',
+      );
+    }
+    String? entrySummary;
+    final entries = run['entries'];
+    if (entries is List<Object?>) {
+      for (final rawEntry in entries.whereType<Map<String, Object?>>()) {
+        final text = rawEntry['text'];
+        if (text is String && text.trim().isNotEmpty) {
+          entrySummary = _truncate(text.trim(), _maxHookMessageLength);
+          break;
+        }
+      }
+    }
+    return HookActivityEvent(
+      threadId: threadId,
+      turnId: turnId,
+      runId: runId,
+      eventName: eventName,
+      handlerType: handlerType,
+      executionMode: executionMode,
+      scope: scope,
+      status: status,
+      completed: completed,
+      statusMessage: statusMessage,
+      durationMs: rawDuration is int && rawDuration >= 0 ? rawDuration : null,
+      entrySummary: entrySummary,
+    );
+  }
+
+  static ModelReroutedEvent _parseModelRerouted(JsonObject params) {
+    return ModelReroutedEvent(
+      threadId: _requiredString(params, 'threadId'),
+      turnId: _requiredString(params, 'turnId'),
+      fromModel: _requiredString(params, 'fromModel'),
+      toModel: _requiredString(params, 'toModel'),
+      reason: _requiredString(params, 'reason'),
+    );
+  }
+
+  static TurnWarningEvent _parseWarning(JsonObject params) {
+    final message = _truncate(
+      _requiredString(params, 'message').trim(),
+      _maxWarningMessageLength,
+    );
+    return TurnWarningEvent(
+      threadId: _optionalString(params, 'threadId') ?? '',
+      message: message,
+    );
   }
 
   static TurnStartedEvent _parseTurnStarted(JsonObject params) {
@@ -314,6 +520,34 @@ final class TurnProtocolAdapter {
     }
     return value;
   }
+
+  static String? _optionalString(JsonObject object, String key) {
+    final value = object[key];
+    if (value == null) {
+      return null;
+    }
+    if (value is! String) {
+      throw ProtocolViolation('Turn field $key must be a string or null.');
+    }
+    return value;
+  }
+
+  static int _nonNegativeInt(JsonObject object, String key) {
+    final value = object[key];
+    if (value is! int || value < 0) {
+      throw ProtocolViolation(
+        'Turn field $key must be a non-negative integer.',
+      );
+    }
+    return value;
+  }
+
+  static TurnPlanStepStatus _planStepStatus(String value) => switch (value) {
+    'pending' => TurnPlanStepStatus.pending,
+    'inProgress' => TurnPlanStepStatus.inProgress,
+    'completed' => TurnPlanStepStatus.completed,
+    _ => TurnPlanStepStatus.unknown,
+  };
 
   static bool _requiredBool(JsonObject object, String key) {
     final value = object[key];

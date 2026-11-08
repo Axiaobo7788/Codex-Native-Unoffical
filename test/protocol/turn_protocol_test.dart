@@ -418,6 +418,206 @@ void main() {
     expect(events[4].summary, 'File changes: 1 update(s) (+5 -2)');
     expect(events[5].summary, 'Context compacted');
   });
+
+  test('parses stable turn plan, token usage, reasoning summary delta, MCP progress, hook lifecycle, model reroute, and warning notifications with bounds', () async {
+    final events = <TurnEvent>[];
+    final sub = adapter.events.listen(events.add);
+    addTearDown(sub.cancel);
+
+    notifications
+      ..add(
+        CodexNotification(
+          method: 'turn/plan/updated',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'explanation': 'Verify protocol adapters and UI projection',
+            'plan': [
+              for (var i = 0; i < 60; i++)
+                {
+                  'step': 'Step $i',
+                  'status': i == 0
+                      ? 'completed'
+                      : i == 1
+                      ? 'inProgress'
+                      : 'pending',
+                },
+            ],
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'thread/tokenUsage/updated',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'tokenUsage': {
+              'last': {
+                'inputTokens': 1200,
+                'cachedInputTokens': 400,
+                'cacheWriteInputTokens': 100,
+                'outputTokens': 300,
+                'reasoningOutputTokens': 150,
+                'totalTokens': 1500,
+              },
+              'total': {
+                'inputTokens': 10000,
+                'cachedInputTokens': 2500,
+                'outputTokens': 2800,
+                'reasoningOutputTokens': 900,
+                'totalTokens': 12800,
+              },
+              'modelContextWindow': 128000,
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/reasoning/summaryTextDelta',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'itemId': 'reason-1',
+            'summaryIndex': 0,
+            'delta': 'Analyzing notification schema',
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'item/mcpToolCall/progress',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'itemId': 'mcp-1',
+            'message': 'Fetched 12 pull requests',
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'hook/started',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'run': {
+              'id': 'hook-run-1',
+              'eventName': 'preToolUse',
+              'handlerType': 'command',
+              'executionMode': 'sync',
+              'scope': 'turn',
+              'source': 'project',
+              'sourcePath': '/workspace/.codex/hooks.json',
+              'startedAt': 1700000000,
+              'status': 'running',
+              'displayOrder': 0,
+              'entries': <Object?>[],
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'hook/completed',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'run': {
+              'id': 'hook-run-1',
+              'eventName': 'preToolUse',
+              'handlerType': 'command',
+              'executionMode': 'sync',
+              'scope': 'turn',
+              'source': 'project',
+              'sourcePath': '/workspace/.codex/hooks.json',
+              'startedAt': 1700000000,
+              'completedAt': 1700000001,
+              'durationMs': 42,
+              'status': 'completed',
+              'statusMessage': 'Policy check passed',
+              'displayOrder': 0,
+              'entries': [
+                {'kind': 'context', 'text': 'Allowed tool call'},
+              ],
+            },
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'model/rerouted',
+          params: {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'fromModel': 'gpt-5-codex',
+            'toModel': 'o3-mini',
+            'reason': 'highRiskCyberActivity',
+          },
+        ),
+      )
+      ..add(
+        const CodexNotification(
+          method: 'warning',
+          params: {
+            'threadId': 'thread-1',
+            'message': 'Approaching workspace rate limit window.',
+          },
+        ),
+      );
+    await pumpEventQueue();
+
+    expect(events, hasLength(8));
+
+    final planEvent = events[0] as TurnPlanUpdatedEvent;
+    expect(planEvent.plan.steps, hasLength(50));
+    expect(planEvent.plan.completedCount, 1);
+    expect(
+      planEvent.plan.explanation,
+      'Verify protocol adapters and UI projection',
+    );
+    expect(planEvent.plan.steps[0].status, TurnPlanStepStatus.completed);
+    expect(planEvent.plan.steps[1].status, TurnPlanStepStatus.inProgress);
+
+    final usageEvent = events[1] as ThreadTokenUsageUpdatedEvent;
+    expect(usageEvent.usage.last.totalTokens, 1500);
+    expect(usageEvent.usage.last.cacheWriteInputTokens, 100);
+    expect(usageEvent.usage.total.totalTokens, 12800);
+    expect(usageEvent.usage.modelContextWindow, 128000);
+    expect(usageEvent.usage.contextWindowUtilization, closeTo(0.10, 0.001));
+
+    final reasoningDelta = events[2] as ReasoningSummaryDeltaEvent;
+    expect(reasoningDelta.itemId, 'reason-1');
+    expect(reasoningDelta.summaryIndex, 0);
+    expect(reasoningDelta.delta, 'Analyzing notification schema');
+
+    final mcpProgress = events[3] as McpToolCallProgressEvent;
+    expect(mcpProgress.itemId, 'mcp-1');
+    expect(mcpProgress.message, 'Fetched 12 pull requests');
+
+    final hookStarted = events[4] as HookActivityEvent;
+    expect(hookStarted.runId, 'hook-run-1');
+    expect(hookStarted.completed, isFalse);
+    expect(hookStarted.formattedSummary, 'Hook: preToolUse (command)');
+
+    final hookCompleted = events[5] as HookActivityEvent;
+    expect(hookCompleted.runId, 'hook-run-1');
+    expect(hookCompleted.completed, isTrue);
+    expect(
+      hookCompleted.formattedSummary,
+      'Hook: preToolUse (command) — Policy check passed · 42ms',
+    );
+
+    final rerouted = events[6] as ModelReroutedEvent;
+    expect(rerouted.fromModel, 'gpt-5-codex');
+    expect(rerouted.toModel, 'o3-mini');
+    expect(rerouted.reason, 'highRiskCyberActivity');
+
+    final warning = events[7] as TurnWarningEvent;
+    expect(warning.threadId, 'thread-1');
+    expect(warning.message, 'Approaching workspace rate limit window.');
+  });
 }
 
 class _Request {

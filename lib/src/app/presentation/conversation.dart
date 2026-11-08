@@ -414,6 +414,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 _conversationHeader(controller),
                 if (_searchOpen && controller.thread != null)
                   _conversationSearchBar(),
+                if (controller.thread != null &&
+                    (controller.latestWarning != null ||
+                        controller.latestModelReroute != null))
+                  _telemetryNoticeBar(controller),
+                if (controller.thread != null &&
+                    controller.latestTurnPlan != null &&
+                    controller.latestTurnPlan!.steps.isNotEmpty)
+                  _turnPlanBanner(controller),
                 Expanded(child: timelineChild),
                 _ApprovalBanner(controller: widget.approvalController),
                 _UserInputBanner(controller: widget.userInputController),
@@ -519,6 +527,204 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  Widget _telemetryNoticeBar(ConversationController controller) {
+    final palette = ThemeTokens.of(context);
+    final reroute = controller.latestModelReroute;
+    final warning = controller.latestWarning;
+    final parts = <String>[
+      if (reroute != null)
+        'Model rerouted: ${reroute.fromModel} → ${reroute.toModel} (${reroute.reason})',
+      if (warning != null && warning.isNotEmpty) warning,
+    ];
+    return Container(
+      key: const ValueKey('conversation-telemetry-notice'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: ThemeTokens.space4,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border(
+          bottom: BorderSide(
+            color: palette.border,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 15,
+                color: palette.warning,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  parts.join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 6),
+              CodexIconButton(
+                key: const ValueKey('conversation-telemetry-notice-dismiss'),
+                tooltip: 'Dismiss notice',
+                size: 24,
+                onPressed: controller.dismissTelemetryNotice,
+                icon: const Icon(Icons.close_rounded, size: 14),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _turnPlanBanner(ConversationController controller) {
+    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
+    final plan = controller.latestTurnPlan!;
+    final displayedSteps = plan.steps.take(6).toList(growable: false);
+    return Container(
+      key: const ValueKey('conversation-turn-plan-banner'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: ThemeTokens.space4,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: theme.elevatedSurface,
+        border: Border(
+          bottom: BorderSide(
+            color: palette.border,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    plan.allCompleted
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.checklist_rounded,
+                    size: 15,
+                    color: plan.allCompleted ? palette.success : palette.accent,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Plan (${plan.completedCount}/${plan.steps.length} completed)'
+                      '${plan.explanation != null ? ' — ${plan.explanation}' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: palette.textPrimary,
+                      ),
+                    ),
+                  ),
+                  CodexIconButton(
+                    key: const ValueKey('conversation-turn-plan-dismiss'),
+                    tooltip: 'Hide plan banner',
+                    size: 24,
+                    onPressed: controller.dismissTurnPlan,
+                    icon: const Icon(Icons.close_rounded, size: 14),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (var i = 0; i < displayedSteps.length; i++)
+                    Container(
+                      key: ValueKey('turn-plan-step-$i'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.surfaceRaised,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: palette.border,
+                          width: OfficialCodexTheme.hairlineBorderWidth,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            switch (displayedSteps[i].status) {
+                              TurnPlanStepStatus.completed =>
+                                Icons.check_rounded,
+                              TurnPlanStepStatus.inProgress =>
+                                Icons.play_arrow_rounded,
+                              _ => Icons.radio_button_unchecked_rounded,
+                            },
+                            size: 11,
+                            color: switch (displayedSteps[i].status) {
+                              TurnPlanStepStatus.completed => palette.success,
+                              TurnPlanStepStatus.inProgress => palette.accent,
+                              _ => palette.textMuted,
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 220),
+                            child: Text(
+                              displayedSteps[i].step,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: palette.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (plan.steps.length > displayedSteps.length)
+                    Text(
+                      '+${plan.steps.length - displayedSteps.length} more',
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: palette.textMuted),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatCompactTokens(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    }
+    if (count >= 1000) {
+      final k = count / 1000;
+      return k >= 100 ? '${k.round()}k' : '${k.toStringAsFixed(1)}k';
+    }
+    return '$count';
+  }
+
   Widget _conversationHeader(ConversationController controller) {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
@@ -620,6 +826,48 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                         ),
                                       ),
                                     ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (controller.tokenUsage case final usage?
+                              when constraints.maxWidth >= 680) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: CodexTooltip(
+                                message:
+                                    'Thread total: ${usage.total.totalTokens} tokens '
+                                    '(in ${usage.total.inputTokens}, cached ${usage.total.cachedInputTokens}, '
+                                    'out ${usage.total.outputTokens}, reasoning ${usage.total.reasoningOutputTokens})\n'
+                                    'Last turn: ${usage.last.totalTokens} tokens',
+                                child: Container(
+                                  key: const ValueKey(
+                                    'thread-token-usage-pill',
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.elevatedSurface,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    usage.modelContextWindow != null
+                                        ? '${_formatCompactTokens(usage.total.totalTokens)} / '
+                                              '${_formatCompactTokens(usage.modelContextWindow!)} tok '
+                                              '(${((usage.contextWindowUtilization ?? 0) * 100).round()}%)'
+                                        : '${_formatCompactTokens(usage.total.totalTokens)} tok',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: palette.textSecondary,
+                                          fontSize: 11.5,
+                                        ),
                                   ),
                                 ),
                               ),
