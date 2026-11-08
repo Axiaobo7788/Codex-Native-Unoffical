@@ -44,23 +44,23 @@ class ProcessTransport implements CodexTransport {
       writer: process.write,
     );
     _threadProtocol = ThreadProtocolAdapter(
-      request: _peer.request,
+      request: _request,
       notifications: _peer.notifications,
     );
-    _historyProtocol = HistoryProtocolAdapter(request: _peer.request);
-    _modelProtocol = ModelProtocolAdapter(request: _peer.request);
-    _outputProtocol = OutputProtocolAdapter(request: _peer.request);
-    _remoteAdminProtocol = RemoteAdminProtocolAdapter(request: _peer.request);
-    _ecosystemProtocol = EcosystemProtocolAdapter(request: _peer.request);
+    _historyProtocol = HistoryProtocolAdapter(request: _request);
+    _modelProtocol = ModelProtocolAdapter(request: _request);
+    _outputProtocol = OutputProtocolAdapter(request: _request);
+    _remoteAdminProtocol = RemoteAdminProtocolAdapter(request: _request);
+    _ecosystemProtocol = EcosystemProtocolAdapter(request: _request);
     _turnProtocol = TurnProtocolAdapter(
-      request: _peer.request,
+      request: _request,
       notifications: _peer.notifications,
     );
     _approvalProtocol = ApprovalProtocolAdapter(
       serverRequests: _peer.serverRequests,
       notifications: _peer.notifications,
-      respond: _peer.respond,
-      respondError: _peer.respondError,
+      respond: _respond,
+      respondError: _respondError,
     );
     _stderrSubscription = process.stderr
         .transform(utf8.decoder)
@@ -143,12 +143,41 @@ class ProcessTransport implements CodexTransport {
 
   @override
   Future<InitializeResult> initialize(InitializeRequest request) async {
-    final response = await _peer
-        .request('initialize', request.toJson())
-        .timeout(const Duration(seconds: 30));
+    final response = await _request(
+      'initialize',
+      request.toJson(),
+    ).timeout(const Duration(seconds: 30));
     final result = InitializeResult.fromJson(response);
-    await _peer.notify('initialized');
+    await _notify('initialized');
     return result;
+  }
+
+  Future<JsonObject> _request(String method, [JsonObject params = const {}]) {
+    if (_closing) {
+      return Future.error(const TransportClosedException());
+    }
+    return _peer.request(method, params);
+  }
+
+  Future<void> _notify(String method, [JsonObject params = const {}]) {
+    if (_closing) {
+      return Future.error(const TransportClosedException());
+    }
+    return _peer.notify(method, params);
+  }
+
+  Future<void> _respond(Object id, JsonObject result) {
+    if (_closing) {
+      return Future.error(const TransportClosedException());
+    }
+    return _peer.respond(id, result);
+  }
+
+  Future<void> _respondError(Object id, int code, String message) {
+    if (_closing) {
+      return Future.error(const TransportClosedException());
+    }
+    return _peer.respondError(id, code, message);
   }
 
   @override

@@ -85,6 +85,7 @@ void main() {
           'data': [
             {
               'turnId': 'turn-1',
+              'outputDeferred': true,
               'item': {
                 'id': 'command-2',
                 'type': 'commandExecution',
@@ -147,6 +148,7 @@ void main() {
     });
     expect(page.items.single.text, 'Command: cargo test');
     expect(page.items.single.output?.bytes, 1024);
+    expect(page.items.single.outputDeferred, isTrue);
     expect(
       page.items.single.output?.reference,
       '0123456789abcdef0123456789abcdef',

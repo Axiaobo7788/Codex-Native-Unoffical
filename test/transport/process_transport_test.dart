@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
+import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
+import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/transport/process/child_process.dart';
 import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +96,17 @@ void main() {
     expect(child.killSignals, isEmpty);
   });
 
+  test('rejects new RPC writes as soon as shutdown starts', () async {
+    child.exitWhenInputCloses = true;
+
+    final closeFuture = transport.close();
+    final lateRequest = transport.listModels(const ModelListQuery());
+
+    await expectLater(lateRequest, throwsA(isA<TransportClosedException>()));
+    await closeFuture;
+    expect(child.writesAfterInputClosed, 0);
+  });
+
   test(
     'routes trusted local Remote administration through the Host peer',
     () async {
@@ -177,6 +189,7 @@ final class _FakeChildProcess implements ChildProcess {
   final List<ProcessSignal> killSignals = [];
   bool inputClosed = false;
   int closeInputCount = 0;
+  int writesAfterInputClosed = 0;
   bool exitWhenInputCloses = false;
 
   @override
@@ -192,7 +205,13 @@ final class _FakeChildProcess implements ChildProcess {
   Future<int> get exitCode => _exitCode.future;
 
   @override
-  Future<void> write(String value) async => writes.add(value);
+  Future<void> write(String value) async {
+    if (inputClosed) {
+      writesAfterInputClosed += 1;
+      throw StateError('stdin is closed');
+    }
+    writes.add(value);
+  }
 
   @override
   Future<void> closeInput() async {
