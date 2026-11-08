@@ -67,9 +67,10 @@ class _RuntimeDetailsDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(
+        CodexButton(
+          variant: CodexButtonVariant.ghost,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          label: 'Close',
         ),
       ],
     );

@@ -8,8 +8,10 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Mode: `SELF_ITERATION`**
 
-- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_IN_PROGRESS`**.
-- Phase marker: **`Official Client Convergence`**.
+- Current status: **`OFFICIAL_DESKTOP_UI_CONVERGENCE_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED`**.
+- Phase marker: **`Official Desktop UI Convergence (Milestone M3 Slices A–E)`**.
+- Prior status: `OFFICIAL_CLIENT_CONVERGENCE_IN_PROGRESS`.
+- Milestone M3 Completion Summary: Executed full measured desktop visual convergence against ChatGPT / Codex Desktop specification (`26.1103.32239`, build `25471`). Created `OfficialCodexTheme` and 10 desktop semantic zero-ink-ripple primitives (`CodexButton`, `CodexIconButton`, `CodexTooltip`, `CodexSidebarRow`, `CodexComposer`, `CodexMessageBubble`, `CodexActivityRow`, `CodexPopover`, `CodexMenu`, `CodexSegment`). Converged window titlebar (46px), sidebar (260px), inset workspace card (12px top-left radius), thread header bar (46px), reading column (bounded to <= 704px), user message bubble (<= 528px / 75%), floating composer (704px / 24px radius), circular Send button, and 3-way detail mode presentation projection (`Prose` / `Commands` / `Execution`) without client prompt injection. Added multi-viewport geometry test suite `test/app/official_convergence_geometry_test.dart` (1920x1080, 1440x900, 2560x1440 DPR 1.25/2.0). All 285 unit/widget/e2e tests pass; memory benchmark retains 100 turns; cargo workspace tests pass 98/98.
 - Prior phase marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
 
 ## Current phase
@@ -34,7 +36,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Desktop shared conversation foundation checkpoint (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol attachments bounding, envelope sanitization, semantics transform, and documentation reconciliation complete and verified on hosted CI.**
 
-**Current phase — Official Client Convergence: IN_PROGRESS (`Mode: SELF_ITERATION`).**
+**Current phase — Milestone M3: Official Desktop UI Convergence (Slices A–E): IMPLEMENTATION_MACHINE_COMPLETE — HUMAN_REVIEW_REQUIRED.**
 
 ## Current repository state
 

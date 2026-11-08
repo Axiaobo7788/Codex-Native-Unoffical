@@ -144,7 +144,9 @@ class _ApprovalBanner extends StatelessWidget {
         final deciding = controller.isDeciding(request.requestId);
         return Center(
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(
+              maxWidth: OfficialCodexTheme.maxContentWidth,
+            ),
             margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
             padding: const EdgeInsets.all(ThemeTokens.space3),
             decoration: BoxDecoration(
@@ -152,7 +154,9 @@ class _ApprovalBanner extends StatelessWidget {
               border: Border.all(
                 color: palette.warning.withValues(alpha: 0.35),
               ),
-              borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+              borderRadius: BorderRadius.circular(
+                OfficialCodexTheme.mainSurfaceRadius,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,19 +197,23 @@ class _ApprovalBanner extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
+                    CodexButton(
+                      variant: CodexButtonVariant.ghost,
+                      size: CodexButtonSize.sm,
                       onPressed: deciding
                           ? null
                           : () => controller.reject(request.requestId),
-                      child: const Text('Reject'),
+                      label: 'Reject',
                     ),
                     if (request.approveSupported) ...[
                       const SizedBox(width: ThemeTokens.space2),
-                      FilledButton(
+                      CodexButton(
+                        variant: CodexButtonVariant.primary,
+                        size: CodexButtonSize.sm,
                         onPressed: deciding
                             ? null
                             : () => controller.approve(request.requestId),
-                        child: const Text('Approve once'),
+                        label: 'Approve once',
                       ),
                     ],
                   ],
@@ -289,16 +297,18 @@ class _HistoryEntryView extends StatelessWidget {
   Widget? _commandOutputAction(BuildContext context) {
     final output = item.output;
     if (output != null && output.available && output.reference != null) {
-      return TextButton.icon(
+      return CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
         onPressed: () => showDialog<void>(
           context: context,
           builder: (context) =>
               _OutputDialog(gateway: outputGateway, descriptor: output),
         ),
-        icon: const Icon(Icons.terminal, size: 15),
-        label: Text(
-          output.truncated ? 'View stored output (truncated)' : 'View output',
-        ),
+        icon: const Icon(Icons.terminal, size: 14),
+        label: output.truncated
+            ? 'View stored output (truncated)'
+            : 'View output',
       );
     }
     if (output != null && !output.available) {
@@ -308,19 +318,23 @@ class _HistoryEntryView extends StatelessWidget {
       );
     }
     if (item.outputDeferred) {
-      return TextButton(
+      return CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
         onPressed: historyController.loadingItems
             ? null
             : () => historyController.loadDeferredOutput(item),
-        child: const Text('Fetch output safely'),
+        label: 'Fetch output safely',
       );
     }
     if (historyController.selectedTurnId != item.turnId) {
-      return TextButton(
+      return CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
         onPressed: historyController.loadingItems
             ? null
             : () => historyController.loadTurnItems(item.turnId),
-        child: const Text('Load turn details'),
+        label: 'Load turn details',
       );
     }
     return null;
@@ -350,39 +364,46 @@ class _TurnWorkDivider extends StatelessWidget {
         children: [
           Expanded(child: Divider(height: 1, color: palette.border)),
           const SizedBox(width: ThemeTokens.space2),
-          InkWell(
-            borderRadius: BorderRadius.circular(6),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: palette.textSecondary,
-                      fontWeight: FontWeight.w500,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  color: Colors.transparent,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 3),
-                  if (loading)
-                    SizedBox.square(
-                      dimension: 11,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
+                    const SizedBox(width: 3),
+                    if (loading)
+                      SizedBox.square(
+                        dimension: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: palette.textSecondary,
+                        ),
+                      )
+                    else
+                      Icon(
+                        expanded
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.chevron_right_rounded,
+                        size: 14,
                         color: palette.textSecondary,
                       ),
-                    )
-                  else
-                    Icon(
-                      expanded
-                          ? Icons.keyboard_arrow_down_rounded
-                          : Icons.chevron_right_rounded,
-                      size: 14,
-                      color: palette.textSecondary,
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -464,7 +485,7 @@ class _OutputDialogState extends State<_OutputDialog> {
                           ],
                         ),
                       ),
-                      IconButton(
+                      CodexIconButton(
                         tooltip: 'Close',
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close),
@@ -529,29 +550,40 @@ class _OutputDialogState extends State<_OutputDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
+                      CodexButton(
+                        variant: CodexButtonVariant.ghost,
+                        size: CodexButtonSize.sm,
                         onPressed: _controller.loading
                             ? null
                             : _controller.loadStart,
-                        child: const Text('First'),
+                        label: 'First',
                       ),
-                      TextButton(
+                      const SizedBox(width: 4),
+                      CodexButton(
+                        variant: CodexButtonVariant.ghost,
+                        size: CodexButtonSize.sm,
                         onPressed: _controller.canLoadPrevious
                             ? _controller.loadPrevious
                             : null,
-                        child: const Text('Previous'),
+                        label: 'Previous',
                       ),
-                      TextButton(
+                      const SizedBox(width: 4),
+                      CodexButton(
+                        variant: CodexButtonVariant.ghost,
+                        size: CodexButtonSize.sm,
                         onPressed: _controller.canLoadNext
                             ? _controller.loadNext
                             : null,
-                        child: const Text('Next'),
+                        label: 'Next',
                       ),
-                      TextButton(
+                      const SizedBox(width: 4),
+                      CodexButton(
+                        variant: CodexButtonVariant.ghost,
+                        size: CodexButtonSize.sm,
                         onPressed: _controller.loading
                             ? null
                             : _controller.loadTail,
-                        child: const Text('Tail'),
+                        label: 'Tail',
                       ),
                     ],
                   ),
@@ -615,19 +647,25 @@ class _HistoryFooter extends StatelessWidget {
       spacing: ThemeTokens.space2,
       children: [
         if (controller.canLoadOlderTurns)
-          TextButton(
+          CodexButton(
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
             onPressed: controller.loadOlderTurns,
-            child: const Text('Load older turns'),
+            label: 'Load older turns',
           ),
         if (controller.canReturnToNewest)
-          TextButton(
+          CodexButton(
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
             onPressed: controller.refresh,
-            child: const Text('Return to newest'),
+            label: 'Return to newest',
           ),
         if (controller.canLoadMoreItems)
-          TextButton(
+          CodexButton(
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
             onPressed: controller.loadMoreItems,
-            child: const Text('Load more items'),
+            label: 'Load more items',
           ),
       ],
     );

@@ -62,24 +62,24 @@ void main() {
     expect(runtime.tailLengths, [64 * 1024]);
     expect(runtime.rangeReads, isEmpty);
 
-    await tester.tap(find.widgetWithText(TextButton, 'First'));
+    await tester.tap(find.text('First'));
     await tester.pumpAndSettle();
     expect(find.text('Window at byte 0 of 150000'), findsOneWidget);
     expect(find.textContaining('START'), findsOneWidget);
     expect(runtime.rangeReads.single, (offset: 0, length: 64 * 1024 + 3));
 
-    await tester.tap(find.widgetWithText(TextButton, 'Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(find.text('Window at byte 65536 of 150000'), findsOneWidget);
     expect(runtime.rangeReads.last.offset, 64 * 1024);
     expect(runtime.rangeReads.last.length, 64 * 1024 + 3);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Previous'));
+    await tester.tap(find.text('Previous'));
     await tester.pumpAndSettle();
     expect(find.text('Window at byte 0 of 150000'), findsOneWidget);
     expect(runtime.rangeReads.last.offset, 0);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Tail'));
+    await tester.tap(find.text('Tail'));
     await tester.pumpAndSettle();
     expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
     expect(runtime.tailLengths, [64 * 1024, 64 * 1024]);

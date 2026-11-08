@@ -36,7 +36,7 @@ void main() {
       );
       final row = find.byKey(const ValueKey('thread-row-controls-thread'));
       expect(row, findsOneWidget);
-      expect(tester.getSize(row).height, 42);
+      expect(tester.getSize(row).height, 36.0);
       final palette = ThemeTokens.of(tester.element(row));
 
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);

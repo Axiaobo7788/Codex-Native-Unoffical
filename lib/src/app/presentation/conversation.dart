@@ -1,5 +1,7 @@
 part of '../codex_native_app.dart';
 
+enum PresentationDetailMode { prose, commands, execution }
+
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
     required this.controller,
@@ -85,6 +87,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
   var _showChanges = false;
+  var _detailMode = PresentationDetailMode.commands;
 
   String get _activeProjectDirectory {
     final selectedCwd = widget.controller.thread?.cwd;
@@ -174,80 +177,125 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Widget _conversationHeader(ConversationController controller) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final thread = controller.thread;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
     return Container(
-      height: 52,
+      key: const ValueKey('thread_header_bar'),
+      height: OfficialCodexTheme.headerHeight,
       padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
       decoration: BoxDecoration(
-        color: palette.canvas,
-        border: Border(bottom: BorderSide(color: palette.border)),
+        color: theme.workspaceBackground,
+        border: Border(
+          bottom: BorderSide(
+            color: palette.border,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
       ),
-      child: Row(
-        children: [
-          if (widget.sidebarCollapsed && widget.onToggleSidebar != null) ...[
-            IconButton(
-              key: const ValueKey('sidebar-expand-button'),
-              tooltip: 'Show sidebar',
-              onPressed: widget.onToggleSidebar,
-              icon: const Icon(Icons.view_sidebar_outlined, size: 17),
-            ),
-            const SizedBox(width: ThemeTokens.space2),
-          ],
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    thread?.displayTitle ?? 'New thread',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showSegment = constraints.maxWidth >= 380;
+          return Row(
+            children: [
+              if (widget.sidebarCollapsed &&
+                  widget.onToggleSidebar != null) ...[
+                CodexIconButton(
+                  key: const ValueKey('sidebar-expand-button'),
+                  tooltip: 'Show sidebar',
+                  onPressed: widget.onToggleSidebar,
+                  icon: const Icon(Icons.view_sidebar_outlined, size: 17),
                 ),
-                if (projectCwd.isNotEmpty) ...[
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Tooltip(
-                      message: projectCwd,
+                const SizedBox(width: ThemeTokens.space2),
+              ],
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
                       child: Text(
-                        _projectName(projectCwd),
+                        thread?.displayTitle ?? 'New thread',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: palette.textSecondary),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14.0,
+                            ),
                       ),
                     ),
+                    if (projectCwd.isNotEmpty &&
+                        constraints.maxWidth >= 480) ...[
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: CodexTooltip(
+                          message: projectCwd,
+                          child: Text(
+                            _projectName(projectCwd),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: palette.textSecondary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (widget.diffController.snapshot?.files.isNotEmpty ??
+                  false) ...[
+                CodexButton(
+                  key: const ValueKey('changes-view-button'),
+                  size: CodexButtonSize.sm,
+                  variant: CodexButtonVariant.ghost,
+                  onPressed: () => setState(() => _showChanges = !_showChanges),
+                  icon: Icon(
+                    _showChanges
+                        ? Icons.chat_bubble_outline_rounded
+                        : Icons.difference_outlined,
+                    size: 15,
                   ),
-                ],
+                  label: _showChanges
+                      ? 'Conversation'
+                      : 'Changes ${widget.diffController.snapshot!.files.length}',
+                ),
+                const SizedBox(width: ThemeTokens.space2),
               ],
-            ),
-          ),
-          if (widget.diffController.snapshot?.files.isNotEmpty ?? false)
-            TextButton.icon(
-              key: const ValueKey('changes-view-button'),
-              onPressed: () => setState(() => _showChanges = !_showChanges),
-              icon: Icon(
-                _showChanges
-                    ? Icons.chat_bubble_outline_rounded
-                    : Icons.difference_outlined,
-                size: 17,
-              ),
-              label: Text(
-                _showChanges
-                    ? 'Conversation'
-                    : 'Changes ${widget.diffController.snapshot!.files.length}',
-              ),
-            ),
-          if (controller.canInterrupt) ...[
-            const SizedBox(width: ThemeTokens.space1),
-            OutlinedButton.icon(
-              onPressed: controller.interrupt,
-              icon: const Icon(Icons.stop_rounded, size: 16),
-              label: const Text('Stop'),
-            ),
-          ],
-        ],
+              if (showSegment)
+                CodexSegment<PresentationDetailMode>(
+                  items: const [
+                    CodexSegmentItem(
+                      value: PresentationDetailMode.prose,
+                      label: 'Prose',
+                      tooltip: 'Only messages',
+                    ),
+                    CodexSegmentItem(
+                      value: PresentationDetailMode.commands,
+                      label: 'Commands',
+                      tooltip: 'Grouped commands',
+                    ),
+                    CodexSegmentItem(
+                      value: PresentationDetailMode.execution,
+                      label: 'Execution',
+                      tooltip: 'Full execution stream',
+                    ),
+                  ],
+                  selectedValue: _detailMode,
+                  onSelected: (mode) => setState(() => _detailMode = mode),
+                ),
+              if (controller.canInterrupt) ...[
+                const SizedBox(width: ThemeTokens.space2),
+                CodexButton(
+                  size: CodexButtonSize.sm,
+                  variant: CodexButtonVariant.danger,
+                  onPressed: controller.interrupt,
+                  icon: const Icon(Icons.stop_rounded, size: 16),
+                  label: 'Stop',
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -255,28 +303,70 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   Widget _timeline(ConversationController controller) {
     if (controller.thread == null) {
       _currentTimelineItemKeys = const [];
-      return _ConversationEmptyState(workingDirectory: _activeProjectDirectory);
+      return Center(
+        child: ConstrainedBox(
+          key: const ValueKey('conversation_reading_column'),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: _ConversationEmptyState(
+            workingDirectory: _activeProjectDirectory,
+          ),
+        ),
+      );
     }
     final showLiveEntries = !widget.historyController.canReturnToNewest;
-    final liveEntries = showLiveEntries
+    final rawLiveEntries = showLiveEntries
         ? controller.entries
         : const <ConversationEntry>[];
+    final liveEntries = switch (_detailMode) {
+      PresentationDetailMode.prose =>
+        rawLiveEntries
+            .where(
+              (e) =>
+                  e.kind == ConversationEntryKind.user ||
+                  e.kind == ConversationEntryKind.assistant,
+            )
+            .toList(growable: false),
+      _ => rawLiveEntries,
+    };
     final liveIds = liveEntries.map((entry) => entry.id).toSet();
-    final historyItems = widget.historyController.timelineItems
+    final rawHistoryItems = widget.historyController.timelineItems
         .where((item) => !liveIds.contains(item.id))
         .toList(growable: false);
+    final historyItems = switch (_detailMode) {
+      PresentationDetailMode.prose =>
+        rawHistoryItems
+            .where(
+              (item) =>
+                  item.kind == HistoryItemKind.user ||
+                  item.kind == HistoryItemKind.assistant,
+            )
+            .toList(growable: false),
+      _ => rawHistoryItems,
+    };
     if (liveEntries.isEmpty && historyItems.isEmpty) {
       _currentTimelineItemKeys = const [];
+      final Widget emptyChild;
       if (widget.historyController.loadingTurns) {
-        return const _ConversationLoadingState();
-      }
-      if (widget.historyController.errorMessage case final error?) {
-        return _ConversationErrorState(
+        emptyChild = const _ConversationLoadingState();
+      } else if (widget.historyController.errorMessage case final error?) {
+        emptyChild = _ConversationErrorState(
           message: error,
           onRetry: widget.historyController.refresh,
         );
+      } else {
+        emptyChild = _ThreadEmptyState(thread: controller.thread!);
       }
-      return _ThreadEmptyState(thread: controller.thread!);
+      return Center(
+        child: ConstrainedBox(
+          key: const ValueKey('conversation_reading_column'),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: emptyChild,
+        ),
+      );
     }
 
     final footerCount =
@@ -300,79 +390,89 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           return 'live-${liveEntries[liveIndex].id}';
         }(),
     ];
-    return Stack(
-      children: [
-        Scrollbar(
-          controller: _scrollController,
-          child: _ConversationScrollView(
-            key: const ValueKey('conversation-timeline'),
-            controller: _scrollController,
-            padding: const EdgeInsets.fromLTRB(16, 28, 16, 36),
-            itemCount: totalCount,
-            findChildIndexCallback: (key) {
-              if (key is ValueKey<String>) {
-                final value = key.value;
-                if (value == 'history-pagination-footer') {
-                  return footerCount > 0 ? messageCount : null;
-                }
-                if (value.startsWith('measured-')) {
-                  final itemKey = value.substring('measured-'.length);
-                  final index = _currentTimelineItemKeys.indexOf(itemKey);
-                  return index >= 0 ? index : null;
-                }
-              }
-              return null;
-            },
-            itemBuilder: (context, reverseIndex) {
-              if (reverseIndex == messageCount) {
-                return _HistoryFooter(
-                  key: const ValueKey('history-pagination-footer'),
-                  controller: widget.historyController,
-                );
-              }
-              final chronologicalIndex = messageCount - 1 - reverseIndex;
-              if (chronologicalIndex < historyItems.length) {
-                final item = historyItems[chronologicalIndex];
-                final itemKey = 'history-${item.id}';
-                return _MeasuredTimelineItem(
-                  key: ValueKey('measured-$itemKey'),
-                  itemKey: itemKey,
-                  turnId: item.turnId,
-                  onMeasured: _recordItemMeasurement,
-                  onUnmount: _unregisterItemBox,
-                  child: _HistoryEntryView(
-                    key: ValueKey(itemKey),
-                    item: item,
-                    historyController: widget.historyController,
-                    outputGateway: widget.outputGateway,
-                  ),
-                );
-              }
-              final liveIndex = chronologicalIndex - historyItems.length;
-              final entry = liveEntries[liveIndex];
-              final itemKey = 'live-${entry.id}';
-              return _MeasuredTimelineItem(
-                key: ValueKey('measured-$itemKey'),
-                itemKey: itemKey,
-                turnId: '',
-                onMeasured: _recordItemMeasurement,
-                onUnmount: _unregisterItemBox,
-                child: _ConversationEntryView(
-                  key: ValueKey(entry.id),
-                  entry: entry,
-                ),
-              );
-            },
-          ),
+    return Center(
+      child: ConstrainedBox(
+        key: const ValueKey('conversation_reading_column'),
+        constraints: const BoxConstraints(
+          maxWidth: OfficialCodexTheme.maxContentWidth,
         ),
-        if (_showJumpToLatest)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 12,
-            child: Center(child: _JumpToLatestButton(onPressed: _jumpToLatest)),
-          ),
-      ],
+        child: Stack(
+          children: [
+            Scrollbar(
+              controller: _scrollController,
+              child: _ConversationScrollView(
+                key: const ValueKey('conversation-timeline'),
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 36),
+                itemCount: totalCount,
+                findChildIndexCallback: (key) {
+                  if (key is ValueKey<String>) {
+                    final value = key.value;
+                    if (value == 'history-pagination-footer') {
+                      return footerCount > 0 ? messageCount : null;
+                    }
+                    if (value.startsWith('measured-')) {
+                      final itemKey = value.substring('measured-'.length);
+                      final index = _currentTimelineItemKeys.indexOf(itemKey);
+                      return index >= 0 ? index : null;
+                    }
+                  }
+                  return null;
+                },
+                itemBuilder: (context, reverseIndex) {
+                  if (reverseIndex == messageCount) {
+                    return _HistoryFooter(
+                      key: const ValueKey('history-pagination-footer'),
+                      controller: widget.historyController,
+                    );
+                  }
+                  final chronologicalIndex = messageCount - 1 - reverseIndex;
+                  if (chronologicalIndex < historyItems.length) {
+                    final item = historyItems[chronologicalIndex];
+                    final itemKey = 'history-${item.id}';
+                    return _MeasuredTimelineItem(
+                      key: ValueKey('measured-$itemKey'),
+                      itemKey: itemKey,
+                      turnId: item.turnId,
+                      onMeasured: _recordItemMeasurement,
+                      onUnmount: _unregisterItemBox,
+                      child: _HistoryEntryView(
+                        key: ValueKey(itemKey),
+                        item: item,
+                        historyController: widget.historyController,
+                        outputGateway: widget.outputGateway,
+                      ),
+                    );
+                  }
+                  final liveIndex = chronologicalIndex - historyItems.length;
+                  final entry = liveEntries[liveIndex];
+                  final itemKey = 'live-${entry.id}';
+                  return _MeasuredTimelineItem(
+                    key: ValueKey('measured-$itemKey'),
+                    itemKey: itemKey,
+                    turnId: '',
+                    onMeasured: _recordItemMeasurement,
+                    onUnmount: _unregisterItemBox,
+                    child: _ConversationEntryView(
+                      key: ValueKey(entry.id),
+                      entry: entry,
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (_showJumpToLatest)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 12,
+                child: Center(
+                  child: _JumpToLatestButton(onPressed: _jumpToLatest),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -391,12 +491,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          key: const ValueKey('floating_composer'),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
           child: DecoratedBox(
             key: const ValueKey('composer-surface'),
             decoration: BoxDecoration(
               color: palette.surface,
-              border: Border.all(color: palette.borderStrong),
+              border: Border.all(
+                color: palette.borderStrong,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
               borderRadius: BorderRadius.circular(ThemeTokens.radiusComposer),
               boxShadow: [
                 BoxShadow(
@@ -459,7 +565,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           ),
                           if (projectCwd.isNotEmpty && !compactComposer) ...[
                             const SizedBox(width: 4),
-                            Tooltip(
+                            CodexTooltip(
                               message: projectCwd,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -511,18 +617,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 style: Theme.of(context).textTheme.labelSmall,
                               ),
                             ),
-                          IconButton.filled(
+                          CodexIconButton(
                             key: const ValueKey('composer-send-button'),
                             tooltip: 'Send (Enter)',
-                            style: IconButton.styleFrom(
-                              shape: const CircleBorder(),
-                              minimumSize: const Size.square(34),
-                              maximumSize: const Size.square(34),
-                              backgroundColor: palette.textPrimary,
-                              foregroundColor: palette.canvas,
-                              disabledBackgroundColor: palette.border,
-                              disabledForegroundColor: palette.textMuted,
-                            ),
+                            size: 34.0,
+                            shape: BoxShape.circle,
+                            variant: CodexButtonVariant.primary,
                             onPressed: enabled ? _send : null,
                             icon: const Icon(
                               Icons.arrow_upward_rounded,
@@ -1337,32 +1437,46 @@ class _JumpToLatestButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return Material(
-      color: palette.surface,
-      elevation: 3,
-      shadowColor: palette.shadow,
-      shape: StadiumBorder(side: BorderSide(color: palette.borderStrong)),
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: palette.borderStrong,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: palette.shadow,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: GestureDetector(
         key: const ValueKey('jump-to-latest-button'),
-        customBorder: const StadiumBorder(),
+        behavior: HitTestBehavior.opaque,
         onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.arrow_downward_rounded,
-                size: 14,
-                color: palette.textPrimary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Jump to latest',
-                style: Theme.of(context).textTheme.labelMedium
-                    ?.copyWith(color: palette.textPrimary),
-              ),
-            ],
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.arrow_downward_rounded,
+                  size: 14,
+                  color: palette.textPrimary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Jump to latest',
+                  style: Theme.of(context).textTheme.labelMedium
+                      ?.copyWith(color: palette.textPrimary),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1529,7 +1643,9 @@ class _ConversationEntryView extends StatelessWidget {
     if (entry.kind == ConversationEntryKind.user) {
       return Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
           child: _UserMessageEntryView(entry: entry, attachments: attachments),
         ),
       );
@@ -1540,7 +1656,9 @@ class _ConversationEntryView extends StatelessWidget {
             entry.text == 'Reasoning')) {
       return Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1560,7 +1678,9 @@ class _ConversationEntryView extends StatelessWidget {
         entry.text.trim().isNotEmpty;
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
+        constraints: const BoxConstraints(
+          maxWidth: OfficialCodexTheme.maxContentWidth,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1678,17 +1798,24 @@ class _AssistantCopyButtonState extends State<_AssistantCopyButton> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return Tooltip(
+    return CodexTooltip(
       message: _copied ? 'Copied' : 'Copy response',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: _copy,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(
-            _copied ? Icons.check_rounded : Icons.content_copy_rounded,
-            size: 14,
-            color: _copied ? palette.success : palette.textMuted,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              color: Colors.transparent,
+            ),
+            child: Icon(
+              _copied ? Icons.check_rounded : Icons.content_copy_rounded,
+              size: 14,
+              color: _copied ? palette.success : palette.textMuted,
+            ),
           ),
         ),
       ),
@@ -1743,7 +1870,9 @@ class _UserMessageEntryViewState extends State<_UserMessageEntryView> {
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
+        constraints: const BoxConstraints(
+          maxWidth: OfficialCodexTheme.maxContentWidth * 0.75,
+        ),
         child: Padding(
           padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
           child: Column(
@@ -1778,8 +1907,13 @@ class _UserMessageEntryViewState extends State<_UserMessageEntryView> {
                   ),
                   decoration: BoxDecoration(
                     color: palette.userBubble,
-                    border: Border.all(color: palette.border),
-                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: palette.border,
+                      width: OfficialCodexTheme.hairlineBorderWidth,
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      OfficialCodexTheme.userMessageRadius,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1793,19 +1927,22 @@ class _UserMessageEntryViewState extends State<_UserMessageEntryView> {
                       ),
                       if (isCollapsible) ...[
                         const SizedBox(height: 6),
-                        InkWell(
+                        GestureDetector(
                           key: ValueKey('user-expand-${widget.entry.id}'),
-                          borderRadius: BorderRadius.circular(6),
+                          behavior: HitTestBehavior.opaque,
                           onTap: () => setState(() => _expanded = !_expanded),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 2,
-                              horizontal: 4,
-                            ),
-                            child: Text(
-                              _expanded ? 'Show less' : 'Show full message',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(color: palette.accent),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 2,
+                                horizontal: 4,
+                              ),
+                              child: Text(
+                                _expanded ? 'Show less' : 'Show full message',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: palette.accent),
+                              ),
                             ),
                           ),
                         ),
@@ -1848,16 +1985,19 @@ class _UserAttachmentChip extends StatelessWidget {
     final hasDetails =
         (attachment.path != null && attachment.path!.isNotEmpty) ||
         (attachment.preview != null && attachment.preview!.isNotEmpty);
-    return Material(
-      color: palette.surfaceRaised,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: palette.border),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+    return MouseRegion(
+      cursor: hasDetails ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
         onTap: hasDetails ? () => _showAttachmentDetails(context) : null,
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            color: palette.surfaceRaised,
+            border: Border.all(
+              color: palette.border,
+              width: OfficialCodexTheme.hairlineBorderWidth,
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1887,7 +2027,10 @@ class _UserAttachmentChip extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: Text(attachment.label),
         content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 420),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth * 0.75,
+            maxHeight: 420,
+          ),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2150,7 +2293,9 @@ class _ConversationLoadingState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
+        constraints: const BoxConstraints(
+          maxWidth: OfficialCodexTheme.maxContentWidth,
+        ),
         child: ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -2238,7 +2383,9 @@ class _ExecutionSettingsButton extends StatelessWidget {
             controller.sandbox == SandboxModeOverride.dangerFullAccess;
         final label = fullAccess ? 'Full access' : 'Defaults';
         final color = fullAccess ? palette.warning : palette.textSecondary;
-        return TextButton.icon(
+        return CodexButton(
+          variant: CodexButtonVariant.ghost,
+          size: CodexButtonSize.sm,
           onPressed: controller.loading
               ? null
               : () => showDialog<void>(
@@ -2246,10 +2393,6 @@ class _ExecutionSettingsButton extends StatelessWidget {
                   builder: (_) =>
                       _ExecutionSettingsDialog(controller: controller),
                 ),
-          style: TextButton.styleFrom(
-            foregroundColor: color,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
           icon: controller.loading
               ? const SizedBox.square(
                   dimension: 14,
@@ -2260,11 +2403,7 @@ class _ExecutionSettingsButton extends StatelessWidget {
                   size: 15,
                   color: color,
                 ),
-          label: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium
-                ?.copyWith(color: color),
-          ),
+          label: label,
         );
       },
     );
@@ -2298,8 +2437,10 @@ class _ComposerModelSummaryButton extends StatelessWidget {
             : '${model.displayName} · $effortLabel';
         return Padding(
           padding: const EdgeInsets.only(right: 4),
-          child: TextButton(
+          child: CodexButton(
             key: const ValueKey('composer-model-pill'),
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
             onPressed: controller.loading
                 ? null
                 : () => showDialog<void>(
@@ -2307,10 +2448,6 @@ class _ComposerModelSummaryButton extends StatelessWidget {
                     builder: (_) =>
                         _ExecutionSettingsDialog(controller: controller),
                   ),
-            style: TextButton.styleFrom(
-              foregroundColor: palette.textSecondary,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

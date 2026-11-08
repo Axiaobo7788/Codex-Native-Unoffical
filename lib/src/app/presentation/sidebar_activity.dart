@@ -100,44 +100,21 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextButton.icon(
+                        child: CodexButton(
                           key: const ValueKey('new-thread-button'),
+                          variant: CodexButtonVariant.secondary,
+                          size: CodexButtonSize.md,
                           onPressed: controller.mutating ? null : _startThread,
-                          style: TextButton.styleFrom(
-                            alignment: Alignment.centerLeft,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 9,
-                            ),
-                            foregroundColor: palette.textPrimary,
-                            backgroundColor: palette.surface.withValues(
-                              alpha: 0.65,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              side: BorderSide(color: palette.border),
-                              borderRadius: BorderRadius.circular(
-                                ThemeTokens.radiusSmall,
-                              ),
-                            ),
-                          ),
                           icon: Icon(
                             Icons.edit_square,
                             size: 15,
                             color: palette.textSecondary,
                           ),
-                          label: Text(
-                            'New thread',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: palette.textPrimary,
-                                ),
-                          ),
+                          label: 'New thread',
                         ),
                       ),
                       const SizedBox(width: 4),
-                      IconButton(
+                      CodexIconButton(
                         key: const ValueKey('thread-directory-button'),
                         tooltip: 'New thread location',
                         onPressed: controller.mutating
@@ -165,7 +142,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                               ),
                         ),
                       ),
-                      IconButton(
+                      CodexIconButton(
                         key: const ValueKey('thread-search-toggle'),
                         tooltip: 'Filter threads',
                         onPressed: _toggleSearch,
@@ -176,7 +153,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                           size: 16,
                         ),
                       ),
-                      IconButton(
+                      CodexIconButton(
                         tooltip: 'Refresh threads',
                         onPressed: controller.loading || controller.mutating
                             ? null
@@ -210,9 +187,10 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                           ),
                           suffixIcon: _searchQuery.isEmpty
                               ? null
-                              : IconButton(
+                              : CodexIconButton(
                                   tooltip: 'Clear filter',
                                   onPressed: _searchController.clear,
+                                  size: 24,
                                   icon: const Icon(
                                     Icons.close_rounded,
                                     size: 14,
@@ -248,7 +226,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   Widget _brandHeader(BuildContext context) {
     final palette = ThemeTokens.of(context);
     return Container(
-      height: 52,
+      height: OfficialCodexTheme.titlebarHeight,
       padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
       child: Row(
         children: [
@@ -275,7 +253,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             ),
           ),
           if (widget.onToggleSidebar != null)
-            IconButton(
+            CodexIconButton(
               key: const ValueKey('sidebar-collapse-button'),
               tooltip: 'Hide sidebar',
               onPressed: widget.onToggleSidebar,
@@ -355,14 +333,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               ),
             );
           }
-          return TextButton(
-            onPressed: controller.loadingMore ? null : controller.loadMore,
-            child: controller.loadingMore
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Load more'),
+          return Center(
+            child: CodexButton(
+              variant: CodexButtonVariant.ghost,
+              size: CodexButtonSize.sm,
+              onPressed: controller.loadingMore ? null : controller.loadMore,
+              loading: controller.loadingMore,
+              label: 'Load more',
+            ),
           );
         }
         final row = rows[index];
@@ -407,7 +385,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             child: _RuntimeStatusPill(controller: widget.runtimeController),
           ),
           const SizedBox(width: ThemeTokens.space1),
-          IconButton(
+          CodexIconButton(
             key: const ValueKey('remote-setup-button'),
             tooltip: 'Remote setup',
             onPressed: () => showDialog<void>(
@@ -460,13 +438,15 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           ),
         ),
         actions: [
-          TextButton(
+          CodexButton(
+            variant: CodexButtonVariant.ghost,
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            label: 'Cancel',
           ),
-          FilledButton(
+          CodexButton(
+            variant: CodexButtonVariant.primary,
             onPressed: () => Navigator.of(context).pop(field.text),
-            child: const Text('Use location'),
+            label: 'Use location',
           ),
         ],
       ),
@@ -520,13 +500,21 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Tooltip(
+      child: CodexTooltip(
         message: heading.directory,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: widget.onToggleCollapse,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 9, 6, 4),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(
+                OfficialCodexTheme.buttonRadius,
+              ),
+              color: _hovered
+                  ? palette.hover.withValues(alpha: 0.5)
+                  : Colors.transparent,
+            ),
+            padding: const EdgeInsets.fromLTRB(8, 7, 6, 4),
             child: Row(
               children: [
                 Icon(leadingIcon, size: 15, color: palette.textSecondary),
@@ -543,8 +531,8 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
                   ),
                 ),
                 if (_hovered && widget.onNewThreadInProject != null)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(4),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: widget.onNewThreadInProject,
                     child: Padding(
                       padding: const EdgeInsets.all(2),
@@ -623,74 +611,72 @@ class _ThreadRowState extends State<_ThreadRow> {
             },
           ),
         },
-        child: AnimatedContainer(
-          key: ValueKey('thread-row-${widget.thread.id}'),
-          duration: const Duration(milliseconds: 100),
-          height: 40,
-          margin: const EdgeInsets.symmetric(vertical: 1),
-          decoration: BoxDecoration(
-            color: background,
-            border: Border.all(
-              color: _focused ? palette.accent : Colors.transparent,
-              width: _focused ? 2 : 1,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.enabled ? widget.onSelect : null,
+          child: AnimatedContainer(
+            key: ValueKey('thread-row-${widget.thread.id}'),
+            duration: const Duration(milliseconds: 100),
+            height: OfficialCodexTheme.navRowHeight,
+            margin: EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: background,
+              border: Border.all(
+                color: _focused ? palette.accent : Colors.transparent,
+                width: _focused ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(10.0),
             ),
-            borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
-              onTap: widget.enabled ? widget.onSelect : null,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: statusColor != null ? 8 : 18,
-                  right: 6,
-                ),
-                child: Row(
-                  children: [
-                    if (statusColor != null) ...[
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    Expanded(
-                      child: Text(
-                        widget.thread.displayTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontSize: 13,
-                          fontWeight: widget.selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                          color: widget.selected
-                              ? palette.textPrimary
-                              : palette.textPrimary.withValues(alpha: 0.92),
-                        ),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: statusColor != null ? 8 : 12,
+                right: 8,
+              ),
+              child: Row(
+                children: [
+                  if (statusColor != null) ...[
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 6),
-                    if (_hovered &&
-                        widget.thread.status == ThreadRuntimeStatus.notLoaded)
-                      IconButton(
-                        tooltip: 'Resume thread',
-                        onPressed: widget.enabled ? widget.onResume : null,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                      )
-                    else
-                      Text(
-                        _shortTime(widget.thread.updatedAt),
-                        style: Theme.of(context).textTheme.labelSmall
-                            ?.copyWith(fontSize: 11, color: palette.textMuted),
-                      ),
                   ],
-                ),
+                  Expanded(
+                    child: Text(
+                      widget.thread.displayTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontSize: 13,
+                        fontWeight: widget.selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: widget.selected
+                            ? palette.textPrimary
+                            : palette.textPrimary.withValues(alpha: 0.92),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  if (_hovered &&
+                      widget.thread.status == ThreadRuntimeStatus.notLoaded)
+                    CodexIconButton(
+                      tooltip: 'Resume thread',
+                      onPressed: widget.enabled ? widget.onResume : null,
+                      size: 24,
+                      icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                    )
+                  else
+                    Text(
+                      _shortTime(widget.thread.updatedAt),
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(fontSize: 11, color: palette.textMuted),
+                    ),
+                ],
               ),
             ),
           ),

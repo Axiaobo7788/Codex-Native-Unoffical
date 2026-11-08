@@ -28,7 +28,11 @@ import '../features/settings/remote_pairing_qr.dart';
 import '../features/settings/remote_pairing_scanner.dart';
 import '../features/threads/thread_list_controller.dart';
 import '../transport/remote/remote_onboarding.dart';
+import 'primitives/codex_button.dart';
+import 'primitives/codex_segment.dart';
+import 'primitives/codex_tooltip.dart';
 import 'runtime_controller.dart';
+import 'theme/official_codex_theme.dart';
 import 'theme_tokens.dart';
 
 part 'presentation/app_shell.dart';
@@ -40,7 +44,7 @@ part 'presentation/remote_setup.dart';
 part 'presentation/runtime_details.dart';
 
 const _desktopSplitMinimumWidth = 760.0;
-const _desktopSidebarWidth = 264.0;
+const _desktopSidebarWidth = 260.0;
 
 class CodexNativeApp extends StatefulWidget {
   const CodexNativeApp({
@@ -120,6 +124,12 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
       theme: ThemeTokens.lightTheme,
       darkTheme: ThemeTokens.darkTheme,
       themeMode: ThemeMode.system,
+      builder: (context, child) => OfficialCodexThemeProvider(
+        data: Theme.of(context).brightness == Brightness.dark
+            ? OfficialCodexThemeData.dark
+            : OfficialCodexThemeData.light,
+        child: child ?? const SizedBox(),
+      ),
       home: RuntimeStatusScreen(
         controller: _controller,
         threadController: _threadController,

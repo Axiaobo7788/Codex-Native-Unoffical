@@ -133,7 +133,8 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
+
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyB, control: true):
@@ -141,37 +142,106 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
         const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
             _toggleSidebar,
       },
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!_sidebarCollapsed) ...[
-            SizedBox(
-              width: _desktopSidebarWidth,
-              child: _ThreadPanel(
-                controller: widget.threadController,
-                settingsController: widget.settingsController,
-                runtimeController: widget.runtimeController,
-                defaultWorkingDirectory: widget.defaultWorkingDirectory,
-                onToggleSidebar: _toggleSidebar,
+      child: ColoredBox(
+        color: theme.shellBackground,
+        child: Column(
+          children: [
+            Container(
+              key: const ValueKey('app_shell_titlebar'),
+              height: OfficialCodexTheme.titlebarHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              decoration: BoxDecoration(
+                color: theme.shellBackground,
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.hairlineBorder,
+                    width: OfficialCodexTheme.hairlineBorderWidth,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: theme.textPrimary,
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Icon(
+                      Icons.terminal_rounded,
+                      size: 14,
+                      color: theme.shellBackground,
+                    ),
+                  ),
+                  const SizedBox(width: 8.0),
+                  Text(
+                    'Codex Native',
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 13.0,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  _RuntimeStatusPill(
+                    controller: widget.runtimeController,
+                    compact: true,
+                  ),
+                ],
               ),
             ),
-            VerticalDivider(width: 1, color: palette.border),
-          ],
-          Expanded(
-            child: _ConversationPanel(
-              controller: widget.conversationController,
-              threadController: widget.threadController,
-              historyController: widget.historyController,
-              approvalController: widget.approvalController,
-              settingsController: widget.settingsController,
-              diffController: widget.diffController,
-              outputGateway: widget.runtimeController,
-              defaultWorkingDirectory: widget.defaultWorkingDirectory,
-              sidebarCollapsed: _sidebarCollapsed,
-              onToggleSidebar: _toggleSidebar,
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!_sidebarCollapsed) ...[
+                    SizedBox(
+                      key: const ValueKey('app_shell_sidebar'),
+                      width: _desktopSidebarWidth,
+                      child: _ThreadPanel(
+                        controller: widget.threadController,
+                        settingsController: widget.settingsController,
+                        runtimeController: widget.runtimeController,
+                        defaultWorkingDirectory: widget.defaultWorkingDirectory,
+                        onToggleSidebar: _toggleSidebar,
+                      ),
+                    ),
+                  ],
+                  Expanded(
+                    child: Container(
+                      key: const ValueKey('inset_workspace_card'),
+                      margin: const EdgeInsets.only(bottom: 6.0, right: 6.0),
+                      decoration: BoxDecoration(
+                        color: theme.workspaceBackground,
+                        borderRadius: BorderRadius.circular(
+                          OfficialCodexTheme.mainSurfaceRadius,
+                        ),
+                        border: Border.all(
+                          color: theme.hairlineBorder,
+                          width: OfficialCodexTheme.hairlineBorderWidth,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _ConversationPanel(
+                        controller: widget.conversationController,
+                        threadController: widget.threadController,
+                        historyController: widget.historyController,
+                        approvalController: widget.approvalController,
+                        settingsController: widget.settingsController,
+                        diffController: widget.diffController,
+                        outputGateway: widget.runtimeController,
+                        defaultWorkingDirectory: widget.defaultWorkingDirectory,
+                        sidebarCollapsed: _sidebarCollapsed,
+                        onToggleSidebar: _toggleSidebar,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -247,7 +317,7 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
               ),
               child: Row(
                 children: [
-                  IconButton(
+                  CodexIconButton(
                     key: const ValueKey('compact-workspace-toggle'),
                     tooltip: _showSidebar
                         ? 'Show conversation'
@@ -483,7 +553,7 @@ class _RuntimeStatusPill extends StatelessWidget {
     final snapshot = controller.snapshot;
     final color = _runtimeStatusColor(context, snapshot);
     if (compact) {
-      return IconButton(
+      return CodexIconButton(
         tooltip: '${snapshot.stateLabel} — runtime details',
         onPressed: () => showDialog<void>(
           context: context,
@@ -497,29 +567,25 @@ class _RuntimeStatusPill extends StatelessWidget {
       );
     }
     if (!showDetails && snapshot.state == RuntimeConnectionState.connected) {
-      return TextButton.icon(
+      return CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
         onPressed: () => showDialog<void>(
           context: context,
           builder: (context) => _RuntimeDetailsDialog(controller: controller),
-        ),
-        style: TextButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          foregroundColor: ThemeTokens.of(context).textSecondary,
         ),
         icon: Container(
           width: 7,
           height: 7,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        label: Text(
-          snapshot.stateLabel,
-          style: Theme.of(context).textTheme.labelMedium,
-        ),
+        label: snapshot.stateLabel,
       );
     }
-    return OutlinedButton.icon(
+    return CodexButton(
       key: showDetails ? const ValueKey('runtime-details-button') : null,
+      variant: CodexButtonVariant.secondary,
+      size: CodexButtonSize.sm,
       onPressed: () => showDialog<void>(
         context: context,
         builder: (context) => _RuntimeDetailsDialog(controller: controller),
@@ -529,7 +595,7 @@ class _RuntimeStatusPill extends StatelessWidget {
         height: 7,
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
-      label: Text(showDetails ? 'Runtime details' : snapshot.stateLabel),
+      label: showDetails ? 'Runtime details' : snapshot.stateLabel,
     );
   }
 }

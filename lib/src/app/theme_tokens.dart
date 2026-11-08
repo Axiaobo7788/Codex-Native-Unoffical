@@ -194,7 +194,14 @@ abstract final class ThemeTokens {
   static const double radiusSmall = 8;
   static const double radiusMedium = 12;
   static const double radiusLarge = 18;
-  static const double radiusComposer = 22;
+  static const double radiusComposer = 24;
+
+  static const double maxContentWidth = 704;
+  static const double sidebarWidth = 260;
+  static const double titlebarHeight = 46;
+  static const double navRowHeight = 36;
+  static const double mainSurfaceRadius = 12;
+  static const double hairlineBorderWidth = 0.5;
 
   static CodexPalette of(BuildContext context) =>
       Theme.of(context).extension<CodexPalette>() ??
