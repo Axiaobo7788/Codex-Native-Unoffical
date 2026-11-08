@@ -6,10 +6,11 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Operating mode
 
-**Mode: `HUMAN_REVIEW`**
+**Mode: `SELF_ITERATION`**
 
-- Current status: **`DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED`**.
-- Prior phase marker (`cb684b5`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED` — reopened into `SELF_ITERATION` per `ADR-030` after Human/code review and hosted CI inspection identified 2 P1 edge cases (deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding), 3 P2 edge cases (legacy envelope false positives & quoted-preview delimiter spoofing, literal `&#x20;` prose preservation, `_RenderConversationViewport` semantics transform & selection evidence tightening), `dart format` CI drift on `cb684b5`, and symbol/constant documentation drift across `PROJECT_STATUS.md`, `docs/RESEARCH.md`, and `docs/reverse/ADOPTION_MATRIX.md`. All machine-actionable fixes, regression tests, live Linux walkthrough, and hosted CI gates are now complete.
+- Current status: **`OFFICIAL_CLIENT_CONVERGENCE_IN_PROGRESS`**.
+- Phase marker: **`Official Client Convergence`**.
+- Prior phase marker (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — all 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol-boundary `HistoryItem.attachments` metadata bounding, legacy envelope parsing & quoted-preview delimiter spoofing defenses, literal `&#x20;` preservation, `_RenderConversationViewport` semantics transform & selection verification, and symbol/constant documentation reconciliation completed, verified on live Linux desktop, and confirmed green on hosted CI. Reopened immediately into `SELF_ITERATION` under new authorized phase `Official Client Convergence` per authoritative user request (`ORIGINAL_REQUEST.md`). Prior foundation marker (`cb684b5`, preserved history) is retained as milestone checkpoint history. Do not re-litigate or aimlessly polish `16.A–16.E`.
 
 ## Current phase
 
@@ -31,7 +32,9 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 **Prior foundation-hardening marker (`cb684b5`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_VERIFIED — HUMAN_REVIEW_REQUIRED` — core `16.A–16.E` architecture accepted, reopened into `SELF_ITERATION` for targeted P1/P2 boundary fixes, CI format gate restoration, and code-to-documentation reconciliation.**
 
-**Current phase — Desktop Shared Conversation Foundation Correction & Evidence Tightening: `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` (`Mode: HUMAN_REVIEW`).**
+**Desktop shared conversation foundation checkpoint (`f69cdad`, preserved history): `DESKTOP_SHARED_CONVERSATION_FOUNDATION_RECALIBRATED — HUMAN_REVIEW_REQUIRED` — 16.A–16.E foundation hardening, deep-history bookmark fallback beyond `_maxRestorePages = 10`, protocol attachments bounding, envelope sanitization, semantics transform, and documentation reconciliation complete and verified on hosted CI.**
+
+**Current phase — Official Client Convergence: IN_PROGRESS (`Mode: SELF_ITERATION`).**
 
 ## Current repository state
 
@@ -2217,11 +2220,12 @@ specific evidence boundaries.
 - **AGENT REAL-USE VERIFIED**:
   - End-to-end live Linux desktop walkthrough of `build/linux/x64/debug/bundle/codex_native_unofficial` against `/opt/codex-desktop/resources/codex` and real user threads `<real-long-thread>` (`>140` turns, `287,442.9 px` scroll extent) and `<real-attachment-thread>` (`6` turns with pasted-file attachments), verifying `0.000 px` visual drift across `open latest -> scroll older (Pages 2..5) -> cross >100-turn boundary (Page 6) -> Jump to latest -> switch thread & attachment presentation -> return & multi-page content-identity scroll restoration -> streaming while scrolled up & at latest`, followed by clean process tree shutdown (`ALL_CLEAN`).
 - **HUMAN REVIEWED**:
-  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), `17f08f3` / `99e6141` were reviewed to authorize `ADR-032` (`683d431`), and `cb684b5` was reviewed to authorize this **Desktop Shared Conversation Foundation Correction & Evidence Tightening** recalibration.
+  - Prior revision `7f220d5` was reviewed by the user on Linux (`ADR-029`), `17f08f3` / `99e6141` were reviewed to authorize `ADR-032` (`683d431`), and `cb684b5` was reviewed to authorize the **Desktop Shared Conversation Foundation Correction & Evidence Tightening** recalibration.
+  - Authoritative user instruction received (2026-11-08T04:15:32Z, `ORIGINAL_REQUEST.md`) authorizing immediate transition to `Mode: SELF_ITERATION` for the new phase **`Official Client Convergence`**.
 - **NOT YET HUMAN VERIFIED**:
-  - Interactive Human review and acceptance of the recalibrated Desktop conversation timeline (`16.A`–`16.E` + P1/P2 boundary hardening) across daily-use long-session workflows, dark/light visual comfort, live approve-once interaction, and native Windows/macOS interactive desktop review.
+  - Human review and acceptance of the converged Desktop client visual system, semantic primitives (`OfficialCodexTheme` + `Codex*`), conversation timeline presentation, composer popovers, and bounded activity/diff/approval presentation against official client baselines.
 
-Wait for Human review and an explicit instruction before starting any next product phase.
+Active authorized phase: **`Official Client Convergence`** in **`Mode: SELF_ITERATION`**. Executing Milestone M0 hygiene & security audit.
 
 ## Milestone outline
 
@@ -2256,3 +2260,12 @@ Wait for Human review and an explicit instruction before starting any next produ
 ### Phase 5 — Ecosystem
 
 - Skills, MCP, Plugins, optional isolated plugin WebView, tablet UX, and multi-host support.
+
+### Phase 6 — Official client convergence
+
+- Stage 0: Repository Hygiene & Security Audit (40-char SHA action pinning, UUID de-identification, mode transition);
+- Stage 1 & 2: Official Evidence Refresh (Desktop installed package refresh + clean web-sourced Android APK research & cross-validation with evidence grading);
+- Stage 3, 5 & 6: Reverse Specification Suite (`docs/reverse/OFFICIAL_UI_SPEC.md`, `OFFICIAL_COMPONENT_MATRIX.md`, `OFFICIAL_SCREENSHOT_BASELINES.md`, `OFFICIAL_FEATURE_MATRIX.md`, `CHAT_*` architecture suite);
+- Stage 3, 4 & 5: Multi-Slice Desktop UI Refactor (Slices A–E: `OfficialCodexTheme` & `Codex*` primitives, Shell/Sidebar/Header, Timeline & detail-mode projection, Composer & selectors, Activities/Diff/Approvals);
+- Stage 4: Multi-Viewport Geometry Verification (automated 1920x1080, 1440x900, 2560x1440 geometry tests);
+- Stage 7: Full Verification & Victory Audit (full machine gates, live Linux walkthrough, ADR in `docs/DECISIONS.md`, green hosted CI).
