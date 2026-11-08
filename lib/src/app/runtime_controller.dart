@@ -287,6 +287,10 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().startTurn(options);
 
   @override
+  Future<String> steerTurn(TurnSteerOptions options) =>
+      _connectedTransport().steerTurn(options);
+
+  @override
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,

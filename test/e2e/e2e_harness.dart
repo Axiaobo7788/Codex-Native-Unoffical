@@ -113,6 +113,7 @@ class E2ERuntimeHarness extends RuntimeController {
   // Action audit trails for assertion verification
   final List<String> startedThreadCwds = [];
   final List<TurnStartOptions> startedTurns = [];
+  final List<TurnSteerOptions> steeredTurns = [];
   final List<String> deletedThreadIds = [];
   final List<({String threadId, String name})> renamedThreads = [];
   final List<String> archivedThreadIds = [];
@@ -320,6 +321,12 @@ class E2ERuntimeHarness extends RuntimeController {
       TurnStartedEvent(threadId: options.threadId, turnId: handle.id),
     );
     return handle;
+  }
+
+  @override
+  Future<String> steerTurn(TurnSteerOptions options) async {
+    steeredTurns.add(options);
+    return options.expectedTurnId;
   }
 
   @override

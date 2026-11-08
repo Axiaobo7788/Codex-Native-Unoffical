@@ -84,6 +84,92 @@ void main() {
     expect(requests.single.params['sandboxPolicy'], {'type': 'workspaceWrite'});
   });
 
+  test(
+    'serializes structured UserAttachment items and steers active turns',
+    () async {
+      responses['turn/start'] = {
+        'turn': {'id': 'turn-3', 'status': 'inProgress'},
+      };
+      responses['turn/steer'] = {'turnId': 'turn-3'};
+
+      await adapter.startTurn(
+        const TurnStartOptions(
+          threadId: 'thread-1',
+          text: 'Inspect these',
+          attachments: [
+            UserAttachment(
+              kind: UserAttachmentKind.mention,
+              label: 'main.dart',
+              path: 'lib/main.dart',
+            ),
+            UserAttachment(
+              kind: UserAttachmentKind.image,
+              label: 'screen.png',
+              path: '/tmp/screen.png',
+            ),
+            UserAttachment(
+              kind: UserAttachmentKind.image,
+              label: 'diagram.png',
+              path: 'https://example.com/diagram.png',
+            ),
+            UserAttachment(
+              kind: UserAttachmentKind.skill,
+              label: r'$frontend-design',
+              path: '/skills/frontend-design',
+            ),
+          ],
+        ),
+      );
+
+      expect(requests.first.method, 'turn/start');
+      expect(requests.first.params['input'], [
+        {'type': 'text', 'text': 'Inspect these', 'text_elements': <Object?>[]},
+        {'type': 'mention', 'name': 'main.dart', 'path': 'lib/main.dart'},
+        {'type': 'localImage', 'path': '/tmp/screen.png'},
+        {'type': 'image', 'url': 'https://example.com/diagram.png'},
+        {
+          'type': 'skill',
+          'name': 'frontend-design',
+          'path': '/skills/frontend-design',
+        },
+      ]);
+
+      final steeredTurnId = await adapter.steerTurn(
+        const TurnSteerOptions(
+          threadId: 'thread-1',
+          expectedTurnId: 'turn-3',
+          text: 'Now update the widget',
+          attachments: [
+            UserAttachment(
+              kind: UserAttachmentKind.pastedText,
+              label: 'Snippet',
+              preview: 'const x = 1;',
+            ),
+          ],
+        ),
+      );
+
+      expect(steeredTurnId, 'turn-3');
+      expect(requests.last.method, 'turn/steer');
+      expect(requests.last.params, {
+        'threadId': 'thread-1',
+        'expectedTurnId': 'turn-3',
+        'input': [
+          {
+            'type': 'text',
+            'text': 'Now update the widget',
+            'text_elements': <Object?>[],
+          },
+          {
+            'type': 'text',
+            'text': 'const x = 1;',
+            'text_elements': <Object?>[],
+          },
+        ],
+      });
+    },
+  );
+
   test('maps lifecycle and assistant delta notifications', () async {
     final events = <TurnEvent>[];
     final subscription = adapter.events.listen(events.add);

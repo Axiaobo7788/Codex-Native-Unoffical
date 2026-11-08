@@ -21,9 +21,7 @@ final class TurnProtocolAdapter {
   Future<TurnHandle> startTurn(TurnStartOptions options) async {
     final response = await request('turn/start', {
       'threadId': options.threadId,
-      'input': [
-        {'type': 'text', 'text': options.text, 'text_elements': <Object?>[]},
-      ],
+      'input': _serializeUserInput(options.text, options.attachments),
       if (options.model != null) 'model': options.model,
       if (options.reasoningEffort != null) 'effort': options.reasoningEffort,
       if (options.approvalPolicy case final approvalPolicy?)
@@ -35,12 +33,72 @@ final class TurnProtocolAdapter {
     return _parseTurnHandle(turn);
   }
 
+  Future<String> steerTurn(TurnSteerOptions options) async {
+    final response = await request('turn/steer', {
+      'threadId': options.threadId,
+      'expectedTurnId': options.expectedTurnId,
+      'input': _serializeUserInput(options.text, options.attachments),
+    });
+    return _requiredString(response, 'turnId');
+  }
+
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,
   }) async {
     await request('turn/interrupt', {'threadId': threadId, 'turnId': turnId});
   }
+
+  static List<JsonObject> _serializeUserInput(
+    String text,
+    List<UserAttachment> attachments,
+  ) {
+    final normalizedAttachments = normalizeUserAttachments(attachments);
+    final items = <JsonObject>[];
+    if (text.isNotEmpty || normalizedAttachments.isEmpty) {
+      items.add({'type': 'text', 'text': text, 'text_elements': <Object?>[]});
+    }
+    for (final attachment in normalizedAttachments) {
+      final path = attachment.path;
+      switch (attachment.kind) {
+        case UserAttachmentKind.image:
+          final value = (path != null && path.isNotEmpty)
+              ? path
+              : attachment.label;
+          if (_isUrlOrDataUri(value)) {
+            items.add({'type': 'image', 'url': value});
+          } else {
+            items.add({'type': 'localImage', 'path': value});
+          }
+        case UserAttachmentKind.skill:
+          final rawName = attachment.label.startsWith(r'$')
+              ? attachment.label.substring(1)
+              : attachment.label;
+          items.add({'type': 'skill', 'name': rawName, 'path': path ?? ''});
+        case UserAttachmentKind.file || UserAttachmentKind.mention:
+          items.add({
+            'type': 'mention',
+            'name': attachment.label,
+            'path': (path != null && path.isNotEmpty) ? path : attachment.label,
+          });
+        case UserAttachmentKind.pastedText || UserAttachmentKind.ideContext:
+          final snippet = attachment.preview;
+          items.add({
+            'type': 'text',
+            'text': (snippet != null && snippet.isNotEmpty)
+                ? snippet
+                : attachment.label,
+            'text_elements': <Object?>[],
+          });
+      }
+    }
+    return items;
+  }
+
+  static bool _isUrlOrDataUri(String value) =>
+      value.startsWith('http://') ||
+      value.startsWith('https://') ||
+      value.startsWith('data:');
 
   static TurnEvent? _parseNotification(
     CodexNotification notification,

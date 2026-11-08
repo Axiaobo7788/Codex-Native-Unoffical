@@ -245,6 +245,10 @@ class ProcessTransport implements CodexTransport {
       _turnProtocol.startTurn(options);
 
   @override
+  Future<String> steerTurn(TurnSteerOptions options) =>
+      _turnProtocol.steerTurn(options);
+
+  @override
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,

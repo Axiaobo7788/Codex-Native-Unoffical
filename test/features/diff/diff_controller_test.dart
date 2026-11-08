@@ -48,6 +48,10 @@ class _TurnGateway implements TurnGateway {
       throw UnimplementedError();
 
   @override
+  Future<String> steerTurn(TurnSteerOptions options) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,

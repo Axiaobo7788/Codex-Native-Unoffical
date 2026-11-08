@@ -90,6 +90,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _detailMode = PresentationDetailMode.commands;
   var _productMode = ProductMode.codex;
   final _threadActionsPopoverController = CodexPopoverController();
+  final _composerAttachPopoverController = CodexPopoverController();
+  final List<UserAttachment> _composerAttachments = <UserAttachment>[];
 
   String get _activeProjectDirectory {
     final selectedCwd = widget.controller.thread?.cwd;
@@ -141,6 +143,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..removeListener(_handleScrollPositionChanged)
       ..dispose();
     _threadActionsPopoverController.dispose();
+    _composerAttachPopoverController.dispose();
     _composerFocusNode.dispose();
     _composerController.dispose();
     super.dispose();
@@ -585,6 +588,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   if (chronologicalIndex < historyItems.length) {
                     final item = historyItems[chronologicalIndex];
                     final itemKey = 'history-${item.id}';
+                    final activeThread = controller.thread;
+                    final threadController = widget.threadController;
+                    final canMutateTurn =
+                        item.kind == HistoryItemKind.user &&
+                        item.turnId.isNotEmpty &&
+                        activeThread != null &&
+                        threadController != null;
                     return _MeasuredTimelineItem(
                       key: ValueKey('measured-$itemKey'),
                       itemKey: itemKey,
@@ -597,6 +607,29 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         historyController: widget.historyController,
                         outputGateway: widget.outputGateway,
                         detailMode: _detailMode,
+                        onForkFromTurn: canMutateTurn
+                            ? () => unawaited(
+                                threadController.forkThread(
+                                  ThreadForkOptions(
+                                    threadId: activeThread.id,
+                                    beforeTurnId: item.turnId,
+                                    cwd: activeThread.cwd,
+                                  ),
+                                ),
+                              )
+                            : null,
+                        onRevertFromTurn: canMutateTurn
+                            ? () async {
+                                final reverted = await threadController
+                                    .revertThread(
+                                      threadId: activeThread.id,
+                                      beforeTurnId: item.turnId,
+                                    );
+                                if (reverted != null && mounted) {
+                                  await widget.historyController.refresh();
+                                }
+                              }
+                            : null,
                       ),
                     );
                   }
@@ -612,6 +645,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     child: _ConversationEntryView(
                       key: ValueKey(entry.id),
                       entry: entry,
+                      attachments: entry.attachments,
                     ),
                   );
                 },
@@ -641,7 +675,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         widget.threadController != null &&
         projectCwd.isNotEmpty &&
         !(widget.threadController?.mutating ?? false);
-    final enabled = (thread != null || canCreateOnSend) && !controller.busy;
+    final canSteer = controller.canSteer;
+    final enabled =
+        (thread != null || canCreateOnSend) && (!controller.busy || canSteer);
     return Container(
       color: palette.canvas,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
@@ -652,7 +688,36 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           isFocused: _composerFocusNode.hasFocus,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_composerAttachments.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (
+                        var index = 0;
+                        index < _composerAttachments.length;
+                        index += 1
+                      )
+                        _ComposerAttachmentDraftChip(
+                          key: ValueKey('composer-attachment-chip-$index'),
+                          removeKey: ValueKey(
+                            'composer-attachment-remove-$index',
+                          ),
+                          attachment: _composerAttachments[index],
+                          onRemove: () {
+                            setState(() {
+                              _composerAttachments.removeAt(index);
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               CallbackShortcuts(
                 bindings: {
                   const SingleActivator(LogicalKeyboardKey.enter): () {
@@ -674,6 +739,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   decoration: InputDecoration(
                     hintText: thread == null && !canCreateOnSend
                         ? 'Select or create a thread'
+                        : canSteer
+                        ? 'Steer active turn in Codex'
                         : 'Send a message to Codex',
                     filled: false,
                     border: InputBorder.none,
@@ -689,10 +756,56 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final compactComposer = rowConstraints.maxWidth < 560;
                   final showModelPill = rowConstraints.maxWidth >= 340;
                   final maxModelLabelWidth =
-                      (rowConstraints.maxWidth - (compactComposer ? 210 : 370))
-                          .clamp(72.0, 190.0);
+                      (rowConstraints.maxWidth - (compactComposer ? 270 : 450))
+                          .clamp(56.0, 160.0);
                   return Row(
                     children: [
+                      CodexPopoverAnchor(
+                        controller: _composerAttachPopoverController,
+                        targetAnchor: Alignment.topLeft,
+                        followerAnchor: Alignment.bottomLeft,
+                        width: 210,
+                        offset: const Offset(0, -6),
+                        popoverBuilder: (context, close) =>
+                            CodexMenu<UserAttachmentKind>(
+                              items: const [
+                                CodexMenuItem(
+                                  value: UserAttachmentKind.mention,
+                                  label: 'Attach file (@mention)',
+                                  icon: Icon(Icons.description_outlined),
+                                ),
+                                CodexMenuItem(
+                                  value: UserAttachmentKind.image,
+                                  label: 'Attach image',
+                                  icon: Icon(Icons.image_outlined),
+                                ),
+                                CodexMenuItem(
+                                  value: UserAttachmentKind.skill,
+                                  label: 'Attach skill (\$skill)',
+                                  icon: Icon(Icons.auto_fix_high_outlined),
+                                ),
+                                CodexMenuItem(
+                                  value: UserAttachmentKind.pastedText,
+                                  label: 'Attach snippet',
+                                  icon: Icon(Icons.notes_rounded),
+                                ),
+                              ],
+                              onSelected: (kind) {
+                                close();
+                                unawaited(_promptAddAttachment(kind));
+                              },
+                            ),
+                        child: CodexIconButton(
+                          key: const ValueKey('composer-attach-button'),
+                          tooltip: 'Add attachment',
+                          size: 28.0,
+                          onPressed: enabled
+                              ? _composerAttachPopoverController.toggle
+                              : null,
+                          icon: const Icon(Icons.add_rounded, size: 17),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
                       _ExecutionSettingsButton(
                         controller: widget.settingsController,
                       ),
@@ -720,7 +833,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 const SizedBox(width: 4),
                                 ConstrainedBox(
                                   constraints: const BoxConstraints(
-                                    maxWidth: 140,
+                                    maxWidth: 120,
                                   ),
                                   child: Text(
                                     _projectName(projectCwd),
@@ -752,12 +865,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       CodexIconButton(
                         key: const ValueKey('composer-send-button'),
-                        tooltip: 'Send (Enter)',
+                        tooltip: canSteer
+                            ? 'Steer turn (Enter)'
+                            : 'Send (Enter)',
                         size: 34.0,
                         shape: BoxShape.circle,
                         variant: CodexButtonVariant.primary,
                         onPressed: enabled ? _send : null,
-                        icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                        icon: Icon(
+                          canSteer
+                              ? Icons.subdirectory_arrow_right_rounded
+                              : Icons.arrow_upward_rounded,
+                          size: 18,
+                        ),
                       ),
                     ],
                   );
@@ -770,9 +890,25 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  Future<void> _promptAddAttachment(UserAttachmentKind kind) async {
+    final added = await showDialog<UserAttachment>(
+      context: context,
+      builder: (context) => _ComposerAttachmentDialog(kind: kind),
+    );
+    if (added != null && mounted) {
+      setState(() {
+        final next = normalizeUserAttachments([..._composerAttachments, added]);
+        _composerAttachments
+          ..clear()
+          ..addAll(next);
+      });
+    }
+  }
+
   Future<void> _send() async {
     final text = _composerController.text;
-    if (text.trim().isEmpty) {
+    final attachments = List<UserAttachment>.of(_composerAttachments);
+    if (text.trim().isEmpty && attachments.isEmpty) {
       return;
     }
     if (widget.threadController case final threadController?) {
@@ -803,8 +939,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     }
-    if (await widget.controller.submit(text)) {
+    if (await widget.controller.submit(text, attachments: attachments)) {
       _composerController.clear();
+      setState(_composerAttachments.clear);
       _jumpToLatest();
     }
   }
@@ -1171,6 +1308,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+    if (_composerAttachments.isNotEmpty) {
+      _composerAttachments.clear();
+    }
     if (_showJumpToLatest && mounted) {
       setState(() => _showJumpToLatest = false);
     }
@@ -1751,19 +1891,25 @@ class _ConversationEntryView extends StatelessWidget {
   const _ConversationEntryView({
     super.key,
     required this.entry,
+    this.turnId,
     this.attachments = const [],
     this.isReasoning = false,
     this.isCommand = false,
     this.leadingHeader,
     this.trailingAction,
+    this.onForkFromTurn,
+    this.onRevertFromTurn,
   });
 
   final ConversationEntry entry;
+  final String? turnId;
   final List<UserAttachment> attachments;
   final bool isReasoning;
   final bool isCommand;
   final Widget? leadingHeader;
   final Widget? trailingAction;
+  final VoidCallback? onForkFromTurn;
+  final VoidCallback? onRevertFromTurn;
 
   @override
   Widget build(BuildContext context) {
@@ -1774,7 +1920,13 @@ class _ConversationEntryView extends StatelessWidget {
           constraints: const BoxConstraints(
             maxWidth: OfficialCodexTheme.maxContentWidth,
           ),
-          child: _UserMessageEntryView(entry: entry, attachments: attachments),
+          child: _UserMessageEntryView(
+            entry: entry,
+            turnId: turnId,
+            attachments: attachments,
+            onForkFromTurn: onForkFromTurn,
+            onRevertFromTurn: onRevertFromTurn,
+          ),
         ),
       );
     }
@@ -1965,13 +2117,23 @@ String? _nonNominalStatus(String? status) {
 }
 
 class _UserMessageEntryView extends StatelessWidget {
-  const _UserMessageEntryView({required this.entry, required this.attachments});
+  const _UserMessageEntryView({
+    required this.entry,
+    this.turnId,
+    required this.attachments,
+    this.onForkFromTurn,
+    this.onRevertFromTurn,
+  });
 
   final ConversationEntry entry;
+  final String? turnId;
   final List<UserAttachment> attachments;
+  final VoidCallback? onForkFromTurn;
+  final VoidCallback? onRevertFromTurn;
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
     final presentation = parseUserMessagePresentation(
       entry.text,
       attachments: attachments,
@@ -1984,15 +2146,288 @@ class _UserMessageEntryView extends StatelessWidget {
           attachment: presentation.attachments[index],
         ),
     ];
+    final hasTurnActions =
+        fullText.isNotEmpty ||
+        onForkFromTurn != null ||
+        onRevertFromTurn != null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
-      child: CodexMessageBubble(
-        key: ValueKey('user-message-bubble-${entry.id}'),
-        text: fullText,
-        attachments: attachmentWidgets,
-        expandKey: ValueKey('user-expand-${entry.id}'),
+      child: Stack(
+        alignment: Alignment.centerRight,
+        children: [
+          if (hasTurnActions)
+            Positioned(
+              left: 0,
+              bottom: 4,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (fullText.isNotEmpty)
+                    _AssistantCopyButton(
+                      key: ValueKey('user-copy-${entry.id}'),
+                      text: fullText,
+                    ),
+                  if (onForkFromTurn != null)
+                    CodexTooltip(
+                      message: 'Fork thread before this turn',
+                      child: GestureDetector(
+                        key: ValueKey('turn-fork-${turnId ?? entry.id}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onForkFromTurn,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.call_split_rounded,
+                              size: 14,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (onRevertFromTurn != null)
+                    CodexTooltip(
+                      message: 'Revert thread before this turn',
+                      child: GestureDetector(
+                        key: ValueKey('turn-revert-${turnId ?? entry.id}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onRevertFromTurn,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.undo_rounded,
+                              size: 14,
+                              color: palette.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          CodexMessageBubble(
+            key: ValueKey('user-message-bubble-${entry.id}'),
+            text: fullText,
+            attachments: attachmentWidgets,
+            expandKey: ValueKey('user-expand-${entry.id}'),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _ComposerAttachmentDraftChip extends StatelessWidget {
+  const _ComposerAttachmentDraftChip({
+    super.key,
+    required this.removeKey,
+    required this.attachment,
+    required this.onRemove,
+  });
+
+  final Key removeKey;
+  final UserAttachment attachment;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final icon = switch (attachment.kind) {
+      UserAttachmentKind.pastedText => Icons.notes_rounded,
+      UserAttachmentKind.file => Icons.description_outlined,
+      UserAttachmentKind.ideContext => Icons.code_rounded,
+      UserAttachmentKind.image => Icons.image_outlined,
+      UserAttachmentKind.skill => Icons.auto_fix_high_outlined,
+      UserAttachmentKind.mention => Icons.alternate_email_rounded,
+    };
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: palette.textSecondary),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(
+              attachment.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: palette.textPrimary),
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            key: removeKey,
+            behavior: HitTestBehavior.opaque,
+            onTap: onRemove,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 13,
+                  color: palette.textMuted,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComposerAttachmentDialog extends StatefulWidget {
+  const _ComposerAttachmentDialog({required this.kind});
+
+  final UserAttachmentKind kind;
+
+  @override
+  State<_ComposerAttachmentDialog> createState() =>
+      _ComposerAttachmentDialogState();
+}
+
+class _ComposerAttachmentDialogState extends State<_ComposerAttachmentDialog> {
+  late final TextEditingController _primaryController;
+  late final TextEditingController _secondaryController;
+
+  @override
+  void initState() {
+    super.initState();
+    _primaryController = TextEditingController();
+    _secondaryController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _primaryController.dispose();
+    _secondaryController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final primary = _primaryController.text.trim();
+    if (primary.isEmpty) {
+      return;
+    }
+    final secondary = _secondaryController.text.trim();
+    final attachment = switch (widget.kind) {
+      UserAttachmentKind.mention || UserAttachmentKind.file => UserAttachment(
+        kind: UserAttachmentKind.mention,
+        label: secondary.isNotEmpty
+            ? secondary
+            : primary
+                  .split('/')
+                  .lastWhere((s) => s.isNotEmpty, orElse: () => primary),
+        path: primary,
+      ),
+      UserAttachmentKind.image => UserAttachment(
+        kind: UserAttachmentKind.image,
+        label: secondary.isNotEmpty
+            ? secondary
+            : primary
+                  .split('/')
+                  .lastWhere((s) => s.isNotEmpty, orElse: () => primary),
+        path: primary,
+      ),
+      UserAttachmentKind.skill => UserAttachment(
+        kind: UserAttachmentKind.skill,
+        label: primary.startsWith(r'$') ? primary : '\$$primary',
+        path: secondary.isNotEmpty ? secondary : primary,
+      ),
+      UserAttachmentKind.pastedText ||
+      UserAttachmentKind.ideContext => UserAttachment(
+        kind: UserAttachmentKind.pastedText,
+        label: secondary.isNotEmpty
+            ? secondary
+            : 'Snippet (${primary.length} chars)',
+        preview: primary,
+      ),
+    };
+    Navigator.of(context).pop(attachment);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, primaryHint, secondaryHint) = switch (widget.kind) {
+      UserAttachmentKind.mention || UserAttachmentKind.file => (
+        'Attach file (@mention)',
+        'File path (e.g. lib/main.dart)',
+        'Optional label',
+      ),
+      UserAttachmentKind.image => (
+        'Attach image',
+        'Image path or URL',
+        'Optional label',
+      ),
+      UserAttachmentKind.skill => (
+        'Attach skill (\$skill)',
+        'Skill name (e.g. frontend-design)',
+        'Skill path (optional)',
+      ),
+      UserAttachmentKind.pastedText || UserAttachmentKind.ideContext => (
+        'Attach snippet',
+        'Snippet content',
+        'Optional label',
+      ),
+    };
+    return AlertDialog(
+      title: Text(title),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const ValueKey('composer-attachment-primary-field'),
+              controller: _primaryController,
+              autofocus: true,
+              maxLines: widget.kind == UserAttachmentKind.pastedText ? 4 : 1,
+              decoration: InputDecoration(hintText: primaryHint),
+              onSubmitted: widget.kind == UserAttachmentKind.pastedText
+                  ? null
+                  : (_) => _submit(),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('composer-attachment-secondary-field'),
+              controller: _secondaryController,
+              decoration: InputDecoration(hintText: secondaryHint),
+              onSubmitted: (_) => _submit(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        CodexButton(
+          variant: CodexButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+        ),
+        CodexButton(
+          key: const ValueKey('composer-attachment-confirm-button'),
+          variant: CodexButtonVariant.primary,
+          onPressed: _submit,
+          label: 'Attach',
+        ),
+      ],
     );
   }
 }

@@ -38,6 +38,7 @@ abstract interface class CodexTransport implements OutputGateway {
   Future<void> compactThread(String threadId);
   Future<void> deleteThread(String threadId);
   Future<TurnHandle> startTurn(TurnStartOptions options);
+  Future<String> steerTurn(TurnSteerOptions options);
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,

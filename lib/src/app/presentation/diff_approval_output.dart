@@ -316,12 +316,16 @@ class _HistoryEntryView extends StatelessWidget {
     required this.historyController,
     required this.outputGateway,
     this.detailMode = PresentationDetailMode.commands,
+    this.onForkFromTurn,
+    this.onRevertFromTurn,
   });
 
   final HistoryItem item;
   final HistoryController historyController;
   final OutputGateway outputGateway;
   final PresentationDetailMode detailMode;
+  final VoidCallback? onForkFromTurn;
+  final VoidCallback? onRevertFromTurn;
 
   @override
   Widget build(BuildContext context) {
@@ -347,8 +351,12 @@ class _HistoryEntryView extends StatelessWidget {
         text: item.text,
         completed: true,
         status: item.status,
+        attachments: item.attachments,
       ),
       attachments: item.attachments,
+      turnId: item.turnId,
+      onForkFromTurn: onForkFromTurn,
+      onRevertFromTurn: onRevertFromTurn,
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
       leadingHeader: showWorkDivider

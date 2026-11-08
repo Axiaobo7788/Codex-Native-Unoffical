@@ -1,5 +1,8 @@
 import 'execution_settings.dart';
 import 'diff_models.dart';
+import 'user_message_presentation.dart';
+
+export 'user_message_presentation.dart';
 
 enum TurnRuntimeStatus { inProgress, completed, interrupted, failed, unknown }
 
@@ -7,6 +10,7 @@ class TurnStartOptions {
   const TurnStartOptions({
     required this.threadId,
     required this.text,
+    this.attachments = const [],
     this.model,
     this.reasoningEffort,
     this.approvalPolicy,
@@ -15,10 +19,25 @@ class TurnStartOptions {
 
   final String threadId;
   final String text;
+  final List<UserAttachment> attachments;
   final String? model;
   final String? reasoningEffort;
   final ApprovalPolicyOverride? approvalPolicy;
   final SandboxModeOverride? sandbox;
+}
+
+class TurnSteerOptions {
+  const TurnSteerOptions({
+    required this.threadId,
+    required this.expectedTurnId,
+    required this.text,
+    this.attachments = const [],
+  });
+
+  final String threadId;
+  final String expectedTurnId;
+  final String text;
+  final List<UserAttachment> attachments;
 }
 
 class TurnHandle {

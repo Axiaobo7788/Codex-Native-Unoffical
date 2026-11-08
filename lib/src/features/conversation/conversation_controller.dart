@@ -17,6 +17,7 @@ class ConversationEntry {
     required this.text,
     required this.completed,
     this.status,
+    this.attachments = const [],
   });
 
   final String id;
@@ -24,15 +25,21 @@ class ConversationEntry {
   final String text;
   final bool completed;
   final String? status;
+  final List<UserAttachment> attachments;
 
-  ConversationEntry copyWith({String? text, bool? completed, String? status}) =>
-      ConversationEntry(
-        id: id,
-        kind: kind,
-        text: text ?? this.text,
-        completed: completed ?? this.completed,
-        status: status ?? this.status,
-      );
+  ConversationEntry copyWith({
+    String? text,
+    bool? completed,
+    String? status,
+    List<UserAttachment>? attachments,
+  }) => ConversationEntry(
+    id: id,
+    kind: kind,
+    text: text ?? this.text,
+    completed: completed ?? this.completed,
+    status: status ?? this.status,
+    attachments: attachments ?? this.attachments,
+  );
 }
 
 class ConversationController extends ChangeNotifier {
@@ -76,6 +83,7 @@ class ConversationController extends ChangeNotifier {
   String? get activeTurnId => _activeTurnId;
   bool get busy => _busy;
   bool get canInterrupt => _busy && _interruptReady;
+  bool get canSteer => _busy && _interruptReady && _activeTurnId != null;
 
   void bindThread(ThreadSummary? thread) {
     if (_thread?.id == thread?.id) {
@@ -100,10 +108,19 @@ class ConversationController extends ChangeNotifier {
     _notify();
   }
 
-  Future<bool> submit(String text) async {
+  Future<bool> submit(
+    String text, {
+    List<UserAttachment> attachments = const [],
+  }) async {
+    if (canSteer) {
+      return steer(text, attachments: attachments);
+    }
     final currentThread = _thread;
     final trimmed = text.trim();
-    if (currentThread == null || trimmed.isEmpty || _busy) {
+    final normalizedAttachments = normalizeUserAttachments(attachments);
+    if (currentThread == null ||
+        (trimmed.isEmpty && normalizedAttachments.isEmpty) ||
+        _busy) {
       return false;
     }
 
@@ -114,13 +131,18 @@ class ConversationController extends ChangeNotifier {
         kind: ConversationEntryKind.user,
         text: _bounded(trimmed),
         completed: true,
+        attachments: normalizedAttachments,
       ),
     );
     _notify();
 
     try {
       final turn = await gateway.startTurn(
-        settings.turnOptions(threadId: currentThread.id, text: trimmed),
+        settings.turnOptions(
+          threadId: currentThread.id,
+          text: trimmed,
+          attachments: normalizedAttachments,
+        ),
       );
       if (_disposed || _thread?.id != currentThread.id) {
         return true;
@@ -134,6 +156,55 @@ class ConversationController extends ChangeNotifier {
         _busy = false;
         _interruptReady = false;
         _activeTurnId = null;
+        _appendError(error.toString());
+        _notify();
+      }
+      return false;
+    }
+  }
+
+  Future<bool> steer(
+    String text, {
+    List<UserAttachment> attachments = const [],
+  }) async {
+    final currentThread = _thread;
+    final turnId = _activeTurnId;
+    final trimmed = text.trim();
+    final normalizedAttachments = normalizeUserAttachments(attachments);
+    if (currentThread == null ||
+        turnId == null ||
+        !canSteer ||
+        (trimmed.isEmpty && normalizedAttachments.isEmpty)) {
+      return false;
+    }
+
+    _append(
+      ConversationEntry(
+        id: 'local-user-${_localEntrySequence++}',
+        kind: ConversationEntryKind.user,
+        text: _bounded(trimmed),
+        completed: true,
+        attachments: normalizedAttachments,
+      ),
+    );
+    _notify();
+
+    try {
+      final steeredTurnId = await gateway.steerTurn(
+        TurnSteerOptions(
+          threadId: currentThread.id,
+          expectedTurnId: turnId,
+          text: trimmed,
+          attachments: normalizedAttachments,
+        ),
+      );
+      if (!_disposed && _thread?.id == currentThread.id) {
+        _activeTurnId = steeredTurnId;
+        _notify();
+      }
+      return true;
+    } catch (error) {
+      if (!_disposed && _thread?.id == currentThread.id) {
         _appendError(error.toString());
         _notify();
       }

@@ -381,6 +381,10 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
       _unsupported('Turn start');
 
   @override
+  Future<String> steerTurn(TurnSteerOptions options) =>
+      _unsupported('Turn steering');
+
+  @override
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,

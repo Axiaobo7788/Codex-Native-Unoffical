@@ -100,9 +100,11 @@ class ExecutionSettingsController extends ChangeNotifier {
   TurnStartOptions turnOptions({
     required String threadId,
     required String text,
+    List<UserAttachment> attachments = const [],
   }) => TurnStartOptions(
     threadId: threadId,
     text: text,
+    attachments: attachments,
     model: effectiveModel == null || _selectedModelId == null
         ? null
         : effectiveModel!.model,

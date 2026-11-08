@@ -142,12 +142,55 @@ void main() {
     expect(controller.entries, isEmpty);
     expect(controller.thread?.id, 'thread-2');
   });
+
+  test('steers an active turn when turn/started has been observed', () async {
+    await controller.submit(
+      'Initial instruction',
+      attachments: const [
+        UserAttachment(
+          kind: UserAttachmentKind.mention,
+          label: 'main.dart',
+          path: 'lib/main.dart',
+        ),
+      ],
+    );
+    expect(controller.canSteer, isFalse);
+
+    gateway.events.add(
+      const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'),
+    );
+    expect(controller.canSteer, isTrue);
+
+    expect(
+      await controller.submit(
+        'Focus on tests instead',
+        attachments: const [
+          UserAttachment(
+            kind: UserAttachmentKind.skill,
+            label: r'$test-runner',
+            path: '/skills/test-runner',
+          ),
+        ],
+      ),
+      isTrue,
+    );
+
+    expect(gateway.steered, hasLength(1));
+    expect(gateway.steered.single.threadId, 'thread-1');
+    expect(gateway.steered.single.expectedTurnId, 'turn-1');
+    expect(gateway.steered.single.text, 'Focus on tests instead');
+    expect(gateway.steered.single.attachments.single.label, r'$test-runner');
+    expect(controller.entries, hasLength(2));
+    expect(controller.entries.last.text, 'Focus on tests instead');
+    expect(controller.entries.last.attachments.single.label, r'$test-runner');
+  });
 }
 
 class _FakeTurnGateway implements TurnGateway {
   final StreamController<TurnEvent> events =
       StreamController<TurnEvent>.broadcast(sync: true);
   final List<(String, String)> started = [];
+  final List<TurnSteerOptions> steered = [];
   final List<(String, String)> interrupted = [];
 
   @override
@@ -157,6 +200,12 @@ class _FakeTurnGateway implements TurnGateway {
   Future<TurnHandle> startTurn(TurnStartOptions options) async {
     started.add((options.threadId, options.text));
     return const TurnHandle(id: 'turn-1', status: TurnRuntimeStatus.inProgress);
+  }
+
+  @override
+  Future<String> steerTurn(TurnSteerOptions options) async {
+    steered.add(options);
+    return options.expectedTurnId;
   }
 
   @override

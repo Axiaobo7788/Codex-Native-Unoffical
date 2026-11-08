@@ -1149,5 +1149,95 @@ void main() {
         expect(harness.unarchivedThreadIds, ['thread-fork-1']);
       },
     );
+
+    testWidgets(
+      'T1.6.7: Composer structured attachments, active turn steering, and turn-level fork/revert',
+      (tester) async {
+        final thread = createTestThread(
+          id: 'steer-attach-thread',
+          preview: 'Steer attach thread',
+        );
+        final histTurn = createTestTurn(
+          id: 'turn-hist-1',
+          userPrompt: 'Historical prompt',
+          assistantProse: 'Historical answer',
+        );
+        final harness = E2ERuntimeHarness(
+          initialThreads: [thread],
+          initialHistoryTurns: [histTurn],
+        );
+        await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.text('Steer attach thread'));
+        await tester.pumpAndSettle();
+
+        // 1. Turn-level fork and revert actions on historical user message
+        final forkTurnBtn = find.byKey(const ValueKey('turn-fork-turn-hist-1'));
+        final revertTurnBtn = find.byKey(
+          const ValueKey('turn-revert-turn-hist-1'),
+        );
+        expect(forkTurnBtn, findsOneWidget);
+        expect(revertTurnBtn, findsOneWidget);
+
+        await tester.tap(revertTurnBtn);
+        await tester.pumpAndSettle();
+        expect(harness.revertedThreads, [
+          (threadId: 'steer-attach-thread', beforeTurnId: 'turn-hist-1'),
+        ]);
+
+        // 2. Composer structured attachment (@mention)
+        final attachBtn = find.byKey(const ValueKey('composer-attach-button'));
+        expect(attachBtn, findsOneWidget);
+        await tester.tap(attachBtn);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Attach file (@mention)'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const ValueKey('composer-attachment-primary-field')),
+          'lib/main.dart',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('composer-attachment-confirm-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('composer-attachment-chip-0')),
+          findsOneWidget,
+        );
+
+        // 3. Submit initial turn with attachment
+        final composerField = find.byKey(
+          const ValueKey('conversation-composer'),
+        );
+        await tester.enterText(composerField, 'Review this file');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+        await tester.pump();
+
+        expect(harness.startedTurns, hasLength(1));
+        expect(harness.startedTurns.single.text, 'Review this file');
+        expect(
+          harness.startedTurns.single.attachments.single.path,
+          'lib/main.dart',
+        );
+
+        // 4. Active turn is now in progress and TurnStartedEvent was emitted;
+        //    submitting from the composer steers the active turn via turn/steer
+        expect(find.text('Working…'), findsOneWidget);
+        expect(find.text('Steer active turn in Codex'), findsOneWidget);
+        await tester.enterText(composerField, 'Also check edge cases');
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+        await tester.pump();
+
+        expect(harness.steeredTurns, hasLength(1));
+        expect(harness.steeredTurns.single.threadId, 'steer-attach-thread');
+        expect(harness.steeredTurns.single.expectedTurnId, 'turn-1');
+        expect(harness.steeredTurns.single.text, 'Also check edge cases');
+      },
+    );
   });
 }
