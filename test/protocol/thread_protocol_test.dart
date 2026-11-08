@@ -85,14 +85,48 @@ void main() {
     },
   );
 
-  test('drops malformed credential-bearing git origins', () async {
+  test(
+    'drops credential-bearing git origins that cannot be sanitized',
+    () async {
+      responses['thread/list'] = {
+        'data': [
+          {
+            ..._threadJson(id: 'thread-git-malformed'),
+            'gitInfo': {
+              'branch': 'main',
+              'originUrl': 'https://user:secret@',
+              'sha': 'abc123',
+            },
+          },
+          {
+            ..._threadJson(id: 'thread-git-scp-credentials'),
+            'gitInfo': {
+              'branch': 'main',
+              'originUrl': 'user:secret@example.test:owner/repo.git',
+              'sha': 'def456',
+            },
+          },
+        ],
+        'nextCursor': null,
+      };
+
+      final page = await adapter.listThreads(const ThreadListQuery());
+
+      expect(page.threads, hasLength(2));
+      expect(page.threads[0].gitInfo?.originUrl, isNull);
+      expect(page.threads[1].gitInfo?.originUrl, isNull);
+    },
+  );
+
+  test('preserves normal SCP-like git origins without suffix data', () async {
     responses['thread/list'] = {
       'data': [
         {
-          ..._threadJson(id: 'thread-git-malformed'),
+          ..._threadJson(id: 'thread-git-scp'),
           'gitInfo': {
             'branch': 'main',
-            'originUrl': 'https://user:secret@',
+            'originUrl':
+                'git@example.test:owner/repo.git?token=secret#fragment',
             'sha': 'abc123',
           },
         },
@@ -102,7 +136,10 @@ void main() {
 
     final page = await adapter.listThreads(const ThreadListQuery());
 
-    expect(page.threads.single.gitInfo?.originUrl, isNull);
+    expect(
+      page.threads.single.gitInfo?.originUrl,
+      'git@example.test:owner/repo.git',
+    );
   });
 
   test(

@@ -264,12 +264,26 @@ final class ThreadProtocolAdapter {
     if (normalized == null || normalized.isEmpty) {
       return null;
     }
+    if (!normalized.contains('://')) {
+      final userSeparator = normalized.indexOf('@');
+      if (userSeparator >= 0) {
+        final credentialSeparator = normalized.indexOf(':');
+        if (credentialSeparator < userSeparator) {
+          return null;
+        }
+        final pathSeparator = normalized.indexOf(':', userSeparator + 1);
+        if (pathSeparator <= userSeparator + 1) {
+          return null;
+        }
+        return _stripOriginSuffix(normalized);
+      }
+    }
     final uri = Uri.tryParse(normalized);
     if (uri == null) {
       return null;
     }
     if (!uri.hasScheme) {
-      return normalized;
+      return _stripOriginSuffix(normalized);
     }
     if (uri.host.isEmpty) {
       return null;
@@ -280,6 +294,20 @@ final class ThreadProtocolAdapter {
       port: uri.hasPort ? uri.port : null,
       path: uri.path,
     ).toString();
+  }
+
+  static String? _stripOriginSuffix(String value) {
+    final querySeparator = value.indexOf('?');
+    final fragmentSeparator = value.indexOf('#');
+    final suffixSeparators = [
+      querySeparator,
+      fragmentSeparator,
+    ].where((index) => index >= 0).toList();
+    final safeLength = suffixSeparators.isEmpty
+        ? value.length
+        : suffixSeparators.reduce((left, right) => left < right ? left : right);
+    final safeOrigin = value.substring(0, safeLength).trim();
+    return safeOrigin.isEmpty ? null : safeOrigin;
   }
 
   static JsonObject _requiredObject(
