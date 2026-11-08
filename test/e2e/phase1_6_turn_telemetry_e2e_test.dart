@@ -7,6 +7,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'e2e_harness.dart';
 
 class _TelemetryE2EHarness extends E2ERuntimeHarness {
+  _TelemetryE2EHarness()
+    : super(
+        initialThreads: [
+          createTestThread(
+            id: 'active-thread',
+            preview: 'Telemetry Test Thread',
+          ),
+        ],
+      );
+
   final StreamController<TurnEvent> telemetryEvents =
       StreamController<TurnEvent>.broadcast(sync: true);
 
@@ -14,9 +24,9 @@ class _TelemetryE2EHarness extends E2ERuntimeHarness {
   Stream<TurnEvent> get turnEvents => telemetryEvents.stream;
 
   @override
-  Future<void> shutdown() async {
+  Future<void> disposeHarness() async {
     await telemetryEvents.close();
-    await super.shutdown();
+    await super.disposeHarness();
   }
 }
 
@@ -27,6 +37,9 @@ void main() {
       (tester) async {
         final harness = _TelemetryE2EHarness();
         await pumpE2EApp(tester, harness: harness);
+
+        await tester.tap(find.text('Telemetry Test Thread'));
+        await tester.pumpAndSettle();
 
         // Emit live turn plan, token usage, reasoning summary delta, MCP progress, hook lifecycle, model reroute, and warning
         harness.telemetryEvents
