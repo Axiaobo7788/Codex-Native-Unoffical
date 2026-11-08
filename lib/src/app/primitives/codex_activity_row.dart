@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/official_codex_theme.dart';
 import 'codex_button.dart';
@@ -111,7 +112,7 @@ class CodexActivityRow extends StatelessWidget {
 
 /// Semantic turn work divider primitive ("Worked for Xm Ys ›") with centered hairline rule
 /// and interactive collapsible pill button.
-class CodexActivityDivider extends StatelessWidget {
+class CodexActivityDivider extends StatefulWidget {
   const CodexActivityDivider({
     super.key,
     required this.label,
@@ -122,12 +123,62 @@ class CodexActivityDivider extends StatelessWidget {
 
   final String label;
   final bool isExpanded;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
   final bool isLoading;
+
+  bool get isEnabled => onToggle != null && !isLoading;
+
+  @override
+  State<CodexActivityDivider> createState() => _CodexActivityDividerState();
+}
+
+class _CodexActivityDividerState extends State<CodexActivityDivider> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+  bool _isFocused = false;
+
+  @override
+  void didUpdateWidget(covariant CodexActivityDivider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isEnabled && (_isHovered || _isPressed || _isFocused)) {
+      _isHovered = false;
+      _isPressed = false;
+      _isFocused = false;
+    }
+  }
+
+  void _handleHover(bool hovering) {
+    final next = widget.isEnabled && hovering;
+    if (next != _isHovered) {
+      setState(() => _isHovered = next);
+    }
+  }
+
+  void _handleFocus(bool focused) {
+    final next = widget.isEnabled && focused;
+    if (next != _isFocused) {
+      setState(() => _isFocused = next);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
+    final Color pillColor;
+    if (_isPressed) {
+      pillColor = Color.alphaBlend(
+        theme.pressedTint,
+        theme.workspaceBackground,
+      );
+    } else if (_isHovered) {
+      pillColor = Color.alphaBlend(theme.hoverTint, theme.workspaceBackground);
+    } else {
+      pillColor = theme.workspaceBackground;
+    }
+
+    final textColor = _isHovered || _isPressed
+        ? theme.textSecondary
+        : theme.textMuted;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -139,59 +190,103 @@ class CodexActivityDivider extends StatelessWidget {
             thickness: OfficialCodexTheme.hairlineBorderWidth,
             color: theme.hairlineBorder,
           ),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onToggle,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
-                height: OfficialCodexTheme.workDividerHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                decoration: BoxDecoration(
-                  color: theme.workspaceBackground,
-                  borderRadius: BorderRadius.circular(
-                    OfficialCodexTheme.workDividerHeight / 2,
-                  ),
-                  border: Border.all(
-                    color: theme.hairlineBorder,
-                    width: OfficialCodexTheme.hairlineBorderWidth,
-                  ),
+          Semantics(
+            button: true,
+            enabled: widget.isEnabled,
+            toggled: widget.isExpanded,
+            label: widget.label,
+            child: FocusableActionDetector(
+              enabled: widget.isEnabled,
+              onShowHoverHighlight: _handleHover,
+              onShowFocusHighlight: _handleFocus,
+              actions: {
+                ActivateIntent: CallbackAction<ActivateIntent>(
+                  onInvoke: (_) =>
+                      widget.isEnabled ? widget.onToggle?.call() : null,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12.0,
-                        color: theme.textMuted,
-                        fontWeight: FontWeight.w500,
+              },
+              shortcuts: const {
+                SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.isEnabled ? widget.onToggle : null,
+                onTapDown: widget.isEnabled
+                    ? (_) => setState(() => _isPressed = true)
+                    : null,
+                onTapUp: (_) {
+                  if (_isPressed) {
+                    setState(() => _isPressed = false);
+                  }
+                },
+                onTapCancel: () {
+                  if (_isPressed) {
+                    setState(() => _isPressed = false);
+                  }
+                },
+                child: MouseRegion(
+                  onEnter: (_) => _handleHover(true),
+                  onExit: (_) => _handleHover(false),
+                  cursor: widget.isEnabled
+                      ? SystemMouseCursors.click
+                      : SystemMouseCursors.basic,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 80),
+                    curve: Curves.easeOut,
+                    height: OfficialCodexTheme.workDividerHeight,
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                    decoration: BoxDecoration(
+                      color: pillColor,
+                      borderRadius: BorderRadius.circular(
+                        OfficialCodexTheme.workDividerHeight / 2,
+                      ),
+                      border: Border.all(
+                        color: _isFocused
+                            ? theme.focusRing
+                            : theme.hairlineBorder,
+                        width: _isFocused
+                            ? 1.5
+                            : OfficialCodexTheme.hairlineBorderWidth,
                       ),
                     ),
-                    const SizedBox(width: 4.0),
-                    if (isLoading)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 2.0),
-                        child: SizedBox(
-                          width: 12.0,
-                          height: 12.0,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              theme.textMuted,
-                            ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: TextStyle(
+                            fontSize: 12.0,
+                            color: textColor,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      )
-                    else
-                      Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_right_rounded,
-                        size: 14.0,
-                        color: theme.textMuted,
-                      ),
-                  ],
+                        const SizedBox(width: 4.0),
+                        if (widget.isLoading)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 2.0),
+                            child: SizedBox(
+                              width: 12.0,
+                              height: 12.0,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  textColor,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          Icon(
+                            widget.isExpanded
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_right_rounded,
+                            size: 14.0,
+                            color: textColor,
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

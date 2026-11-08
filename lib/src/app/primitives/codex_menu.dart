@@ -96,15 +96,26 @@ class _CodexMenuItemWidgetState<T> extends State<_CodexMenuItemWidget<T>> {
   bool _isHovered = false;
   bool _isFocused = false;
 
+  @override
+  void didUpdateWidget(covariant _CodexMenuItemWidget<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onTap == null && (_isHovered || _isFocused)) {
+      _isHovered = false;
+      _isFocused = false;
+    }
+  }
+
   void _handleHover(bool hovering) {
-    if (widget.onTap != null && hovering != _isHovered) {
-      setState(() => _isHovered = hovering);
+    final next = widget.onTap != null && hovering;
+    if (next != _isHovered) {
+      setState(() => _isHovered = next);
     }
   }
 
   void _handleFocus(bool focused) {
-    if (widget.onTap != null && focused != _isFocused) {
-      setState(() => _isFocused = focused);
+    final next = widget.onTap != null && focused;
+    if (next != _isFocused) {
+      setState(() => _isFocused = next);
     }
   }
 

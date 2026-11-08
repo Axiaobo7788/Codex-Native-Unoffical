@@ -140,7 +140,10 @@ class _DiffView extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(height: 1),
+        const Divider(
+          height: 1,
+          thickness: OfficialCodexTheme.hairlineBorderWidth,
+        ),
         Expanded(child: _DiffLines(file: selected)),
       ],
     );
@@ -155,17 +158,25 @@ class _DiffLines extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return SelectionArea(
       child: ListView.builder(
         itemExtent: 21,
         itemCount: file.lines.length,
         itemBuilder: (context, index) {
           final line = file.lines[index];
-          final background = line.startsWith('+') && !line.startsWith('+++')
+          final isAdded = line.startsWith('+') && !line.startsWith('+++');
+          final isRemoved = line.startsWith('-') && !line.startsWith('---');
+          final background = isAdded
               ? palette.diffAdded
-              : line.startsWith('-') && !line.startsWith('---')
+              : isRemoved
               ? palette.diffRemoved
               : Colors.transparent;
+          final textColor = isAdded
+              ? theme.diffAddedText
+              : isRemoved
+              ? theme.diffRemovedText
+              : null;
           return ColoredBox(
             color: background,
             child: Padding(
@@ -177,8 +188,11 @@ class _DiffLines extends StatelessWidget {
                 maxLines: 1,
                 softWrap: false,
                 overflow: TextOverflow.clip,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(fontFamily: 'monospace', height: 1.5),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  height: 1.5,
+                  color: textColor,
+                ),
               ),
             ),
           );
@@ -476,7 +490,7 @@ class _TurnWorkDivider extends StatelessWidget {
       label: label,
       isExpanded: expanded,
       isLoading: loading,
-      onToggle: onTap ?? () {},
+      onToggle: onTap,
     );
   }
 }
@@ -513,10 +527,20 @@ class _OutputDialogState extends State<_OutputDialog> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final viewport = MediaQuery.sizeOf(context);
     final width = (viewport.width - 32).clamp(280, 820).toDouble();
     final height = (viewport.height - 32).clamp(320, 680).toDouble();
     return Dialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       insetPadding: const EdgeInsets.all(16),
       child: SizedBox(
         width: width,
@@ -579,7 +603,10 @@ class _OutputDialogState extends State<_OutputDialog> {
                           ?.copyWith(color: palette.danger),
                     ),
                   ),
-                const Divider(height: 1),
+                const Divider(
+                  height: 1,
+                  thickness: OfficialCodexTheme.hairlineBorderWidth,
+                ),
                 Expanded(
                   child: ColoredBox(
                     color: palette.codeSurface,
@@ -610,7 +637,10 @@ class _OutputDialogState extends State<_OutputDialog> {
                           ),
                   ),
                 ),
-                const Divider(height: 1),
+                const Divider(
+                  height: 1,
+                  thickness: OfficialCodexTheme.hairlineBorderWidth,
+                ),
                 Padding(
                   padding: const EdgeInsets.all(ThemeTokens.space2),
                   child: Row(

@@ -237,6 +237,16 @@ Invalid scheme citation [cite: Unsafe](javascript:void).
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('assistant-citation-2')), findsNothing);
+
+      // Verify fenced code block geometry (8px radius, 0.5px hairline border, 32px header)
+      final codeHeaderLabel = find.text('html');
+      expect(codeHeaderLabel, findsOneWidget);
+      final headerContainer = tester.widget<Container>(
+        find
+            .ancestor(of: codeHeaderLabel, matching: find.byType(Container))
+            .first,
+      );
+      expect(headerContainer.constraints?.maxHeight, 32.0);
     },
   );
 }

@@ -49,15 +49,27 @@ class _CodexButtonState extends State<CodexButton> {
   bool _isPressed = false;
   bool _isFocused = false;
 
+  @override
+  void didUpdateWidget(covariant CodexButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isEnabled && (_isHovered || _isPressed || _isFocused)) {
+      _isHovered = false;
+      _isPressed = false;
+      _isFocused = false;
+    }
+  }
+
   void _handleHover(bool hovering) {
-    if (widget.isEnabled && hovering != _isHovered) {
-      setState(() => _isHovered = hovering);
+    final next = widget.isEnabled && hovering;
+    if (next != _isHovered) {
+      setState(() => _isHovered = next);
     }
   }
 
   void _handleFocus(bool focused) {
-    if (widget.isEnabled && focused != _isFocused) {
-      setState(() => _isFocused = focused);
+    final next = widget.isEnabled && focused;
+    if (next != _isFocused) {
+      setState(() => _isFocused = next);
     }
   }
 
@@ -68,13 +80,13 @@ class _CodexButtonState extends State<CodexButton> {
   }
 
   void _handleTapUp(TapUpDetails _) {
-    if (widget.isEnabled) {
+    if (_isPressed) {
       setState(() => _isPressed = false);
     }
   }
 
   void _handleTapCancel() {
-    if (widget.isEnabled) {
+    if (_isPressed) {
       setState(() => _isPressed = false);
     }
   }
@@ -314,15 +326,27 @@ class _CodexIconButtonState extends State<CodexIconButton> {
   bool _isPressed = false;
   bool _isFocused = false;
 
+  @override
+  void didUpdateWidget(covariant CodexIconButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isEnabled && (_isHovered || _isPressed || _isFocused)) {
+      _isHovered = false;
+      _isPressed = false;
+      _isFocused = false;
+    }
+  }
+
   void _handleHover(bool hovering) {
-    if (widget.isEnabled && hovering != _isHovered) {
-      setState(() => _isHovered = hovering);
+    final next = widget.isEnabled && hovering;
+    if (next != _isHovered) {
+      setState(() => _isHovered = next);
     }
   }
 
   void _handleFocus(bool focused) {
-    if (widget.isEnabled && focused != _isFocused) {
-      setState(() => _isFocused = focused);
+    final next = widget.isEnabled && focused;
+    if (next != _isFocused) {
+      setState(() => _isFocused = next);
     }
   }
 
@@ -333,13 +357,13 @@ class _CodexIconButtonState extends State<CodexIconButton> {
   }
 
   void _handleTapUp(TapUpDetails _) {
-    if (widget.isEnabled) {
+    if (_isPressed) {
       setState(() => _isPressed = false);
     }
   }
 
   void _handleTapCancel() {
-    if (widget.isEnabled) {
+    if (_isPressed) {
       setState(() => _isPressed = false);
     }
   }

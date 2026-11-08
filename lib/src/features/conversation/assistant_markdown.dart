@@ -6,6 +6,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/theme/official_codex_theme.dart';
 import '../../app/theme_tokens.dart';
 import '../../domain/assistant_content_blocks.dart';
 
@@ -273,6 +274,7 @@ class _FencedCodeBlockView extends StatefulWidget {
 
 class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
   var _copied = false;
+  var _copyHovered = false;
 
   Future<void> _copyCode() async {
     await Clipboard.setData(ClipboardData(text: widget.code));
@@ -289,24 +291,41 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final codexTheme = OfficialCodexTheme.of(context);
     final label = widget.language.isEmpty ? 'code' : widget.language;
+    final codeSurface = codexTheme.isDark
+        ? const Color(0xFF171817)
+        : const Color(0xFFF4F4F4);
+    final headerSurface = codexTheme.isDark
+        ? const Color(0xFF1F201F)
+        : const Color(0xFFEAEAEA);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: palette.surfaceRaised,
-        border: Border.all(color: palette.border),
-        borderRadius: BorderRadius.circular(ThemeTokens.radiusMedium),
+        color: codeSurface,
+        border: Border.all(
+          color: codexTheme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+        borderRadius: BorderRadius.circular(
+          OfficialCodexTheme.activityRowRadius,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 30,
+            height: 32,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: palette.sidebar.withValues(alpha: 0.7),
-              border: Border(bottom: BorderSide(color: palette.border)),
+              color: headerSurface,
+              border: Border(
+                bottom: BorderSide(
+                  color: codexTheme.hairlineBorder,
+                  width: OfficialCodexTheme.hairlineBorderWidth,
+                ),
+              ),
             ),
             child: Row(
               children: [
@@ -322,11 +341,19 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
                   behavior: HitTestBehavior.opaque,
                   onTap: _copyCode,
                   child: MouseRegion(
+                    onEnter: (_) => setState(() => _copyHovered = true),
+                    onExit: (_) => setState(() => _copyHovered = false),
                     cursor: SystemMouseCursors.click,
-                    child: Padding(
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
                         vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _copyHovered
+                            ? codexTheme.hoverTint
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -336,7 +363,9 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
                             size: 13,
                             color: _copied
                                 ? palette.success
-                                : palette.textSecondary,
+                                : (_copyHovered
+                                      ? palette.textPrimary
+                                      : palette.textSecondary),
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -345,7 +374,9 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
                                 ?.copyWith(
                                   color: _copied
                                       ? palette.success
-                                      : palette.textSecondary,
+                                      : (_copyHovered
+                                            ? palette.textPrimary
+                                            : palette.textSecondary),
                                 ),
                           ),
                         ],
@@ -358,7 +389,7 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
           ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Text(
               widget.code,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

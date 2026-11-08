@@ -200,9 +200,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
     _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
+    _composerFocusNode.addListener(_handleComposerFocusChanged);
     widget.controller.addListener(_handleConversationChanged);
     widget.historyController.addListener(_handleHistoryChanged);
     widget.threadController?.addListener(_handleThreadListChanged);
+  }
+
+  void _handleComposerFocusChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -229,7 +236,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..removeListener(_handleSearchQueryChanged)
       ..dispose();
     _searchFocusNode.dispose();
-    _composerFocusNode.dispose();
+    _composerFocusNode
+      ..removeListener(_handleComposerFocusChanged)
+      ..dispose();
     _composerController.dispose();
     super.dispose();
   }
@@ -4727,20 +4736,33 @@ class _ExecutionSettingsDialog extends StatelessWidget {
   }) async =>
       await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+        builder: (context) {
+          final theme = OfficialCodexTheme.of(context);
+          return AlertDialog(
+            backgroundColor: theme.modalSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: theme.hairlineBorder,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(confirmLabel),
-            ),
-          ],
-        ),
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              CodexButton(
+                variant: CodexButtonVariant.ghost,
+                onPressed: () => Navigator.of(context).pop(false),
+                label: 'Cancel',
+              ),
+              CodexButton(
+                variant: CodexButtonVariant.danger,
+                onPressed: () => Navigator.of(context).pop(true),
+                label: confirmLabel,
+              ),
+            ],
+          );
+        },
       ) ??
       false;
 

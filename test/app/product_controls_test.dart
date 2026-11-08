@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_composer.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
+import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
@@ -61,6 +63,26 @@ void main() {
       final composer = find.byKey(const ValueKey('composer-surface'));
       expect(composer, findsOneWidget);
       expect(tester.getSize(composer).width, lessThanOrEqualTo(760));
+      expect(
+        tester.widget<CodexComposer>(find.byType(CodexComposer)).isFocused,
+        isTrue,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('conversation-search-toggle')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CodexComposer>(find.byType(CodexComposer)).isFocused,
+        isFalse,
+      );
+      await tester.tap(find.byKey(const ValueKey('conversation-composer')));
+      await tester.pump();
+      expect(
+        tester.widget<CodexComposer>(find.byType(CodexComposer)).isFocused,
+        isTrue,
+      );
+      await tester.tap(find.byKey(const ValueKey('conversation-search-close')));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     },
   );
@@ -112,7 +134,9 @@ void main() {
         option: 'Never ask',
       );
       expect(find.text('Disable approval prompts?'), findsOneWidget);
-      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      expect(find.byType(TextButton), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
       await tester.pumpAndSettle();
 
       await _chooseDropdown(
@@ -121,7 +145,7 @@ void main() {
         option: 'Danger: full access',
       );
       expect(find.text('Allow full filesystem access?'), findsOneWidget);
-      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.widgetWithText(CodexButton, 'Done'));
@@ -137,14 +161,14 @@ void main() {
         key: 'execution-Approval mode',
         option: 'Never ask',
       );
-      await tester.tap(find.widgetWithText(FilledButton, 'Never ask'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Never ask'));
       await tester.pumpAndSettle();
       await _chooseDropdown(
         tester,
         key: 'execution-Sandbox',
         option: 'Danger: full access',
       );
-      await tester.tap(find.widgetWithText(FilledButton, 'Allow full access'));
+      await tester.tap(find.widgetWithText(CodexButton, 'Allow full access'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(CodexButton, 'Done'));
       await tester.pumpAndSettle();
@@ -247,7 +271,7 @@ void main() {
               path: 'second.dart',
               additions: 1,
               deletions: 0,
-              lines: ['+second'],
+              lines: ['-removed', '+second'],
               truncated: false,
             ),
           ],
@@ -273,6 +297,14 @@ void main() {
       await tester.tap(find.text('second.dart  +1 -0').last);
       await tester.pumpAndSettle();
       expect(find.text('+second'), findsOneWidget);
+      expect(find.text('-removed'), findsOneWidget);
+      final addedText = tester.widget<Text>(find.text('+second'));
+      final removedText = tester.widget<Text>(find.text('-removed'));
+      final expectedTheme = OfficialCodexTheme.of(
+        tester.element(find.text('+second')),
+      );
+      expect(addedText.style?.color, expectedTheme.diffAddedText);
+      expect(removedText.style?.color, expectedTheme.diffRemovedText);
       expect(find.text('+line-0'), findsNothing);
       expect(tester.takeException(), isNull);
     },
