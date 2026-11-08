@@ -9,6 +9,8 @@ import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
 import '../../domain/remote_admin_models.dart';
+import '../../domain/runtime_diagnostics_gateway.dart';
+import '../../domain/runtime_diagnostics_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../domain/user_input_models.dart';
@@ -20,6 +22,7 @@ import '../../protocol/model_protocol.dart';
 import '../../protocol/output_protocol.dart';
 import '../../protocol/protocol_models.dart';
 import '../../protocol/remote_admin_protocol.dart';
+import '../../protocol/runtime_diagnostics_protocol.dart';
 import '../../protocol/server_request_protocol.dart';
 import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
@@ -34,7 +37,11 @@ class ProcessExit {
 }
 
 class ProcessTransport
-    implements CodexTransport, EcosystemCatalogGateway, McpCapabilityGateway {
+    implements
+        CodexTransport,
+        EcosystemCatalogGateway,
+        McpCapabilityGateway,
+        RuntimeDiagnosticsGateway {
   ProcessTransport._({
     required this.executablePath,
     required ChildProcess process,
@@ -55,6 +62,10 @@ class ProcessTransport
     _outputProtocol = OutputProtocolAdapter(request: _request);
     _remoteAdminProtocol = RemoteAdminProtocolAdapter(request: _request);
     _ecosystemProtocol = EcosystemProtocolAdapter(request: _request);
+    _runtimeDiagnosticsProtocol = RuntimeDiagnosticsProtocolAdapter(
+      request: _request,
+      notifications: _peer.notifications,
+    );
     _turnProtocol = TurnProtocolAdapter(
       request: _request,
       notifications: _peer.notifications,
@@ -84,6 +95,7 @@ class ProcessTransport
   late final OutputProtocolAdapter _outputProtocol;
   late final RemoteAdminProtocolAdapter _remoteAdminProtocol;
   late final EcosystemProtocolAdapter _ecosystemProtocol;
+  late final RuntimeDiagnosticsProtocolAdapter _runtimeDiagnosticsProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ServerRequestProtocolAdapter _serverRequestProtocol;
   late final StreamSubscription<String> _stderrSubscription;
@@ -155,6 +167,13 @@ class ProcessTransport
   @override
   Stream<McpElicitationEvent> get mcpElicitationEvents =>
       _serverRequestProtocol.mcpElicitationEvents;
+
+  @override
+  bool get supportsRuntimeDiagnostics => true;
+
+  @override
+  Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
+      _runtimeDiagnosticsProtocol.events;
 
   @override
   Future<InitializeResult> initialize(InitializeRequest request) async {
@@ -452,6 +471,52 @@ class ProcessTransport
     clientId,
     environmentId: environmentId,
   );
+
+  @override
+  Future<AccountDiagnosticsSnapshot> readAccountDiagnostics({
+    bool refreshToken = false,
+  }) => _runtimeDiagnosticsProtocol.readAccount(refreshToken: refreshToken);
+
+  @override
+  Future<RateLimitsDiagnosticsSnapshot> readAccountRateLimits({
+    bool excludeResetCreditDetails = false,
+  }) => _runtimeDiagnosticsProtocol.readAccountRateLimits(
+    excludeResetCreditDetails: excludeResetCreditDetails,
+  );
+
+  @override
+  Future<PermissionProfileListSnapshot> listPermissionProfiles({
+    String? cwd,
+    int? limit,
+    String? cursor,
+  }) => _runtimeDiagnosticsProtocol.listPermissionProfiles(
+    cwd: cwd,
+    limit: limit,
+    cursor: cursor,
+  );
+
+  @override
+  Future<ConfigDiagnosticsSnapshot> readConfigDiagnostics({
+    String? cwd,
+    bool includeLayers = true,
+  }) => _runtimeDiagnosticsProtocol.readConfig(
+    cwd: cwd,
+    includeLayers: includeLayers,
+  );
+
+  @override
+  Future<ConfigRequirementsSummaryModel> readConfigRequirements() =>
+      _runtimeDiagnosticsProtocol.readConfigRequirements();
+
+  @override
+  Future<ModelProviderCapabilitiesSnapshot> readModelProviderCapabilities() =>
+      _runtimeDiagnosticsProtocol.readModelProviderCapabilities();
+
+  @override
+  Future<HooksDiagnosticsSnapshot> listHooks({
+    List<String> cwds = const [],
+    String? threadId,
+  }) => _runtimeDiagnosticsProtocol.listHooks(cwds: cwds, threadId: threadId);
 
   void _captureStderr(String chunk) {
     _stderrTail += chunk;

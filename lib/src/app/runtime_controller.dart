@@ -17,6 +17,8 @@ import '../domain/output_models.dart';
 import '../domain/product_mode.dart';
 import '../domain/remote_admin_gateway.dart';
 import '../domain/remote_admin_models.dart';
+import '../domain/runtime_diagnostics_gateway.dart';
+import '../domain/runtime_diagnostics_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
@@ -33,6 +35,9 @@ import '../transport/remote/remote_lifecycle_coordinator.dart';
 import '../transport/remote/remote_onboarding.dart';
 import '../transport/remote/remote_projection.dart';
 import '../transport/remote/remote_secure_storage.dart';
+
+export '../domain/runtime_diagnostics_gateway.dart';
+export '../domain/runtime_diagnostics_models.dart';
 
 typedef TransportStarter = Future<ProcessTransport> Function(
   String hostExecutable,
@@ -52,7 +57,8 @@ class RuntimeController extends ChangeNotifier
         RemoteAdminGateway,
         EcosystemGateway,
         EcosystemCatalogGateway,
-        McpCapabilityGateway {
+        McpCapabilityGateway,
+        RuntimeDiagnosticsGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
     this.hostLocator = const HostExecutableLocator(),
@@ -109,6 +115,8 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
   StreamSubscription<UserInputEvent>? _userInputEventSubscription;
   StreamSubscription<McpElicitationEvent>? _mcpElicitationEventSubscription;
+  StreamSubscription<RuntimeDiagnosticsEvent>?
+  _runtimeDiagnosticsEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
   final StreamController<TurnEvent> _turnEvents =
@@ -121,6 +129,8 @@ class RuntimeController extends ChangeNotifier
       StreamController<UserInputEvent>.broadcast();
   final StreamController<McpElicitationEvent> _mcpElicitationEvents =
       StreamController<McpElicitationEvent>.broadcast();
+  final StreamController<RuntimeDiagnosticsEvent> _runtimeDiagnosticsEvents =
+      StreamController<RuntimeDiagnosticsEvent>.broadcast();
   Future<void>? _startOperation;
   var _disposed = false;
   var _stopping = false;
@@ -158,6 +168,13 @@ class RuntimeController extends ChangeNotifier
   @override
   Stream<McpElicitationEvent> get mcpElicitationEvents =>
       _mcpElicitationEvents.stream;
+
+  @override
+  bool get supportsRuntimeDiagnostics => !_usesRemote;
+
+  @override
+  Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
+      _runtimeDiagnosticsEvents.stream;
 
   Future<void> start() =>
       _usesRemote ? _startRemote() : (_startOperation ??= _startDesktop());
@@ -487,6 +504,101 @@ class RuntimeController extends ChangeNotifier
     environmentId: environmentId,
   );
 
+  @override
+  Future<AccountDiagnosticsSnapshot> readAccountDiagnostics({
+    bool refreshToken = false,
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Account diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readAccountDiagnostics(
+      refreshToken: refreshToken,
+    );
+  }
+
+  @override
+  Future<RateLimitsDiagnosticsSnapshot> readAccountRateLimits({
+    bool excludeResetCreditDetails = false,
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Rate-limit diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readAccountRateLimits(
+      excludeResetCreditDetails: excludeResetCreditDetails,
+    );
+  }
+
+  @override
+  Future<PermissionProfileListSnapshot> listPermissionProfiles({
+    String? cwd,
+    int? limit,
+    String? cursor,
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Permission profile diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().listPermissionProfiles(
+      cwd: cwd,
+      limit: limit,
+      cursor: cursor,
+    );
+  }
+
+  @override
+  Future<ConfigDiagnosticsSnapshot> readConfigDiagnostics({
+    String? cwd,
+    bool includeLayers = true,
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Configuration diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readConfigDiagnostics(
+      cwd: cwd,
+      includeLayers: includeLayers,
+    );
+  }
+
+  @override
+  Future<ConfigRequirementsSummaryModel> readConfigRequirements() {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Configuration requirement diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readConfigRequirements();
+  }
+
+  @override
+  Future<ModelProviderCapabilitiesSnapshot> readModelProviderCapabilities() {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Model provider capabilities are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readModelProviderCapabilities();
+  }
+
+  @override
+  Future<HooksDiagnosticsSnapshot> listHooks({
+    List<String> cwds = const [],
+    String? threadId,
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Workspace hook diagnostics are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().listHooks(cwds: cwds, threadId: threadId);
+  }
+
   ProcessTransport _connectedTransport() {
     if (_usesRemote) {
       throw UnsupportedError(
@@ -567,6 +679,11 @@ class RuntimeController extends ChangeNotifier
         _mcpElicitationEvents.add,
         onError: _mcpElicitationEvents.addError,
       );
+      _runtimeDiagnosticsEventSubscription = transport.runtimeDiagnosticsEvents
+          .listen(
+            _runtimeDiagnosticsEvents.add,
+            onError: _runtimeDiagnosticsEvents.addError,
+          );
       final result = await transport.initialize(const InitializeRequest());
       if (_stopping || _disposed) {
         return;
@@ -739,6 +856,7 @@ class RuntimeController extends ChangeNotifier
     await _approvalEventSubscription?.cancel();
     await _userInputEventSubscription?.cancel();
     await _mcpElicitationEventSubscription?.cancel();
+    await _runtimeDiagnosticsEventSubscription?.cancel();
     await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
     await _remoteStateSubscription?.cancel();
@@ -749,6 +867,7 @@ class RuntimeController extends ChangeNotifier
     await _approvalEvents.close();
     await _userInputEvents.close();
     await _mcpElicitationEvents.close();
+    await _runtimeDiagnosticsEvents.close();
     if (!_disposed) {
       _setSnapshot(
         RuntimeSnapshot(
