@@ -307,8 +307,13 @@ class ProcessTransport implements CodexTransport {
       _ecosystemProtocol.startOfficialRemoteControlPairing();
 
   @override
-  Future<bool> disconnectOfficialRemoteControlClient(String clientId) =>
-      _ecosystemProtocol.disconnectOfficialRemoteControlClient(clientId);
+  Future<bool> disconnectOfficialRemoteControlClient(
+    String clientId, {
+    String? environmentId,
+  }) => _ecosystemProtocol.disconnectOfficialRemoteControlClient(
+    clientId,
+    environmentId: environmentId,
+  );
 
   void _captureStderr(String chunk) {
     _stderrTail += chunk;

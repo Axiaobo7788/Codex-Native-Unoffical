@@ -215,6 +215,53 @@ void main() {
     gateway.events.add(const ThreadArchivedEvent(threadId: '1'));
     expect(controller.threads.map((t) => t.id), ['2']);
     expect(controller.selectedThread?.id, '2');
+
+    gateway.events.add(
+      const ThreadRevertedEvent(threadId: '2', turnsBackwardsCursor: 'turn-1'),
+    );
+    expect(controller.lastRevertedThreadId, '2');
+    expect(controller.revertVersion, 1);
+
+    final deleted = await controller.deleteThread('2');
+    expect(deleted, isTrue);
+    expect(gateway.deletedIds, ['2']);
+    expect(controller.threads, isEmpty);
+    expect(controller.selectedThread, isNull);
+  });
+
+  test('guards fork and compact on unmaterialized threads until status transitions', () async {
+    final gateway = _FakeThreadGateway();
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+
+    final created = await controller.startThread(
+      const ThreadStartOptions(cwd: '/workspace'),
+    );
+    expect(created?.id, 'new');
+    expect(controller.isMaterialized('new'), isFalse);
+
+    expect(
+      await controller.forkThread(const ThreadForkOptions(threadId: 'new')),
+      isNull,
+    );
+    expect(controller.errorMessage, contains('Start at least one turn'));
+
+    expect(await controller.compactThread('new'), isFalse);
+    expect(controller.errorMessage, contains('Start at least one turn'));
+
+    gateway.events.add(
+      const ThreadStatusChangedEvent(
+        threadId: 'new',
+        status: ThreadRuntimeStatus.active,
+      ),
+    );
+    expect(controller.isMaterialized('new'), isTrue);
+
+    final forked = await controller.forkThread(
+      const ThreadForkOptions(threadId: 'new'),
+    );
+    expect(forked?.id, 'fork-new');
   });
 }
 
@@ -231,12 +278,15 @@ class _FakeThreadGateway implements ThreadGateway {
   final List<ThreadForkOptions> forkedOptions = [];
   final List<(String, String)> revertedThreads = [];
   final List<String> compactedIds = [];
+  final List<String> deletedIds = [];
 
   @override
   Stream<ThreadLifecycleEvent> get threadEvents => events.stream;
 
   @override
-  Future<void> deleteThread(String threadId) async {}
+  Future<void> deleteThread(String threadId) async {
+    deletedIds.add(threadId);
+  }
 
   @override
   Future<ThreadPage> listThreads(ThreadListQuery query) async {

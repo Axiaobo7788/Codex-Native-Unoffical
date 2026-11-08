@@ -339,8 +339,13 @@ class RuntimeController extends ChangeNotifier
       _connectedTransport().startOfficialRemoteControlPairing();
 
   @override
-  Future<bool> disconnectOfficialRemoteControlClient(String clientId) =>
-      _connectedTransport().disconnectOfficialRemoteControlClient(clientId);
+  Future<bool> disconnectOfficialRemoteControlClient(
+    String clientId, {
+    String? environmentId,
+  }) => _connectedTransport().disconnectOfficialRemoteControlClient(
+    clientId,
+    environmentId: environmentId,
+  );
 
   ProcessTransport _connectedTransport() {
     if (_usesRemote) {

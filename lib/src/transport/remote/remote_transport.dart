@@ -450,8 +450,10 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
       _unsupported('Official Remote Control pairing');
 
   @override
-  Future<bool> disconnectOfficialRemoteControlClient(String clientId) =>
-      _unsupported('Official Remote Control administration');
+  Future<bool> disconnectOfficialRemoteControlClient(
+    String clientId, {
+    String? environmentId,
+  }) => _unsupported('Official Remote Control administration');
 
   Future<T> _unsupported<T>(String operation) => Future.error(
     UnsupportedError('$operation is not available on read-only Remote.'),

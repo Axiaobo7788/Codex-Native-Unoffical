@@ -417,6 +417,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               unawaited(controller.archiveThread(thread.id));
             }
           },
+          onDelete: () => unawaited(controller.deleteThread(thread.id)),
         );
       },
     );
@@ -559,7 +560,16 @@ class _RenameThreadDialogState extends State<_RenameThreadDialog> {
   @override
   Widget build(BuildContext context) {
     final thread = widget.thread;
+    final theme = OfficialCodexTheme.of(context);
     return AlertDialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
       title: const Text('Rename thread'),
       content: SizedBox(
         width: 420,
@@ -698,6 +708,7 @@ class _ThreadRow extends StatefulWidget {
     required this.onRename,
     required this.onFork,
     required this.onArchiveToggle,
+    required this.onDelete,
   });
 
   final ThreadSummary thread;
@@ -711,6 +722,7 @@ class _ThreadRow extends StatefulWidget {
   final VoidCallback onRename;
   final VoidCallback onFork;
   final VoidCallback onArchiveToggle;
+  final VoidCallback onDelete;
 
   @override
   State<_ThreadRow> createState() => _ThreadRowState();
@@ -800,6 +812,11 @@ class _ThreadRowState extends State<_ThreadRow> {
                             : Icons.inventory_2_outlined,
                       ),
                     ),
+                    const CodexMenuItem(
+                      value: 'delete',
+                      label: 'Delete thread',
+                      icon: Icon(Icons.delete_outline_rounded),
+                    ),
                   ],
                   onSelected: (action) {
                     close();
@@ -812,6 +829,8 @@ class _ThreadRowState extends State<_ThreadRow> {
                         widget.onFork();
                       case 'archive':
                         widget.onArchiveToggle();
+                      case 'delete':
+                        widget.onDelete();
                     }
                   },
                 ),
@@ -1022,7 +1041,16 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return Dialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680, maxHeight: 680),
         child: Column(

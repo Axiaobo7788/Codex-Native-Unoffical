@@ -82,6 +82,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   late final bool _ownsController;
   AppLifecycleListener? _lifecycleListener;
   var _requestedInitialThreads = false;
+  var _lastRevertVersion = 0;
 
   @override
   void initState() {
@@ -97,6 +98,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _historyController = HistoryController(gateway: _controller);
     _diffController = DiffController(gateway: _controller);
     _approvalController = ApprovalController(gateway: _controller);
+    _lastRevertVersion = _threadController.revertVersion;
     _controller.addListener(_handleRuntimeState);
     _threadController.addListener(_handleThreadSelection);
     _lifecycleListener = AppLifecycleListener(
@@ -166,8 +168,17 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   }
 
   void _handleThreadSelection() {
-    _conversationController.bindThread(_threadController.selectedThread);
-    _diffController.bindThread(_threadController.selectedThread);
-    unawaited(_historyController.bindThread(_threadController.selectedThread));
+    final selected = _threadController.selectedThread;
+    if (_threadController.revertVersion != _lastRevertVersion) {
+      _lastRevertVersion = _threadController.revertVersion;
+      final revertedId = _threadController.lastRevertedThreadId;
+      if (revertedId != null && selected?.id == revertedId) {
+        _conversationController.clearEntries();
+        unawaited(_historyController.refresh());
+      }
+    }
+    _conversationController.bindThread(selected);
+    _diffController.bindThread(selected);
+    unawaited(_historyController.bindThread(selected));
   }
 }

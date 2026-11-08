@@ -1,6 +1,9 @@
+import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_segment.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
+import 'package:codex_native_unofficial/src/domain/product_mode.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:flutter/material.dart';
@@ -1147,6 +1150,63 @@ void main() {
         await tester.tap(find.text('Unarchive thread'));
         await tester.pumpAndSettle();
         expect(harness.unarchivedThreadIds, ['thread-fork-1']);
+
+        // 6. ProductMode selector (Codex / Work / Chat) updates detail projection
+        final productModeSelector = find.byKey(
+          const ValueKey('product-mode-selector'),
+        );
+        expect(productModeSelector, findsOneWidget);
+        await tester.tap(
+          find.descendant(of: productModeSelector, matching: find.text('Work')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<CodexSegment<ProductMode>>(productModeSelector)
+              .selectedValue,
+          ProductMode.work,
+        );
+        expect(
+          tester
+              .widget<CodexSegment<PresentationDetailMode>>(
+                find.byType(CodexSegment<PresentationDetailMode>),
+              )
+              .selectedValue,
+          PresentationDetailMode.prose,
+        );
+
+        await tester.tap(
+          find.descendant(
+            of: productModeSelector,
+            matching: find.text('Codex'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<CodexSegment<ProductMode>>(productModeSelector)
+              .selectedValue,
+          ProductMode.codex,
+        );
+        expect(
+          tester
+              .widget<CodexSegment<PresentationDetailMode>>(
+                find.byType(CodexSegment<PresentationDetailMode>),
+              )
+              .selectedValue,
+          PresentationDetailMode.commands,
+        );
+
+        // 7. Delete thread via header actions menu
+        await tester.tap(find.byKey(const ValueKey('thread-archive-toggle')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Renamed Convergence Thread (fork)'));
+        await tester.pumpAndSettle();
+        await tester.tap(headerMenuBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete thread'));
+        await tester.pumpAndSettle();
+        expect(harness.deletedThreadIds, contains('thread-fork-1'));
       },
     );
 

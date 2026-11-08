@@ -95,6 +95,9 @@ class OfficialRemoteControlStatus {
     this.supported = true,
     this.enabled = false,
     this.connected = false,
+    this.stateLabel = 'disabled',
+    this.serverName,
+    this.installationId,
     this.environmentId,
     this.clients = const [],
     this.errorMessage,
@@ -103,7 +106,32 @@ class OfficialRemoteControlStatus {
   final bool supported;
   final bool enabled;
   final bool connected;
+  final String stateLabel;
+  final String? serverName;
+  final String? installationId;
   final String? environmentId;
   final List<OfficialRemoteControlClient> clients;
   final String? errorMessage;
+
+  OfficialRemoteControlStatus copyWith({
+    bool? supported,
+    bool? enabled,
+    bool? connected,
+    String? stateLabel,
+    String? serverName,
+    String? installationId,
+    String? environmentId,
+    List<OfficialRemoteControlClient>? clients,
+    String? errorMessage,
+  }) => OfficialRemoteControlStatus(
+    supported: supported ?? this.supported,
+    enabled: enabled ?? this.enabled,
+    connected: connected ?? this.connected,
+    stateLabel: stateLabel ?? this.stateLabel,
+    serverName: serverName ?? this.serverName,
+    installationId: installationId ?? this.installationId,
+    environmentId: environmentId ?? this.environmentId,
+    clients: clients ?? this.clients,
+    errorMessage: errorMessage ?? this.errorMessage,
+  );
 }

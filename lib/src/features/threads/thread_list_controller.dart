@@ -35,6 +35,8 @@ class ThreadListController extends ChangeNotifier {
   String? _nextCursor;
   ThreadSummary? _selectedThread;
   String? _errorMessage;
+  String? _lastRevertedThreadId;
+  var _revertVersion = 0;
   var _showArchived = false;
   var _initialLoadStarted = false;
   var _loading = false;
@@ -46,6 +48,8 @@ class ThreadListController extends ChangeNotifier {
   Set<String> get pinnedThreadIds => Set.unmodifiable(_pinnedThreadIds);
   ThreadSummary? get selectedThread => _selectedThread;
   String? get errorMessage => _errorMessage;
+  String? get lastRevertedThreadId => _lastRevertedThreadId;
+  int get revertVersion => _revertVersion;
   bool get showArchived => _showArchived;
   bool get initialLoadStarted => _initialLoadStarted;
   bool get loading => _loading;
@@ -57,6 +61,8 @@ class ThreadListController extends ChangeNotifier {
       _nextCursor != null && _threads.length >= maxRetainedThreads;
 
   bool isPinned(String threadId) => _pinnedThreadIds.contains(threadId);
+  bool isMaterialized(String threadId) =>
+      !_unmaterializedThreadIds.contains(threadId);
 
   void togglePinThread(String threadId) {
     if (_pinnedThreadIds.contains(threadId)) {
@@ -226,6 +232,7 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return null;
       }
+      _unmaterializedThreadIds.remove(threadId);
       _replaceInPlace(thread);
       _selectedThread = thread;
       return thread;
@@ -250,6 +257,7 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return null;
       }
+      _unmaterializedThreadIds.remove(threadId);
       _replaceInPlace(thread);
       _selectedThread = thread;
       return thread;
@@ -353,6 +361,11 @@ class ThreadListController extends ChangeNotifier {
     if (_mutating) {
       return null;
     }
+    if (_unmaterializedThreadIds.contains(options.threadId)) {
+      _errorMessage = 'Start at least one turn before forking this thread.';
+      _notify();
+      return null;
+    }
     _mutating = true;
     _errorMessage = null;
     _notify();
@@ -398,6 +411,8 @@ class ThreadListController extends ChangeNotifier {
       if (_selectedThread?.id == thread.id) {
         _selectedThread = thread;
       }
+      _lastRevertedThreadId = thread.id;
+      _revertVersion += 1;
       return thread;
     } catch (error) {
       _errorMessage = error.toString();
@@ -412,6 +427,11 @@ class ThreadListController extends ChangeNotifier {
     if (_mutating) {
       return false;
     }
+    if (_unmaterializedThreadIds.contains(threadId)) {
+      _errorMessage = 'Start at least one turn before compacting this thread.';
+      _notify();
+      return false;
+    }
     _mutating = true;
     _errorMessage = null;
     _notify();
@@ -420,6 +440,36 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return false;
       }
+      return true;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<bool> deleteThread(String threadId) async {
+    if (_mutating) {
+      return false;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      await gateway.deleteThread(threadId);
+      if (_disposed) {
+        return false;
+      }
+      _pinnedThreadIds.remove(threadId);
+      _unmaterializedThreadIds.remove(threadId);
+      final wasSelected = _selectedThread?.id == threadId;
+      _threads.removeWhere((thread) => thread.id == threadId);
+      if (wasSelected) {
+        _selectedThread = _threads.isEmpty ? null : _threads.first;
+      }
+      _synchronizeSelection();
       return true;
     } catch (error) {
       _errorMessage = error.toString();
@@ -452,6 +502,9 @@ class ThreadListController extends ChangeNotifier {
         _applyNameUpdate(threadId, threadName);
         _notify();
       case ThreadStatusChangedEvent(:final threadId, :final status):
+        if (status != ThreadRuntimeStatus.notLoaded) {
+          _unmaterializedThreadIds.remove(threadId);
+        }
         _applyStatusUpdate(threadId, status);
         _notify();
       case ThreadArchivedEvent(:final threadId):
@@ -474,8 +527,10 @@ class ThreadListController extends ChangeNotifier {
           _synchronizeSelection();
           _notify();
         }
-      case ThreadRevertedEvent():
-        break;
+      case ThreadRevertedEvent(:final threadId):
+        _lastRevertedThreadId = threadId;
+        _revertVersion += 1;
+        _notify();
     }
   }
 

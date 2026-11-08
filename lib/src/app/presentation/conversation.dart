@@ -83,6 +83,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _wasLoadingOlderTurns = false;
   var _wasWindowShifted = false;
   var _lastHandledLoadOlderVersion = 0;
+  var _lastHandledRevertVersion = 0;
   var _restorePagesLoaded = 0;
   var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
@@ -120,6 +121,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+    _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
     widget.controller.addListener(_handleConversationChanged);
     widget.historyController.addListener(_handleHistoryChanged);
     widget.threadController?.addListener(_handleThreadListChanged);
@@ -130,6 +132,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.threadController, widget.threadController)) {
       oldWidget.threadController?.removeListener(_handleThreadListChanged);
+      _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
       widget.threadController?.addListener(_handleThreadListChanged);
     }
   }
@@ -202,6 +205,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final showProductMode = constraints.maxWidth >= 600;
           final showSegment = constraints.maxWidth >= 380;
           return Row(
             children: [
@@ -231,7 +235,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       ),
                     ),
                     if (projectCwd.isNotEmpty &&
-                        constraints.maxWidth >= 480) ...[
+                        constraints.maxWidth >= 680) ...[
                       const SizedBox(width: 10),
                       Flexible(
                         child: CodexTooltip(
@@ -268,6 +272,44 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 ),
                 const SizedBox(width: ThemeTokens.space2),
               ],
+              if (showProductMode) ...[
+                CodexSegment<ProductMode>(
+                  key: const ValueKey('product-mode-selector'),
+                  items: const [
+                    CodexSegmentItem(
+                      value: ProductMode.codex,
+                      label: 'Codex',
+                      tooltip:
+                          'Codex engineering workspace (Commands projection)',
+                    ),
+                    CodexSegmentItem(
+                      value: ProductMode.work,
+                      label: 'Work',
+                      tooltip: 'Work task projection (Prose projection)',
+                    ),
+                    CodexSegmentItem(
+                      value: ProductMode.chat,
+                      label: 'Chat',
+                      tooltip: 'Conversational reading projection (Prose projection)',
+                    ),
+                  ],
+                  selectedValue: _productMode,
+                  onSelected: (mode) {
+                    setState(() {
+                      _productMode = mode;
+                      _detailMode = switch (mode.defaultDetailPolicy) {
+                        PresentationDetailPolicy.prose =>
+                          PresentationDetailMode.prose,
+                        PresentationDetailPolicy.commands =>
+                          PresentationDetailMode.commands,
+                        PresentationDetailPolicy.execution =>
+                          PresentationDetailMode.execution,
+                      };
+                    });
+                  },
+                ),
+                const SizedBox(width: ThemeTokens.space1),
+              ],
               if (showSegment)
                 CodexSegment<PresentationDetailMode>(
                   items: const [
@@ -291,11 +333,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   onSelected: (mode) {
                     setState(() {
                       _detailMode = mode;
-                      _productMode = switch (mode) {
-                        PresentationDetailMode.prose => ProductMode.chat,
-                        PresentationDetailMode.commands => ProductMode.work,
-                        PresentationDetailMode.execution => ProductMode.codex,
-                      };
                     });
                   },
                 ),
@@ -346,6 +383,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 : Icons.inventory_2_outlined,
                           ),
                         ),
+                        const CodexMenuItem(
+                          value: 'delete',
+                          label: 'Delete thread',
+                          icon: Icon(Icons.delete_outline_rounded),
+                        ),
                       ],
                       onSelected: (action) {
                         close();
@@ -382,6 +424,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 threadController.archiveThread(thread.id),
                               );
                             }
+                          case 'delete':
+                            unawaited(threadController.deleteThread(thread.id));
                         }
                       },
                     );
@@ -585,16 +629,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     );
                   }
                   final chronologicalIndex = messageCount - 1 - reverseIndex;
+                  final activeThread = controller.thread;
+                  final threadController = widget.threadController;
                   if (chronologicalIndex < historyItems.length) {
                     final item = historyItems[chronologicalIndex];
                     final itemKey = 'history-${item.id}';
-                    final activeThread = controller.thread;
-                    final threadController = widget.threadController;
                     final canMutateTurn =
                         item.kind == HistoryItemKind.user &&
                         item.turnId.isNotEmpty &&
                         activeThread != null &&
-                        threadController != null;
+                        threadController != null &&
+                        !controller.busy &&
+                        !threadController.mutating;
                     return _MeasuredTimelineItem(
                       key: ValueKey('measured-$itemKey'),
                       itemKey: itemKey,
@@ -626,6 +672,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                       beforeTurnId: item.turnId,
                                     );
                                 if (reverted != null && mounted) {
+                                  widget.controller.clearEntries();
+                                  _threadScrollBookmarks.remove(
+                                    activeThread.id,
+                                  );
                                   await widget.historyController.refresh();
                                 }
                               }
@@ -636,16 +686,50 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final liveIndex = chronologicalIndex - historyItems.length;
                   final entry = liveEntries[liveIndex];
                   final itemKey = 'live-${entry.id}';
+                  final liveTurnId = entry.turnId ?? '';
+                  final canMutateLiveTurn =
+                      entry.kind == ConversationEntryKind.user &&
+                      liveTurnId.isNotEmpty &&
+                      activeThread != null &&
+                      threadController != null &&
+                      !controller.busy &&
+                      !threadController.mutating;
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
-                    turnId: '',
+                    turnId: liveTurnId,
                     onMeasured: _recordItemMeasurement,
                     onUnmount: _unregisterItemBox,
                     child: _ConversationEntryView(
                       key: ValueKey(entry.id),
                       entry: entry,
+                      turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: entry.attachments,
+                      onForkFromTurn: canMutateLiveTurn
+                          ? () => unawaited(
+                              threadController.forkThread(
+                                ThreadForkOptions(
+                                  threadId: activeThread.id,
+                                  beforeTurnId: liveTurnId,
+                                  cwd: activeThread.cwd,
+                                ),
+                              ),
+                            )
+                          : null,
+                      onRevertFromTurn: canMutateLiveTurn
+                          ? () async {
+                              final reverted = await threadController
+                                  .revertThread(
+                                    threadId: activeThread.id,
+                                    beforeTurnId: liveTurnId,
+                                  );
+                              if (reverted != null && mounted) {
+                                widget.controller.clearEntries();
+                                _threadScrollBookmarks.remove(activeThread.id);
+                                await widget.historyController.refresh();
+                              }
+                            }
+                          : null,
                     ),
                   );
                 },
@@ -1228,8 +1312,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   void _handleThreadListChanged() {
     final threadController = widget.threadController;
-    if (threadController == null ||
-        !threadController.initialLoadStarted ||
+    if (threadController == null) {
+      return;
+    }
+    if (threadController.revertVersion != _lastHandledRevertVersion) {
+      _lastHandledRevertVersion = threadController.revertVersion;
+      final revertedId = threadController.lastRevertedThreadId;
+      if (revertedId != null) {
+        _threadScrollBookmarks.remove(revertedId);
+        if (revertedId == _activeThreadId) {
+          widget.controller.clearEntries();
+        }
+      }
+    }
+    if (!threadController.initialLoadStarted ||
         threadController.loading ||
         threadController.loadingMore ||
         threadController.canLoadMore) {
@@ -2388,7 +2484,16 @@ class _ComposerAttachmentDialogState extends State<_ComposerAttachmentDialog> {
         'Optional label',
       ),
     };
+    final theme = OfficialCodexTheme.of(context);
     return AlertDialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
       title: Text(title),
       content: SizedBox(
         width: 380,

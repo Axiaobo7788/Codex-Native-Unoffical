@@ -30,7 +30,16 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
   @override
   Widget build(BuildContext context) {
     final ecosystemGateway = widget.ecosystemGateway;
+    final theme = OfficialCodexTheme.of(context);
     return Dialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
         child: AnimatedBuilder(
@@ -50,7 +59,7 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.devices_other),
+                        const Icon(Icons.devices_other, size: 20),
                         const SizedBox(width: ThemeTokens.space2),
                         Expanded(
                           child: Text(
@@ -58,10 +67,10 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ),
-                        IconButton(
+                        CodexIconButton(
                           tooltip: 'Close',
                           onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(Icons.close_rounded, size: 18),
                         ),
                       ],
                     ),
@@ -93,7 +102,7 @@ class _RemoteSetupDialogState extends State<_RemoteSetupDialog> {
                   ],
                 ),
               ),
-              const Divider(height: 1),
+              Divider(height: 1, color: theme.hairlineBorder),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(ThemeTokens.space6),
@@ -682,7 +691,10 @@ class _OfficialRemoteControlTrackViewState
 
   Future<void> _disconnectClient(String clientId) async {
     try {
-      await widget.gateway.disconnectOfficialRemoteControlClient(clientId);
+      await widget.gateway.disconnectOfficialRemoteControlClient(
+        clientId,
+        environmentId: _status?.environmentId,
+      );
       if (mounted) {
         await _refresh();
       }
@@ -698,6 +710,7 @@ class _OfficialRemoteControlTrackViewState
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final status = _status;
+    final errorText = _error ?? status?.errorMessage;
     return Column(
       key: const ValueKey('official-remote-control-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -747,6 +760,10 @@ class _OfficialRemoteControlTrackViewState
                   label: 'Relay connection',
                   value: status.connected ? 'Connected' : 'Disconnected',
                 ),
+                if (status.serverName case final serverName?) ...[
+                  const SizedBox(height: ThemeTokens.space2),
+                  _Detail(label: 'Server name', value: serverName),
+                ],
                 if (status.environmentId case final envId?) ...[
                   const SizedBox(height: ThemeTokens.space2),
                   _Detail(label: 'Environment ID', value: envId),
@@ -754,9 +771,13 @@ class _OfficialRemoteControlTrackViewState
               ],
             ),
           ),
-          if (_error case final error?) ...[
+          if (errorText != null) ...[
             const SizedBox(height: ThemeTokens.space3),
-            Text(error, style: TextStyle(color: palette.danger)),
+            Text(
+              errorText,
+              key: const ValueKey('official-remote-error'),
+              style: TextStyle(color: palette.danger),
+            ),
           ],
           const SizedBox(height: ThemeTokens.space4),
           Wrap(

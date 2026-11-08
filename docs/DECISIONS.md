@@ -1783,28 +1783,29 @@ Re-auditing `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` against actual code (`lib/
 ### Decision
 
 1. **Pure Domain `ProductMode` and `BackendCapabilities` Seam (`lib/src/domain/product_mode.dart`)**:
-   - Define `ProductMode` (`codex`, `work`, `chat`) and `BackendCapabilities` (`codexAppServer` vs `readOnlyRemote`) in a pure leaf domain module without protocol or Flutter imports.
-   - Switching between `Codex` and `Work` modes in the shared shell (`product-mode-selector`) adjusts default client-side detail projection (`Commands` vs `Prose`) while strictly preserving `AGENTS.md` Rule #1 (zero client-side `STEPS_PROSE` / `a2` prompt injection).
+   - Define `ProductMode` (`codex`, `work`, `chat`), `PresentationDetailPolicy`, and `BackendCapabilities` (`stockCodexLocal`, `directHostRemoteReadOnly`, `openAiPublicResponses`) in a pure leaf domain module without protocol or Flutter imports.
+   - Switching between `Codex`, `Work`, and `Chat` modes in the shared shell (`product-mode-selector` in `conversation.dart`) adjusts default client-side detail projection (`Commands` vs `Prose`) while strictly preserving `AGENTS.md` Rule #1 (zero client-side `STEPS_PROSE` / `a2` prompt injection).
 
 2. **Full Thread Lifecycle, Branching, Truncation, and Server-Side Compaction (`Slice F1`)**:
    - Extend `ThreadGateway`, `ThreadProtocolAdapter`, and `ThreadListController` with:
      - `renameThread` (`thread/name/set`) and live `thread/name/updated` notification handling.
-     - `archiveThread` (`thread/archive`), `unarchiveThread` (`thread/unarchive`), and `ThreadListQuery.archived` filtering (`thread-archive-filter-button`).
-     - `forkThread` (`thread/fork` with `excludeTurns: true` so forked thread summaries never hydrate full turn arrays into memory) supporting both whole-thread forks and per-turn branching (`beforeTurnId`).
-     - `revertThread` (`thread/revert` with `beforeTurnId`) for truncating persisted history before a selected turn.
-     - `compactThread` (`thread/compact/start`) delegating context compaction to stock `codex app-server`.
-     - Bounded sidebar pinning (`maxPinnedThreads = 32`) rendered in a dedicated `Pinned` section without mutating stock `~/.codex/*.sqlite` databases.
+     - `archiveThread` (`thread/archive`), `unarchiveThread` (`thread/unarchive`), and `ThreadListQuery.archived` filtering (`thread-archive-toggle`).
+     - `forkThread` (`thread/fork` with `excludeTurns: true` so forked thread summaries never hydrate full turn arrays into memory) supporting both whole-thread forks and per-turn branching (`beforeTurnId`), guarded on unmaterialized empty threads (`isMaterialized`).
+     - `revertThread` (`thread/revert` with `beforeTurnId`) for truncating persisted history before a selected turn, emitting `revertVersion` / `lastRevertedThreadId` on both direct calls and live `ThreadRevertedEvent` notifications to clear `ConversationController` live entries, discard stale `_ThreadScrollBookmark` entries, and refresh `HistoryController`.
+     - `compactThread` (`thread/compact/start`) delegating context compaction to stock `codex app-server`, guarded on unmaterialized empty threads.
+     - `deleteThread` (`thread/delete`) and bounded sidebar pinning (`togglePinThread`, `maxPinnedThreads = 32`) rendered in a dedicated `Pinned` section without mutating stock `~/.codex/*.sqlite` databases.
 
 3. **Active Turn Steering, Structured `UserInput[]` Write Path, and Zero-Height Turn Actions (`Slice F2`)**:
    - Extend `TurnGateway` and `TurnProtocolAdapter` with `steerTurn` (`turn/steer` carrying `threadId`, `expectedTurnId`, and structured `input` items) and serialize `List<UserAttachment>` (`localImage`, `image`, `skill` with normalized leading `$` stripped for RPC `name`, and `mention` / `file`) alongside `text` in both `turn/start` and `turn/steer`.
-   - Keep `CodexComposer` interactive while a turn is `inProgress` (`canSteer == true`) so follow-up input steers the active turn via `ConversationController.steerTurn` without interrupting execution.
+   - Keep `CodexComposer` interactive while a turn is `inProgress` (`canSteer == true`) so follow-up input steers the active turn via `ConversationController.steer` without interrupting execution, protecting against in-flight `TurnCompletedEvent` races and rolling back optimistic user entries on failure.
    - Surface turn-level actions (`user-copy-<id>`, `turn-fork-<turnId>`, `turn-revert-<turnId>`) in the left gutter opposite the right-aligned `75%` `CodexMessageBubble` using a `Stack` so user message vertical height is unchanged (`0.0 px` scroll-anchor impact).
 
 4. **Bounded Ecosystem Adapter and Dual-Track Remote Setup (`Slice F3`)**:
-   - Implement `EcosystemGateway` and `EcosystemProtocolAdapter` (`maxEcosystemItems = 100`) for `skills/list`, `skills/config/write`, `plugin/list`, and `mcpServerStatus/list`, surfaced in `_EcosystemDialog` (`ecosystem-button` in sidebar footer).
-   - Implement Track B host-side Official Remote Control (`remoteControl/status`, `remoteControl/setEnabled`, `remoteControl/pair/start`, `remoteControl/clients/disconnect`) with graceful fallback when unauthenticated or unsupported, selectable alongside Track A (`DirectHostRemoteBackend`) via `ValueKey('remote-track-selector')` in `_RemoteSetupDialog`.
+   - Implement `EcosystemGateway` and `EcosystemProtocolAdapter` (`OfficialRemoteControlHostAdapter`, `maxEcosystemItems = 100`) for `skills/list`, `skills/config/write`, `plugin/list`, and `mcpServerStatus/list`, surfaced in `_EcosystemDialog` (`ecosystem-button` in sidebar footer, `ecosystem-section-selector`).
+   - Implement Track B host-side Official Remote Control (`remoteControl/status/read`, `remoteControl/client/list`, `remoteControl/enable`, `remoteControl/disable`, `remoteControl/pairing/start`, `remoteControl/client/revoke`) distinguishing unsupported servers from operational status/auth errors, selectable alongside Track A (`DirectHostRemoteBackend`) via `ValueKey('remote-track-selector')` in `_RemoteSetupDialog`.
 
 ### Consequences
 
-- Closes all remaining `PUBLIC_SUPPORTED` and `EXPERIMENTAL_STOCK_SCHEMA` functional gaps in `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` (`1.7`, `2.2–2.7`, `3.5–3.7`, `4.4 local`, `5.2`, `6.1–6.3`) while keeping the M3 Desktop UI geometry frozen (`5/5` viewports passing in `official_convergence_geometry_test.dart`).
+- Closes all remaining `PUBLIC_SUPPORTED` and `EXPERIMENTAL_STOCK_SCHEMA` functional gaps in `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` (`1.7`, `2.1–2.7`, `3.5–3.7`, `4.4 local`, `5.2`, `6.1–6.3`) while keeping the M3 Desktop UI geometry frozen (`5/5` viewports passing in `official_convergence_geometry_test.dart`).
 - Strictly preserves all `NATIVE_ADVANTAGE` invariants: `100`-thread catalog cap, `100`-turn / `100`-item sliding windows, `50 ms` streaming coalescing, `512 MiB/item` Rust host output spooling, acyclic `lib/src/domain/` graph, and zero direct SQLite mutation.
+

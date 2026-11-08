@@ -549,7 +549,10 @@ class E2ERuntimeHarness extends RuntimeController {
   }
 
   @override
-  Future<bool> disconnectOfficialRemoteControlClient(String clientId) async {
+  Future<bool> disconnectOfficialRemoteControlClient(
+    String clientId, {
+    String? environmentId,
+  }) async {
     disconnectedOfficialClients.add(clientId);
     officialRemoteStatus = OfficialRemoteControlStatus(
       supported: officialRemoteStatus.supported,

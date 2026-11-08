@@ -111,33 +111,60 @@ void main() {
     },
   );
 
-  test('manages Track B official remoteControl/* RPCs and degrades gracefully when unsupported', () async {
-    var throwUnsupported = false;
+  test('manages Track B official remoteControl/* RPCs and distinguishes operational errors from unsupported methods', () async {
+    var mode = 'ok';
+    final calledMethods = <String>[];
     final adapter = EcosystemProtocolAdapter(
       request: (method, [params = const {}]) async {
-        if (throwUnsupported) {
-          throw StateError('Method not found: $method');
+        calledMethods.add(method);
+        if (mode == 'unsupported') {
+          throw const JsonRpcException(
+            code: -32600,
+            message: 'Invalid request: unknown variant `remoteControl/foo`',
+          );
+        }
+        if (mode == 'operational_error') {
+          throw const JsonRpcException(
+            code: -32000,
+            message: 'ChatGPT account authentication required for relay',
+          );
         }
         return switch (method) {
-          'remoteControl/status' => {
-            'enabled': true,
-            'connected': true,
+          'remoteControl/status/read' => {
+            'status': 'connected',
+            'serverName': 'workstation-host',
+            'installationId': 'inst-1',
             'environmentId': 'env-123',
-            'clients': [
-              {'id': 'client-1', 'name': 'iPhone', 'platform': 'iOS'},
+          },
+          'remoteControl/client/list' => {
+            'data': [
+              {
+                'clientId': 'client-1',
+                'displayName': 'iPhone',
+                'platform': 'iOS',
+                'lastSeenAt': 1700000000,
+              },
             ],
           },
-          'remoteControl/setEnabled' => {
-            'enabled': params['enabled'],
-            'connected': params['enabled'],
+          'remoteControl/enable' => {
+            'status': 'connecting',
+            'serverName': 'workstation-host',
+            'installationId': 'inst-1',
             'environmentId': 'env-123',
-            'clients': <Object?>[],
           },
-          'remoteControl/pair/start' => {
-            'code': 'PAIR-1234',
-            'qrPayload': 'codex://pair?code=PAIR-1234',
+          'remoteControl/disable' => {
+            'status': 'disabled',
+            'serverName': 'workstation-host',
+            'installationId': 'inst-1',
+            'environmentId': null,
           },
-          'remoteControl/clients/disconnect' => {'disconnected': true},
+          'remoteControl/pairing/start' => {
+            'environmentId': 'env-123',
+            'expiresAt': 1700000300,
+            'pairingCode': 'codex://pair?code=PAIR-1234',
+            'manualPairingCode': 'PAIR-1234',
+          },
+          'remoteControl/client/revoke' => const {},
           _ => const {},
         };
       },
@@ -146,21 +173,56 @@ void main() {
     final status = await adapter.readOfficialRemoteControlStatus();
     expect(status.supported, isTrue);
     expect(status.enabled, isTrue);
+    expect(status.connected, isTrue);
+    expect(status.stateLabel, 'connected');
+    expect(status.serverName, 'workstation-host');
     expect(status.environmentId, 'env-123');
+    expect(status.clients.single.id, 'client-1');
     expect(status.clients.single.name, 'iPhone');
+    expect(calledMethods, [
+      'remoteControl/status/read',
+      'remoteControl/client/list',
+    ]);
+
+    final disabledStatus = await adapter.setOfficialRemoteControlEnabled(false);
+    expect(disabledStatus.supported, isTrue);
+    expect(disabledStatus.enabled, isFalse);
+    expect(disabledStatus.stateLabel, 'disabled');
+    expect(calledMethods.last, 'remoteControl/disable');
+
+    final enabledStatus = await adapter.setOfficialRemoteControlEnabled(true);
+    expect(enabledStatus.supported, isTrue);
+    expect(enabledStatus.enabled, isTrue);
+    expect(enabledStatus.stateLabel, 'connecting');
+    expect(calledMethods.last, 'remoteControl/enable');
 
     final pairing = await adapter.startOfficialRemoteControlPairing();
     expect(pairing.code, 'PAIR-1234');
+    expect(pairing.qrPayload, 'codex://pair?code=PAIR-1234');
+    expect(pairing.expiresAtMs, 1700000300);
+    expect(calledMethods.last, 'remoteControl/pairing/start');
 
     final disconnected = await adapter.disconnectOfficialRemoteControlClient(
       'client-1',
+      environmentId: 'env-123',
     );
     expect(disconnected, isTrue);
+    expect(calledMethods.last, 'remoteControl/client/revoke');
 
-    throwUnsupported = true;
+    mode = 'operational_error';
+    final operationalError = await adapter.setOfficialRemoteControlEnabled(
+      true,
+    );
+    expect(operationalError.supported, isTrue);
+    expect(
+      operationalError.errorMessage,
+      contains('ChatGPT account authentication required'),
+    );
+
+    mode = 'unsupported';
     final unsupported = await adapter.readOfficialRemoteControlStatus();
     expect(unsupported.supported, isFalse);
-    expect(unsupported.errorMessage, contains('Method not found'));
+    expect(unsupported.errorMessage, contains('unknown variant'));
   });
 
   test('live stock codex app-server integration exercises thread lifecycle and ecosystem RPCs', () async {
@@ -190,7 +252,15 @@ void main() {
     expect(mcpServers, isA<List<Object?>>());
 
     final remoteControl = await transport.readOfficialRemoteControlStatus();
-    expect(remoteControl.supported, isA<bool>());
+    expect(remoteControl.supported, isTrue);
+    expect(remoteControl.stateLabel, 'disabled');
+    expect(remoteControl.serverName, isNotEmpty);
+
+    final disabledAgain = await transport.setOfficialRemoteControlEnabled(
+      false,
+    );
+    expect(disabledAgain.supported, isTrue);
+    expect(disabledAgain.enabled, isFalse);
 
     // 2. Thread lifecycle (start, rename, archive, unarchive, delete)
     final created = await transport.startThread(

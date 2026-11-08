@@ -16,6 +16,7 @@ class ConversationEntry {
     required this.kind,
     required this.text,
     required this.completed,
+    this.turnId,
     this.status,
     this.attachments = const [],
   });
@@ -24,12 +25,14 @@ class ConversationEntry {
   final ConversationEntryKind kind;
   final String text;
   final bool completed;
+  final String? turnId;
   final String? status;
   final List<UserAttachment> attachments;
 
   ConversationEntry copyWith({
     String? text,
     bool? completed,
+    String? turnId,
     String? status,
     List<UserAttachment>? attachments,
   }) => ConversationEntry(
@@ -37,6 +40,7 @@ class ConversationEntry {
     kind: kind,
     text: text ?? this.text,
     completed: completed ?? this.completed,
+    turnId: turnId ?? this.turnId,
     status: status ?? this.status,
     attachments: attachments ?? this.attachments,
   );
@@ -74,6 +78,7 @@ class ConversationController extends ChangeNotifier {
   ThreadSummary? _thread;
   String? _activeTurnId;
   var _busy = false;
+  var _steering = false;
   var _interruptReady = false;
   var _disposed = false;
   var _localEntrySequence = 0;
@@ -83,7 +88,8 @@ class ConversationController extends ChangeNotifier {
   String? get activeTurnId => _activeTurnId;
   bool get busy => _busy;
   bool get canInterrupt => _busy && _interruptReady;
-  bool get canSteer => _busy && _interruptReady && _activeTurnId != null;
+  bool get canSteer =>
+      _busy && _interruptReady && _activeTurnId != null && !_steering;
 
   void bindThread(ThreadSummary? thread) {
     if (_thread?.id == thread?.id) {
@@ -104,6 +110,22 @@ class ConversationController extends ChangeNotifier {
     _thread = thread;
     _activeTurnId = null;
     _busy = false;
+    _steering = false;
+    _interruptReady = false;
+    _notify();
+  }
+
+  void clearEntries() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _deltaBuffers.clear();
+    if (_entries.isEmpty && !_busy && _activeTurnId == null) {
+      return;
+    }
+    _entries.clear();
+    _activeTurnId = null;
+    _busy = false;
+    _steering = false;
     _interruptReady = false;
     _notify();
   }
@@ -125,9 +147,10 @@ class ConversationController extends ChangeNotifier {
     }
 
     _busy = true;
+    final entryId = 'local-user-${_localEntrySequence++}';
     _append(
       ConversationEntry(
-        id: 'local-user-${_localEntrySequence++}',
+        id: entryId,
         kind: ConversationEntryKind.user,
         text: _bounded(trimmed),
         completed: true,
@@ -148,6 +171,7 @@ class ConversationController extends ChangeNotifier {
         return true;
       }
       _activeTurnId ??= turn.id;
+      _assignTurnIdToEntry(entryId, turn.id);
       _busy = turn.status == TurnRuntimeStatus.inProgress;
       _notify();
       return true;
@@ -178,12 +202,15 @@ class ConversationController extends ChangeNotifier {
       return false;
     }
 
+    _steering = true;
+    final entryId = 'local-user-${_localEntrySequence++}';
     _append(
       ConversationEntry(
-        id: 'local-user-${_localEntrySequence++}',
+        id: entryId,
         kind: ConversationEntryKind.user,
         text: _bounded(trimmed),
         completed: true,
+        turnId: turnId,
         attachments: normalizedAttachments,
       ),
     );
@@ -199,16 +226,23 @@ class ConversationController extends ChangeNotifier {
         ),
       );
       if (!_disposed && _thread?.id == currentThread.id) {
-        _activeTurnId = steeredTurnId;
-        _notify();
+        if (_busy && _activeTurnId == turnId) {
+          _activeTurnId = steeredTurnId;
+        }
+        _assignTurnIdToEntry(entryId, steeredTurnId);
       }
       return true;
     } catch (error) {
       if (!_disposed && _thread?.id == currentThread.id) {
+        _entries.removeWhere((entry) => entry.id == entryId);
         _appendError(error.toString());
-        _notify();
       }
       return false;
+    } finally {
+      if (!_disposed) {
+        _steering = false;
+        _notify();
+      }
     }
   }
 
@@ -226,6 +260,31 @@ class ConversationController extends ChangeNotifier {
     }
   }
 
+  void _assignTurnIdToEntry(String entryId, String turnId) {
+    if (turnId.isEmpty) {
+      return;
+    }
+    final index = _entries.indexWhere((entry) => entry.id == entryId);
+    if (index != -1) {
+      _entries[index] = _entries[index].copyWith(turnId: turnId);
+    }
+  }
+
+  void _assignTurnIdToLatestUnassignedUserEntry(String turnId) {
+    if (turnId.isEmpty) {
+      return;
+    }
+    for (var i = _entries.length - 1; i >= 0; i -= 1) {
+      final entry = _entries[i];
+      if (entry.kind == ConversationEntryKind.user) {
+        if (entry.turnId == null || entry.turnId!.isEmpty) {
+          _entries[i] = entry.copyWith(turnId: turnId);
+        }
+        break;
+      }
+    }
+  }
+
   void _handleEvent(TurnEvent event) {
     if (_disposed || event.threadId != _thread?.id) {
       return;
@@ -233,6 +292,7 @@ class ConversationController extends ChangeNotifier {
     switch (event) {
       case TurnStartedEvent():
         _activeTurnId = event.turnId;
+        _assignTurnIdToLatestUnassignedUserEntry(event.turnId);
         _busy = true;
         _interruptReady = true;
         _notify();
@@ -240,6 +300,7 @@ class ConversationController extends ChangeNotifier {
         _flushDeltas();
         _activeTurnId = null;
         _busy = false;
+        _steering = false;
         _interruptReady = false;
         if (event.errorMessage case final message?) {
           _appendError(message);
@@ -258,6 +319,7 @@ class ConversationController extends ChangeNotifier {
             kind: ConversationEntryKind.activity,
             text: _bounded(event.summary),
             completed: event.completed,
+            turnId: event.turnId,
             status: event.status,
           ),
         );
@@ -301,6 +363,7 @@ class ConversationController extends ChangeNotifier {
         kind: ConversationEntryKind.assistant,
         text: _bounded(event.text.isEmpty ? currentText : event.text),
         completed: event.completed,
+        turnId: event.turnId,
       ),
     );
     if (_deltaBuffers.isEmpty) {
@@ -334,6 +397,7 @@ class ConversationController extends ChangeNotifier {
           kind: ConversationEntryKind.assistant,
           text: _bounded(delta),
           completed: false,
+          turnId: _activeTurnId,
         ),
       );
       return;
@@ -342,6 +406,7 @@ class ConversationController extends ChangeNotifier {
     _entries[index] = existing.copyWith(
       text: _bounded('${existing.text}$delta'),
       completed: false,
+      turnId: existing.turnId ?? _activeTurnId,
     );
   }
 

@@ -17,5 +17,8 @@ abstract interface class EcosystemGateway {
 
   Future<OfficialRemoteControlPairing> startOfficialRemoteControlPairing();
 
-  Future<bool> disconnectOfficialRemoteControlClient(String clientId);
+  Future<bool> disconnectOfficialRemoteControlClient(
+    String clientId, {
+    String? environmentId,
+  });
 }

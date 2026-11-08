@@ -182,7 +182,61 @@ void main() {
     expect(gateway.steered.single.attachments.single.label, r'$test-runner');
     expect(controller.entries, hasLength(2));
     expect(controller.entries.last.text, 'Focus on tests instead');
+    expect(controller.entries.last.turnId, 'turn-1');
     expect(controller.entries.last.attachments.single.label, r'$test-runner');
+  });
+
+  test('does not resurrect activeTurnId if turn/completed arrives while turn/steer is in flight', () async {
+    await controller.submit('Start work');
+    gateway.events.add(
+      const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'),
+    );
+
+    final steerCompleter = Completer<String>();
+    gateway.nextSteerCompleter = steerCompleter;
+
+    final steerFuture = controller.steer('Mid-flight steer');
+    expect(controller.canSteer, isFalse);
+
+    // Server finishes turn-1 before steerTurn RPC resolves.
+    gateway.events.add(
+      const TurnCompletedEvent(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        status: TurnRuntimeStatus.completed,
+      ),
+    );
+    expect(controller.busy, isFalse);
+    expect(controller.activeTurnId, isNull);
+
+    steerCompleter.complete('turn-1');
+    expect(await steerFuture, isTrue);
+
+    expect(controller.busy, isFalse);
+    expect(controller.activeTurnId, isNull);
+  });
+
+  test('rolls back optimistic user entry on failed steer and clears entries on clearEntries()', () async {
+    await controller.submit('Start work');
+    gateway.events.add(
+      const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'),
+    );
+
+    gateway.throwOnSteer = true;
+    expect(await controller.steer('Will fail'), isFalse);
+
+    // Optimistic 'Will fail' user bubble was rolled back; only original user
+    // entry + error entry remain.
+    expect(
+      controller.entries.where((e) => e.kind == ConversationEntryKind.user),
+      hasLength(1),
+    );
+    expect(controller.entries.last.kind, ConversationEntryKind.error);
+
+    controller.clearEntries();
+    expect(controller.entries, isEmpty);
+    expect(controller.busy, isFalse);
+    expect(controller.activeTurnId, isNull);
   });
 }
 
@@ -192,6 +246,8 @@ class _FakeTurnGateway implements TurnGateway {
   final List<(String, String)> started = [];
   final List<TurnSteerOptions> steered = [];
   final List<(String, String)> interrupted = [];
+  Completer<String>? nextSteerCompleter;
+  var throwOnSteer = false;
 
   @override
   Stream<TurnEvent> get turnEvents => events.stream;
@@ -205,6 +261,13 @@ class _FakeTurnGateway implements TurnGateway {
   @override
   Future<String> steerTurn(TurnSteerOptions options) async {
     steered.add(options);
+    if (throwOnSteer) {
+      throw StateError('Turn already completed');
+    }
+    if (nextSteerCompleter case final completer?) {
+      nextSteerCompleter = null;
+      return completer.future;
+    }
     return options.expectedTurnId;
   }
 
