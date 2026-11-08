@@ -116,6 +116,75 @@ stall a long-running `SELF_ITERATION` program.
   idle. Integrate its result, update durable status, and continue to the next
   authorized independent slice.
 
+### Dual-agent peer collaboration: Codex CLI + Antigravity/Gemini
+
+Codex and Antigravity/Gemini are **peer engineering agents**. Neither is the
+permanent manager, implementer, reviewer, or final authority over the other.
+Task ownership follows current evidence, context, and comparative strength rather
+than a fixed hierarchy.
+
+Read `docs/AGENT_COLLABORATION.md` before starting work that is intended to run
+in parallel with, hand off to, or review work from the other agent.
+
+Default specialization is a routing hint, not an exclusive boundary:
+
+- **Antigravity/Gemini preferred**: visual/UI fidelity, live renderer/DevTools
+  inspection, screenshot comparison, interaction polish, ASAR/APK exploratory
+  reverse research, component-system work, and mobile presentation.
+- **Codex preferred**: architecture boundaries, app-server/protocol work, Rust
+  Host/transport, concurrency, bounded-memory behavior, complex state machines,
+  regression hardening, CI/release engineering, and final code-consistency
+  audits.
+- **Either agent** may own shared domain/features, tests, documentation, or any
+  other slice when it currently has the better context. Do not duplicate the
+  same implementation merely to compare agents.
+
+Parallel work rules:
+
+- Use separate Git worktrees/branches for independent writable slices.
+- Maintain **one writer per overlapping file surface**. The other agent may
+  inspect/review that work but must not concurrently edit the same files.
+- Prefer small coherent commits that the peer can inspect, cherry-pick, or
+  integrate without reconstructing chat history.
+- If two slices begin to overlap, pause only the overlapping write surface;
+  continue independent work elsewhere.
+- Do not force-push or rewrite the peer's history. Integrate through ordinary
+  commits/merges/cherry-picks according to the current branch strategy.
+- Peer review is targeted, not ceremonial: require it for cross-cutting
+  architecture/protocol/security/memory changes, public component API changes,
+  or evidence-sensitive reverse conclusions. Routine isolated changes do not
+  require a second agent merely for formality.
+
+Context and handoff discipline:
+
+- Repository state, commits, ADRs, tests, and measured evidence outrank either
+  agent's conversational memory.
+- After a long run, Teamwork/subagent return, or handoff, re-anchor by reading
+  the current task packet, `PROJECT_STATUS.md`, relevant ADRs, current diff,
+  and touched source files before making new claims.
+- Especially for Antigravity/Gemini, do not rely on a very long accumulated
+  conversation as the sole source of truth. Break work into bounded slices and
+  refresh repository evidence between slices.
+- Before handing a slice to the peer, provide a compact handoff containing:
+  current HEAD/commits, goal, changed files, verified behavior, tests run,
+  unresolved risks, evidence level, and the exact next useful action.
+- A peer should **review the existing implementation**, not automatically redo
+  it from scratch.
+
+Disagreement resolution:
+
+1. latest explicit user instruction;
+2. non-negotiable repository rules and accepted ADRs;
+3. public/supported schema or reproducible live behavior;
+4. tests, benchmarks, traces, and minimal repros;
+5. calibrated static reverse evidence;
+6. inference/model preference.
+
+When agents disagree, neither wins by identity. Resolve the claim with stronger
+evidence. For a safe reversible choice where evidence is still tied, choose a
+reasonable option, record the rationale, and continue rather than blocking the
+program.
+
 ### Evidence labels and completion claims
 
 Keep these evidence classes distinct:
