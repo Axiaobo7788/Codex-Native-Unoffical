@@ -100,10 +100,18 @@ final class HistoryProtocolAdapter {
     if (value is! Map<String, Object?>) {
       throw const ProtocolViolation('History item entry must be an object.');
     }
-    return _parseItem(value['item'], _requiredString(value, 'turnId'));
+    return _parseItem(
+      value['item'],
+      _requiredString(value, 'turnId'),
+      outputDeferred: value['outputDeferred'] == true,
+    );
   }
 
-  HistoryItem _parseItem(Object? value, String turnId) {
+  HistoryItem _parseItem(
+    Object? value,
+    String turnId, {
+    bool outputDeferred = false,
+  }) {
     if (value is! Map<String, Object?>) {
       throw const ProtocolViolation('History item must be an object.');
     }
@@ -142,7 +150,10 @@ final class HistoryProtocolAdapter {
             : OutputProtocolAdapter.descriptorFromItem(
                 value['_codexNativeOutput'],
               ),
-        outputDeferred: value['outputDeferred'] == true,
+        // `outputDeferred` belongs to ThreadItemEntry, not the nested
+        // commandExecution item. Keep the optional nested check for older
+        // app-server builds that emitted the flag there.
+        outputDeferred: outputDeferred || value['outputDeferred'] == true,
         isCommand: true,
       ),
       'fileChange' => HistoryItem(
