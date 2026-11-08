@@ -1961,3 +1961,68 @@ project's bounded native projection rules.
   `HUMAN_REVIEW_PENDING`.
 - F8 (stable MCP resource/tool/reload/elicitation) remains machine-actionable;
   closing F7/F9 and their CI run is not a program stop.
+
+## ADR-038 — Bounded Local MCP Capabilities and Live Turn Telemetry Are UI Projections
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+### Context
+
+The stable stock app-server schema exposes local MCP reload/resource/tool
+operations and server-initiated elicitation, while the conversation stream also
+exposes plan, token-usage, reasoning-summary, MCP-progress, hook, reroute, and
+warning notifications. Leaving those surfaces unhandled loses useful official
+behavior, but retaining raw binary/resource/tool/telemetry payloads would violate
+the bounded-projection rule. MCP mutation also cannot be silently widened onto
+the read-only Remote backend.
+
+### Decision
+
+1. **Local-only typed MCP capability surface**:
+   - Implement stable `config/mcpServer/reload`, `mcpServer/resource/read`, and
+     `mcpServer/tool/call` behind `EcosystemGateway` and typed domain models.
+     Remote/unsupported backends fail closed.
+   - Cap aggregate response bytes, JSON depth/nodes, content count, identifiers,
+     URIs, retained text, and structured previews. Retain binary content only as
+     bounded metadata/encoded length; never retain the binary string in UI state.
+   - Permit binary leaves above the retained-text cap up to the aggregate MCP
+     response cap before applying content-specific validation.
+
+2. **Native elicitation without an implicit WebView dependency**:
+   - Route `mcpServer/elicitation/request` through the unified bounded
+     `ServerRequestProtocolAdapter` and combined pending-request budget.
+   - Support standard bounded form and URL actions natively. Treat hosted
+     `openai/form` as decline/cancel-only until a separately justified optional
+     WebView host exists. Clear pending state on response, external resolution,
+     request closure, and controller disposal.
+   - Reject non-finite numeric form values before submission.
+
+3. **Bounded live turn telemetry projection**:
+   - Parse and project stable `turn/plan/updated`,
+     `thread/tokenUsage/updated`, `item/reasoning/summaryTextDelta`,
+     `item/mcpToolCall/progress`, `hook/started`, `hook/completed`,
+     `model/rerouted`, and `warning` notifications through typed turn events.
+   - Bound string/collection retention at parser and controller ingress,
+     coalesce reasoning deltas, and use the existing bounded entry maps.
+     `turn/completed` may finalize only entries belonging to that turn or entries
+     without a turn ID; it must not mutate another active turn.
+
+4. **Cache and evidence discipline**:
+   - Force refresh and MCP reload invalidate retained per-server result/error
+     caches; disappeared servers prune their cache entries.
+   - Schema/controller/widget evidence may establish machine correctness, but a
+     configured successful MCP result and naturally emitted live notification
+     remain separate real-use claims. Presentation quality remains
+     `HUMAN_REVIEW_PENDING`.
+
+### Consequences
+
+- F8 closes the stable non-WebView MCP resource/tool/reload/elicitation gap
+  without adding Remote writes or retaining large binary payloads in Flutter.
+- F10 makes live official turn state visible while preserving bounded memory and
+  cross-turn isolation.
+- Optional `ui://` hosting, MCP OAuth, experimental MCP event streams, plugin
+  share/reconcile, and private cloud services are not implied by this decision.
+- Closing and validating F8/F10 triggers a fresh living-backlog audit and the
+  next peer round; it is not a program stop.

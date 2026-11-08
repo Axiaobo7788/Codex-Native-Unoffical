@@ -3104,3 +3104,80 @@ _Reviewed: 2026-11-09_
   missing-ID, or in-flight state.
 - These are `MACHINE VERIFIED` and protocol `LIVE_CALLED` findings. The Apps and
   Plugins visual/interaction quality has not received Human acceptance.
+
+## Peer Round 4: Stable MCP Capabilities and Live Turn Telemetry
+
+_Reviewed: 2026-11-09_
+
+### Peer ownership and current schema evidence
+
+- Codex and Antigravity/Gemini negotiated the round as equal peers in the
+  official interactive `agy` TUI. Codex owned F8 MCP protocol/gateway/request
+  handling and Gemini owned F10 live turn telemetry. They used isolated
+  worktrees and did not concurrently write overlapping file surfaces.
+- A fresh schema generated from installed stock `codex app-server
+  0.167.0-alpha.3.2` reconfirmed stable
+  `config/mcpServer/reload`, `mcpServer/resource/read`,
+  `mcpServer/tool/call`, and server request
+  `mcpServer/elicitation/request`. It also reconfirmed stable
+  `turn/plan/updated`, `thread/tokenUsage/updated`,
+  `item/reasoning/summaryTextDelta`, `item/mcpToolCall/progress`,
+  `hook/started`, `hook/completed`, `model/rerouted`, and `warning`
+  notifications. The earlier global method counts remain the current installed
+  snapshot rather than a timeless upstream claim.
+
+### F8 MCP runtime and bounded-memory findings
+
+- Native now reloads MCP configuration, reads resources, invokes tools, and
+  handles elicitation through typed gateway/domain boundaries. The UI retains
+  at most 32 resource/tool content entries; MCP JSON is limited to 8 levels,
+  1,024 nodes, and a 256 KiB aggregate encoded response. Retained text is capped
+  at 64 KiB and structured previews at 32 KiB. Binary data is omitted from UI
+  state and represented only by metadata/encoded length.
+- Peer audit found that the initial raw-response validator applied the 64 KiB
+  retained-text limit to every JSON string before content parsing. This made a
+  64 KiB+1 through bounded binary blob fail before the intended binary/aggregate
+  check. The response validator now permits a string leaf up to the aggregate
+  cap, while content-specific text/preview/identifier checks still apply.
+- Peer audit also found stale per-server MCP result/error caches after force
+  refresh/reload and the ability for `num.tryParse` to accept `NaN`/`Infinity`
+  while range comparisons remained false. Refresh/reload now clears/prunes the
+  caches, and non-finite numeric elicitation values cannot submit.
+- Live stock calls reached all three client methods. Reload succeeded;
+  resource/tool calls produced expected operational errors for an unknown
+  server or nonexistent thread, proving method dispatch without claiming a
+  configured successful payload. Standard form and URL elicitations are
+  supported; hosted `openai/form` is explicitly decline/cancel-only.
+
+### F10 telemetry projection and audit findings
+
+- `TurnProtocolAdapter` projects plan snapshots, token usage, reasoning-summary
+  deltas, MCP progress, hook lifecycle, model reroutes, and warnings into typed
+  bounded events. `ConversationController` coalesces reasoning deltas and
+  exposes bounded current plan/token/reroute/warning state plus activity rows.
+- Peer audit found three raw retention risks: a pre-flush reasoning buffer could
+  append an arbitrary delta chunk, MCP base summaries could retain unbounded
+  activity strings, and model reroute fields could remain unbounded. Parser and
+  controller ingress now truncate those fields, cap plan steps/strings and
+  warnings, and preserve bounded map counts (`maxPendingDeltaItems` for pending
+  buffers; `maxEntries` for retained metadata).
+- A separate regression proves `turn/completed` finalizes matching or unassigned
+  entries without finalizing another turn's in-progress activity. The earlier
+  peer handoff's claimed `_maxTrackedItemMetadata = 64` constant did not exist;
+  the corrected evidence is the actual 16 pending-item and 200 retained-entry
+  defaults.
+
+### Integrated validation and evidence boundary
+
+- Integrated main passed formatting, direct `dart analyze`, all `358` Flutter
+  tests, all `98` Rust tests, the bounded history benchmark, and a Linux debug
+  build. The benchmark retained `100` of `1,000` source turns with
+  `RSS_TURN_DELTA=1781760`; ten discarded 3 MiB outputs measured
+  `RSS_HEAVY_OUTPUT_DELTA=29425664`.
+- The integrated KDE Wayland bundle kept Flutter, the packaged Host, and stock
+  app-server alive together and shut them all down cleanly. That is real runtime
+  startup/lifecycle evidence, not a Human visual review.
+- F10's complete notification set is machine verified from schema, protocol,
+  controller, widget, and E2E fixtures. A natural stock session did not emit
+  every method during this round; no claim of full live notification observation
+  is made. MCP and telemetry presentation remains `HUMAN_REVIEW_PENDING`.
