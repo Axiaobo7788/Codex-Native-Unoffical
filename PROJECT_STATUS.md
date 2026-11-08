@@ -6,7 +6,7 @@ This file is the repository's durable project memory. Update it whenever a task 
 
 ## Operating mode
 
-**Mode: `SELF_ITERATION`**
+**Mode: `HUMAN_REVIEW`**
 
 - Current status: **`OFFICIAL_CLIENT_CONVERGENCE_MACHINE_AND_REAL_USE_VERIFIED — HUMAN_REVIEW_REQUIRED`**.
 - Phase marker: **`Official Client Convergence (Milestones M0–M5 Complete)`**.
