@@ -8,6 +8,7 @@ class _ConversationPanel extends StatefulWidget {
     this.threadController,
     required this.historyController,
     required this.approvalController,
+    required this.userInputController,
     required this.settingsController,
     required this.diffController,
     required this.outputGateway,
@@ -20,6 +21,7 @@ class _ConversationPanel extends StatefulWidget {
   final ThreadListController? threadController;
   final HistoryController historyController;
   final ApprovalController approvalController;
+  final UserInputController userInputController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final OutputGateway outputGateway;
@@ -373,6 +375,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               _ApprovalBanner(
                                 controller: widget.approvalController,
                               ),
+                              _UserInputBanner(
+                                controller: widget.userInputController,
+                              ),
                               _composer(controller, isHeroCentered: true),
                               const SizedBox(height: 14),
                               _StarterSuggestionRow(
@@ -411,6 +416,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   _conversationSearchBar(),
                 Expanded(child: timelineChild),
                 _ApprovalBanner(controller: widget.approvalController),
+                _UserInputBanner(controller: widget.userInputController),
                 _composer(controller),
               ],
             );

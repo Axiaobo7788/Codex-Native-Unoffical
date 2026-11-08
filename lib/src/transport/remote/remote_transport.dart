@@ -10,6 +10,7 @@ import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
+import '../../domain/user_input_models.dart';
 import '../../protocol/history_protocol.dart';
 import '../../protocol/jsonl_decoder.dart';
 import '../../protocol/model_protocol.dart';
@@ -299,6 +300,9 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
   Stream<ApprovalEvent> get approvalEvents => const Stream.empty();
 
   @override
+  Stream<UserInputEvent> get userInputEvents => const Stream.empty();
+
+  @override
   Future<RemoteStatus> status() async {
     final result = await _request('host/remote/status');
     final device = _requiredObject(result, 'device');
@@ -407,6 +411,16 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
     required Object requestId,
     required ApprovalDecision decision,
   }) => _unsupported('Approval decisions');
+
+  @override
+  Future<void> submitUserInput({
+    required Object requestId,
+    required UserInputAnswers answers,
+  }) => _unsupported('User input responses');
+
+  @override
+  Future<void> cancelUserInput(Object requestId) =>
+      _unsupported('User input responses');
 
   @override
   Future<OutputDescriptor> statOutput(String reference) =>

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
+import 'package:codex_native_unofficial/src/domain/user_input_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/transport/process/child_process.dart';
 import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
@@ -105,6 +106,71 @@ void main() {
     await expectLater(lateRequest, throwsA(isA<TransportClosedException>()));
     await closeFuture;
     expect(child.writesAfterInputClosed, 0);
+  });
+
+  test(
+    'answers current time server requests through the process peer',
+    () async {
+      final lowerBound = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      child.addStdout({
+        'id': 'clock-1',
+        'method': 'currentTime/read',
+        'params': <String, Object?>{},
+      });
+      await pumpEventQueue();
+
+      final response = jsonDecode(child.writes.single) as Map<String, Object?>;
+      expect(response['id'], 'clock-1');
+      final result = response['result']! as Map<String, Object?>;
+      expect(result['currentTimeAt'], isA<int>());
+      expect(result['currentTimeAt']! as int, greaterThanOrEqualTo(lowerBound));
+    },
+  );
+
+  test('round trips typed tool user input through the process peer', () async {
+    final eventFuture = transport.userInputEvents.first;
+    child.addStdout({
+      'id': 'input-1',
+      'method': 'item/tool/requestUserInput',
+      'params': {
+        'threadId': 'thread-1',
+        'turnId': 'turn-1',
+        'itemId': 'item-1',
+        'isBlocking': true,
+        'questions': [
+          {
+            'id': 'approach',
+            'header': 'Approach',
+            'question': 'Which implementation should be used?',
+            'options': [
+              {
+                'label': 'Incremental',
+                'description': 'Make the smallest compatible change.',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    final event = await eventFuture as UserInputRequestedEvent;
+    expect(event.request.threadId, 'thread-1');
+    await transport.submitUserInput(
+      requestId: event.request.requestId,
+      answers: UserInputAnswers({
+        'approach': ['Incremental'],
+      }),
+    );
+
+    final response = jsonDecode(child.writes.single) as Map<String, Object?>;
+    expect(response['id'], 'input-1');
+    expect(response['result'], {
+      'answers': {
+        'approach': {
+          'answers': ['Incremental'],
+        },
+      },
+    });
   });
 
   test(

@@ -8,6 +8,7 @@ class RuntimeStatusScreen extends StatelessWidget {
     required this.conversationController,
     required this.historyController,
     required this.approvalController,
+    required this.userInputController,
     required this.settingsController,
     required this.diffController,
     required this.defaultWorkingDirectory,
@@ -19,6 +20,7 @@ class RuntimeStatusScreen extends StatelessWidget {
   final ConversationController conversationController;
   final HistoryController historyController;
   final ApprovalController approvalController;
+  final UserInputController userInputController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final String defaultWorkingDirectory;
@@ -52,6 +54,7 @@ class RuntimeStatusScreen extends StatelessWidget {
               threadController: threadController,
               historyController: historyController,
               approvalController: approvalController,
+              userInputController: userInputController,
               settingsController: settingsController,
               diffController: diffController,
               outputGateway: controller,
@@ -71,6 +74,7 @@ class RuntimeStatusScreen extends StatelessWidget {
             conversationController: conversationController,
             historyController: historyController,
             approvalController: approvalController,
+            userInputController: userInputController,
             settingsController: settingsController,
             diffController: diffController,
             defaultWorkingDirectory: defaultWorkingDirectory,
@@ -106,6 +110,7 @@ class _DesktopSplitWorkspace extends StatefulWidget {
     required this.conversationController,
     required this.historyController,
     required this.approvalController,
+    required this.userInputController,
     required this.settingsController,
     required this.diffController,
     required this.defaultWorkingDirectory,
@@ -116,6 +121,7 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   final ConversationController conversationController;
   final HistoryController historyController;
   final ApprovalController approvalController;
+  final UserInputController userInputController;
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final String defaultWorkingDirectory;
@@ -184,6 +190,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                   threadController: widget.threadController,
                   historyController: widget.historyController,
                   approvalController: widget.approvalController,
+                  userInputController: widget.userInputController,
                   settingsController: widget.settingsController,
                   diffController: widget.diffController,
                   outputGateway: widget.runtimeController,

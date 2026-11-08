@@ -10,7 +10,7 @@ import '../../domain/output_models.dart';
 import '../../domain/remote_admin_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
-import '../../protocol/approval_protocol.dart';
+import '../../domain/user_input_models.dart';
 import '../../protocol/ecosystem_protocol.dart';
 import '../../protocol/history_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
@@ -19,6 +19,7 @@ import '../../protocol/model_protocol.dart';
 import '../../protocol/output_protocol.dart';
 import '../../protocol/protocol_models.dart';
 import '../../protocol/remote_admin_protocol.dart';
+import '../../protocol/server_request_protocol.dart';
 import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
 import '../codex_transport.dart';
@@ -56,7 +57,7 @@ class ProcessTransport implements CodexTransport {
       request: _request,
       notifications: _peer.notifications,
     );
-    _approvalProtocol = ApprovalProtocolAdapter(
+    _serverRequestProtocol = ServerRequestProtocolAdapter(
       serverRequests: _peer.serverRequests,
       notifications: _peer.notifications,
       respond: _respond,
@@ -82,7 +83,7 @@ class ProcessTransport implements CodexTransport {
   late final RemoteAdminProtocolAdapter _remoteAdminProtocol;
   late final EcosystemProtocolAdapter _ecosystemProtocol;
   late final TurnProtocolAdapter _turnProtocol;
-  late final ApprovalProtocolAdapter _approvalProtocol;
+  late final ServerRequestProtocolAdapter _serverRequestProtocol;
   late final StreamSubscription<String> _stderrSubscription;
   late final Future<void> _exitWatcher;
   Future<void>? _closeOperation;
@@ -139,7 +140,12 @@ class ProcessTransport implements CodexTransport {
   Stream<ThreadLifecycleEvent> get threadEvents => _threadProtocol.events;
 
   @override
-  Stream<ApprovalEvent> get approvalEvents => _approvalProtocol.events;
+  Stream<ApprovalEvent> get approvalEvents =>
+      _serverRequestProtocol.approvalEvents;
+
+  @override
+  Stream<UserInputEvent> get userInputEvents =>
+      _serverRequestProtocol.userInputEvents;
 
   @override
   Future<InitializeResult> initialize(InitializeRequest request) async {
@@ -291,7 +297,23 @@ class ProcessTransport implements CodexTransport {
   Future<void> decideApproval({
     required Object requestId,
     required ApprovalDecision decision,
-  }) => _approvalProtocol.decide(requestId: requestId, decision: decision);
+  }) => _serverRequestProtocol.decideApproval(
+    requestId: requestId,
+    decision: decision,
+  );
+
+  @override
+  Future<void> submitUserInput({
+    required Object requestId,
+    required UserInputAnswers answers,
+  }) => _serverRequestProtocol.submitUserInput(
+    requestId: requestId,
+    answers: answers,
+  );
+
+  @override
+  Future<void> cancelUserInput(Object requestId) =>
+      _serverRequestProtocol.cancelUserInput(requestId);
 
   Future<RemoteHostStatus> readRemoteAdminStatus() =>
       _remoteAdminProtocol.status();
@@ -388,7 +410,7 @@ class ProcessTransport implements CodexTransport {
 
     await _exitWatcher;
     await _stderrSubscription.cancel();
-    await _approvalProtocol.dispose();
+    await _serverRequestProtocol.dispose();
     await _peer.close();
     await _exits.close();
   }

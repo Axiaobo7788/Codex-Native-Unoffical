@@ -22,11 +22,13 @@ import '../domain/remote_admin_models.dart';
 import '../domain/runtime_snapshot.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
+import '../domain/user_input_models.dart';
 import '../features/approvals/approval_controller.dart';
 import '../features/conversation/assistant_markdown.dart';
 import '../features/conversation/conversation_controller.dart';
 import '../features/conversation/history_controller.dart';
 import '../features/conversation/output_viewer_controller.dart';
+import '../features/conversation/user_input_controller.dart';
 import '../features/diff/diff_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/settings/remote_admin_controller.dart';
@@ -54,6 +56,7 @@ part 'presentation/diff_approval_output.dart';
 part 'presentation/sidebar_activity.dart';
 part 'presentation/remote_setup.dart';
 part 'presentation/runtime_details.dart';
+part 'presentation/user_input.dart';
 
 const _desktopSplitMinimumWidth = 760.0;
 const _desktopSidebarWidth = 260.0;
@@ -82,6 +85,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   late final HistoryController _historyController;
   late final DiffController _diffController;
   late final ApprovalController _approvalController;
+  late final UserInputController _userInputController;
   late final bool _ownsController;
   AppLifecycleListener? _lifecycleListener;
   var _requestedInitialThreads = false;
@@ -101,6 +105,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _historyController = HistoryController(gateway: _controller);
     _diffController = DiffController(gateway: _controller);
     _approvalController = ApprovalController(gateway: _controller);
+    _userInputController = UserInputController(gateway: _controller);
     _lastRevertVersion = _threadController.revertVersion;
     _controller.addListener(_handleRuntimeState);
     _threadController.addListener(_handleThreadSelection);
@@ -119,6 +124,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _controller.removeListener(_handleRuntimeState);
     _threadController.removeListener(_handleThreadSelection);
     _approvalController.dispose();
+    _userInputController.dispose();
     _conversationController.dispose();
     _historyController.dispose();
     _diffController.dispose();
@@ -150,6 +156,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
         conversationController: _conversationController,
         historyController: _historyController,
         approvalController: _approvalController,
+        userInputController: _userInputController,
         settingsController: _settingsController,
         diffController: _diffController,
         defaultWorkingDirectory: Directory.current.path,

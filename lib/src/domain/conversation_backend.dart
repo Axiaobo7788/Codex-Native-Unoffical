@@ -6,6 +6,7 @@ import 'output_gateway.dart';
 import 'product_mode.dart';
 import 'thread_gateway.dart';
 import 'turn_gateway.dart';
+import 'user_input_gateway.dart';
 
 /// Unified domain contract for conversational thread, history, model, and turn
 /// operations shared across `ProductMode.codex`, `ProductMode.work`, and
@@ -16,7 +17,11 @@ abstract interface class ConversationBackend
 /// Unified domain contract for workspace execution, interactive approvals,
 /// spooled command output, and skills/plugins/MCP discovery.
 abstract interface class ExecutionBackend
-    implements ApprovalGateway, OutputGateway, EcosystemGateway {}
+    implements
+        ApprovalGateway,
+        UserInputGateway,
+        OutputGateway,
+        EcosystemGateway {}
 
 /// Resolves the effective `BackendCapabilities` by intersecting transport-level
 /// backend capabilities with the active `ProductMode` presentation policy.

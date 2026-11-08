@@ -14,6 +14,7 @@ import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
+import 'package:codex_native_unofficial/src/domain/user_input_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -246,6 +247,88 @@ void main() {
       (requestId: 'approval-1', decision: ApprovalDecision.approveOnce),
     ]);
     expect(find.text('Approval required'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tool user input stays bounded and actionable in a narrow view', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 780);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final runtime = _ProductRuntimeController();
+    addTearDown(runtime.closeStreams);
+
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controls thread'));
+    await tester.pumpAndSettle();
+    runtime.emitUserInput(
+      UserInputRequest(
+        requestId: 'input-1',
+        threadId: 'controls-thread',
+        turnId: 'turn-1',
+        itemId: 'item-1',
+        isBlocking: true,
+        questions: [
+          UserInputQuestion(
+            id: 'approach',
+            header: 'Approach',
+            question: 'Which implementation should be used?',
+            options: const [
+              UserInputOption(
+                label: 'Incremental',
+                description: 'Keep the protocol boundary small.',
+              ),
+            ],
+            allowsOther: true,
+            isSecret: false,
+          ),
+          UserInputQuestion(
+            id: 'note',
+            header: 'Private note',
+            question: 'Add a short private note.',
+            options: const [],
+            allowsOther: false,
+            isSecret: true,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Codex needs your input'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('user-input-question-scroll')))
+          .height,
+      lessThanOrEqualTo(320),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('user-input-approach-Incremental')),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('user-input-note-text')),
+      'Keep this bounded.',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<CodexButton>(find.byKey(const ValueKey('user-input-submit')))
+          .isEnabled,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const ValueKey('user-input-submit')));
+    await tester.pumpAndSettle();
+
+    expect(runtime.userInputSubmissions, hasLength(1));
+    expect(runtime.userInputSubmissions.single.$1, 'input-1');
+    expect(runtime.userInputSubmissions.single.$2.values, {
+      'approach': ['Incremental'],
+      'note': ['Keep this bounded.'],
+    });
+    expect(find.text('Codex needs your input'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -505,12 +588,16 @@ class _ProductRuntimeController extends RuntimeController {
       StreamController<TurnEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvals =
       StreamController<ApprovalEvent>.broadcast(sync: true);
+  final StreamController<UserInputEvent> _userInputs =
+      StreamController<UserInputEvent>.broadcast(sync: true);
   final List<TurnStartOptions> turnOptions = [];
   final List<String> startedThreadCwds = [];
   List<HistoryTurn> historyTurns = const [];
   List<HistoryItem> expandedTurnItems = const [];
   final List<({Object requestId, ApprovalDecision decision})>
   approvalDecisions = [];
+  final List<(Object, UserInputAnswers)> userInputSubmissions = [];
+  final List<Object> userInputCancellations = [];
   final ThreadSummary thread = ThreadSummary(
     id: 'controls-thread',
     sessionId: 'controls-session',
@@ -535,6 +622,9 @@ class _ProductRuntimeController extends RuntimeController {
 
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvals.stream;
+
+  @override
+  Stream<UserInputEvent> get userInputEvents => _userInputs.stream;
 
   @override
   Future<void> start() async {
@@ -619,6 +709,19 @@ class _ProductRuntimeController extends RuntimeController {
   }
 
   @override
+  Future<void> submitUserInput({
+    required Object requestId,
+    required UserInputAnswers answers,
+  }) async {
+    userInputSubmissions.add((requestId, answers));
+  }
+
+  @override
+  Future<void> cancelUserInput(Object requestId) async {
+    userInputCancellations.add(requestId);
+  }
+
+  @override
   Future<void> shutdown() async {}
 
   void emitDiff(DiffSnapshot snapshot) {
@@ -629,9 +732,14 @@ class _ProductRuntimeController extends RuntimeController {
     _approvals.add(ApprovalRequestedEvent(request: request));
   }
 
+  void emitUserInput(UserInputRequest request) {
+    _userInputs.add(UserInputRequestedEvent(request: request));
+  }
+
   Future<void> closeStreams() async {
     await _turns.close();
     await _approvals.close();
+    await _userInputs.close();
     dispose();
   }
 }

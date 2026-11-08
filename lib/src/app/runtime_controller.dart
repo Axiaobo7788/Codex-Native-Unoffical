@@ -22,6 +22,7 @@ import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_gateway.dart';
 import '../domain/turn_models.dart';
+import '../domain/user_input_models.dart';
 import '../protocol/protocol_models.dart';
 import '../transport/process/codex_executable_locator.dart';
 import '../transport/process/host_executable_locator.dart';
@@ -104,6 +105,7 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<TurnEvent>? _turnEventSubscription;
   StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
+  StreamSubscription<UserInputEvent>? _userInputEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
   final StreamController<TurnEvent> _turnEvents =
@@ -112,6 +114,8 @@ class RuntimeController extends ChangeNotifier
       StreamController<ThreadLifecycleEvent>.broadcast();
   final StreamController<ApprovalEvent> _approvalEvents =
       StreamController<ApprovalEvent>.broadcast();
+  final StreamController<UserInputEvent> _userInputEvents =
+      StreamController<UserInputEvent>.broadcast();
   Future<void>? _startOperation;
   var _disposed = false;
   var _stopping = false;
@@ -139,6 +143,9 @@ class RuntimeController extends ChangeNotifier
 
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvalEvents.stream;
+
+  @override
+  Stream<UserInputEvent> get userInputEvents => _userInputEvents.stream;
 
   Future<void> start() =>
       _usesRemote ? _startRemote() : (_startOperation ??= _startDesktop());
@@ -312,6 +319,19 @@ class RuntimeController extends ChangeNotifier
   );
 
   @override
+  Future<void> submitUserInput({
+    required Object requestId,
+    required UserInputAnswers answers,
+  }) => _connectedTransport().submitUserInput(
+    requestId: requestId,
+    answers: answers,
+  );
+
+  @override
+  Future<void> cancelUserInput(Object requestId) =>
+      _connectedTransport().cancelUserInput(requestId);
+
+  @override
   Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) =>
       _connectedTransport().listSkills(cwds: cwds);
 
@@ -421,6 +441,10 @@ class RuntimeController extends ChangeNotifier
       _approvalEventSubscription = transport.approvalEvents.listen(
         _approvalEvents.add,
         onError: _approvalEvents.addError,
+      );
+      _userInputEventSubscription = transport.userInputEvents.listen(
+        _userInputEvents.add,
+        onError: _userInputEvents.addError,
       );
       final result = await transport.initialize(const InitializeRequest());
       if (_stopping || _disposed) {
@@ -592,6 +616,7 @@ class RuntimeController extends ChangeNotifier
     await _turnEventSubscription?.cancel();
     await _threadEventSubscription?.cancel();
     await _approvalEventSubscription?.cancel();
+    await _userInputEventSubscription?.cancel();
     await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
     await _remoteStateSubscription?.cancel();
@@ -600,6 +625,7 @@ class RuntimeController extends ChangeNotifier
     await _turnEvents.close();
     await _threadEvents.close();
     await _approvalEvents.close();
+    await _userInputEvents.close();
     if (!_disposed) {
       _setSnapshot(
         RuntimeSnapshot(
