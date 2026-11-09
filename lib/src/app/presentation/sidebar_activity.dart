@@ -8,6 +8,7 @@ class _ThreadPanel extends StatefulWidget {
     required this.defaultWorkingDirectory,
     this.userInputController,
     this.onToggleSidebar,
+    this.onThreadSelected,
   });
 
   final ThreadListController controller;
@@ -16,6 +17,7 @@ class _ThreadPanel extends StatefulWidget {
   final String defaultWorkingDirectory;
   final UserInputController? userInputController;
   final VoidCallback? onToggleSidebar;
+  final VoidCallback? onThreadSelected;
 
   @override
   State<_ThreadPanel> createState() => _ThreadPanelState();
@@ -765,8 +767,8 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           enabled: !controller.mutating,
           supportsSections: controller.supportsThreadSections,
           sections: allSections,
-          onSelect: () => controller.selectThread(thread.id),
-          onResume: () => controller.resumeThread(thread.id),
+          onSelect: () => unawaited(_selectThread(thread.id)),
+          onResume: () => unawaited(_resumeThread(thread.id)),
           onTogglePin: () => unawaited(controller.togglePinThread(thread.id)),
           onRename: () => _renameThreadDialog(thread),
           onManageGoal: controller.canManageGoal(thread.id)
@@ -829,6 +831,24 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         ],
       ),
     );
+  }
+
+  Future<void> _selectThread(String threadId) async {
+    final selected = await widget.controller.selectThread(threadId);
+    if (selected != null &&
+        mounted &&
+        widget.controller.selectedThread?.id == selected.id) {
+      widget.onThreadSelected?.call();
+    }
+  }
+
+  Future<void> _resumeThread(String threadId) async {
+    final resumed = await widget.controller.resumeThread(threadId);
+    if (resumed != null &&
+        mounted &&
+        widget.controller.selectedThread?.id == resumed.id) {
+      widget.onThreadSelected?.call();
+    }
   }
 
   Future<void> _startThread() => _startThreadInDirectory(_workingDirectory);

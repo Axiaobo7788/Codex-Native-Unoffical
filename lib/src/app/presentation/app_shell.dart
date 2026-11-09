@@ -43,13 +43,6 @@ class RuntimeStatusScreen extends StatelessWidget {
       RuntimeConnectionState.connected => LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth < _desktopSplitMinimumWidth) {
-            final sidebar = _ThreadPanel(
-              controller: threadController,
-              settingsController: settingsController,
-              runtimeController: controller,
-              userInputController: userInputController,
-              defaultWorkingDirectory: defaultWorkingDirectory,
-            );
             final conversation = _ConversationPanel(
               controller: conversationController,
               threadController: threadController,
@@ -65,7 +58,14 @@ class RuntimeStatusScreen extends StatelessWidget {
             return _CompactWorkspace(
               key: const ValueKey('compact-workspace'),
               threadController: threadController,
-              sidebar: sidebar,
+              sidebarBuilder: (onThreadSelected) => _ThreadPanel(
+                controller: threadController,
+                settingsController: settingsController,
+                runtimeController: controller,
+                userInputController: userInputController,
+                defaultWorkingDirectory: defaultWorkingDirectory,
+                onThreadSelected: onThreadSelected,
+              ),
               conversation: conversation,
             );
           }
@@ -215,12 +215,12 @@ class _CompactWorkspace extends StatefulWidget {
   const _CompactWorkspace({
     super.key,
     required this.threadController,
-    required this.sidebar,
+    required this.sidebarBuilder,
     required this.conversation,
   });
 
   final ThreadListController threadController;
-  final Widget sidebar;
+  final Widget Function(VoidCallback onThreadSelected) sidebarBuilder;
   final Widget conversation;
 
   @override
@@ -323,7 +323,9 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
                 switchOutCurve: Curves.easeIn,
                 child: KeyedSubtree(
                   key: ValueKey(_showSidebar),
-                  child: _showSidebar ? widget.sidebar : widget.conversation,
+                  child: _showSidebar
+                      ? widget.sidebarBuilder(_closeSidebar)
+                      : widget.conversation,
                 ),
               ),
             ),
@@ -333,9 +335,20 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
     );
   }
 
+  void _closeSidebar() {
+    _selectedThreadId = widget.threadController.selectedThread?.id;
+    if (mounted && _showSidebar) {
+      setState(() => _showSidebar = false);
+    }
+  }
+
   void _handleThreadSelection() {
     final next = widget.threadController.selectedThread?.id;
-    if (next == null || next == _selectedThreadId) {
+    if (next == null) {
+      _selectedThreadId = null;
+      return;
+    }
+    if (next == _selectedThreadId) {
       return;
     }
     _selectedThreadId = next;

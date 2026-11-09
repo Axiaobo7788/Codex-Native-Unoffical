@@ -89,9 +89,9 @@ void main() {
   );
 
   testWidgets(
-    'compact thread selection opens conversation and Escape closes sidebar',
+    'compact thread selection and reselection open conversation while refresh or failed read keeps Threads open and Escape closes sidebar',
     (tester) async {
-      tester.view.physicalSize = const Size(600, 780);
+      tester.view.physicalSize = const Size(720, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -108,9 +108,40 @@ void main() {
       );
       expect(find.byTooltip('Show threads'), findsOneWidget);
 
+      // Reopen compact Threads and click the already-selected thread row:
+      // closes Threads and returns to the conversation.
       await tester.tap(find.byTooltip('Show threads'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Show conversation'), findsOneWidget);
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('conversation-composer')),
+        findsOneWidget,
+      );
+
+      // Reopen compact Threads; refreshing threads preserves selection without
+      // closing the Threads sidebar.
+      await tester.tap(find.byTooltip('Show threads'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show conversation'), findsOneWidget);
+      await tester.tap(find.byTooltip('Refresh threads'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show conversation'), findsOneWidget);
+      expect(find.byKey(const ValueKey('conversation-composer')), findsNothing);
+
+      // A failed readThread on reselection keeps Threads open so the error is visible.
+      runtime.failNextReadThread = true;
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show conversation'), findsOneWidget);
+      expect(find.byKey(const ValueKey('conversation-composer')), findsNothing);
+      expect(
+        find.textContaining('Simulated thread read failure'),
+        findsOneWidget,
+      );
+
+      // Escape still closes the compact Threads sidebar.
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(
@@ -598,6 +629,7 @@ class _ProductRuntimeController extends RuntimeController {
   approvalDecisions = [];
   final List<(Object, UserInputAnswers)> userInputSubmissions = [];
   final List<Object> userInputCancellations = [];
+  var failNextReadThread = false;
   final ThreadSummary thread = ThreadSummary(
     id: 'controls-thread',
     sessionId: 'controls-session',
@@ -636,7 +668,13 @@ class _ProductRuntimeController extends RuntimeController {
       ThreadPage(threads: [thread], nextCursor: null);
 
   @override
-  Future<ThreadSummary> readThread(String threadId) async => thread;
+  Future<ThreadSummary> readThread(String threadId) async {
+    if (failNextReadThread) {
+      failNextReadThread = false;
+      throw StateError('Simulated thread read failure');
+    }
+    return thread;
+  }
 
   @override
   Future<ThreadSummary> resumeThread(String threadId) async => thread;
