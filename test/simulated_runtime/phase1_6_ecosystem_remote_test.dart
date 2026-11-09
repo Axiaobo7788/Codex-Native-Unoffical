@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
+import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,14 +16,44 @@ void main() {
       (tester) async {
         final harness = SimulatedRuntimeHarness(
           initialThreads: [
-            createTestThread(id: 'thread-mcp', preview: 'MCP capability test'),
+            createTestThread(
+              id: 'thread-mcp',
+              preview: 'MCP capability test',
+              status: ThreadRuntimeStatus.notLoaded,
+            ),
           ],
         );
 
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
+        // Global resource read when no thread is selected stays threadless.
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('MCP (1)'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('mcp-resource-uri-field')),
+          'file:///workspace/README.md',
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-resource-read-submit')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, isEmpty);
+        expect(harness.mcpResourceReadQueries.single.threadId, isNull);
+        expect(find.text('# Test workspace'), findsOneWidget);
+        harness.mcpResourceReadQueries.clear();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+
         await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
         await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, isEmpty);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
@@ -34,8 +65,82 @@ void main() {
         expect(harness.mcpReloadCount, 1);
         expect(find.byKey(const ValueKey('mcp-action-notice')), findsOneWidget);
 
+        // Cold persisted thread requires explicit sidebar Resume without
+        // implicitly calling thread/resume or falling back to global read.
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('mcp-resource-uri-field')),
+          'memory://native-fixture/needs-form',
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-resource-read-submit')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, isEmpty);
+        expect(harness.mcpResourceReadQueries, isEmpty);
+        expect(
+          find.byKey(const ValueKey('mcp-error-filesystem-mcp')),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.',
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-call-tool-filesystem-mcp')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('mcp-tool-name-field')),
+          'read_file',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('mcp-tool-call-submit')));
+        await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, isEmpty);
+        expect(harness.mcpToolCallQueries, isEmpty);
+        expect(
+          find.text(
+            'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.',
+          ),
+          findsOneWidget,
+        );
+
+        // Explicitly resume the selected thread in the sidebar, then reopen the modal.
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Resume thread'));
+        await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, ['thread-mcp']);
+
+        harness.emitMcpElicitation(
+          McpElicitationRequest(
+            requestId: 'stale-preexisting-elicitation',
+            serverName: 'filesystem-mcp',
+            threadId: 'thread-mcp',
+            message: 'Stale elicitation from earlier session.',
+            mode: McpElicitationMode.form,
+            fields: const [],
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('MCP (1)'));
+        await tester.pumpAndSettle();
+
+        final outboundReadGate = Completer<void>();
         harness.mcpResourceReadHandler = (query) async {
           if (query.uri == 'memory://native-fixture/needs-form') {
+            await outboundReadGate.future;
             final response = await harness.emitMcpElicitationAndWait(
               McpElicitationRequest(
                 requestId: 'elicitation-resource-1',
@@ -88,9 +193,46 @@ void main() {
           harness.mcpResourceReadQueries.single.uri,
           'memory://native-fixture/needs-form',
         );
+        // Pre-existing form on the loaded thread is excluded from the modal slot.
+        expect(
+          find.byKey(const ValueKey('ecosystem-modal-elicitation-slot')),
+          findsNothing,
+        );
+
+        outboundReadGate.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-call-tool-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsNothing,
+        );
         expect(
           find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
           findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('ecosystem-modal-elicitation-slot')),
+            matching: find.text('Provide resource token.'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('ecosystem-modal-elicitation-slot')),
+            matching: find.text('Stale elicitation from earlier session.'),
+          ),
+          findsNothing,
         );
         await tester.enterText(
           find
@@ -108,6 +250,12 @@ void main() {
           find.byKey(const ValueKey('mcp-result-filesystem-mcp')),
           findsOneWidget,
         );
+        await harness.respondToMcpElicitation(
+          requestId: 'stale-preexisting-elicitation',
+          action: McpElicitationAction.cancel,
+        );
+        harness.mcpElicitationResponses.clear();
+        await tester.pumpAndSettle();
 
         await tester.tap(
           find.byKey(const ValueKey('ecosystem-refresh-button')),
@@ -187,6 +335,20 @@ void main() {
         expect(harness.mcpToolCallQueries.single.arguments, {
           'path': 'README.md',
         });
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-call-tool-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsNothing,
+        );
 
         // Direct elicitation (turnId == null) renders inside the open modal
         // scroll-bounded slot and is hit-testable above the modal barrier.

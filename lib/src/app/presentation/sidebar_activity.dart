@@ -146,6 +146,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                       context: context,
                       builder: (context) => _EcosystemDialog(
                         gateway: widget.runtimeController,
+                        threadController: widget.controller,
                         userInputController: widget.userInputController,
                         cwd:
                             widget.controller.selectedThread?.cwd ??
@@ -2090,17 +2091,21 @@ String _shortTime(DateTime time) {
 
 enum _EcosystemSection { skills, plugins, apps, mcp }
 
+enum _McpOperationKind { readResource, callTool }
+
 class _EcosystemDialog extends StatefulWidget {
   const _EcosystemDialog({
     required this.gateway,
     required this.cwd,
     this.threadId,
+    this.threadController,
     this.userInputController,
   });
 
   final EcosystemGateway gateway;
   final String cwd;
   final String? threadId;
+  final ThreadListController? threadController;
   final UserInputController? userInputController;
 
   @override
@@ -2129,6 +2134,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   final Map<String, String> _mcpErrors = <String, String>{};
   String? _mcpBusyServer;
   String? _mcpBusyThreadId;
+  _McpOperationKind? _mcpBusyOperation;
+  Set<Object> _mcpExcludedElicitationIds = const <Object>{};
   var _reloadingMcp = false;
   String? _mcpNotice;
 
@@ -2176,6 +2183,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     return userInputController.pendingElicitations
         .where(
           (request) =>
+              !_mcpExcludedElicitationIds.contains(request.requestId) &&
               request.turnId == null &&
               request.threadId == busyThreadId &&
               request.serverName == busyServer,
@@ -2493,6 +2501,47 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
+  bool _ensureCapturedThreadReady(String serverName, String capturedThreadId) {
+    final threadController = widget.threadController;
+    if (threadController == null) {
+      return true;
+    }
+    final selected = threadController.selectedThread;
+    if (selected == null || selected.id != capturedThreadId) {
+      setState(() {
+        _mcpErrors[serverName] = 'Selected thread changed; reopen Skills, Plugins & MCP to continue.';
+      });
+      return false;
+    }
+    if (selected.status == ThreadRuntimeStatus.notLoaded &&
+        threadController.isMaterialized(selected.id)) {
+      setState(() {
+        _mcpErrors[serverName] = 'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.';
+      });
+      return false;
+    }
+    return true;
+  }
+
+  void _activateMcpOutboundOperation(
+    String serverName,
+    String? threadId,
+    _McpOperationKind kind,
+  ) {
+    final existingIds = widget.userInputController?.pendingElicitations
+        .map((request) => request.requestId)
+        .toSet();
+    setState(() {
+      _mcpBusyServer = serverName;
+      _mcpBusyThreadId = threadId;
+      _mcpBusyOperation = kind;
+      _mcpExcludedElicitationIds = existingIds == null || existingIds.isEmpty
+          ? const <Object>{}
+          : Set<Object>.unmodifiable(existingIds);
+      _mcpErrors.remove(serverName);
+    });
+  }
+
   Future<void> _readMcpResource(McpServerStatusModel server) async {
     final gateway = _mcpGateway;
     if (gateway == null || _mcpBusyServer != null) {
@@ -2510,11 +2559,15 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         normalizedThreadId == null || normalizedThreadId.isEmpty
         ? null
         : normalizedThreadId;
-    setState(() {
-      _mcpBusyServer = server.name;
-      _mcpBusyThreadId = activeThreadId;
-      _mcpErrors.remove(server.name);
-    });
+    if (activeThreadId != null &&
+        !_ensureCapturedThreadReady(server.name, activeThreadId)) {
+      return;
+    }
+    _activateMcpOutboundOperation(
+      server.name,
+      activeThreadId,
+      _McpOperationKind.readResource,
+    );
     try {
       final result = await gateway.readMcpResource(
         McpResourceReadQuery(
@@ -2535,6 +2588,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         setState(() {
           _mcpBusyServer = null;
           _mcpBusyThreadId = null;
+          _mcpBusyOperation = null;
+          _mcpExcludedElicitationIds = const <Object>{};
         });
       }
     }
@@ -2561,11 +2616,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (input == null || !mounted) {
       return;
     }
-    setState(() {
-      _mcpBusyServer = server.name;
-      _mcpBusyThreadId = normalizedThreadId;
-      _mcpErrors.remove(server.name);
-    });
+    if (!_ensureCapturedThreadReady(server.name, normalizedThreadId)) {
+      return;
+    }
+    _activateMcpOutboundOperation(
+      server.name,
+      normalizedThreadId,
+      _McpOperationKind.callTool,
+    );
     try {
       final result = await gateway.callMcpTool(
         McpToolCallQuery(
@@ -2587,6 +2645,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         setState(() {
           _mcpBusyServer = null;
           _mcpBusyThreadId = null;
+          _mcpBusyOperation = null;
+          _mcpExcludedElicitationIds = const <Object>{};
         });
       }
     }
@@ -3860,6 +3920,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                           key: ValueKey('mcp-read-resource-${server.name}'),
                           variant: CodexButtonVariant.secondary,
                           size: CodexButtonSize.sm,
+                          loading:
+                              _mcpBusyServer == server.name &&
+                              _mcpBusyOperation ==
+                                  _McpOperationKind.readResource,
                           onPressed: gateway == null || _mcpBusyServer != null
                               ? null
                               : () => _readMcpResource(server),
@@ -3869,7 +3933,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                           key: ValueKey('mcp-call-tool-${server.name}'),
                           variant: CodexButtonVariant.secondary,
                           size: CodexButtonSize.sm,
-                          loading: _mcpBusyServer == server.name,
+                          loading:
+                              _mcpBusyServer == server.name &&
+                              _mcpBusyOperation == _McpOperationKind.callTool,
                           onPressed: gateway == null || _mcpBusyServer != null
                               ? null
                               : () => _callMcpTool(server),
