@@ -40,6 +40,9 @@ class ThreadListController extends ChangeNotifier {
   String? _errorMessage;
   String? _lastRevertedThreadId;
   String? _goalOperationThreadId;
+  String? _pendingGoalHydrationThreadId;
+  var _goalProjectionRevision = 0;
+  var _hydratingGoal = false;
   var _goalEventObserved = false;
   var _revertVersion = 0;
   var _showArchived = false;
@@ -270,6 +273,7 @@ class ThreadListController extends ChangeNotifier {
       final index = _threads.indexWhere((thread) => thread.id == threadId);
       if (index != -1) {
         _selectedThread = _threads[index];
+        _queueSelectedGoalHydration(threadId);
         _notify();
         return _selectedThread;
       }
@@ -285,6 +289,7 @@ class ThreadListController extends ChangeNotifier {
       _unmaterializedThreadIds.remove(threadId);
       final retainedThread = _replaceInPlace(thread);
       _selectedThread = retainedThread;
+      _queueSelectedGoalHydration(threadId);
       return retainedThread;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -310,6 +315,7 @@ class ThreadListController extends ChangeNotifier {
       _unmaterializedThreadIds.remove(threadId);
       final retainedThread = _replaceInPlace(thread);
       _selectedThread = retainedThread;
+      _queueSelectedGoalHydration(threadId);
       return retainedThread;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -531,6 +537,57 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
+  // Stock thread/list and thread/read omit goal state. Fetch only for the
+  // selected thread, with one request and one replaceable pending target.
+  void _queueSelectedGoalHydration(String threadId) {
+    if (!canManageGoal(threadId)) {
+      return;
+    }
+    _pendingGoalHydrationThreadId = threadId;
+    if (!_hydratingGoal) {
+      unawaited(_drainSelectedGoalHydration());
+    }
+  }
+
+  Future<void> _drainSelectedGoalHydration() async {
+    _hydratingGoal = true;
+    try {
+      while (_pendingGoalHydrationThreadId != null) {
+        final threadId = _pendingGoalHydrationThreadId!;
+        _pendingGoalHydrationThreadId = null;
+        final gateway = _goalGateway;
+        if (gateway == null ||
+            _selectedThread?.id != threadId ||
+            !canManageGoal(threadId) ||
+            _goalOperationThreadId == threadId) {
+          continue;
+        }
+        final revision = _goalProjectionRevision;
+        ThreadGoal? goal;
+        try {
+          goal = await gateway.readThreadGoal(threadId);
+        } catch (_) {
+          // Selection stays usable with older runtimes. An explicit Manage
+          // goal request can surface its bounded error.
+          continue;
+        }
+        if (_selectedThread?.id != threadId ||
+            !canManageGoal(threadId) ||
+            revision != _goalProjectionRevision) {
+          continue;
+        }
+        if (goal == null) {
+          _clearGoal(threadId);
+        } else {
+          _applyGoalUpdate(threadId, goal);
+        }
+        _notify();
+      }
+    } finally {
+      _hydratingGoal = false;
+    }
+  }
+
   Future<({ThreadGoal? goal})?> loadGoal(String threadId) => _runGoalOperation(
     threadId,
     (gateway) => gateway.readThreadGoal(threadId),
@@ -567,6 +624,7 @@ class ThreadListController extends ChangeNotifier {
     }
     _mutating = true;
     _goalOperationThreadId = threadId;
+    _goalProjectionRevision += 1;
     _goalEventObserved = false;
     _errorMessage = null;
     _notify();
@@ -802,10 +860,12 @@ class ThreadListController extends ChangeNotifier {
         _applyStatusUpdate(threadId, status);
         _notify();
       case ThreadGoalUpdatedEvent(:final threadId, :final goal):
+        _goalProjectionRevision += 1;
         _goalEventObserved |= threadId == _goalOperationThreadId;
         _applyGoalUpdate(threadId, goal);
         _notify();
       case ThreadGoalClearedEvent(:final threadId):
+        _goalProjectionRevision += 1;
         _goalEventObserved |= threadId == _goalOperationThreadId;
         _clearGoal(threadId);
         _notify();

@@ -28,7 +28,7 @@ void main() {
       gateway.events.add(
         const ThreadGoalUpdatedEvent(threadId: 'goal', goal: newer),
       );
-      gateway.goalReply.complete(null);
+      gateway.goalReplies['goal']!.complete(null);
       expect((await load)?.goal, same(newer));
       expect(controller.goalForThread('goal'), same(newer));
     },
@@ -57,6 +57,42 @@ void main() {
     expect(controller.canLoadMore, isFalse);
     expect(controller.retentionLimitReached, isTrue);
   });
+
+  test(
+    'hydrates only the latest selected goal while a read is pending',
+    () async {
+      final gateway = _GoalReadGateway()
+        ..pages.add(
+          ThreadPage(
+            threads: [_thread('first'), _thread('skipped'), _thread('last')],
+            nextCursor: null,
+          ),
+        );
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+      await controller.refresh();
+      await controller.selectThread('first');
+      await controller.selectThread('skipped');
+      await controller.selectThread('last');
+      expect(gateway.goalReplies.keys, ['first']);
+      const goal = ThreadGoal(
+        objective: 'Read only when selected',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 2,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+      gateway.goalReplies['first']!.complete(goal);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.goalReplies.keys, ['first', 'last']);
+      expect(controller.goalForThread('first'), isNull);
+      gateway.goalReplies['last']!.complete(goal);
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.selectedThread?.goal, same(goal));
+    },
+  );
 
   test('start, read, and resume update the bounded projection', () async {
     final gateway = _FakeThreadGateway()
@@ -400,13 +436,14 @@ void main() {
 }
 
 class _GoalReadGateway extends _FakeThreadGateway implements ThreadGoalGateway {
-  final goalReply = Completer<ThreadGoal?>();
+  final goalReplies = <String, Completer<ThreadGoal?>>{};
 
   @override
   bool get supportsThreadGoals => true;
 
   @override
-  Future<ThreadGoal?> readThreadGoal(String threadId) => goalReply.future;
+  Future<ThreadGoal?> readThreadGoal(String threadId) =>
+      (goalReplies[threadId] = Completer<ThreadGoal?>()).future;
 
   @override
   Future<ThreadGoal> setThreadGoal(

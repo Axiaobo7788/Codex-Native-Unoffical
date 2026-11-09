@@ -5,6 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'simulated_runtime_harness.dart';
 
 void main() {
+  testWidgets('loads a saved goal only after selecting its thread', (
+    tester,
+  ) async {
+    final harness = _GoalHarness()
+      ..goal = const ThreadGoal(
+        objective: 'Persisted objective',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 1,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    final badge = find.byKey(const ValueKey('thread-goal-badge-goal-thread'));
+    expect(badge, findsNothing);
+    await tester.tap(find.text('Goal thread'));
+    await tester.pumpAndSettle();
+    expect(badge, findsOneWidget);
+    expect(find.text('Persisted objective'), findsOneWidget);
+  });
+
   testWidgets('manages a local goal and confirms clearing it', (tester) async {
     final harness = _GoalHarness();
     await pumpSimulatedRuntimeApp(tester, harness: harness);
