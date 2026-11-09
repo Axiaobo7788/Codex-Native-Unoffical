@@ -83,6 +83,7 @@ class ProcessTransport
     );
     _turnProtocol = TurnProtocolAdapter(
       request: _request,
+      includeUserMessages: true,
       notifications: _peer.notifications,
     );
     _serverRequestProtocol = ServerRequestProtocolAdapter(

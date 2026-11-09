@@ -1348,6 +1348,10 @@ class SimulatedRuntimeHarness extends RuntimeController {
   Future<void> shutdown() async {}
 
   // Test manipulation helpers
+  void emitUserMessage(UserMessageEvent event) {
+    _turnsController.add(event);
+  }
+
   void emitStreamingMessage(
     String itemId,
     String text, {

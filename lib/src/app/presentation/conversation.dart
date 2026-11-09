@@ -2545,7 +2545,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             .toList(growable: false),
       PresentationDetailMode.execution => rawLiveEntries,
     };
-    final liveIds = liveEntries.map((entry) => entry.id).toSet();
+    final liveIds = liveEntries
+        .map((entry) => entry.stockItemId ?? entry.id)
+        .toSet();
     final rawHistoryItems = widget.historyController.timelineItems
         .where((item) => !liveIds.contains(item.id))
         .toList(growable: false);
@@ -3441,16 +3443,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       );
       return;
     }
+    final submissionSelectionVersion = _threadSelectionVersion;
     final submitted = await widget.controller.submit(
       text,
       attachments: attachments,
     );
     if (submitted &&
         mounted &&
+        _threadSelectionVersion == submissionSelectionVersion &&
         widget.controller.thread?.id == targetThreadId) {
-      _pendingBranchEdit = null;
-      final clearDraft =
-          !resumedForSend || _sameComposerDraft(text, attachments);
+      if (identical(_pendingBranchEdit, pendingBranch)) {
+        _pendingBranchEdit = null;
+      }
+      final clearDraft = _sameComposerDraft(text, attachments);
       if (clearDraft) {
         _composerController.clear();
       }

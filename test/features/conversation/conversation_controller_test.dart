@@ -54,6 +54,228 @@ void main() {
     expect(controller.activeTurnId, isNull);
   });
 
+  test(
+    'reconciles one optimistic row and keeps distinct queued stock items',
+    () async {
+      await controller.submit(
+        'Local input',
+        attachments: const [
+          UserAttachment(
+            kind: UserAttachmentKind.pastedText,
+            label: 'Local snippet',
+            preview: 'Original attachment presentation',
+          ),
+        ],
+      );
+      final original = controller.entries.single;
+      final clientId = gateway.startOptions.single.clientUserMessageId;
+      expect(clientId, original.id);
+
+      gateway.events
+        ..add(
+          UserMessageEvent(
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            itemId: 'echo',
+            clientMessageId: clientId,
+            text: 'Stock serialization',
+          ),
+        )
+        ..add(
+          UserMessageEvent(
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            itemId: 'echo',
+            clientMessageId: clientId,
+            text: 'Duplicate delivery',
+          ),
+        )
+        ..add(
+          UserMessageEvent(
+            threadId: 'thread-1',
+            turnId: 'turn-2',
+            itemId: 'queue-first',
+            clientMessageId: clientId,
+            text: 'Repeated input',
+          ),
+        )
+        ..add(
+          UserMessageEvent(
+            threadId: 'thread-1',
+            turnId: 'turn-3',
+            itemId: 'queue-second',
+            clientMessageId: clientId,
+            text: 'Repeated input',
+          ),
+        )
+        ..add(
+          const UserMessageEvent(
+            threadId: 'another-thread',
+            turnId: 'elsewhere',
+            itemId: 'inactive',
+            text: 'Outside the active projection',
+          ),
+        );
+
+      final entries = controller.entries;
+      expect(entries.map((entry) => entry.stockItemId), [
+        'echo',
+        'queue-first',
+        'queue-second',
+      ]);
+      expect(entries.first.id, original.id);
+      expect(entries.first.text, 'Local input');
+      expect(
+        entries.first.attachments.single.kind,
+        UserAttachmentKind.pastedText,
+      );
+      expect(entries.skip(1).map((entry) => entry.text), [
+        'Repeated input',
+        'Repeated input',
+      ]);
+      expect(entries.map((entry) => entry.turnId), [
+        'turn-1',
+        'turn-2',
+        'turn-3',
+      ]);
+    },
+  );
+
+  test('a completed start remains terminal when its reply is late', () async {
+    final response = Completer<TurnHandle>();
+    gateway.nextStartCompleter = response;
+    final pending = controller.submit('Complete first');
+    final clientId = gateway.startOptions.single.clientUserMessageId;
+    gateway.events
+      ..add(const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'))
+      ..add(
+        UserMessageEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'echo',
+          clientMessageId: clientId,
+          text: 'Complete first',
+        ),
+      )
+      ..add(
+        const TurnCompletedEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          status: TurnRuntimeStatus.completed,
+        ),
+      );
+    response.complete(
+      const TurnHandle(id: 'turn-1', status: TurnRuntimeStatus.inProgress),
+    );
+
+    expect(await pending, isTrue);
+    expect(controller.entries.single.stockItemId, 'echo');
+    expect(controller.activeTurnId, isNull);
+    expect(controller.busy, isFalse);
+  });
+
+  test(
+    'an authoritative steer echo survives an unsuccessful RPC reply',
+    () async {
+      await controller.submit('Foreground');
+      gateway.events.add(
+        const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'),
+      );
+      final response = Completer<String>();
+      gateway.nextSteerCompleter = response;
+      final pending = controller.steer('Echo before reply');
+      final clientId = gateway.steered.single.clientUserMessageId;
+      expect(clientId, isNot(gateway.startOptions.single.clientUserMessageId));
+      gateway.events.add(
+        UserMessageEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'steer-echo',
+          clientMessageId: clientId,
+          text: 'Echo before reply',
+        ),
+      );
+      response.completeError(StateError('Reply lost'));
+
+      expect(await pending, isTrue);
+      expect(controller.entries.last.stockItemId, 'steer-echo');
+      expect(controller.entries.last.kind, ConversationEntryKind.user);
+      expect(controller.canSteer, isTrue);
+    },
+  );
+
+  test(
+    'a start reply from an evicted binding cannot change its replacement',
+    () async {
+      final response = Completer<TurnHandle>();
+      gateway.nextStartCompleter = response;
+      final pending = controller.submit('Old binding');
+      controller
+        ..bindThread(_thread(id: 'other-thread'))
+        ..bindThread(_thread());
+
+      response.complete(
+        const TurnHandle(id: 'old-turn', status: TurnRuntimeStatus.inProgress),
+      );
+
+      expect(await pending, isTrue);
+      expect(controller.entries, isEmpty);
+      expect(controller.activeTurnId, isNull);
+      expect(controller.busy, isFalse);
+    },
+  );
+
+  test('a failed old start cannot clear the next active turn', () async {
+    final response = Completer<TurnHandle>();
+    gateway.nextStartCompleter = response;
+    final pending = controller.submit('Previous input');
+    gateway.events
+      ..add(const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'))
+      ..add(
+        const TurnCompletedEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          status: TurnRuntimeStatus.completed,
+        ),
+      )
+      ..add(const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-2'));
+
+    response.completeError(StateError('Previous reply lost'));
+
+    expect(await pending, isFalse);
+    expect(controller.activeTurnId, 'turn-2');
+    expect(controller.canInterrupt, isTrue);
+  });
+
+  test('an old steer reply does not release the next turn’s steer', () async {
+    final first = Completer<String>();
+    final second = Completer<String>();
+    gateway.events.add(
+      const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-1'),
+    );
+    gateway.nextSteerCompleter = first;
+    final previous = controller.steer('Previous');
+    gateway.events
+      ..add(
+        const TurnCompletedEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          status: TurnRuntimeStatus.completed,
+        ),
+      )
+      ..add(const TurnStartedEvent(threadId: 'thread-1', turnId: 'turn-2'));
+    gateway.nextSteerCompleter = second;
+    final latest = controller.steer('Latest');
+
+    first.complete('turn-1');
+    expect(await previous, isTrue);
+    expect(controller.canSteer, isFalse);
+
+    second.complete('turn-2');
+    expect(await latest, isTrue);
+    expect(controller.canSteer, isTrue);
+  });
+
   test('coalesces token deltas into one presentation update', () async {
     var notifications = 0;
     controller.addListener(() => notifications += 1);
@@ -633,8 +855,10 @@ class _FakeTurnGateway implements TurnGateway {
   final StreamController<TurnEvent> events =
       StreamController<TurnEvent>.broadcast(sync: true);
   final List<(String, String)> started = [];
+  final List<TurnStartOptions> startOptions = [];
   final List<TurnSteerOptions> steered = [];
   final List<(String, String)> interrupted = [];
+  Completer<TurnHandle>? nextStartCompleter;
   Completer<String>? nextSteerCompleter;
   var throwOnSteer = false;
 
@@ -644,6 +868,11 @@ class _FakeTurnGateway implements TurnGateway {
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) async {
     started.add((options.threadId, options.text));
+    startOptions.add(options);
+    if (nextStartCompleter case final completer?) {
+      nextStartCompleter = null;
+      return completer.future;
+    }
     return const TurnHandle(id: 'turn-1', status: TurnRuntimeStatus.inProgress);
   }
 

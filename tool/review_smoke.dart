@@ -155,7 +155,10 @@ Future<void> main(List<String> args) async {
             if (!event.willRetry && !completion.isCompleted) {
               completion.completeError(StateError(event.message));
             }
-          case TurnStartedEvent() || ActivityEvent() || TurnDiffUpdatedEvent():
+          case UserMessageEvent() ||
+              TurnStartedEvent() ||
+              ActivityEvent() ||
+              TurnDiffUpdatedEvent():
         }
       },
       onError: (Object error, StackTrace stackTrace) {

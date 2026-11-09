@@ -11,6 +11,7 @@ class TurnStartOptions {
     required this.threadId,
     required this.text,
     this.attachments = const [],
+    this.clientUserMessageId,
     this.model,
     this.reasoningEffort,
     this.approvalPolicy,
@@ -20,6 +21,7 @@ class TurnStartOptions {
   final String threadId;
   final String text;
   final List<UserAttachment> attachments;
+  final String? clientUserMessageId;
   final String? model;
   final String? reasoningEffort;
   final ApprovalPolicyOverride? approvalPolicy;
@@ -32,12 +34,14 @@ class TurnSteerOptions {
     required this.expectedTurnId,
     required this.text,
     this.attachments = const [],
+    this.clientUserMessageId,
   });
 
   final String threadId;
   final String expectedTurnId;
   final String text;
   final List<UserAttachment> attachments;
+  final String? clientUserMessageId;
 }
 
 sealed class ReviewTarget {
@@ -132,6 +136,22 @@ class TurnCompletedEvent extends TurnEvent {
 
   final TurnRuntimeStatus status;
   final String? errorMessage;
+}
+
+class UserMessageEvent extends TurnEvent {
+  const UserMessageEvent({
+    required super.threadId,
+    required super.turnId,
+    required this.itemId,
+    required this.text,
+    this.clientMessageId,
+    this.attachments = const [],
+  });
+
+  final String itemId;
+  final String text;
+  final String? clientMessageId;
+  final List<UserAttachment> attachments;
 }
 
 class AssistantTextDeltaEvent extends TurnEvent {
