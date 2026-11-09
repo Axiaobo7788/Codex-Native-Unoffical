@@ -181,6 +181,7 @@ Four isolated Python probes were executed against stock `codex app-server` (`0.1
 |---|---|---|
 | Empty / whitespace `attachmentType` | `""` or `"   "` | Error `-32602`: `"attachmentType must not be empty"` |
 | Empty `identityKey` | `""` | Error `-32602`: `"identityKey must not be empty"` |
+| Max `identityKey` UTF-8 bytes | 256 ASCII bytes or 128 two-byte characters | Succeeds. 257 bytes in either fixture fails with `identityKey must not exceed 256 bytes`. Confirmed in the F19 installed-stock probe. |
 | Max `payload` serialized JSON bytes | `65,536` bytes (`64 KiB`) | Succeeds (`"outcome": "created"`) |
 | Oversized `payload` serialized JSON bytes | `65,537` bytes (`64 KiB + 1`) | Error `-32602`: `"attachment payload must not exceed 65536 bytes"` |
 | Max attachments per thread | `100` distinct `(attachmentType, identityKey)` rows | `1..100` succeed; `101`st fails `-32602`: `"thread attachment identity count exceeds 100"` |

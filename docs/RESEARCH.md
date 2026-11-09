@@ -3699,3 +3699,61 @@ runtime evidence before asserting parity.
 The installed experimental `thread/search` returned empty for those same
 metadata-only fixtures. A search of full persisted turns needs a separate
 probe before interpreting that result as a content-search limitation.
+
+## F19 bounded local lookup
+
+- Fresh schemas from installed `0.167.0-alpha.3.2` report 106 stable and 74
+  experimental client requests, 10 stable and one experimental server request,
+  86 server notifications, and one client notification. The measured Desktop
+  build and ASAR hash were unchanged. `adb devices` listed no device.
+- A second stock fixture seeded a complete turn with a loopback model,
+  renamed the thread, and restarted. Stable `thread/list.searchTerm`, with
+  and without `useStateDbOnly`, matched the saved title and first user
+  text. The experimental `thread/search` matched the user and assistant
+  text and missed the independently saved title. The sampled stable title
+  match remained case-sensitive. The default Native loaded-row filter
+  still matches local metadata without case sensitivity.
+- F19A `c75c06d` uses the stable saved-search contract and one catalog
+  working set. The 64 focused Flutter cases cover retained selection,
+  bounded pages, a stale result after closing search, refresh after a name
+  update, keyboard submit and escape, and the prior geometry and product
+  controls. Dart format and analysis and the Linux build passed.
+- The packaged F19A app used the bundled Host and stock app-server with 28
+  disposable persisted threads. The initial list and loaded filter omitted
+  the old title. Explicit search found it while preserving the prior
+  active conversation. Selecting the result and returning to loaded rows
+  preserved the new conversation. An initial Enter moved focus out of the
+  field and prevented immediate Escape. The rebuilt app retained focus,
+  cleared search with Escape, and passed the pointer path. At 720 × 800 the
+  compact view showed an empty mixed-case result and the exact-case match.
+  A direct resize on the private Xvfb display briefly captured a stale frame
+  before input repainted the window. The compact flow then passed. The
+  packaged app, bundled Host, and stock child all exited.
+- F19B `e8acec2` and `67de334` project local stored GitHub and GitLab links
+  from stable `thread/attachment/list`. The installed stock store accepted
+  generic payload URLs and enforced a 256-byte UTF-8 identity key limit.
+  The parser rejects unsafe URLs and identity mismatches, bounds each page
+  to 16 records and the total scan to 100 records and 16 pages, and keeps at
+  most 16 links for the selected thread. [Stock attachment contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#stored-thread-attachments)
+- Peer audit reproduced a Dart percent-decoding exception and a stale
+  open popover. Source review found that the initial selection path could
+  start additional scans before earlier scans finished. The corrected
+  implementation skips malformed URLs, serializes one scan with
+  one replaceable pending target, and observes the current selected snapshot
+  inside the overlay. Ten focused cases also verified the explicit retry and
+  old-runtime `-32601` fallback. A second typed call to an unsupported
+  transport fails locally instead of returning an empty success.
+- The shared packaged app used a disposable cold thread with 23 stock
+  attachments over two pages. It showed the two valid links, excluded
+  unrelated and malformed records, and still offered explicit thread
+  resume. Selecting a thread without links cleared the prior projection.
+  Both Open buttons sent the expected canonical HTTPS URI to a private
+  desktop link handler. The popover fit the measured 1280 × 720 and
+  720 × 800 layouts. The app, bundled Host and stock child exited on
+  request. Human interaction and external browser acceptance remain open.
+- Shared integration `8052b0d` passed format, analysis, 64 pure-Dart roots,
+  427 Flutter cases with five opt-in skips, 5/5 direct-stock cases, Rust
+  format, Clippy, 98 Rust tests, Linux bundle and license verification, and
+  the bundled Host MCP smoke. The history benchmark retained 100 of 1,000
+  source turns and 100 entries, discarded ten 3 MiB outputs, and measured
+  RSS deltas of 2,121,728 and 32,563,200 bytes.

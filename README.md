@@ -12,12 +12,14 @@ and is not affiliated with or endorsed by OpenAI.
   a 704 px reading/composer column, and a compact layout for narrow windows.
 - **Organization and review:** archive, rename, pin, and group local threads into
   sections. Global section counts describe loaded rows. Browse one local section
-  at a time in stock order with bounded pagination. Eligible pins are saved in
-  stock Pinned. Quick pins on custom-section threads and older runtimes are
-  labeled session-only.
+  at a time in stock order with bounded pagination. Filter loaded rows or
+  explicitly search saved threads through the local runtime. Eligible pins
+  are saved in stock Pinned. Quick pins on custom-section threads and older
+  runtimes are labeled session-only.
   Manage a local thread Goal from its sidebar menu. Desktop code review can
   target uncommitted changes, a base branch, a commit or ref, or custom
-  instructions on an eligible thread.
+  instructions on an eligible thread. The conversation header shows stored
+  GitHub and GitLab review links on supported local runtimes.
 - **Runtime tools:** discover Skills, Plugins, installed Apps and MCP servers.
   Read local MCP resources and call tools, including forms from the running
   operation. Resume a cold thread explicitly before running thread-scoped MCP

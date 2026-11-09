@@ -2272,3 +2272,39 @@ lifecycle presentation the source of truth.
   app-server with a disposable profile, a stdio MCP fixture, and a
   loopback model endpoint. Simulated presentation tests cover the
   modal ownership and input state.
+
+---
+
+## ADR-046 — Search saved threads within the bounded local catalog
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Preserve instant filtering of loaded thread metadata. An explicit saved
+  search uses stable stock `thread/list.searchTerm` with the selected archive
+  filter. Stock owns matching and ordering.
+- Search, Section browsing, and the global catalog use the same paged
+  working set. Keep the current conversation across a search transition and
+  reject pages from an earlier catalog revision.
+- Expose this saved search in the local Desktop path. Experimental
+  `thread/search` has different observed matching behavior and remains a
+  separate convergence item.
+
+---
+
+## ADR-047 — Project local stored review links with bounded reads
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- The conversation header projects canonical GitHub PR and GitLab MR links
+  from stable stock `thread/attachment/list`. The user opens a sanitized
+  HTTPS URL explicitly. Store metadata remains separate from composer inputs.
+- Fetch at most 16 records per page, scan at most 100 records and 16 pages,
+  and retain at most 16 projected links for the selected thread. Serialize
+  scans and replace the pending target on newer selection or update events.
+- A stock unknown-method error disables the capability for that process.
+  Other failures stay visible and retryable. Direct Host Remote retains its
+  existing contract. [Stock attachment contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#stored-thread-attachments)
