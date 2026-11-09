@@ -98,7 +98,9 @@ void main() {
                   'resources': [
                     {'uri': 'file:///workspace'},
                   ],
-                  'authStatus': 'ready',
+                  'authStatus': 'unsupported',
+                  'runtimeStatus': 'connected',
+                  'status': 'ready',
                 },
               ],
             },
@@ -128,7 +130,36 @@ void main() {
       expect(mcp.single.name, 'filesystem-mcp');
       expect(mcp.single.toolCount, 2);
       expect(mcp.single.resourceCount, 1);
-      expect(mcp.single.status, 'ready');
+      expect(mcp.single.status, 'connected');
+      expect(mcp.single.authStatus, 'unsupported');
+    },
+  );
+
+  test(
+    'keeps MCP catalog authentication distinct from runtime state',
+    () async {
+      final adapter = EcosystemProtocolAdapter(
+        request: (method, [params = const {}]) async => {
+          'data': [
+            {
+              'name': 'catalog-only',
+              'authStatus': 'unsupported',
+              'runtimeStatus': null,
+            },
+            {
+              'name': 'legacy-explicit',
+              'authStatus': 'oAuth',
+              'status': 'ready',
+            },
+          ],
+        },
+      );
+
+      final servers = await adapter.listMcpServerStatus();
+      expect(servers.first.status, isEmpty);
+      expect(servers.first.authStatus, 'unsupported');
+      expect(servers.last.status, 'ready');
+      expect(servers.last.authStatus, 'oAuth');
     },
   );
 
