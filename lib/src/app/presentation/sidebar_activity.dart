@@ -2164,15 +2164,13 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   List<McpElicitationRequest> _activeDirectMcpElicitations(
-    UserInputController? userInputController, {
-    String? serverName,
-  }) {
+    UserInputController? userInputController,
+  ) {
     final busyServer = _mcpBusyServer;
     final busyThreadId = _mcpBusyThreadId;
     if (userInputController == null ||
         busyServer == null ||
-        busyThreadId == null ||
-        (serverName != null && serverName != busyServer)) {
+        busyThreadId == null) {
       return const <McpElicitationRequest>[];
     }
     return userInputController.pendingElicitations
