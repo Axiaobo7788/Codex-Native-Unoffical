@@ -166,11 +166,9 @@ class ThreadListController extends ChangeNotifier {
       return 'Unpin saved thread';
     }
     if (isSessionPinnedThread(thread)) {
-      return builtInPinnedSection != null
-          ? 'Unpin session pin'
-          : 'Unpin thread';
+      return 'Unpin session pin';
     }
-    if (canPersistPinForThread(thread) || builtInPinnedSection == null) {
+    if (canPersistPinForThread(thread)) {
       return 'Pin thread';
     }
     return 'Pin for session';
@@ -196,7 +194,10 @@ class ThreadListController extends ChangeNotifier {
         }
         return Future<bool>.value(false);
       }
-      return moveThreadToSection(threadId: threadId, sectionId: null);
+      return _togglePersistedPinWithFreshRead(
+        threadId: threadId,
+        expectedCurrentlyPinned: true,
+      );
     }
     if (_pinnedThreadIds.remove(threadId)) {
       _notify();
@@ -206,9 +207,9 @@ class ThreadListController extends ChangeNotifier {
       if (_mutating) {
         return Future<bool>.value(false);
       }
-      return moveThreadToSection(
+      return _togglePersistedPinWithFreshRead(
         threadId: threadId,
-        sectionId: kBuiltInPinnedThreadSectionId,
+        expectedCurrentlyPinned: false,
       );
     }
     if (_pinnedThreadIds.length >= maxPinnedThreads) {
@@ -217,6 +218,90 @@ class ThreadListController extends ChangeNotifier {
     _pinnedThreadIds.add(threadId);
     _notify();
     return Future<bool>.value(true);
+  }
+
+  /// Re-reads current thread metadata under [_mutating] before sending a stock
+  /// section move for saved pin/unpin.
+  ///
+  /// Stock `thread/section/move` has no compare-and-swap precondition field, so
+  /// a concurrent cross-process write between `thread/read` and
+  /// `thread/section/move` remains a stock protocol limitation; re-reading
+  /// immediately before the move prevents stale cached membership from
+  /// silently overwriting or clearing a custom section.
+  Future<bool> _togglePersistedPinWithFreshRead({
+    required String threadId,
+    required bool expectedCurrentlyPinned,
+  }) async {
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null) {
+      _errorMessage = 'Thread sections are unavailable on this runtime.';
+      _notify();
+      return false;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final latest = await gateway.readThread(threadId);
+      if (_disposed) {
+        return false;
+      }
+      _unmaterializedThreadIds.remove(threadId);
+      final reconciled = _replaceInPlace(latest);
+      if (_selectedThread?.id == threadId) {
+        _selectedThread = reconciled;
+      }
+      if (expectedCurrentlyPinned) {
+        _pinnedThreadIds.remove(threadId);
+        if (reconciled.section == null) {
+          _invalidateSectionOrder();
+          return true;
+        }
+        if (!reconciled.isPersistedPinned) {
+          _errorMessage =
+              'Thread is now in section "${reconciled.section!.name}" and was not removed from that section.';
+          return false;
+        }
+        await sectionGateway.moveThreadSection(
+          ThreadSectionMoveOptions(threadId: threadId, sectionId: null),
+        );
+        if (_disposed) {
+          return false;
+        }
+        _applySectionChanged(threadId, null);
+        _invalidateSectionOrder();
+        return true;
+      } else {
+        if (reconciled.isPersistedPinned) {
+          _pinnedThreadIds.remove(threadId);
+          _invalidateSectionOrder();
+          return true;
+        }
+        if (reconciled.section != null) {
+          _errorMessage =
+              'Thread is now in section "${reconciled.section!.name}". Use Pin for session or Move to section.';
+          return false;
+        }
+        await sectionGateway.moveThreadSection(
+          ThreadSectionMoveOptions(
+            threadId: threadId,
+            sectionId: kBuiltInPinnedThreadSectionId,
+          ),
+        );
+        if (_disposed) {
+          return false;
+        }
+        _applySectionChanged(threadId, kBuiltInPinnedThreadSectionId);
+        _invalidateSectionOrder();
+        return true;
+      }
+    } catch (error) {
+      _errorMessage = _boundedError(error);
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
   }
 
   Future<void> setSectionScope(String? sectionId) async {
@@ -1244,7 +1329,8 @@ class ThreadListController extends ChangeNotifier {
     if (_sections.length >= maxRetainedSections) {
       if (section.isBuiltInPinned) {
         final replaceIndex = _sections.lastIndexWhere(
-          (candidate) => !candidate.isBuiltInPinned,
+          (candidate) =>
+              !candidate.isBuiltInPinned && candidate.id != _sectionScopeId,
         );
         if (replaceIndex != -1) {
           _sections[replaceIndex] = section;

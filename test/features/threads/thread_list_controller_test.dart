@@ -733,6 +733,81 @@ void main() {
     );
     expect(controller.isPinned('t-prepinned'), isFalse);
     expect(controller.pinnedThreadIds, isNot(contains('t-prepinned')));
+
+    // 6. Stale cached unsectioned state re-reads before saved pin and refuses to overwrite a custom section
+    gateway.readSectionOverrides['t-plain'] = customWork;
+    final movesBeforeStalePin = gateway.movedSections.length;
+    expect(await controller.togglePinThread('t-plain'), isFalse);
+    expect(gateway.movedSections, hasLength(movesBeforeStalePin));
+    expect(
+      controller.threads.firstWhere((t) => t.id == 't-plain').section?.id,
+      'sec-work',
+    );
+    expect(
+      controller.errorMessage,
+      contains('Thread is now in section "Work"'),
+    );
+
+    // 7. Stale cached saved-Pinned state re-reads before saved unpin and refuses to clear a custom section
+    gateway.readSectionOverrides['t-work'] = customWork;
+    final movesBeforeStaleUnpin = gateway.movedSections.length;
+    expect(await controller.togglePinThread('t-work'), isFalse);
+    expect(gateway.movedSections, hasLength(movesBeforeStaleUnpin));
+    expect(
+      controller.threads.firstWhere((t) => t.id == 't-work').section?.id,
+      'sec-work',
+    );
+    expect(
+      controller.errorMessage,
+      contains('Thread is now in section "Work"'),
+    );
+  });
+
+  test('capped section retention preserves active scoped custom section when built-in Pinned arrives and uses session wording when built-in is absent', () async {
+    final gateway = _FakeThreadGateway();
+    for (var i = 0; i < ThreadListController.maxRetainedSections; i++) {
+      gateway.sections.add(ThreadSection(id: 'sec-$i', name: 'Section $i'));
+    }
+    final scopedSection = gateway.sections.last;
+    final tScoped = _thread(
+      't-scoped',
+      status: ThreadRuntimeStatus.idle,
+      section: scopedSection,
+    );
+    gateway.pages.addAll([
+      ThreadPage(threads: [tScoped], nextCursor: null),
+      ThreadPage(threads: [tScoped], nextCursor: null),
+    ]);
+
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+
+    await controller.refresh();
+    expect(controller.builtInPinnedSection, isNull);
+    expect(
+      controller.pinActionLabelForThread(controller.threads.single),
+      'Pin for session',
+    );
+    await controller.togglePinThread('t-scoped');
+    expect(
+      controller.pinActionLabelForThread(controller.threads.single),
+      'Unpin session pin',
+    );
+
+    await controller.setSectionScope(scopedSection.id);
+    expect(controller.sectionScopeId, scopedSection.id);
+
+    // Observe built-in Pinned while at the 64-section cap and scoped to sec-63
+    gateway.pages.add(ThreadPage(threads: [tScoped], nextCursor: null));
+    gateway.events.add(
+      const ThreadSectionChangedEvent(
+        threadId: 't-other',
+        sectionId: kBuiltInPinnedThreadSectionId,
+      ),
+    );
+    expect(controller.builtInPinnedSection?.id, kBuiltInPinnedThreadSectionId);
+    expect(controller.scopedSection?.id, scopedSection.id);
   });
 }
 
@@ -808,6 +883,7 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   final List<ThreadSectionUpdateOptions> updatedSections = [];
   final List<String> deletedSectionIds = [];
   final List<ThreadSectionMoveOptions> movedSections = [];
+  final Map<String, ThreadSection?> readSectionOverrides = {};
   bool sectionSupport = true;
 
   @override
@@ -868,6 +944,13 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   @override
   Future<void> moveThreadSection(ThreadSectionMoveOptions options) async {
     movedSections.add(options);
+    final sectionId = options.sectionId;
+    readSectionOverrides[options.threadId] = sectionId == null
+        ? null
+        : sections.firstWhere(
+            (s) => s.id == sectionId,
+            orElse: () => ThreadSection(id: sectionId, name: sectionId),
+          );
   }
 
   @override
@@ -891,7 +974,11 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   @override
   Future<ThreadSummary> readThread(String threadId) async {
     readIds.add(threadId);
-    return _thread(threadId, name: 'Read metadata');
+    return _thread(
+      threadId,
+      name: 'Read metadata',
+      section: readSectionOverrides[threadId],
+    );
   }
 
   @override

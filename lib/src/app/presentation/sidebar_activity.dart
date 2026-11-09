@@ -1228,32 +1228,14 @@ class _PinnedHeadingRowState extends State<_PinnedHeadingRow> {
     super.dispose();
   }
 
-  String _summaryLabel() {
-    final heading = widget.heading;
-    if (heading.section == null) {
-      return '${heading.count}';
-    }
-    if (heading.savedCount > 0 && heading.sessionCount > 0) {
-      return '${heading.savedCount}+${heading.sessionCount}';
-    }
-    if (heading.sessionCount > 0) {
-      return '${heading.sessionCount} local';
-    }
-    return '${heading.savedCount} saved';
-  }
+  String _summaryLabel() => '${widget.heading.count} loaded';
 
   String _tooltipSummary() {
     final heading = widget.heading;
     if (heading.section == null) {
-      return '${heading.count}';
+      return '${heading.sessionCount} loaded session pins';
     }
-    if (heading.savedCount > 0 && heading.sessionCount > 0) {
-      return '${heading.savedCount} saved · ${heading.sessionCount} session';
-    }
-    if (heading.sessionCount > 0) {
-      return '0 saved · ${heading.sessionCount} session';
-    }
-    return '${heading.savedCount} saved';
+    return '${heading.savedCount} loaded saved · ${heading.sessionCount} session';
   }
 
   @override

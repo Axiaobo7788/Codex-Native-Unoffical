@@ -442,7 +442,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(harness.movedThreadSections, isEmpty);
-        expect(find.text('1+1'), findsOneWidget);
+        expect(find.text('2 loaded'), findsOneWidget);
         expect(find.text('Session pin · In Progress'), findsOneWidget);
 
         // Browsing saved Pinned section scopes to persisted stock membership only
