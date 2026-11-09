@@ -32,6 +32,31 @@ void main() {
     await notifications.close();
   });
 
+  test('queued-work presence requires a conclusive bounded page', () async {
+    responses['thread/queue/list'] = {'data': [], 'nextCursor': null};
+    expect(
+      await adapter.readQueuePresence('thread-1'),
+      ThreadQueuePresence.empty,
+    );
+    expect(requests.last.params, {'threadId': 'thread-1', 'limit': 1});
+
+    responses['thread/queue/list'] = {'data': [], 'nextCursor': 'continuation'};
+    await expectLater(
+      adapter.readQueuePresence('thread-1'),
+      throwsA(isA<ProtocolViolation>()),
+    );
+    responses['thread/queue/list'] = {
+      'data': [
+        {'id': 'one'},
+        {'id': 'unexpected-extra'},
+      ],
+    };
+    await expectLater(
+      adapter.readQueuePresence('thread-1'),
+      throwsA(isA<ProtocolViolation>()),
+    );
+  });
+
   test(
     'optional read receipts bind to listed IDs and metadata-only reads',
     () async {

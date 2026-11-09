@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
+import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/domain/user_input_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
@@ -33,6 +34,41 @@ void main() {
     await transport.close();
     await child.dispose();
   });
+
+  test(
+    'keeps one raw queued-work read in flight and falls back on old stock',
+    () async {
+      final first = transport.readThreadQueuePresence('first-thread');
+      await pumpEventQueue();
+      final request = jsonDecode(child.writes.single) as Map<String, Object?>;
+      expect(request['method'], 'thread/queue/list');
+      expect(request['params'], {'threadId': 'first-thread', 'limit': 1});
+      expect(
+        await transport.readThreadQueuePresence('another-thread'),
+        ThreadQueuePresence.unknown,
+      );
+      expect(child.writes, hasLength(1));
+      child.addStdout({
+        'id': request['id'],
+        'result': {
+          'data': [
+            {'id': 'queued-item', 'input': 'unprojected'},
+          ],
+          'nextCursor': null,
+        },
+      });
+      expect(await first, ThreadQueuePresence.pending);
+
+      final old = transport.readThreadQueuePresence('another-thread');
+      await pumpEventQueue();
+      final second = jsonDecode(child.writes.last) as Map<String, Object?>;
+      child.addStdout({
+        'id': second['id'],
+        'error': {'code': -32601, 'message': 'Method not found'},
+      });
+      expect(await old, ThreadQueuePresence.unsupported);
+    },
+  );
 
   test('performs initialize request and initialized notification', () async {
     final resultFuture = transport.initialize(const InitializeRequest());

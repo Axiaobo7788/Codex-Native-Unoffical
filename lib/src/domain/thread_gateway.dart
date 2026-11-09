@@ -43,6 +43,14 @@ abstract interface class ThreadReadReceiptGateway {
   });
 }
 
+/// Optional local read used before an implicit resume. Queued inputs stay out
+/// of the feature and presentation layers.
+abstract interface class ThreadQueuePresenceGateway {
+  bool get supportsThreadQueuePresence;
+
+  Future<ThreadQueuePresence> readThreadQueuePresence(String threadId);
+}
+
 abstract interface class ThreadSectionGateway {
   bool get supportsThreadSections;
 

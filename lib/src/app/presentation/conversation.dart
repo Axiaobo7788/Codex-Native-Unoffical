@@ -117,6 +117,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _showJumpToLatest = false;
   var _showChanges = false;
   var _searchOpen = false;
+  var _checkingColdSend = false;
+  var _threadSelectionVersion = 0;
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
@@ -3363,12 +3365,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   Future<void> _send() async {
+    if (_checkingColdSend) {
+      return;
+    }
     final text = _composerController.text;
     final attachments = List<UserAttachment>.of(_composerAttachments);
     if (text.trim().isEmpty && attachments.isEmpty) {
       return;
     }
     var targetThreadId = widget.controller.thread?.id;
+    final selectionVersion = _threadSelectionVersion;
+    var resumedForSend = false;
     if (widget.threadController case final threadController?) {
       if (targetThreadId == null) {
         final cwd = _activeProjectDirectory;
@@ -3383,7 +3390,21 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
         targetThreadId = created.id;
       } else {
-        final ready = await threadController.ensureSelectedThreadLoaded();
+        resumedForSend = threadController.selectedThreadNeedsResume(
+          targetThreadId,
+        );
+        if (resumedForSend) {
+          final ready = await _confirmColdSend(
+            threadController,
+            targetThreadId,
+          );
+          if (!mounted || !ready || !_sameComposerDraft(text, attachments)) {
+            return;
+          }
+        }
+        final ready = await threadController.ensureSelectedThreadLoaded(
+          targetThreadId,
+        );
         if (!ready) {
           return;
         }
@@ -3394,6 +3415,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         widget.controller.thread?.id != targetThreadId) {
       return;
     }
+    if (resumedForSend &&
+        (_threadSelectionVersion != selectionVersion ||
+            !_sameComposerDraft(text, attachments))) {
+      return;
+    }
     _threadScrollBookmarks.remove(targetThreadId);
     if (widget.historyController.canReturnToNewest) {
       unawaited(widget.historyController.refresh());
@@ -3402,6 +3428,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     }
     final pendingBranch = _pendingBranchEdit;
+    if (resumedForSend &&
+        (widget.controller.busy ||
+            widget.threadController?.selectedThread?.status ==
+                ThreadRuntimeStatus.active)) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The resumed thread is already running. Your draft is still in the composer.',
+          ),
+        ),
+      );
+      return;
+    }
     final submitted = await widget.controller.submit(
       text,
       attachments: attachments,
@@ -3410,9 +3449,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         mounted &&
         widget.controller.thread?.id == targetThreadId) {
       _pendingBranchEdit = null;
-      _composerController.clear();
+      final clearDraft =
+          !resumedForSend || _sameComposerDraft(text, attachments);
+      if (clearDraft) {
+        _composerController.clear();
+      }
       setState(() {
-        _composerAttachments.clear();
+        if (clearDraft) {
+          _composerAttachments.clear();
+        }
         if (pendingBranch != null &&
             widget.controller.thread?.id == pendingBranch.threadId) {
           final nextTurnId =
@@ -3437,6 +3482,51 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
       });
       _jumpToLatest();
+    }
+  }
+
+  bool _sameComposerDraft(String text, List<UserAttachment> attachments) =>
+      _composerController.text == text &&
+      listEquals(_composerAttachments, attachments);
+
+  Future<bool> _confirmColdSend(
+    ThreadListController threadController,
+    String threadId,
+  ) async {
+    final selectionVersion = _threadSelectionVersion;
+    bool stillCold() =>
+        mounted &&
+        _threadSelectionVersion == selectionVersion &&
+        widget.controller.thread?.id == threadId &&
+        threadController.selectedThreadNeedsResume(threadId);
+    _checkingColdSend = true;
+    try {
+      final presence = await threadController.selectedThreadQueuePresence(
+        threadId,
+      );
+      if (!mounted || !stillCold()) {
+        return false;
+      }
+      if (presence == ThreadQueuePresence.empty ||
+          presence == ThreadQueuePresence.unsupported) {
+        return true;
+      }
+      final pending = presence == ThreadQueuePresence.pending;
+      final resume = await _confirmDesktopAction(
+        context,
+        title: pending ? 'Resume queued work?' : 'Could not check queued work',
+        message: pending
+            ? 'This thread has saved prompts. Resuming will let Codex run them. Your new draft will stay in the composer.'
+            : 'Resuming may start saved prompts. Your new draft will stay in the composer.',
+        confirmLabel: pending ? 'Resume queued work' : 'Resume thread',
+        confirmVariant: CodexButtonVariant.primary,
+      );
+      if (resume && stillCold()) {
+        await threadController.resumeThread(threadId);
+      }
+      return false;
+    } finally {
+      _checkingColdSend = false;
     }
   }
 
@@ -3806,6 +3896,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(_activeThreadId!);
     }
     _activeThreadId = nextThreadId;
+    _threadSelectionVersion += 1;
     _queuedLinkedPrThreadId = nextThreadId;
     _activeThreadLinkedPrs = null;
     _linkedPrLoadError = null;
@@ -6078,6 +6169,7 @@ Future<bool> _confirmDesktopAction(
   required String title,
   required String message,
   required String confirmLabel,
+  CodexButtonVariant confirmVariant = CodexButtonVariant.danger,
 }) async =>
     await showDialog<bool>(
       context: context,
@@ -6101,7 +6193,7 @@ Future<bool> _confirmDesktopAction(
               label: 'Cancel',
             ),
             CodexButton(
-              variant: CodexButtonVariant.danger,
+              variant: confirmVariant,
               onPressed: () => Navigator.of(context).pop(true),
               label: confirmLabel,
             ),

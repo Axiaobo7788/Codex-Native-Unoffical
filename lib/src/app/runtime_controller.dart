@@ -55,6 +55,7 @@ class RuntimeController extends ChangeNotifier
         ExecutionBackend,
         ThreadGateway,
         ThreadGoalGateway,
+        ThreadQueuePresenceGateway,
         ThreadReadReceiptGateway,
         ThreadSectionGateway,
         ThreadAttachmentGateway,
@@ -190,6 +191,20 @@ class RuntimeController extends ChangeNotifier
       !_usesRemote &&
       snapshot.state == RuntimeConnectionState.connected &&
       (_transport?.supportsThreadGoals ?? false);
+
+  @override
+  bool get supportsThreadQueuePresence =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsThreadQueuePresence ?? false);
+
+  @override
+  Future<ThreadQueuePresence> readThreadQueuePresence(String threadId) async {
+    if (!supportsThreadQueuePresence) {
+      return ThreadQueuePresence.unknown;
+    }
+    return _transport!.readThreadQueuePresence(threadId);
+  }
 
   @override
   bool get supportsThreadReadReceiptWrites =>

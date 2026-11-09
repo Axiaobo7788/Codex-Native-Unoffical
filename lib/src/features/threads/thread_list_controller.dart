@@ -1228,16 +1228,47 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
-  Future<bool> ensureSelectedThreadLoaded() async {
+  bool selectedThreadNeedsResume(String threadId) =>
+      _selectedThread?.id == threadId &&
+      _selectedThread?.status == ThreadRuntimeStatus.notLoaded &&
+      !_unmaterializedThreadIds.contains(threadId);
+
+  Future<ThreadQueuePresence> selectedThreadQueuePresence(
+    String threadId,
+  ) async {
+    if (_disposed || !selectedThreadNeedsResume(threadId)) {
+      return ThreadQueuePresence.unknown;
+    }
+    final source = switch (gateway) {
+      final ThreadQueuePresenceGateway queue
+          when queue.supportsThreadQueuePresence =>
+        queue,
+      _ => null,
+    };
+    if (source == null) {
+      return ThreadQueuePresence.unsupported;
+    }
+    try {
+      return await source
+          .readThreadQueuePresence(threadId)
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => ThreadQueuePresence.unknown,
+          );
+    } catch (_) {
+      return ThreadQueuePresence.unknown;
+    }
+  }
+
+  Future<bool> ensureSelectedThreadLoaded(String threadId) async {
     final current = _selectedThread;
-    if (current == null) {
+    if (current == null || current.id != threadId) {
       return false;
     }
-    if (current.status != ThreadRuntimeStatus.notLoaded ||
-        _unmaterializedThreadIds.contains(current.id)) {
+    if (!selectedThreadNeedsResume(threadId)) {
       return true;
     }
-    final resumed = await resumeThread(current.id);
+    final resumed = await resumeThread(threadId);
     return resumed != null;
   }
 
