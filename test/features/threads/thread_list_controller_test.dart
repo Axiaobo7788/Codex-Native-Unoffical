@@ -604,6 +604,136 @@ void main() {
     expect(controller.sections.map((s) => s.id), isNot(contains('sec-1')));
     expect(threadById('t-1').section, isNull);
   });
+
+  test('protects built-in Pinned by ID, persists unsectioned pins, preserves custom-section session pins, and reconciles stock/local pin transitions', () async {
+    const builtInPinned = ThreadSection(
+      id: kBuiltInPinnedThreadSectionId,
+      name: 'Pinned',
+    );
+    const customPinned = ThreadSection(id: 'sec-custom-pinned', name: 'Pinned');
+    const customWork = ThreadSection(id: 'sec-work', name: 'Work');
+
+    final gateway = _FakeThreadGateway();
+    gateway.sections.addAll([builtInPinned, customPinned, customWork]);
+    gateway.pages.add(
+      ThreadPage(
+        threads: [
+          _thread('t-plain', status: ThreadRuntimeStatus.idle),
+          _thread(
+            't-work',
+            status: ThreadRuntimeStatus.idle,
+            section: customWork,
+          ),
+          _thread(
+            't-custom-pinned',
+            status: ThreadRuntimeStatus.idle,
+            section: customPinned,
+          ),
+        ],
+        nextCursor: null,
+      ),
+    );
+
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+
+    // Local session pin before stock refresh observes built-in Pinned membership
+    await controller.togglePinThread('t-prepinned');
+    expect(controller.pinnedThreadIds, contains('t-prepinned'));
+
+    gateway.pages.first = ThreadPage(
+      threads: [
+        ...gateway.pages.first.threads,
+        _thread(
+          't-prepinned',
+          status: ThreadRuntimeStatus.idle,
+          section: builtInPinned,
+        ),
+      ],
+      nextCursor: null,
+    );
+
+    await controller.refresh();
+
+    // 1. Local pin + newly observed stock membership reconciles out of pinnedThreadIds
+    expect(controller.isPinned('t-prepinned'), isTrue);
+    expect(controller.isPersistedPinned('t-prepinned'), isTrue);
+    expect(controller.isSessionPinned('t-prepinned'), isFalse);
+    expect(controller.pinnedThreadIds, isNot(contains('t-prepinned')));
+
+    // 2. Built-in Pinned cannot be renamed or deleted, while custom section named Pinned can
+    expect(
+      await controller.renameSection(kBuiltInPinnedThreadSectionId, 'Saved'),
+      isNull,
+    );
+    expect(
+      controller.errorMessage,
+      'The built-in Pinned section cannot be renamed.',
+    );
+    expect(
+      await controller.deleteSection(kBuiltInPinnedThreadSectionId),
+      isFalse,
+    );
+    expect(
+      controller.errorMessage,
+      'The built-in Pinned section cannot be deleted.',
+    );
+    expect(gateway.updatedSections, isEmpty);
+    expect(gateway.deletedSectionIds, isEmpty);
+
+    final renamedCustom = await controller.renameSection(
+      'sec-custom-pinned',
+      'Team Pinned',
+    );
+    expect(renamedCustom?.name, 'Team Pinned');
+    expect(await controller.deleteSection('sec-custom-pinned'), isTrue);
+
+    // 3. Unsectioned materialized thread persists to built-in Pinned on togglePinThread
+    expect(controller.canPersistPin('t-plain'), isTrue);
+    expect(await controller.togglePinThread('t-plain'), isTrue);
+    expect(gateway.movedSections.last.threadId, 't-plain');
+    expect(gateway.movedSections.last.sectionId, kBuiltInPinnedThreadSectionId);
+    expect(controller.isPersistedPinned('t-plain'), isTrue);
+    expect(controller.isSessionPinned('t-plain'), isFalse);
+
+    // 4. Custom-section thread keeps session-only quick pin without losing section
+    expect(controller.canPersistPin('t-work'), isFalse);
+    expect(await controller.togglePinThread('t-work'), isTrue);
+    expect(gateway.movedSections, hasLength(1));
+    expect(controller.isPinned('t-work'), isTrue);
+    expect(controller.isSessionPinned('t-work'), isTrue);
+    expect(controller.isPersistedPinned('t-work'), isFalse);
+    expect(
+      controller.threads.firstWhere((t) => t.id == 't-work').section?.id,
+      'sec-work',
+    );
+
+    // Explicit move from custom section to built-in Pinned promotes session pin to saved
+    expect(
+      await controller.moveThreadToSection(
+        threadId: 't-work',
+        sectionId: kBuiltInPinnedThreadSectionId,
+      ),
+      isTrue,
+    );
+    expect(controller.isPersistedPinned('t-work'), isTrue);
+    expect(controller.isSessionPinned('t-work'), isFalse);
+    expect(controller.pinnedThreadIds, isNot(contains('t-work')));
+
+    // 5. Stock unpin clears any retained local pin and unpins cleanly
+    expect(await controller.togglePinThread('t-plain'), isTrue);
+    expect(gateway.movedSections.last.threadId, 't-plain');
+    expect(gateway.movedSections.last.sectionId, isNull);
+    expect(controller.isPinned('t-plain'), isFalse);
+
+    // External stock unpin notification also leaves thread unpinned
+    gateway.events.add(
+      const ThreadSectionChangedEvent(threadId: 't-prepinned', sectionId: null),
+    );
+    expect(controller.isPinned('t-prepinned'), isFalse);
+    expect(controller.pinnedThreadIds, isNot(contains('t-prepinned')));
+  });
 }
 
 class _DraftSectionGateway extends _FakeThreadGateway {

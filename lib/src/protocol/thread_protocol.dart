@@ -301,6 +301,13 @@ final class ThreadProtocolAdapter {
       'sectionId',
       _maxIdentifierLength,
     );
+    if (sectionId == kBuiltInPinnedThreadSectionId) {
+      throw ArgumentError.value(
+        options.sectionId,
+        'sectionId',
+        'The built-in Pinned section cannot be renamed.',
+      );
+    }
     final name = _requireArgumentText(
       options.name,
       'name',
@@ -323,6 +330,13 @@ final class ThreadProtocolAdapter {
       'sectionId',
       _maxIdentifierLength,
     );
+    if (normalizedId == kBuiltInPinnedThreadSectionId) {
+      throw ArgumentError.value(
+        sectionId,
+        'sectionId',
+        'The built-in Pinned section cannot be deleted.',
+      );
+    }
     await request('threadSection/delete', {'sectionId': normalizedId});
   }
 

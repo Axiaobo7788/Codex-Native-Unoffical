@@ -113,20 +113,110 @@ class ThreadListController extends ChangeNotifier {
     _ => null,
   };
 
-  bool isPinned(String threadId) => _pinnedThreadIds.contains(threadId);
+  ThreadSection? get builtInPinnedSection =>
+      _findSectionById(kBuiltInPinnedThreadSectionId);
+
+  bool isPersistedPinned(String threadId) =>
+      _findThread(threadId)?.isPersistedPinned ?? false;
+
+  bool isSessionPinned(String threadId) =>
+      _pinnedThreadIds.contains(threadId) && !isPersistedPinned(threadId);
+
+  bool isSessionPinnedThread(ThreadSummary thread) =>
+      !thread.isPersistedPinned && _pinnedThreadIds.contains(thread.id);
+
+  bool isPinned(String threadId) =>
+      isPersistedPinned(threadId) || _pinnedThreadIds.contains(threadId);
+
+  bool isPinnedThread(ThreadSummary thread) =>
+      thread.isPersistedPinned || _pinnedThreadIds.contains(thread.id);
+
   bool isMaterialized(String threadId) =>
       !_unmaterializedThreadIds.contains(threadId);
 
-  void togglePinThread(String threadId) {
-    if (_pinnedThreadIds.contains(threadId)) {
-      _pinnedThreadIds.remove(threadId);
-    } else {
-      if (_pinnedThreadIds.length >= maxPinnedThreads) {
-        _pinnedThreadIds.remove(_pinnedThreadIds.first);
-      }
-      _pinnedThreadIds.add(threadId);
+  bool canPersistPinForThread(ThreadSummary thread) {
+    if (_disposed || _showArchived || !supportsThreadSections) {
+      return false;
     }
+    if (builtInPinnedSection == null || !isMaterialized(thread.id)) {
+      return false;
+    }
+    return thread.section == null || thread.isPersistedPinned;
+  }
+
+  bool canPersistPin(String threadId) {
+    final thread = _findThread(threadId);
+    if (thread == null) {
+      return false;
+    }
+    return canPersistPinForThread(thread);
+  }
+
+  bool canTogglePinForThread(ThreadSummary thread) =>
+      !_disposed &&
+      (!thread.isPersistedPinned || (!_showArchived && supportsThreadSections));
+
+  bool canTogglePin(String threadId) =>
+      !_disposed &&
+      (!isPersistedPinned(threadId) ||
+          (!_showArchived && supportsThreadSections));
+
+  String pinActionLabelForThread(ThreadSummary thread) {
+    if (thread.isPersistedPinned) {
+      return 'Unpin saved thread';
+    }
+    if (isSessionPinnedThread(thread)) {
+      return builtInPinnedSection != null
+          ? 'Unpin session pin'
+          : 'Unpin thread';
+    }
+    if (canPersistPinForThread(thread) || builtInPinnedSection == null) {
+      return 'Pin thread';
+    }
+    return 'Pin for session';
+  }
+
+  Future<bool> togglePinThread(String threadId) {
+    if (_disposed) {
+      return Future<bool>.value(false);
+    }
+    if (isPersistedPinned(threadId)) {
+      final removedLocal = _pinnedThreadIds.remove(threadId);
+      if (_showArchived || !supportsThreadSections) {
+        if (!removedLocal) {
+          _errorMessage =
+              'Saved Pinned threads cannot be unpinned in this view.';
+        }
+        _notify();
+        return Future<bool>.value(removedLocal);
+      }
+      if (_mutating) {
+        if (removedLocal) {
+          _notify();
+        }
+        return Future<bool>.value(false);
+      }
+      return moveThreadToSection(threadId: threadId, sectionId: null);
+    }
+    if (_pinnedThreadIds.remove(threadId)) {
+      _notify();
+      return Future<bool>.value(true);
+    }
+    if (canPersistPin(threadId)) {
+      if (_mutating) {
+        return Future<bool>.value(false);
+      }
+      return moveThreadToSection(
+        threadId: threadId,
+        sectionId: kBuiltInPinnedThreadSectionId,
+      );
+    }
+    if (_pinnedThreadIds.length >= maxPinnedThreads) {
+      _pinnedThreadIds.remove(_pinnedThreadIds.first);
+    }
+    _pinnedThreadIds.add(threadId);
     _notify();
+    return Future<bool>.value(true);
   }
 
   Future<void> setSectionScope(String? sectionId) async {
@@ -756,6 +846,12 @@ class ThreadListController extends ChangeNotifier {
     if (_mutating) {
       return null;
     }
+    final normalizedId = sectionId.trim();
+    if (normalizedId == kBuiltInPinnedThreadSectionId) {
+      _errorMessage = 'The built-in Pinned section cannot be renamed.';
+      _notify();
+      return null;
+    }
     final sectionGateway = _sectionGateway;
     if (sectionGateway == null) {
       _errorMessage = 'Thread sections are unavailable on this runtime.';
@@ -774,7 +870,7 @@ class ThreadListController extends ChangeNotifier {
     try {
       final updated = await sectionGateway.updateThreadSection(
         ThreadSectionUpdateOptions(
-          sectionId: sectionId,
+          sectionId: normalizedId,
           name: trimmed,
           appearance: appearance,
           clearAppearance: clearAppearance,
@@ -806,6 +902,12 @@ class ThreadListController extends ChangeNotifier {
     if (_mutating) {
       return false;
     }
+    final normalizedId = sectionId.trim();
+    if (normalizedId == kBuiltInPinnedThreadSectionId) {
+      _errorMessage = 'The built-in Pinned section cannot be deleted.';
+      _notify();
+      return false;
+    }
     final sectionGateway = _sectionGateway;
     if (sectionGateway == null) {
       _errorMessage = 'Thread sections are unavailable on this runtime.';
@@ -816,12 +918,12 @@ class ThreadListController extends ChangeNotifier {
     _errorMessage = null;
     _notify();
     try {
-      await sectionGateway.deleteThreadSection(sectionId);
+      await sectionGateway.deleteThreadSection(normalizedId);
       if (_disposed) {
         return false;
       }
-      _sections.removeWhere((section) => section.id == sectionId);
-      if (_sectionScopeId == sectionId) {
+      _sections.removeWhere((section) => section.id == normalizedId);
+      if (_sectionScopeId == normalizedId) {
         _sectionScopeId = null;
         _sectionOrderRevision += 1;
         _refreshSectionOrder = true;
@@ -829,14 +931,14 @@ class ThreadListController extends ChangeNotifier {
         _nextCursor = null;
       }
       for (var i = 0; i < _threads.length; i++) {
-        if (_threads[i].section?.id == sectionId) {
+        if (_threads[i].section?.id == normalizedId) {
           _threads[i] = _threads[i].copyWith(
             clearSection: true,
             clearSectionEnteredAtSeconds: true,
           );
         }
       }
-      if (_selectedThread?.section?.id == sectionId) {
+      if (_selectedThread?.section?.id == normalizedId) {
         _selectedThread = _selectedThread!.copyWith(
           clearSection: true,
           clearSectionEnteredAtSeconds: true,
@@ -1011,6 +1113,11 @@ class ThreadListController extends ChangeNotifier {
   }
 
   void _applySectionChanged(String threadId, String? sectionId) {
+    final previousWasBuiltInPinned = isPersistedPinned(threadId);
+    if (sectionId == kBuiltInPinnedThreadSectionId ||
+        previousWasBuiltInPinned) {
+      _pinnedThreadIds.remove(threadId);
+    }
     if (_sectionScopeId != null && sectionId != _sectionScopeId) {
       _threads.removeWhere((thread) => thread.id == threadId);
     }
@@ -1031,7 +1138,15 @@ class ThreadListController extends ChangeNotifier {
       return;
     }
 
-    final resolved = _findSectionById(sectionId);
+    var resolved = _findSectionById(sectionId);
+    if (resolved == null && sectionId == kBuiltInPinnedThreadSectionId) {
+      const builtIn = ThreadSection(
+        id: kBuiltInPinnedThreadSectionId,
+        name: 'Pinned',
+      );
+      _upsertSection(builtIn);
+      resolved = builtIn;
+    }
     if (resolved == null) {
       if (_sectionGateway != null) {
         unawaited(_reloadSectionsAndResolveThread(threadId, sectionId));
@@ -1127,9 +1242,29 @@ class ThreadListController extends ChangeNotifier {
       return;
     }
     if (_sections.length >= maxRetainedSections) {
+      if (section.isBuiltInPinned) {
+        final replaceIndex = _sections.lastIndexWhere(
+          (candidate) => !candidate.isBuiltInPinned,
+        );
+        if (replaceIndex != -1) {
+          _sections[replaceIndex] = section;
+        }
+      }
       return;
     }
     _sections.add(section);
+  }
+
+  ThreadSummary? _findThread(String threadId) {
+    for (final thread in _threads) {
+      if (thread.id == threadId) {
+        return thread;
+      }
+    }
+    if (_selectedThread?.id == threadId) {
+      return _selectedThread;
+    }
+    return null;
   }
 
   ThreadSection? _findSectionById(String sectionId) {
@@ -1145,6 +1280,9 @@ class ThreadListController extends ChangeNotifier {
     final currentSection = thread.section;
     if (currentSection == null) {
       return thread;
+    }
+    if (currentSection.isBuiltInPinned) {
+      _pinnedThreadIds.remove(thread.id);
     }
     _upsertSection(currentSection);
     final canonical = _findSectionById(currentSection.id);
@@ -1206,15 +1344,19 @@ class ThreadListController extends ChangeNotifier {
   }
 
   ThreadSummary _preserveTransientState(ThreadSummary thread) {
-    if (thread.goal != null) {
-      return thread;
-    }
     ThreadSummary? retained;
     final index = _threads.indexWhere((candidate) => candidate.id == thread.id);
     if (index != -1) {
       retained = _threads[index];
     } else if (_selectedThread?.id == thread.id) {
       retained = _selectedThread;
+    }
+    if (thread.section?.isBuiltInPinned == true ||
+        retained?.section?.isBuiltInPinned == true) {
+      _pinnedThreadIds.remove(thread.id);
+    }
+    if (thread.goal != null) {
+      return thread;
     }
     final goal = retained?.goal;
     return goal == null ? thread : thread.copyWith(goal: goal);

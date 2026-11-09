@@ -342,6 +342,136 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'unifies built-in Pinned and session pins, protects built-in Pinned by ID, and scopes Browse to saved Pinned only',
+      (tester) async {
+        const builtInPinned = ThreadSection(
+          id: kBuiltInPinnedThreadSectionId,
+          name: 'Pinned',
+        );
+        const customPinned = ThreadSection(
+          id: 'custom-pinned-sec',
+          name: 'Pinned',
+        );
+        const customWork = ThreadSection(id: 'work-sec', name: 'In Progress');
+
+        final savedPinThread = createTestThread(
+          id: 'thread-saved-pin',
+          preview: 'Saved pinned thread',
+        ).copyWith(name: 'Saved Pin Thread', section: builtInPinned);
+        final workThread = createTestThread(
+          id: 'thread-work-pin',
+          preview: 'Work section thread',
+        ).copyWith(name: 'Work Thread', section: customWork);
+        final customPinnedThread = createTestThread(
+          id: 'thread-custom-pinned',
+          preview: 'Custom pinned section thread',
+        ).copyWith(name: 'Custom Pinned Thread', section: customPinned);
+
+        final harness = _OrderedSectionHarness(
+          global: [savedPinThread, workThread, customPinnedThread],
+          ordered: [savedPinThread, savedPinThread],
+        )..threadSections.addAll([builtInPinned, customPinned, customWork]);
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+
+        // Unified Pinned heading renders once at top; custom section named Pinned renders separately
+        expect(
+          find.byKey(const ValueKey('pinned-threads-heading')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey(
+              'thread-section-heading-$kBuiltInPinnedThreadSectionId',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey('thread-section-heading-custom-pinned-sec'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('thread-pin-badge-thread-saved-pin')),
+          findsOneWidget,
+        );
+        expect(find.text('Saved pin'), findsOneWidget);
+
+        // Built-in Pinned menu offers only 'Browse saved Pinned section' (no Rename/Delete)
+        await tester.tap(
+          find.byKey(
+            const ValueKey(
+              'thread-section-menu-$kBuiltInPinnedThreadSectionId',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Browse saved Pinned section'), findsOneWidget);
+        expect(find.text('Rename section'), findsNothing);
+        expect(find.text('Delete section'), findsNothing);
+        // Close popover by tapping outside
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
+
+        // Custom section named 'Pinned' still offers Rename and Delete
+        await tester.tap(
+          find.byKey(const ValueKey('thread-section-menu-custom-pinned-sec')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Browse section'), findsOneWidget);
+        expect(find.text('Rename section'), findsOneWidget);
+        expect(find.text('Delete section'), findsOneWidget);
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
+
+        // Session-pinning a custom-section thread keeps its section and shows 'Session pin · In Progress'
+        await tester.tap(
+          find.byKey(const ValueKey('thread-row-thread-work-pin')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('thread-menu-thread-work-pin')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Pin for session'), findsOneWidget);
+        await tester.tap(find.text('Pin for session'));
+        await tester.pumpAndSettle();
+
+        expect(harness.movedThreadSections, isEmpty);
+        expect(find.text('1+1'), findsOneWidget);
+        expect(find.text('Session pin · In Progress'), findsOneWidget);
+
+        // Browsing saved Pinned section scopes to persisted stock membership only
+        await tester.tap(
+          find.byKey(
+            const ValueKey(
+              'thread-section-menu-$kBuiltInPinnedThreadSectionId',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Browse saved Pinned section'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('thread-section-scope-pinned-note')),
+          findsOneWidget,
+        );
+        expect(find.text('Saved in stock Pinned only'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('thread-row-thread-saved-pin')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('thread-row-thread-work-pin')),
+          findsNothing,
+        );
+      },
+    );
   });
 }
 
