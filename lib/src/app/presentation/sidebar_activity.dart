@@ -2507,8 +2507,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (uri == null || !mounted) {
       return;
     }
+    final normalizedThreadId = widget.threadId?.trim();
+    final activeThreadId =
+        normalizedThreadId == null || normalizedThreadId.isEmpty
+        ? null
+        : normalizedThreadId;
     setState(() {
       _mcpBusyServer = server.name;
+      _mcpBusyThreadId = activeThreadId;
       _mcpErrors.remove(server.name);
     });
     try {
@@ -2516,7 +2522,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         McpResourceReadQuery(
           server: server.name,
           uri: uri,
-          threadId: widget.threadId,
+          threadId: activeThreadId,
         ),
       );
       if (mounted) {
@@ -2528,7 +2534,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       }
     } finally {
       if (mounted) {
-        setState(() => _mcpBusyServer = null);
+        setState(() {
+          _mcpBusyServer = null;
+          _mcpBusyThreadId = null;
+        });
       }
     }
   }
@@ -2901,8 +2910,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   ),
                 ),
               ),
-            if (widget.userInputController case final userInputController?
-                when _loading || _section != _EcosystemSection.mcp)
+            if (widget.userInputController case final userInputController?)
               AnimatedBuilder(
                 animation: userInputController,
                 builder: (context, _) {
@@ -2915,6 +2923,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                     return const SizedBox.shrink();
                   }
                   return Padding(
+                    key: const ValueKey('ecosystem-modal-elicitation-slot'),
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: _McpElicitationCard(
                       key: ValueKey(
@@ -2925,6 +2934,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                       pendingCount: directElicitations.length,
                       errorMessage: userInputController.errorMessage,
                       margin: EdgeInsets.zero,
+                      maxFieldsHeight: 180,
                     ),
                   );
                 },
@@ -3747,21 +3757,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   Widget _buildMcpList(BuildContext context) {
-    final userInputController = widget.userInputController;
-    if (userInputController == null) {
-      return _buildMcpListContent(context, null);
-    }
-    return AnimatedBuilder(
-      animation: userInputController,
-      builder: (context, _) =>
-          _buildMcpListContent(context, userInputController),
-    );
-  }
-
-  Widget _buildMcpListContent(
-    BuildContext context,
-    UserInputController? userInputController,
-  ) {
     final palette = ThemeTokens.of(context);
     final gateway = _mcpGateway;
     return Column(
@@ -3803,11 +3798,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             builder: (context) {
               final runtimeStatus = server.status.trim();
               final authStatus = server.authStatus?.trim();
-              final directElicitations = _activeDirectMcpElicitations(
-                userInputController,
-                serverName: server.name,
-              );
-              final activeDirectElicitation = directElicitations.firstOrNull;
               return Container(
                 key: ValueKey('mcp-row-${server.name}'),
                 margin: const EdgeInsets.only(bottom: 8),
@@ -3889,20 +3879,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                         ),
                       ],
                     ),
-                    if (activeDirectElicitation != null &&
-                        userInputController != null) ...[
-                      const SizedBox(height: ThemeTokens.space3),
-                      _McpElicitationCard(
-                        key: ValueKey(
-                          'mcp-elicitation-${activeDirectElicitation.requestId}',
-                        ),
-                        controller: userInputController,
-                        request: activeDirectElicitation,
-                        pendingCount: directElicitations.length,
-                        errorMessage: userInputController.errorMessage,
-                        margin: EdgeInsets.zero,
-                      ),
-                    ],
                     if (_mcpErrors[server.name] case final error?) ...[
                       const SizedBox(height: ThemeTokens.space2),
                       SelectableText(

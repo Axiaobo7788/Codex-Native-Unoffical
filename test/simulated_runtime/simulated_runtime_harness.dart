@@ -191,6 +191,8 @@ class SimulatedRuntimeHarness extends RuntimeController {
   var mcpReloadCount = 0;
   final List<McpResourceReadQuery> mcpResourceReadQueries = [];
   final List<McpToolCallQuery> mcpToolCallQueries = [];
+  Future<McpResourceReadResultModel> Function(McpResourceReadQuery query)?
+  mcpResourceReadHandler;
   Future<McpToolCallResultModel> Function(McpToolCallQuery query)?
   mcpToolCallHandler;
   final Map<
@@ -1142,6 +1144,10 @@ class SimulatedRuntimeHarness extends RuntimeController {
     McpResourceReadQuery query,
   ) async {
     mcpResourceReadQueries.add(query);
+    final handler = mcpResourceReadHandler;
+    if (handler != null) {
+      return handler(query);
+    }
     return mcpResourceReadResult;
   }
 

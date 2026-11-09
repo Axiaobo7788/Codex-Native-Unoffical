@@ -34,25 +34,76 @@ void main() {
         expect(harness.mcpReloadCount, 1);
         expect(find.byKey(const ValueKey('mcp-action-notice')), findsOneWidget);
 
+        harness.mcpResourceReadHandler = (query) async {
+          if (query.uri == 'memory://native-fixture/needs-form') {
+            final response = await harness.emitMcpElicitationAndWait(
+              McpElicitationRequest(
+                requestId: 'elicitation-resource-1',
+                serverName: query.server,
+                threadId: query.threadId!,
+                message: 'Provide resource token.',
+                mode: McpElicitationMode.form,
+                fields: [
+                  McpElicitationField(
+                    id: 'value',
+                    title: 'Value',
+                    description: 'Resource form value',
+                    kind: McpElicitationFieldKind.string,
+                    required: true,
+                  ),
+                ],
+              ),
+            );
+            return McpResourceReadResultModel(
+              contents: [
+                McpTextResourceContentModel(
+                  uri: query.uri,
+                  mimeType: 'text/plain',
+                  text: '${response.action.name}: ${response.content['value']}',
+                ),
+              ],
+            );
+          }
+          return harness.mcpResourceReadResult;
+        };
+
         await tester.tap(
           find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
         );
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byKey(const ValueKey('mcp-resource-uri-field')),
-          'file:///workspace/README.md',
+          'memory://native-fixture/needs-form',
         );
         await tester.pump();
         await tester.tap(
           find.byKey(const ValueKey('mcp-resource-read-submit')),
         );
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
         expect(harness.mcpResourceReadQueries.single.server, 'filesystem-mcp');
+        expect(harness.mcpResourceReadQueries.single.threadId, 'thread-mcp');
         expect(
           harness.mcpResourceReadQueries.single.uri,
-          'file:///workspace/README.md',
+          'memory://native-fixture/needs-form',
         );
-        expect(find.text('# Test workspace'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
+          findsOneWidget,
+        );
+        await tester.enterText(
+          find
+              .byKey(const ValueKey('mcp-elicitation-field-value'))
+              .hitTestable(),
+          'answer',
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-elicitation-accept')).hitTestable(),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('accept: answer'), findsOneWidget);
         expect(
           find.byKey(const ValueKey('mcp-result-filesystem-mcp')),
           findsOneWidget,
@@ -138,21 +189,34 @@ void main() {
         });
 
         // Direct elicitation (turnId == null) renders inside the open modal
-        // MCP server row and is hit-testable above the modal barrier.
+        // scroll-bounded slot and is hit-testable above the modal barrier.
         expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ecosystem-modal-elicitation-slot')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
           findsOneWidget,
         );
         expect(
           find.descendant(
-            of: find.byKey(const ValueKey('mcp-row-filesystem-mcp')),
+            of: find.byKey(const ValueKey('ecosystem-modal-elicitation-slot')),
             matching: find.byKey(const ValueKey('mcp-elicitation-card')),
           ),
           findsOneWidget,
         );
 
-        // Switching tabs mid-call keeps the active form reachable in the modal.
+        await tester.enterText(
+          find
+              .byKey(const ValueKey('mcp-elicitation-field-path'))
+              .hitTestable(),
+          'README.md',
+        );
+        await tester.pump();
+
+        // Switching tabs mid-call keeps the active form reachable in the modal
+        // and preserves typed draft text in the single dialog-local slot.
         await tester.tap(find.text('Skills (1)'));
         await tester.pump();
         expect(
@@ -162,12 +226,6 @@ void main() {
         await tester.tap(find.text('MCP (1)'));
         await tester.pump();
 
-        await tester.enterText(
-          find
-              .byKey(const ValueKey('mcp-elicitation-field-path'))
-              .hitTestable(),
-          'README.md',
-        );
         await tester.tap(
           find
               .byKey(const ValueKey('mcp-elicitation-field-mode-replace'))
@@ -182,7 +240,7 @@ void main() {
         await tester.tap(acceptButton);
         await tester.pumpAndSettle();
 
-        final response = harness.mcpElicitationResponses.single;
+        final response = harness.mcpElicitationResponses.last;
         expect(response.requestId, 'elicitation-1');
         expect(response.action, McpElicitationAction.accept);
         expect(response.content, {'path': 'README.md', 'mode': 'replace'});

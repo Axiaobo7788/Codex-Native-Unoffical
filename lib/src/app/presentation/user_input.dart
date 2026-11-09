@@ -56,6 +56,7 @@ class _McpElicitationCard extends StatefulWidget {
     required this.pendingCount,
     required this.errorMessage,
     this.margin = const EdgeInsets.fromLTRB(16, 4, 16, 6),
+    this.maxFieldsHeight = 320,
   });
 
   final UserInputController controller;
@@ -63,6 +64,7 @@ class _McpElicitationCard extends StatefulWidget {
   final int pendingCount;
   final String? errorMessage;
   final EdgeInsetsGeometry margin;
+  final double maxFieldsHeight;
 
   @override
   State<_McpElicitationCard> createState() => _McpElicitationCardState();
@@ -164,7 +166,7 @@ class _McpElicitationCardState extends State<_McpElicitationCard> {
             ),
             const SizedBox(height: ThemeTokens.space2),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
+              constraints: BoxConstraints(maxHeight: widget.maxFieldsHeight),
               child: SingleChildScrollView(
                 key: const ValueKey('mcp-elicitation-scroll'),
                 child: switch (widget.request.mode) {
