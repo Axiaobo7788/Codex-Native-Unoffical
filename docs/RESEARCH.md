@@ -3789,3 +3789,49 @@ probe before interpreting that result as a content-search limitation.
   process read back exactly one expected record in each thread, which both
   remained cold. This is agent real-use evidence. Human visual and physical
   mobile checks remain pending.
+
+## F21 saved-message search and compact thread navigation
+
+- On the measured Desktop `26.1103.60933` ASAR, renderer chunk
+  `884779.bf167971f9.js` invokes experimental `thread/searchOccurrences`
+  and supplies the returned inclusive cursor to match hydration. The bundle
+  requests up to 250 hits in that path. Native requests at most 16 per page,
+  validates UTF-16 offsets and cursor progress, and verifies a stable
+  `thread/turns/list` summary page before changing the working set.
+  [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+- The baseline history test reproduced a stuck item spinner after refresh
+  cleared the selected turn while an item page was pending. F21A
+  (`eccd4f1`, `1e120e4`) invalidates the item request at window replacement
+  and scopes anchor progress to the originating selection. The initial
+  packaged narrow view also dropped Ctrl+F after selecting a thread. An
+  autofocus-only attempt still failed the regression test. An explicit
+  focus request on the mounted conversation passed it.
+- The baseline compact view ignored a successful same-row selection when
+  its thread ID had not changed. F21B (`c69491f`) closes Threads after an
+  explicit successful select or resume and keeps the view open during a
+  background catalog refresh or a failed read. Both changes were reviewed
+  against their commits through the official `agy` TUI.
+- A separate exploratory bundled Host probe found durable read receipts in
+  both legacy and paginated saved threads. A cold empty thread could be
+  marked unread at `threadStart`, rejected a stale revision with `-32600`,
+  and could be marked read using a fresh revision without loading the
+  thread. Turn-completion and multi-connection notification behavior remain
+  research questions.
+- Shared `c788855` passed format and analyze, 441 default Flutter tests with
+  five opt-in skips, 5/5 isolated direct-stock tests, 98 Rust tests with
+  Clippy, the 64-root pure-Dart gate, the Linux bundle and license checks,
+  and bundled Host MCP smoke. The history benchmark kept 100 of 1,000
+  source turns and exercised ten 3 MiB output payloads.
+- The combined Linux package used bundled Host, stock
+  `0.167.0-alpha.3.2`, and a disposable profile seeded with a loopback
+  model. At 720×800, Ctrl+F opened after selecting a saved thread.
+  Search opened the oldest message in a 108-turn fixture and returned to
+  the newest window. A separate stock process reverted a hit before
+  navigation. Native reported the failure and left the current window in
+  place. A legacy thread kept loaded Find, then a paginated thread
+  returned 16 and 3 hits on successive pages in the same app.
+- At the same size, refreshing the compact catalog kept Threads open.
+  Selecting the current row and explicitly resuming it each returned to
+  the conversation. No Flutter overflow or exception was observed, and
+  app, Host and stock shut down. The session verifies the packaged
+  product. Human visual and physical Android checks remain separate.

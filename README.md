@@ -10,6 +10,8 @@ and is not affiliated with or endorsed by OpenAI.
   turns, approve tool requests, choose models and execution settings, and inspect
   bounded diffs and command output. The desktop layout has a 260 px sidebar,
   a 704 px reading/composer column, and a compact layout for narrow windows.
+  Find filters loaded messages. On supported local threads, the experimental
+  saved search also finds older messages and opens the matched turn.
 - **Organization and review:** archive, rename, pin, and group local threads into
   sections. Global section counts describe loaded rows. Browse one local section
   at a time in stock order with bounded pagination. Filter loaded rows or

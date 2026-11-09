@@ -90,5 +90,6 @@ response confirms the expected turn ID. Keep item loading on the
 existing lazy path. Full global content coverage remains under research
 because the installed global search can omit inherited fork messages.
 
-F20A records runtime evidence. Native's conversation filter still uses
-the loaded timeline, and the older-turn jump is a separate product slice.
+F20A records runtime evidence. F21 adds the explicit local saved search
+and guarded turn-window jump. Loaded Find remains independent. See
+[F21 evidence](../RESEARCH.md#f21-saved-message-search-and-compact-thread-navigation).

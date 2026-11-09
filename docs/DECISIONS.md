@@ -2327,3 +2327,25 @@ lifecycle presentation the source of truth.
 - Local link removal needs a separate identity and retry policy for canonical
   and legacy aliases. Remote and external Git state are outside the local
   attachment write path. [Stock attachment contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#stored-thread-attachments)
+
+---
+
+## ADR-049 — Search saved messages within one bounded conversation
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Keep loaded-message Find and offer a separate explicit saved search for
+  eligible local threads. Experimental stock `thread/searchOccurrences`
+  owns persisted matching. One 16-hit page, one running request and one
+  replaceable pending query cover the active scope. Unsupported results are
+  remembered for the selected thread.
+- Open a hit through a bounded summary page from stable `thread/turns/list`.
+  Verify the first turn and its renderable rows before replacing the history
+  window. Align the matched message when the summary contains it, or another
+  visible message in the verified turn. A failed or superseded anchor
+  preserves the current window.
+- Replacing a window invalidates its pending item projection. Item detail,
+  command output, and return to newest retain their existing bounded paths.
+  The search capability stays in the local process transport. [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
