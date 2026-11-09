@@ -2248,3 +2248,27 @@ lifecycle presentation the source of truth.
   Automatic detach requires a separate policy for turns, approval
   delivery and reconnect recovery.
   [Stock subscription evidence](reverse/THREAD_SUBSCRIPTION_EVIDENCE.md)
+
+---
+
+## ADR-045 — Resolve direct MCP forms in the calling dialog
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- The ecosystem dialog uses its existing input controller for a
+  null-turn form that matches the active operation's thread and server.
+  One bounded form slot preserves entered text across tab changes.
+  The conversation keeps its normal model-turn route, requests that were
+  already pending, and forms left pending after dialog dismissal.
+- Thread-scoped MCP operations require a loaded thread. Keep resuming a
+  cold thread explicit because stock can continue an active Goal on resume.
+  Resource reads can still use the global catalog when no thread is selected.
+- Stock MCP catalog authentication is independent of runtime state.
+  Prefer reported `runtimeStatus` and accept an explicit legacy
+  `status`. Omit the runtime label when the catalog does not report it.
+- The opt-in pure-Dart MCP smoke exercises the packaged Host and stock
+  app-server with a disposable profile, a stdio MCP fixture, and a
+  loopback model endpoint. Simulated presentation tests cover the
+  modal ownership and input state.

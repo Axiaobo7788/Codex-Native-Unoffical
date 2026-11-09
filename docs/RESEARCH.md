@@ -3591,3 +3591,111 @@ evidence slice.
   launch exited on request, and the app, Host and stock processes
   were gone. The environment emitted the existing GTK accessibility
   and software-display warnings. Human visual acceptance is pending.
+- Hosted CI on `e61f67c` first reported failure with a single
+  successful Windows job and no Linux or macOS job records. The second
+  attempt on the same SHA reported success for all three jobs.
+  [Attempt 1](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42671357717/attempts/1)
+  [Attempt 2](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42671357717/attempts/2)
+
+## F18 direct MCP forms and runtime evidence
+
+The official `agy` TUI coordinated independent worktrees from
+`e61f67c`. Codex owned the protocol status correction and real smoke
+(`943b8c0`, `7cea8af`). Gemini owned the modal interaction and
+simulated regression (`558a8ee`, `1233497`, `a36a9b6`,
+`3f6b599`). Both audited the actual commits.
+
+- In the prior packaged app, a direct tool call on a disposable
+  on-request thread left the ecosystem modal busy while its form
+  rendered in the conversation behind the barrier. Closing the
+  modal exposed the form. After submission, reopening the modal
+  showed no result because the original dialog had been disposed.
+  A focused simulated reproducer independently confirmed that
+  the accept control was unreachable with the dialog open.
+- Direct stock and bundled Host probes establish separate form paths.
+  The sampled direct tool call under `never` returned a decline.
+  Under `on-request`, a direct tool call and a thread-scoped resource
+  read each delivered a null-turn form and accepted a response.
+  A model-driven call delivered stock tool consent and a subsequent
+  MCP form with the matching turn ID, then completed the turn.
+- The old UI showed bare `unsupported` for a working local MCP
+  server. The value came from stock `authStatus`. The global
+  catalog reported `runtimeStatus: null`. The thread-scoped
+  catalog reported `runtimeStatus: connected` with the same auth
+  status. Native now projects these fields separately.
+  [Stock MCP schema](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/ListMcpServerStatusResponse.json)
+- The modal uses one scroll-bounded card for a matching thread, server,
+  and null-turn form while a direct operation is in flight. This
+  keeps the draft when switching tabs. Peer review removed the
+  initial global claim registry and the duplicated form mounts.
+  The underlying conversation can still present pending forms.
+- `dart run tool/mcp_smoke.dart` uses a fresh profile and a Dart
+  stdio MCP fixture with a loopback Responses endpoint. It exercises
+  the real Native adapter, bundled Host, and stock app-server with
+  no configured account. It checks the typed catalog, global and
+  thread-scoped resources, typed tool results, both approval
+  policies, and model-turn terminal identity.
+- At integration `3c2d327`, an isolated packaged Linux walkthrough
+  selected a resumed fixture thread and submitted both tool and resource
+  forms. Switching from MCP to Skills and back kept the tool draft.
+  The original modal showed the tool result and the resource content.
+  The app, bundled Host, and stock child all exited on request.
+- The same walkthrough exposed two adjacent failures. A pending resource
+  read put the spinner on Call tool. Selecting a cold persisted thread
+  and then reading a resource surfaced a raw `thread not found` response.
+  A separate bundled Host probe reproduced that response on both direct
+  methods after a metadata-only read. Explicit `thread/resume` restored
+  both methods, and a global resource read still worked without a thread.
+- Automatic resume was considered during peer review. A separate disposable
+  installed-stock probe seeded one synthetic turn, persisted a paused Goal,
+  restarted, and marked the Goal active while the thread was cold. The
+  loopback model request count stayed at one until explicit `thread/resume`.
+  It reached four after resume, before the Goal was paused and the runtime
+  closed. This verifies a model-execution side effect of resume and keeps it
+  an explicit prerequisite for a cold thread. [Upstream Goal resume hook](https://github.com/openai/codex/blob/main/codex-rs/ext/goal/src/extension.rs)
+- Shared validation at `3c2d327` passed format and analysis, the pure-Dart
+  boundary check over 61 roots, 414 default Flutter cases with five opt-in
+  skips, 5/5 isolated direct-stock cases, Rust format, Clippy, and 98
+  tests. The bounded-history benchmark retained 100 of 1,000 source turns
+  and 100 entries, discarded ten 3 MiB outputs, and reported
+  RSS deltas of 1,646,592 and 29,315,072 bytes. The Linux debug bundle and
+  license check passed. The MCP smoke passed with that bundle's Host.
+- The final code integration `8ad91d3` includes Gemini's operation-specific
+  progress and explicit cold-thread requirement. The delayed simulated path
+  verifies that a pre-existing form stays in the conversation and the new
+  request appears in the modal. An earlier assertion had counted the retained
+  conversation card as a failure. The corrected assertion separates the two
+  surfaces and resolves the old fixture request.
+- The rebuilt packaged Linux app returned a global resource without a selected
+  thread. Both cold scoped actions showed guidance to resume. After explicit
+  sidebar resume, both scoped operations put the spinner on the active
+  button and returned accepted results in the original dialog. Switching tabs
+  kept the tool form draft. The run used a private Xvfb display, disposable
+  profile, bundled Host and installed stock app-server. All three processes
+  exited when the app closed.
+- Reverification at `8ad91d3` passed format, analysis, all 61 pure-Dart roots,
+  414 Flutter cases with five opt-in skips, 5/5 opt-in direct-stock cases,
+  Rust format, Clippy, 98 Rust tests, Linux bundle and licenses, and MCP smoke
+  with the exact bundled Host selected. The benchmark retained 100 of 1,000
+  source turns and 100 entries, discarded ten 3 MiB outputs, and measured
+  RSS deltas of 1,855,488 and 27,193,344 bytes. Human interaction review is
+  pending.
+
+### Catalog search follow-up
+
+The Native sidebar currently filters loaded rows. Its typed adapter supports
+stock `thread/list.searchTerm`, with no sidebar caller. A disposable stock
+fixture placed a named thread behind 27 newer rows. The first 25 rows omitted
+it. The title search matched `Cobalt` and `Needle`, skipped mixed-case `cObAlT`,
+treated `%` literally in the tested title, and respected the archive filter.
+The same search matched the synthetic Goal text and skipped the workspace
+path. This differs from Native's case-insensitive local metadata filter.
+
+In the installed Desktop build, call sites at ASAR offsets `8825777` and
+`109859343` pass `searchTerm` to `thread/search` or to the stock `thread/list`
+fallback with `useStateDbOnly`. The observations establish separate search
+paths. Which branch and matching behavior a given Desktop session uses need
+runtime evidence before asserting parity.
+The installed experimental `thread/search` returned empty for those same
+metadata-only fixtures. A search of full persisted turns needs a separate
+probe before interpreting that result as a content-search limitation.

@@ -19,7 +19,9 @@ and is not affiliated with or endorsed by OpenAI.
   target uncommitted changes, a base branch, a commit or ref, or custom
   instructions on an eligible thread.
 - **Runtime tools:** discover Skills, Plugins, installed Apps and MCP servers.
-  Available actions and catalogs depend on the installed Codex runtime and its
+  Read local MCP resources and call tools, including forms from the running
+  operation. Resume a cold thread explicitly before running thread-scoped MCP
+  actions. Available actions and catalogs depend on the installed runtime and
   configuration.
 - **Android and Direct Host Remote:** pair by QR or invitation, reconnect, and
   inspect bounded model/thread metadata on Android. The authenticated transport
@@ -81,8 +83,9 @@ CODEX_NATIVE_STOCK_TEST=1 flutter test test/live/stock_app_server_test.dart
 
 For Host-backed runtime checks, build the Linux bundle and run the smoke tools
 against your installed Codex. Review smoke runs a model turn against its own
-Git fixture. A packaged desktop walkthrough and Human acceptance are separate
-verification steps.
+Git fixture. MCP smoke uses a disposable profile and loopback fixtures.
+A packaged desktop walkthrough and Human acceptance are separate verification
+steps.
 
 ```sh
 flutter build linux --debug
@@ -91,6 +94,7 @@ dart run tool/runtime_smoke.dart
 dart run tool/thread_smoke.dart
 dart run tool/model_smoke.dart
 dart run tool/review_smoke.dart
+dart run tool/mcp_smoke.dart
 flutter test tool/history_memory_benchmark.dart --reporter expanded
 ```
 
