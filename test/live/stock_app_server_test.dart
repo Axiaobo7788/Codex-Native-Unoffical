@@ -85,6 +85,15 @@ void main() {
           after.sections.map((section) => section.id),
           isNot(contains(created.id)),
         );
+        expect(
+          after.sections.any((section) => section.isBuiltInPinned),
+          isTrue,
+        );
+        final customSameName = await transport.createThreadSection(
+          const ThreadSectionCreateOptions(name: 'Pinned'),
+        );
+        expect(customSameName.isBuiltInPinned, isFalse);
+        await transport.deleteThreadSection(customSameName.id);
       });
 
       test('pages scoped stock threads in section order', () async {

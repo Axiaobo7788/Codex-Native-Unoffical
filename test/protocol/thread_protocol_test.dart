@@ -694,6 +694,19 @@ void main() {
     expect(updated.appearance, isNull);
 
     await adapter.deleteThreadSection('sec-created');
+    await expectLater(
+      () => adapter.updateThreadSection(
+        const ThreadSectionUpdateOptions(
+          sectionId: ' $kBuiltInPinnedThreadSectionId ',
+          name: 'Renamed Built-in',
+        ),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      () => adapter.deleteThreadSection(' $kBuiltInPinnedThreadSectionId '),
+      throwsArgumentError,
+    );
     await adapter.moveThreadSection(
       const ThreadSectionMoveOptions(
         threadId: 'thread-5',

@@ -1094,7 +1094,7 @@ void main() {
         // 1. Pin thread
         await tester.tap(headerMenuBtn);
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Pin thread'));
+        await tester.tap(find.text('Pin for session'));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('pinned-threads-heading')),

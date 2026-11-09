@@ -32,12 +32,18 @@ class ThreadSectionAppearance {
   final String? icon;
 }
 
+const kBuiltInPinnedThreadSectionId = '01984de2-8f74-7c91-a3b2-5c5e937cf318';
+
 class ThreadSection {
   const ThreadSection({required this.id, required this.name, this.appearance});
+
+  static const builtInPinnedId = kBuiltInPinnedThreadSectionId;
 
   final String id;
   final String name;
   final ThreadSectionAppearance? appearance;
+
+  bool get isBuiltInPinned => id == kBuiltInPinnedThreadSectionId;
 
   ThreadSection copyWith({
     String? name,
@@ -106,6 +112,8 @@ class ThreadSummary {
   final ThreadGoal? goal;
   final ThreadSection? section;
   final int? sectionEnteredAtSeconds;
+
+  bool get isPersistedPinned => section?.isBuiltInPinned ?? false;
 
   ThreadSummary copyWith({
     String? preview,

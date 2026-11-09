@@ -984,7 +984,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   followerAnchor: Alignment.topRight,
                   width: 196,
                   popoverBuilder: (context, close) {
-                    final pinned = threadController.isPinned(thread.id);
+                    final pinned = threadController.isPinnedThread(thread);
+                    final canTogglePin = threadController.canTogglePinForThread(
+                      thread,
+                    );
+                    final pinLabel = threadController.pinActionLabelForThread(
+                      thread,
+                    );
                     final archived = threadController.showArchived;
                     final capabilities = _activeCapabilities;
                     return CodexMenu<String>(
@@ -995,15 +1001,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             label: 'Find in conversation',
                             icon: Icon(Icons.search_rounded),
                           ),
-                        CodexMenuItem(
-                          value: 'pin',
-                          label: pinned ? 'Unpin thread' : 'Pin thread',
-                          icon: Icon(
-                            pinned
-                                ? Icons.push_pin_rounded
-                                : Icons.push_pin_outlined,
+                        if (canTogglePin)
+                          CodexMenuItem(
+                            value: 'pin',
+                            label: pinLabel,
+                            icon: Icon(
+                              pinned
+                                  ? Icons.push_pin_rounded
+                                  : Icons.push_pin_outlined,
+                            ),
                           ),
-                        ),
                         const CodexMenuItem(
                           value: 'rename',
                           label: 'Rename thread',
@@ -1056,7 +1063,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           case 'search':
                             _openConversationSearch();
                           case 'pin':
-                            threadController.togglePinThread(thread.id);
+                            unawaited(
+                              threadController.togglePinThread(thread.id),
+                            );
                           case 'rename':
                             unawaited(
                               _renameActiveThreadDialog(

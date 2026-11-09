@@ -236,12 +236,35 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
-                            controller.scopedSection?.name ?? 'Section',
-                            key: const ValueKey('thread-section-scope-name'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                controller.scopedSection?.name ?? 'Section',
+                                key: const ValueKey(
+                                  'thread-section-scope-name',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              if (controller.scopedSection?.isBuiltInPinned ==
+                                  true)
+                                Text(
+                                  'Saved in stock Pinned only',
+                                  key: const ValueKey(
+                                    'thread-section-scope-pinned-note',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: palette.textMuted,
+                                        fontSize: 10.5,
+                                      ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
@@ -413,18 +436,29 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       );
     }
 
-    final showPinnedGroup =
-        !scoped && !controller.showArchived && query.isEmpty;
+    final builtInPinnedSection = !controller.showArchived
+        ? controller.builtInPinnedSection
+        : null;
+    final showPinnedGroup = !scoped && !controller.showArchived;
+    final savedPinnedThreads = <ThreadSummary>[];
+    final sessionPinnedThreads = <ThreadSummary>[];
+    final unpinnedThreads = <ThreadSummary>[];
+    if (showPinnedGroup) {
+      for (final thread in filteredThreads) {
+        if (thread.isPersistedPinned) {
+          savedPinnedThreads.add(thread);
+        } else if (controller.isSessionPinnedThread(thread)) {
+          sessionPinnedThreads.add(thread);
+        } else {
+          unpinnedThreads.add(thread);
+        }
+      }
+    } else {
+      unpinnedThreads.addAll(filteredThreads);
+    }
     final pinnedThreads = showPinnedGroup
-        ? filteredThreads
-              .where((thread) => controller.isPinned(thread.id))
-              .toList(growable: false)
+        ? <ThreadSummary>[...savedPinnedThreads, ...sessionPinnedThreads]
         : const <ThreadSummary>[];
-    final unpinnedThreads = showPinnedGroup
-        ? filteredThreads
-              .where((thread) => !controller.isPinned(thread.id))
-              .toList(growable: false)
-        : filteredThreads;
 
     final allSections = <ThreadSection>[];
     final seenSectionIds = <String>{};
@@ -434,20 +468,23 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           allSections.add(section);
         }
       }
-      for (final thread in unpinnedThreads) {
+      for (final thread in filteredThreads) {
         if (thread.section case final section?
             when seenSectionIds.add(section.id)) {
           allSections.add(section);
         }
       }
     }
+    final customSections = allSections
+        .where((section) => !section.isBuiltInPinned)
+        .toList(growable: false);
 
     final sectionThreadsById = <String, List<ThreadSummary>>{};
     final unsectionedThreads = <ThreadSummary>[];
     if (!controller.showArchived) {
       for (final thread in unpinnedThreads) {
         final section = thread.section;
-        if (section != null) {
+        if (section != null && !section.isBuiltInPinned) {
           sectionThreadsById
               .putIfAbsent(section.id, () => <ThreadSummary>[])
               .add(thread);
@@ -467,11 +504,28 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     if (scoped) {
       rows.addAll(filteredThreads);
     } else {
-      if (pinnedThreads.isNotEmpty) {
-        rows.add(_PinnedHeading(count: pinnedThreads.length));
-        rows.addAll(pinnedThreads);
+      final showPinnedHeading =
+          pinnedThreads.isNotEmpty ||
+          (builtInPinnedSection != null &&
+              (query.isEmpty ||
+                  builtInPinnedSection.name.toLowerCase().contains(query)));
+      if (showPinnedHeading) {
+        final pinnedCollapsed =
+            query.isEmpty &&
+            _collapsedSections.contains(kBuiltInPinnedThreadSectionId);
+        rows.add(
+          _PinnedHeading(
+            section: builtInPinnedSection,
+            savedCount: savedPinnedThreads.length,
+            sessionCount: sessionPinnedThreads.length,
+            collapsed: pinnedCollapsed,
+          ),
+        );
+        if (!pinnedCollapsed) {
+          rows.addAll(pinnedThreads);
+        }
       }
-      for (final section in allSections) {
+      for (final section in customSections) {
         final sectionThreads =
             sectionThreadsById[section.id] ?? const <ThreadSummary>[];
         if (query.isNotEmpty &&
@@ -544,7 +598,26 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         }
         final row = rows[index];
         if (row is _PinnedHeading) {
-          return _PinnedHeadingRow(heading: row);
+          final section = row.section;
+          return _PinnedHeadingRow(
+            heading: row,
+            enabled:
+                !controller.catalogBusy && controller.supportsThreadSections,
+            onOpenSection:
+                section != null &&
+                    controller.sections.any(
+                      (candidate) => candidate.id == section.id,
+                    )
+                ? () => controller.setSectionScope(section.id)
+                : null,
+            onToggleCollapse: () {
+              setState(() {
+                if (!_collapsedSections.remove(kBuiltInPinnedThreadSectionId)) {
+                  _collapsedSections.add(kBuiltInPinnedThreadSectionId);
+                }
+              });
+            },
+          );
         }
         if (row is _SectionHeading) {
           return _SectionHeadingRow(
@@ -564,10 +637,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                 }
               });
             },
-            onRenameSection: controller.supportsThreadSections
+            onRenameSection:
+                controller.supportsThreadSections &&
+                    !row.section.isBuiltInPinned
                 ? () => _renameSectionDialog(row.section)
                 : null,
-            onDeleteSection: controller.supportsThreadSections
+            onDeleteSection:
+                controller.supportsThreadSections &&
+                    !row.section.isBuiltInPinned
                 ? () => unawaited(controller.deleteSection(row.section.id))
                 : null,
           );
@@ -592,14 +669,18 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           key: ValueKey(thread.id),
           thread: thread,
           selected: controller.selectedThread?.id == thread.id,
-          pinned: controller.isPinned(thread.id),
+          pinned: controller.isPinnedThread(thread),
+          persistedPinned: thread.isPersistedPinned,
+          sessionPinned: controller.isSessionPinnedThread(thread),
+          pinActionLabel: controller.pinActionLabelForThread(thread),
+          canTogglePin: controller.canTogglePinForThread(thread),
           archived: controller.showArchived,
           enabled: !controller.mutating,
           supportsSections: controller.supportsThreadSections,
           sections: allSections,
           onSelect: () => controller.selectThread(thread.id),
           onResume: () => controller.resumeThread(thread.id),
-          onTogglePin: () => controller.togglePinThread(thread.id),
+          onTogglePin: () => unawaited(controller.togglePinThread(thread.id)),
           onRename: () => _renameThreadDialog(thread),
           onManageGoal: controller.canManageGoal(thread.id)
               ? () => unawaited(_manageThreadGoal(thread))
@@ -1106,30 +1187,119 @@ class _RenameThreadDialogState extends State<_RenameThreadDialog> {
 }
 
 final class _PinnedHeading {
-  const _PinnedHeading({required this.count});
+  const _PinnedHeading({
+    required this.section,
+    required this.savedCount,
+    required this.sessionCount,
+    required this.collapsed,
+  });
 
-  final int count;
+  final ThreadSection? section;
+  final int savedCount;
+  final int sessionCount;
+  final bool collapsed;
+
+  int get count => savedCount + sessionCount;
 }
 
-class _PinnedHeadingRow extends StatelessWidget {
-  const _PinnedHeadingRow({required this.heading});
+class _PinnedHeadingRow extends StatefulWidget {
+  const _PinnedHeadingRow({
+    required this.heading,
+    required this.enabled,
+    required this.onToggleCollapse,
+    this.onOpenSection,
+  });
 
   final _PinnedHeading heading;
+  final bool enabled;
+  final VoidCallback onToggleCollapse;
+  final VoidCallback? onOpenSection;
+
+  @override
+  State<_PinnedHeadingRow> createState() => _PinnedHeadingRowState();
+}
+
+class _PinnedHeadingRowState extends State<_PinnedHeadingRow> {
+  final _menuController = CodexPopoverController();
+
+  @override
+  void dispose() {
+    _menuController.dispose();
+    super.dispose();
+  }
+
+  String _summaryLabel() => '${widget.heading.count} loaded';
+
+  String _tooltipSummary() {
+    final heading = widget.heading;
+    if (heading.section == null) {
+      return '${heading.sessionCount} loaded session pins';
+    }
+    return '${heading.savedCount} loaded saved · ${heading.sessionCount} session';
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return CodexSidebarRow(
-      key: const ValueKey('pinned-threads-heading'),
-      title: 'Pinned',
-      leading: Icon(
-        Icons.push_pin_outlined,
-        size: 14,
-        color: palette.textSecondary,
-      ),
-      trailingBuilder: (context, _) => Text(
-        '${heading.count}',
-        style: Theme.of(context).textTheme.labelSmall,
+    final section = widget.heading.section;
+    final canBrowse = widget.enabled && widget.onOpenSection != null;
+    final summary = _summaryLabel();
+    final title = section?.name ?? 'Pinned';
+    return Padding(
+      padding: const EdgeInsets.only(top: 2.0),
+      child: CodexSidebarRow(
+        key: const ValueKey('pinned-threads-heading'),
+        containerKey: section != null
+            ? ValueKey('thread-section-heading-${section.id}')
+            : null,
+        height: 32.0,
+        tooltip: '$title · ${_tooltipSummary()}',
+        title: title,
+        leading: Icon(
+          widget.heading.collapsed
+              ? Icons.push_pin_outlined
+              : Icons.push_pin_rounded,
+          size: 14,
+          color: palette.textSecondary,
+        ),
+        onTap: widget.onToggleCollapse,
+        trailingBuilder: (context, _) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(summary, style: Theme.of(context).textTheme.labelSmall),
+            if (canBrowse && section != null) ...[
+              const SizedBox(width: 2),
+              CodexPopoverAnchor(
+                controller: _menuController,
+                targetAnchor: Alignment.bottomRight,
+                followerAnchor: Alignment.topRight,
+                width: 216,
+                popoverBuilder: (context, close) => CodexMenu<String>(
+                  items: const [
+                    CodexMenuItem(
+                      value: 'open',
+                      label: 'Browse saved Pinned section',
+                      icon: Icon(Icons.list_rounded),
+                    ),
+                  ],
+                  onSelected: (action) {
+                    close();
+                    if (action == 'open') {
+                      widget.onOpenSection?.call();
+                    }
+                  },
+                ),
+                child: CodexIconButton(
+                  key: ValueKey('thread-section-menu-${section.id}'),
+                  tooltip: 'Pinned section actions',
+                  onPressed: _menuController.toggle,
+                  size: 22,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 14),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1184,9 +1354,11 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
     final leadingIcon = widget.heading.collapsed
         ? Icons.label_outline_rounded
         : Icons.label_rounded;
-    final canMutate =
+    final canShowMenu =
         widget.enabled &&
-        (widget.onRenameSection != null || widget.onDeleteSection != null);
+        (widget.onOpenSection != null ||
+            widget.onRenameSection != null ||
+            widget.onDeleteSection != null);
 
     return Padding(
       padding: const EdgeInsets.only(top: 2.0),
@@ -1205,20 +1377,22 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
                 '${widget.heading.count} loaded',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
-              if (canMutate) ...[
+              if (canShowMenu) ...[
                 const SizedBox(width: 2),
                 CodexPopoverAnchor(
                   controller: _menuController,
                   targetAnchor: Alignment.bottomRight,
                   followerAnchor: Alignment.topRight,
-                  width: 176,
+                  width: 216,
                   popoverBuilder: (context, close) => CodexMenu<String>(
                     items: [
                       if (widget.onOpenSection != null)
-                        const CodexMenuItem(
+                        CodexMenuItem(
                           value: 'open',
-                          label: 'Browse section',
-                          icon: Icon(Icons.list_rounded),
+                          label: section.isBuiltInPinned
+                              ? 'Browse saved Pinned section'
+                              : 'Browse section',
+                          icon: const Icon(Icons.list_rounded),
                         ),
                       if (widget.onRenameSection != null)
                         const CodexMenuItem(
@@ -1333,6 +1507,10 @@ class _ThreadRow extends StatefulWidget {
     required this.thread,
     required this.selected,
     required this.pinned,
+    this.persistedPinned = false,
+    this.sessionPinned = false,
+    this.pinActionLabel = 'Pin thread',
+    this.canTogglePin = true,
     required this.archived,
     required this.enabled,
     this.supportsSections = false,
@@ -1352,6 +1530,10 @@ class _ThreadRow extends StatefulWidget {
   final ThreadSummary thread;
   final bool selected;
   final bool pinned;
+  final bool persistedPinned;
+  final bool sessionPinned;
+  final String pinActionLabel;
+  final bool canTogglePin;
   final bool archived;
   final bool enabled;
   final bool supportsSections;
@@ -1378,6 +1560,22 @@ class _ThreadRowState extends State<_ThreadRow> {
   void dispose() {
     _menuController.dispose();
     super.dispose();
+  }
+
+  String get _pinMenuLabel => widget.pinActionLabel;
+
+  String? _formatPinBadge() {
+    if (widget.persistedPinned) {
+      return 'Saved pin';
+    }
+    if (widget.sessionPinned) {
+      final section = widget.thread.section;
+      if (section != null && !section.isBuiltInPinned) {
+        return _truncateSidebarBadge('Session pin · ${section.name}', 32);
+      }
+      return 'Session pin';
+    }
+    return null;
   }
 
   Future<void> _chooseSection() async {
@@ -1445,9 +1643,11 @@ class _ThreadRowState extends State<_ThreadRow> {
       _ => null,
     };
 
+    final pinBadge = _formatPinBadge();
     final gitBadge = _formatGitBadge(thread.gitInfo);
     final goalBadge = _formatGoalBadge(thread.goal);
-    final hasMetadataBadges = gitBadge != null || goalBadge != null;
+    final hasMetadataBadges =
+        pinBadge != null || gitBadge != null || goalBadge != null;
 
     final rowWidget = CodexSidebarRow(
       containerKey: ValueKey('thread-row-${thread.id}'),
@@ -1484,15 +1684,16 @@ class _ThreadRowState extends State<_ThreadRow> {
                 width: 212,
                 popoverBuilder: (context, close) => CodexMenu<String>(
                   items: [
-                    CodexMenuItem(
-                      value: 'pin',
-                      label: widget.pinned ? 'Unpin thread' : 'Pin thread',
-                      icon: Icon(
-                        widget.pinned
-                            ? Icons.push_pin_rounded
-                            : Icons.push_pin_outlined,
+                    if (widget.canTogglePin)
+                      CodexMenuItem(
+                        value: 'pin',
+                        label: _pinMenuLabel,
+                        icon: Icon(
+                          widget.pinned
+                              ? Icons.push_pin_rounded
+                              : Icons.push_pin_outlined,
+                        ),
                       ),
-                    ),
                     const CodexMenuItem(
                       value: 'rename',
                       label: 'Rename thread',
@@ -1525,7 +1726,8 @@ class _ThreadRowState extends State<_ThreadRow> {
                           label: 'Move to new section…',
                           icon: Icon(Icons.create_new_folder_outlined),
                         ),
-                      if (thread.section != null)
+                      if (thread.section != null &&
+                          !thread.section!.isBuiltInPinned)
                         const CodexMenuItem(
                           value: 'remove-section',
                           label: 'Remove from section',
@@ -1611,6 +1813,8 @@ class _ThreadRowState extends State<_ThreadRow> {
                 rowWidget,
                 _ThreadMetadataStrip(
                   threadId: thread.id,
+                  pinBadge: pinBadge,
+                  persistedPinned: widget.persistedPinned,
                   gitBadge: gitBadge,
                   goalBadge: goalBadge,
                 ),
@@ -1668,11 +1872,15 @@ class _ThreadRowState extends State<_ThreadRow> {
 class _ThreadMetadataStrip extends StatelessWidget {
   const _ThreadMetadataStrip({
     required this.threadId,
+    this.pinBadge,
+    this.persistedPinned = false,
     required this.gitBadge,
     required this.goalBadge,
   });
 
   final String threadId;
+  final String? pinBadge;
+  final bool persistedPinned;
   final String? gitBadge;
   final String? goalBadge;
 
@@ -1684,10 +1892,46 @@ class _ThreadMetadataStrip extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 8, 4),
-      child: Row(
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 3,
         children: [
+          if (pinBadge != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Container(
+                key: ValueKey('thread-pin-badge-$threadId'),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      persistedPinned
+                          ? Icons.push_pin_rounded
+                          : Icons.push_pin_outlined,
+                      size: 10,
+                      color: palette.textMuted,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        pinBadge!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: labelStyle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           if (gitBadge != null)
-            Flexible(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
               child: Container(
                 key: ValueKey('thread-git-badge-$threadId'),
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1716,9 +1960,9 @@ class _ThreadMetadataStrip extends StatelessWidget {
                 ),
               ),
             ),
-          if (gitBadge != null && goalBadge != null) const SizedBox(width: 4),
           if (goalBadge != null)
-            Flexible(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
               child: Container(
                 key: ValueKey('thread-goal-badge-$threadId'),
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),

@@ -102,7 +102,13 @@ final class ThreadProtocolAdapter {
       'threadId': threadId,
       'includeTurns': false,
     });
-    return _parseThreadContainer(response, 'thread/read');
+    final thread = _parseThreadContainer(response, 'thread/read');
+    if (thread.id != threadId) {
+      throw const ProtocolViolation(
+        'thread/read returned a different thread ID than requested.',
+      );
+    }
+    return thread;
   }
 
   Future<ThreadSummary> resumeThread(String threadId) async {
@@ -301,6 +307,13 @@ final class ThreadProtocolAdapter {
       'sectionId',
       _maxIdentifierLength,
     );
+    if (sectionId == kBuiltInPinnedThreadSectionId) {
+      throw ArgumentError.value(
+        options.sectionId,
+        'sectionId',
+        'The built-in Pinned section cannot be renamed.',
+      );
+    }
     final name = _requireArgumentText(
       options.name,
       'name',
@@ -323,6 +336,13 @@ final class ThreadProtocolAdapter {
       'sectionId',
       _maxIdentifierLength,
     );
+    if (normalizedId == kBuiltInPinnedThreadSectionId) {
+      throw ArgumentError.value(
+        sectionId,
+        'sectionId',
+        'The built-in Pinned section cannot be deleted.',
+      );
+    }
     await request('threadSection/delete', {'sectionId': normalizedId});
   }
 
