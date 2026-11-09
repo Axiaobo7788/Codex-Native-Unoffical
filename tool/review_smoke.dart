@@ -8,7 +8,16 @@ import 'package:codex_native_unofficial/src/transport/process/codex_executable_l
 import 'package:codex_native_unofficial/src/transport/process/host_executable_locator.dart';
 import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  final targetKind = _parseTargetArg(args);
+  if (targetKind == null) {
+    stderr.writeln(
+      'Usage: dart run tool/review_smoke.dart '
+      '[--target=uncommitted|base-branch|commit|custom]',
+    );
+    exitCode = 64;
+    return;
+  }
   final executable = await const CodexExecutableLocator().locate();
   if (executable == null) {
     stderr.writeln('REVIEW_SMOKE=CODEX_NOT_FOUND');
@@ -37,7 +46,11 @@ Future<void> main() async {
     fixtureDirectory = await Directory.systemTemp.createTemp(
       'codex-native-review-smoke-',
     );
-    await _runGit(fixtureDirectory.path, ['init', '--quiet']);
+    await _runGit(fixtureDirectory.path, [
+      'init',
+      '--quiet',
+      '--initial-branch=main',
+    ]);
     await _runGit(fixtureDirectory.path, [
       'config',
       'user.email',
@@ -57,7 +70,42 @@ Future<void> main() async {
       '-m',
       'initial fixture',
     ]);
+    await _runGit(fixtureDirectory.path, [
+      'checkout',
+      '--quiet',
+      '-b',
+      'feature/review-smoke',
+    ]);
+    await fixture.writeAsString(
+      'int add(int a, int b) => a + b;\n'
+      'int subtract(int a, int b) => a - b;\n',
+    );
+    await _runGit(fixtureDirectory.path, ['add', 'calculator.dart']);
+    await _runGit(fixtureDirectory.path, [
+      'commit',
+      '--quiet',
+      '-m',
+      'add subtract helper',
+    ]);
+    final featureCommitSha = (await _runGit(fixtureDirectory.path, [
+      'rev-parse',
+      '--short',
+      'HEAD',
+    ])).trim();
     await fixture.writeAsString('int divide(int a, int b) => a ~/ b;\n');
+
+    final target = switch (targetKind) {
+      'uncommitted' => const UncommittedChangesReviewTarget(),
+      'base-branch' => const BaseBranchReviewTarget('main'),
+      'commit' => CommitReviewTarget(
+        sha: featureCommitSha,
+        title: 'add subtract helper',
+      ),
+      'custom' => const CustomReviewTarget(
+        'Check calculator.dart for division by zero edge cases in 1 sentence.',
+      ),
+      _ => const UncommittedChangesReviewTarget(),
+    };
 
     transport = await ProcessTransport.startHost(
       hostExecutablePath: host,
@@ -115,10 +163,7 @@ Future<void> main() async {
     });
 
     final review = await transport.startReview(
-      ReviewStartOptions(
-        threadId: smokeThreadId,
-        target: const UncommittedChangesReviewTarget(),
-      ),
+      ReviewStartOptions(threadId: smokeThreadId, target: target),
     );
     if (review.reviewThreadId != smokeThreadId) {
       throw StateError('review/start returned a different thread identity.');
@@ -144,6 +189,7 @@ Future<void> main() async {
     }
 
     stdout.writeln('REVIEW_SMOKE=PASS');
+    stdout.writeln('REVIEW_TARGET=$targetKind');
     stdout.writeln('REVIEW_STATUS=${completed.status.name}');
     stdout.writeln('REVIEW_ENTERED=$enteredReviewMode');
     stdout.writeln('REVIEW_EXITED=$exitedReviewMode');
@@ -184,7 +230,22 @@ Future<void> main() async {
   }
 }
 
-Future<void> _runGit(String workingDirectory, List<String> arguments) async {
+String? _parseTargetArg(List<String> args) {
+  var target = 'uncommitted';
+  for (final arg in args) {
+    if (arg.startsWith('--target=')) {
+      target = arg.substring('--target='.length).trim();
+    } else {
+      return null;
+    }
+  }
+  return switch (target) {
+    'uncommitted' || 'base-branch' || 'commit' || 'custom' => target,
+    _ => null,
+  };
+}
+
+Future<String> _runGit(String workingDirectory, List<String> arguments) async {
   final result = await Process.run(
     'git',
     arguments,
@@ -196,4 +257,5 @@ Future<void> _runGit(String workingDirectory, List<String> arguments) async {
       '${result.stderr.toString().trim()}',
     );
   }
+  return result.stdout.toString();
 }
