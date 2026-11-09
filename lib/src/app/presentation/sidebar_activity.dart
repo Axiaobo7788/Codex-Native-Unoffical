@@ -1278,7 +1278,7 @@ class _PinnedHeadingRowState extends State<_PinnedHeadingRow> {
                   items: const [
                     CodexMenuItem(
                       value: 'open',
-                      label: 'Browse saved Pinned section',
+                      label: 'Browse saved pins',
                       icon: Icon(Icons.list_rounded),
                     ),
                   ],
@@ -1390,7 +1390,7 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
                         CodexMenuItem(
                           value: 'open',
                           label: section.isBuiltInPinned
-                              ? 'Browse saved Pinned section'
+                              ? 'Browse saved pins'
                               : 'Browse section',
                           icon: const Icon(Icons.list_rounded),
                         ),

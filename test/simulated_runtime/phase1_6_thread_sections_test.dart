@@ -401,7 +401,7 @@ void main() {
         );
         expect(find.text('Saved pin'), findsOneWidget);
 
-        // Built-in Pinned menu offers only 'Browse saved Pinned section' (no Rename/Delete)
+        // Built-in Pinned menu offers only 'Browse saved pins' (no Rename/Delete)
         await tester.tap(
           find.byKey(
             const ValueKey(
@@ -410,7 +410,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Browse saved Pinned section'), findsOneWidget);
+        expect(find.text('Browse saved pins'), findsOneWidget);
         expect(find.text('Rename section'), findsNothing);
         expect(find.text('Delete section'), findsNothing);
         // Close popover by tapping outside
@@ -454,7 +454,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Browse saved Pinned section'));
+        await tester.tap(find.text('Browse saved pins'));
         await tester.pumpAndSettle();
 
         expect(
