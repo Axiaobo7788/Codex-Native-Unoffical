@@ -246,55 +246,41 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return false;
       }
+      if (latest.id != threadId) {
+        _errorMessage = 'Thread read returned a mismatched thread identifier.';
+        return false;
+      }
       _unmaterializedThreadIds.remove(threadId);
       final reconciled = _replaceInPlace(latest);
       if (_selectedThread?.id == threadId) {
         _selectedThread = reconciled;
       }
-      if (expectedCurrentlyPinned) {
-        _pinnedThreadIds.remove(threadId);
-        if (reconciled.section == null) {
-          _invalidateSectionOrder();
-          return true;
-        }
-        if (!reconciled.isPersistedPinned) {
-          _errorMessage =
-              'Thread is now in section "${reconciled.section!.name}" and was not removed from that section.';
-          return false;
-        }
-        await sectionGateway.moveThreadSection(
-          ThreadSectionMoveOptions(threadId: threadId, sectionId: null),
-        );
-        if (_disposed) {
-          return false;
-        }
-        _applySectionChanged(threadId, null);
-        _invalidateSectionOrder();
-        return true;
-      } else {
-        if (reconciled.isPersistedPinned) {
-          _pinnedThreadIds.remove(threadId);
-          _invalidateSectionOrder();
-          return true;
-        }
-        if (reconciled.section != null) {
-          _errorMessage =
-              'Thread is now in section "${reconciled.section!.name}". Use Pin for session or Move to section.';
-          return false;
-        }
-        await sectionGateway.moveThreadSection(
-          ThreadSectionMoveOptions(
-            threadId: threadId,
-            sectionId: kBuiltInPinnedThreadSectionId,
-          ),
-        );
-        if (_disposed) {
-          return false;
-        }
-        _applySectionChanged(threadId, kBuiltInPinnedThreadSectionId);
+      if (reconciled.section != null && !reconciled.isPersistedPinned) {
+        _errorMessage = expectedCurrentlyPinned
+            ? 'Thread is now in section "${reconciled.section!.name}" and was not removed from that section.'
+            : 'Thread is now in section "${reconciled.section!.name}". Use Pin for session or Move to section.';
+        return false;
+      }
+      final targetSectionId = expectedCurrentlyPinned
+          ? null
+          : kBuiltInPinnedThreadSectionId;
+      _pinnedThreadIds.remove(threadId);
+      if (reconciled.isPersistedPinned != expectedCurrentlyPinned) {
         _invalidateSectionOrder();
         return true;
       }
+      await sectionGateway.moveThreadSection(
+        ThreadSectionMoveOptions(
+          threadId: threadId,
+          sectionId: targetSectionId,
+        ),
+      );
+      if (_disposed) {
+        return false;
+      }
+      _applySectionChanged(threadId, targetSectionId);
+      _invalidateSectionOrder();
+      return true;
     } catch (error) {
       _errorMessage = _boundedError(error);
       return false;

@@ -102,7 +102,13 @@ final class ThreadProtocolAdapter {
       'threadId': threadId,
       'includeTurns': false,
     });
-    return _parseThreadContainer(response, 'thread/read');
+    final thread = _parseThreadContainer(response, 'thread/read');
+    if (thread.id != threadId) {
+      throw const ProtocolViolation(
+        'thread/read returned a different thread ID than requested.',
+      );
+    }
+    return thread;
   }
 
   Future<ThreadSummary> resumeThread(String threadId) async {

@@ -761,6 +761,22 @@ void main() {
       controller.errorMessage,
       contains('Thread is now in section "Work"'),
     );
+
+    // 8. Mismatched readThread ID fails closed before any move or projection overwrite
+    gateway.readSectionOverrides.remove('t-custom-pinned');
+    await controller.moveThreadToSection(
+      threadId: 't-custom-pinned',
+      sectionId: null,
+    );
+    gateway.readIdOverrides['t-custom-pinned'] = 't-wrong';
+    final movesBeforeMismatch = gateway.movedSections.length;
+    expect(await controller.togglePinThread('t-custom-pinned'), isFalse);
+    expect(gateway.movedSections, hasLength(movesBeforeMismatch));
+    expect(
+      controller.errorMessage,
+      'Thread read returned a mismatched thread identifier.',
+    );
+    expect(controller.threads.any((t) => t.id == 't-wrong'), isFalse);
   });
 
   test('capped section retention preserves active scoped custom section when built-in Pinned arrives and uses session wording when built-in is absent', () async {
@@ -884,6 +900,7 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   final List<String> deletedSectionIds = [];
   final List<ThreadSectionMoveOptions> movedSections = [];
   final Map<String, ThreadSection?> readSectionOverrides = {};
+  final Map<String, String> readIdOverrides = {};
   bool sectionSupport = true;
 
   @override
@@ -975,7 +992,7 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   Future<ThreadSummary> readThread(String threadId) async {
     readIds.add(threadId);
     return _thread(
-      threadId,
+      readIdOverrides[threadId] ?? threadId,
       name: 'Read metadata',
       section: readSectionOverrides[threadId],
     );
