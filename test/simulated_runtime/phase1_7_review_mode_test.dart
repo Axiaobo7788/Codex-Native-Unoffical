@@ -112,8 +112,9 @@ void main() {
       );
       expect(submitBtn.onPressed, isNull);
 
-      await tester.tap(
-        find.byKey(const ValueKey('review-suggested-branch-origin/main')),
+      await tester.enterText(
+        find.byKey(const ValueKey('review-base-branch-field')),
+        '  origin/main  ',
       );
       await tester.pumpAndSettle();
       await tester.tap(
@@ -165,8 +166,18 @@ void main() {
 
       await tester.enterText(
         find.byKey(const ValueKey('review-commit-sha-field')),
-        '  a64b8e7  ',
+        '  HEAD~1  ',
       );
+      final titleField = tester.widget<TextField>(
+        find.byKey(const ValueKey('review-commit-title-field')),
+      );
+      titleField.controller!.text = 'a' * 241;
+      await tester.pumpAndSettle();
+      submitBtn = tester.widget<CodexButton>(
+        find.byKey(const ValueKey('start-review-submit-button')),
+      );
+      expect(submitBtn.onPressed, isNull);
+
       await tester.enterText(
         find.byKey(const ValueKey('review-commit-title-field')),
         '  Consolidation baseline  ',
@@ -182,7 +193,7 @@ void main() {
       expect(
         harness.startedReviews.last.target,
         isA<CommitReviewTarget>()
-            .having((t) => t.sha, 'sha', 'a64b8e7')
+            .having((t) => t.sha, 'sha', 'HEAD~1')
             .having((t) => t.title, 'title', 'Consolidation baseline'),
       );
 

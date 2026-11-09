@@ -61,12 +61,21 @@ Future<void> main(List<String> args) async {
       'user.name',
       'Codex Native Review Smoke',
     ]);
+    await _runGit(fixtureDirectory.path, ['config', 'commit.gpgsign', 'false']);
+    await _runGit(fixtureDirectory.path, ['config', 'tag.gpgsign', 'false']);
+    await _runGit(fixtureDirectory.path, [
+      'config',
+      'core.hooksPath',
+      '/dev/null',
+    ]);
     final fixture = File('${fixtureDirectory.path}/calculator.dart');
     await fixture.writeAsString('int add(int a, int b) => a + b;\n');
     await _runGit(fixtureDirectory.path, ['add', 'calculator.dart']);
     await _runGit(fixtureDirectory.path, [
       'commit',
       '--quiet',
+      '--no-gpg-sign',
+      '--no-verify',
       '-m',
       'initial fixture',
     ]);
@@ -84,6 +93,8 @@ Future<void> main(List<String> args) async {
     await _runGit(fixtureDirectory.path, [
       'commit',
       '--quiet',
+      '--no-gpg-sign',
+      '--no-verify',
       '-m',
       'add subtract helper',
     ]);

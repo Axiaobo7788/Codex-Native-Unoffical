@@ -1147,6 +1147,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       mounted &&
       widget.controller.thread?.id == threadId &&
       widget.threadController?.showArchived == false &&
+      widget.threadController?.mutating == false &&
       widget.threadController?.isMaterialized(threadId) == true &&
       widget.controller.canStartReview &&
       _activeCapabilities.supportsGitDiff;
@@ -5162,13 +5163,12 @@ class _StartReviewDialogState extends State<_StartReviewDialog> {
           return null;
         }
         final title = _commitTitleController.text.trim();
+        if (title.length > _maxCommitTitleChars) {
+          return null;
+        }
         return CommitReviewTarget(
           sha: sha,
-          title: title.isEmpty
-              ? null
-              : (title.length <= _maxCommitTitleChars
-                    ? title
-                    : title.substring(0, _maxCommitTitleChars)),
+          title: title.isEmpty ? null : title,
         );
       case _ReviewTargetKind.custom:
         final instructions = _customInstructionsController.text.trim();
@@ -5192,10 +5192,6 @@ class _StartReviewDialogState extends State<_StartReviewDialog> {
     final theme = OfficialCodexTheme.of(context);
     final currentBranch = widget.thread.gitInfo?.branch?.trim();
     final resolvedTarget = _resolveTarget();
-    final suggestedBranches = <String>[
-      if (currentBranch != 'main') 'main',
-      if (currentBranch != 'origin/main') 'origin/main',
-    ];
 
     return AlertDialog(
       backgroundColor: theme.modalSurface,
@@ -5262,37 +5258,16 @@ class _StartReviewDialogState extends State<_StartReviewDialog> {
                   'current working tree.',
                   style: TextStyle(color: theme.textSecondary, fontSize: 13),
                 ),
-                _ReviewTargetKind.baseBranch => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      key: const ValueKey('review-base-branch-field'),
-                      controller: _baseBranchController,
-                      autofocus: true,
-                      maxLength: _maxBranchChars,
-                      decoration: const InputDecoration(
-                        labelText: 'Base branch or ref',
-                        hintText: 'main or origin/main',
-                      ),
-                      onSubmitted: (_) => _submitIfValid(),
-                    ),
-                    if (suggestedBranches.isNotEmpty)
-                      Wrap(
-                        spacing: ThemeTokens.space2,
-                        runSpacing: ThemeTokens.space1,
-                        children: [
-                          for (final branch in suggestedBranches)
-                            ActionChip(
-                              key: ValueKey('review-suggested-branch-$branch'),
-                              label: Text('Use $branch'),
-                              onPressed: () {
-                                _baseBranchController.text = branch;
-                              },
-                            ),
-                        ],
-                      ),
-                  ],
+                _ReviewTargetKind.baseBranch => TextField(
+                  key: const ValueKey('review-base-branch-field'),
+                  controller: _baseBranchController,
+                  autofocus: true,
+                  maxLength: _maxBranchChars,
+                  decoration: const InputDecoration(
+                    labelText: 'Base branch or ref',
+                    hintText: 'main or origin/main',
+                  ),
+                  onSubmitted: (_) => _submitIfValid(),
                 ),
                 _ReviewTargetKind.commit => Column(
                   mainAxisSize: MainAxisSize.min,
@@ -5305,7 +5280,7 @@ class _StartReviewDialogState extends State<_StartReviewDialog> {
                       maxLength: _maxCommitShaChars,
                       decoration: const InputDecoration(
                         labelText: 'Commit SHA or ref',
-                        hintText: 'e.g. a64b8e7',
+                        hintText: 'HEAD~1 or commit SHA',
                       ),
                       onSubmitted: (_) => _submitIfValid(),
                     ),
