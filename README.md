@@ -11,7 +11,8 @@ and is not affiliated with or endorsed by OpenAI.
   bounded diffs and command output. The desktop layout has a 260 px sidebar,
   a 704 px reading/composer column, and a compact layout for narrow windows.
 - **Organization and review:** archive, rename, pin, and group local threads into
-  sections. Section counts describe loaded threads from the bounded global list.
+  sections. Global section counts describe loaded rows. Browse one local section
+  at a time in stock order with bounded pagination.
   Manage a local thread Goal from its sidebar menu. Desktop code review can
   target uncommitted changes, a base branch, a commit or ref, or custom
   instructions on an eligible thread.

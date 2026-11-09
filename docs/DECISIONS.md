@@ -2206,3 +2206,22 @@ lifecycle presentation the source of truth.
   identity, archive, mutation, and runtime state after it closes. Review
   remains inline through the existing stock lifecycle and unavailable on
   read-only Remote. This extends the initial F14 single-action scope.
+
+---
+
+## ADR-043 — Browse one stock-ordered local Section at a time
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Keep one bounded sidebar working set. A local Section scope replaces the
+  global recency rows with the concrete section's ascending `section_position`
+  pages. The scope keeps the 100-thread cap and can preserve one selected
+  conversation outside the list. Global group counts still describe loaded rows.
+- Use the same section and sort on every cursor request. Treat moves,
+  archive changes and membership corrections as invalidation signals. Discard
+  stale page replies and restart from the first page. Metadata reads can
+  reconcile membership without changing the active conversation.
+- Scope is local. Track A rejects section filters and ordering. Keep the
+  64-section catalog cap, virtualized rows, and bounded thread metadata.

@@ -3452,3 +3452,66 @@ P1, or P2 findings.
 - The new UI surfaces remain `HUMAN_REVIEW_PENDING`. Goal pause/resume
   controls have simulated interaction coverage. The real Goal probe used
   paused state and did not exercise model-driven automatic continuation.
+
+## F16 scoped Sections and stored attachment evidence
+
+The peers used the official `agy` TUI and isolated worktrees from
+`f70a210`. Codex owned bounded local Section browsing (`3a25dc4`,
+`392fa92`, `fffbcf3`). Gemini owned the [stored attachment evidence](reverse/THREAD_ATTACHMENT_EVIDENCE.md)
+(`cbfdc20`, `88f1198`). The Section audit found no P0 or P1 issues.
+It found one P2 in draft metadata after switching to another row. The
+owner fixed it and verified the transition. The attachment audit narrowed
+claims about Native composer types, materialization and global visibility,
+and grounded PR identity in the public app-server contract.
+
+- Stock `0.167.0-alpha.3.2` distinguishes omitted `sectionId` (global),
+  explicit null (unsectioned), and a concrete Section ID. Section-position
+  sorting requires a concrete ID. Direct stock and bundled Host probes
+  returned matching membership and ascending order across cursor pages.
+  A disposable 26-row fixture returned rows 01–25 and then row 26.
+  A move within a section is also an order change. [OpenAI app-server section moves](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#thread-section-moves)
+- The Native scope shares the global working-set cap, resets stale cursors
+  after membership changes, and preserves the selected conversation.
+  Simulated tests cover filtering before another page is loaded, stale
+  replies, membership observed first by a metadata read, and release of
+  the former draft's metadata. The read-only Remote rejects scoped requests.
+- Public source and a new stock probe establish the built-in Pinned
+  identity. Stock rejects rename and delete for that identity. It permits
+  a different custom section with the same display name. The fixture's
+  named thread was visible in its explicit Pinned scope after a move.
+  Metadata read showed no membership after removal. Global and explicit
+  unsectioned lists still omitted the named thread before any turn.
+  [Stock migration](https://github.com/openai/codex/blob/main/codex-rs/state/migrations/0045_threads_section.sql)
+  [Stock section handlers](https://github.com/openai/codex/blob/main/codex-rs/app-server/src/request_processors/thread_sections.rs)
+- A second stock lifecycle probe returned `unsubscribed`, then
+  `notSubscribed`. The persisted thread remained in `thread/loaded/list`
+  for the 1.9 s observation window. Metadata reads succeeded and
+  `thread/resume` restored the subscription. These results support
+  further notification-lifecycle research. Memory release and background
+  approval safety are unverified.
+- Stored attachments have a stable local metadata API. Stock bounds
+  individual payloads to 64 KiB and a thread to 100 entries. Desktop
+  evidence covers managed worktree and linked PR references. A small
+  typed local link surface remains a separate candidate.
+  [OpenAI stored attachment contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#stored-thread-attachments)
+
+### Integrated F16 verification
+
+- Dart format (174 files), analyze, standalone boundary (61 roots),
+  409 default Flutter cases with five explicit opt-in skips, and all
+  five isolated direct-stock tests passed. Rust format, Clippy and
+  98 Rust tests passed. The Linux debug bundle and source license
+  packaging checks passed.
+- The history benchmark retained 100 of 1,000 source turns and discarded
+  ten 3 MiB command outputs. RSS deltas were 1,703,936 bytes for retained
+  history and 24,715,264 bytes for the heavy-output iterations.
+- The packaged Linux app connected to its bundled Host and stock
+  app-server in a test-owned desktop and Codex profile. An initial
+  XWayland launch rendered the connected shell and both section
+  headings but ignored synthetic pointer input. In a private Xvfb
+  session, the app opened the Section menu, browsed rows 01–25,
+  loaded row 26 through the footer, selected it, and kept the active
+  thread when returning to the global list. App, Host, and stock
+  process exit was verified. The existing GTK accessibility warning
+  occurred. This is an agent real-use walkthrough; Human review is
+  pending.
