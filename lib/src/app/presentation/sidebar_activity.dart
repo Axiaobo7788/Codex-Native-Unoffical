@@ -34,7 +34,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   void initState() {
     super.initState();
     _workingDirectory = widget.defaultWorkingDirectory;
-    _searchController = TextEditingController()
+    _searchQuery = widget.controller.savedSearchTerm ?? '';
+    _showSearch = _searchQuery.isNotEmpty;
+    _searchController = TextEditingController(text: _searchQuery)
       ..addListener(() {
         final next = _searchController.text.trim();
         if (next != _searchQuery && mounted) {
@@ -52,19 +54,22 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   void _toggleSearch() {
-    setState(() {
-      _showSearch = !_showSearch;
-      if (!_showSearch) {
-        _searchController.clear();
-        _searchQuery = '';
+    setState(() => _showSearch = !_showSearch);
+    if (!_showSearch) {
+      _clearSearch();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _searchFocusNode.requestFocus();
       }
     });
-    if (_showSearch) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _searchFocusNode.requestFocus();
-        }
-      });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    if (widget.controller.savedSearchTerm != null) {
+      unawaited(widget.controller.setSavedSearch(null));
     }
   }
 
@@ -94,6 +99,17 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           animation: widget.controller,
           builder: (context, _) {
             final controller = widget.controller;
+            final savedSearch = controller.savedSearchTerm;
+            final offersSavedSearch =
+                !widget.runtimeController.usesRemote &&
+                controller.sectionScopeId == null;
+            final canSubmitSavedSearch =
+                offersSavedSearch &&
+                _searchQuery.isNotEmpty &&
+                _searchQuery.length <=
+                    ThreadListController.maxSavedSearchLength &&
+                _searchQuery != savedSearch &&
+                !controller.catalogBusy;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -286,10 +302,19 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                         key: const ValueKey('thread-search-field'),
                         controller: _searchController,
                         focusNode: _searchFocusNode,
+                        onEditingComplete: offersSavedSearch
+                            ? () {
+                                if (canSubmitSavedSearch) {
+                                  unawaited(
+                                    controller.setSavedSearch(_searchQuery),
+                                  );
+                                }
+                              }
+                            : null,
                         decoration: InputDecoration(
-                          hintText: controller.sectionScopeId == null
-                              ? 'Filter threads…'
-                              : 'Filter loaded threads…',
+                          hintText: savedSearch == null
+                              ? 'Filter loaded threads…'
+                              : 'Search saved threads…',
                           prefixIcon: const Icon(
                             Icons.search_rounded,
                             size: 16,
@@ -298,11 +323,12 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                             minWidth: 32,
                             minHeight: 30,
                           ),
-                          suffixIcon: _searchQuery.isEmpty
+                          suffixIcon:
+                              _searchQuery.isEmpty && savedSearch == null
                               ? null
                               : CodexIconButton(
                                   tooltip: 'Clear filter',
-                                  onPressed: _searchController.clear,
+                                  onPressed: _clearSearch,
                                   size: 24,
                                   icon: const Icon(
                                     Icons.close_rounded,
@@ -315,6 +341,50 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                if (_showSearch &&
+                    offersSavedSearch &&
+                    _searchQuery.isNotEmpty &&
+                    _searchQuery != savedSearch)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: CodexButton(
+                        key: const ValueKey('thread-search-saved'),
+                        variant: CodexButtonVariant.ghost,
+                        size: CodexButtonSize.sm,
+                        onPressed: canSubmitSavedSearch
+                            ? () => controller.setSavedSearch(_searchQuery)
+                            : null,
+                        label: 'Search saved threads',
+                      ),
+                    ),
+                  ),
+                if (savedSearch != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                    child: Row(
+                      children: [
+                        CodexIconButton(
+                          key: const ValueKey('thread-search-saved-back'),
+                          tooltip: 'Back to loaded threads',
+                          size: 26,
+                          onPressed: _clearSearch,
+                          icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Saved matches for “$savedSearch”',
+                            key: const ValueKey('thread-search-saved-scope'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 if (controller.errorMessage case final error?)
@@ -378,8 +448,10 @@ class _ThreadPanelState extends State<_ThreadPanel> {
 
   Widget _threadList(ThreadListController controller) {
     final scoped = controller.sectionScopeId != null;
+    final savedSearch = controller.savedSearchTerm;
+    final flat = scoped || savedSearch != null;
     final hasPersistedSections =
-        !scoped && !controller.showArchived && controller.sections.isNotEmpty;
+        !flat && !controller.showArchived && controller.sections.isNotEmpty;
     if (controller.loading &&
         controller.threads.isEmpty &&
         !hasPersistedSections) {
@@ -388,6 +460,15 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     if (controller.threads.isEmpty &&
         !hasPersistedSections &&
         !controller.canLoadMore) {
+      if (savedSearch != null) {
+        return Center(
+          child: Text(
+            controller.errorMessage == null
+                ? 'No saved threads match.'
+                : 'Unable to search saved threads.',
+          ),
+        );
+      }
       return scoped
           ? Center(
               child: Text(
@@ -399,7 +480,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           : const _SidebarEmptyState();
     }
 
-    final query = _searchQuery.toLowerCase();
+    final query = savedSearch == null ? _searchQuery.toLowerCase() : '';
     final filteredThreads = query.isEmpty
         ? controller.threads
         : controller.threads
@@ -418,14 +499,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               .toList(growable: false);
 
     final matchingEmptySections =
-        !scoped && !controller.showArchived && query.isNotEmpty
+        !flat && !controller.showArchived && query.isNotEmpty
         ? controller.sections
               .where((section) => section.name.toLowerCase().contains(query))
               .toList(growable: false)
         : const <ThreadSection>[];
 
     if (filteredThreads.isEmpty &&
-        !(scoped && controller.canLoadMore) &&
+        !(flat && controller.canLoadMore) &&
         (query.isNotEmpty
             ? matchingEmptySections.isEmpty
             : !hasPersistedSections)) {
@@ -443,7 +524,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     final builtInPinnedSection = !controller.showArchived
         ? controller.builtInPinnedSection
         : null;
-    final showPinnedGroup = !scoped && !controller.showArchived;
+    final showPinnedGroup = !flat && !controller.showArchived;
     final savedPinnedThreads = <ThreadSummary>[];
     final sessionPinnedThreads = <ThreadSummary>[];
     final unpinnedThreads = <ThreadSummary>[];
@@ -505,7 +586,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       projects.putIfAbsent(thread.cwd, () => <ThreadSummary>[]).add(thread);
     }
     final rows = <Object>[];
-    if (scoped) {
+    if (flat) {
       rows.addAll(filteredThreads);
     } else {
       final showPinnedHeading =
@@ -566,14 +647,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       }
     }
     final hasFooter =
-        (scoped || query.isEmpty) &&
+        (flat || query.isEmpty) &&
         (controller.canLoadMore || controller.retentionLimitReached);
     return ListView.builder(
-      key: ValueKey(
-        scoped
-            ? 'thread-list-section-${controller.sectionScopeId}'
-            : 'thread-list',
-      ),
+      key: ValueKey(switch (savedSearch) {
+        final term? => 'thread-list-saved-search-$term',
+        null when scoped => 'thread-list-section-${controller.sectionScopeId}',
+        null => 'thread-list',
+      }),
       padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
       itemCount: rows.length + (hasFooter ? 1 : 0),
       itemBuilder: (context, index) {
@@ -582,7 +663,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             return Padding(
               padding: const EdgeInsets.all(ThemeTokens.space3),
               child: Text(
-                scoped
+                savedSearch != null
+                    ? 'Showing the first ${controller.maxRetainedThreads} matches.'
+                    : scoped
                     ? 'Showing the first ${controller.maxRetainedThreads} threads in this section.'
                     : 'Showing the newest ${controller.maxRetainedThreads} threads.',
                 textAlign: TextAlign.center,

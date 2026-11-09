@@ -25,6 +25,7 @@ class ThreadListController extends ChangeNotifier {
 
   static const maxPinnedThreads = 32;
   static const maxRetainedSections = 64;
+  static const maxSavedSearchLength = 256;
   static const _maxErrorChars = 320;
 
   final ThreadGateway gateway;
@@ -37,8 +38,9 @@ class ThreadListController extends ChangeNotifier {
   StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
   String? _nextCursor;
   String? _sectionScopeId;
-  var _sectionOrderRevision = 0;
-  var _refreshSectionOrder = false;
+  String? _savedSearchTerm;
+  var _catalogRevision = 0;
+  var _refreshCatalogPending = false;
   var _preserveOutsideCatalog = false;
   ThreadSummary? _selectedThread;
   String? _errorMessage;
@@ -65,6 +67,7 @@ class ThreadListController extends ChangeNotifier {
   int get revertVersion => _revertVersion;
   bool get showArchived => _showArchived;
   String? get sectionScopeId => _sectionScopeId;
+  String? get savedSearchTerm => _savedSearchTerm;
   ThreadSection? get scopedSection => switch (_sectionScopeId) {
     final id? => _findSectionById(id),
     null => null,
@@ -301,16 +304,50 @@ class ThreadListController extends ChangeNotifier {
       return;
     }
     _sectionScopeId = sectionId;
-    _sectionOrderRevision += 1;
-    _nextCursor = null;
-    _threads.clear();
+    _savedSearchTerm = null;
+    _resetCatalogScope();
     await refresh(preserveSelection: true);
+  }
+
+  Future<void> setSavedSearch(String? term) async {
+    final trimmed = term?.trim() ?? '';
+    final searchTerm = trimmed.isEmpty ? null : trimmed;
+    if (_disposed ||
+        _sectionScopeId != null ||
+        _savedSearchTerm == searchTerm ||
+        trimmed.length > maxSavedSearchLength ||
+        (searchTerm != null && catalogBusy)) {
+      return;
+    }
+    _savedSearchTerm = searchTerm;
+    _resetCatalogScope();
+    if (catalogBusy) {
+      // Let a pending page finish before starting the replacement request.
+      // The revision prevents the pending page from changing the new scope.
+      _refreshCatalogPending = true;
+      _notify();
+      return;
+    }
+    await refresh(preserveSelection: true);
+  }
+
+  void _resetCatalogScope() {
+    _catalogRevision += 1;
+    _nextCursor = null;
+    _errorMessage = null;
+    _threads.clear();
+    _preserveOutsideCatalog = _selectedThread != null;
   }
 
   ThreadListQuery _threadQuery({String? cursor, required int limit}) {
     final sectionId = _sectionScopeId;
     return sectionId == null
-        ? ThreadListQuery(cursor: cursor, limit: limit, archived: _showArchived)
+        ? ThreadListQuery(
+            cursor: cursor,
+            limit: limit,
+            archived: _showArchived,
+            searchTerm: _savedSearchTerm,
+          )
         : ThreadListQuery(
             cursor: cursor,
             limit: limit,
@@ -321,12 +358,21 @@ class ThreadListController extends ChangeNotifier {
   }
 
   void _invalidateSectionOrder() {
-    if (_sectionScopeId == null) {
-      return;
+    if (_sectionScopeId != null) {
+      _invalidateCatalogOrder();
     }
-    _sectionOrderRevision += 1;
+  }
+
+  void _invalidateSavedSearch() {
+    if (_savedSearchTerm != null) {
+      _invalidateCatalogOrder();
+    }
+  }
+
+  void _invalidateCatalogOrder() {
+    _catalogRevision += 1;
     _nextCursor = null;
-    _refreshSectionOrder = true;
+    _refreshCatalogPending = true;
   }
 
   Future<void> setShowArchived(bool value) async {
@@ -335,7 +381,11 @@ class ThreadListController extends ChangeNotifier {
     }
     _showArchived = value;
     _sectionScopeId = null;
-    _refreshSectionOrder = false;
+    if (_savedSearchTerm != null) {
+      _threads.clear();
+    }
+    _savedSearchTerm = null;
+    _refreshCatalogPending = false;
     _preserveOutsideCatalog = false;
     _nextCursor = null;
     _selectedThread = null;
@@ -346,15 +396,15 @@ class ThreadListController extends ChangeNotifier {
     if (_disposed || catalogBusy) {
       return;
     }
-    final revision = _sectionOrderRevision;
-    _refreshSectionOrder = false;
+    final revision = _catalogRevision;
+    _refreshCatalogPending = false;
     _initialLoadStarted = true;
     _loading = true;
     _errorMessage = null;
     _notify();
     try {
       final page = await gateway.listThreads(_threadQuery(limit: pageSize));
-      if (_disposed || revision != _sectionOrderRevision) {
+      if (_disposed || revision != _catalogRevision) {
         return;
       }
       final seenIds = <String>{};
@@ -380,7 +430,7 @@ class ThreadListController extends ChangeNotifier {
         final nextPage = await gateway.listThreads(
           _threadQuery(cursor: cursor, limit: pageSize),
         );
-        if (_disposed || revision != _sectionOrderRevision) {
+        if (_disposed || revision != _catalogRevision) {
           return;
         }
         for (final thread in nextPage.threads) {
@@ -391,9 +441,11 @@ class ThreadListController extends ChangeNotifier {
         }
         cursor = nextPage.nextCursor;
       }
-      if (!_showArchived && _sectionScopeId == null) {
+      if (!_showArchived &&
+          _sectionScopeId == null &&
+          _savedSearchTerm == null) {
         await _refreshSectionsWithThreads(uniqueThreads);
-        if (_disposed || revision != _sectionOrderRevision) {
+        if (_disposed || revision != _catalogRevision) {
           return;
         }
       } else {
@@ -405,7 +457,9 @@ class ThreadListController extends ChangeNotifier {
       _nextCursor = cursor;
       _synchronizeSelection(preserveSelection: preserveSelection);
     } catch (error) {
-      _errorMessage = _boundedError(error);
+      if (revision == _catalogRevision) {
+        _errorMessage = _boundedError(error);
+      }
     } finally {
       _loading = false;
       _notify();
@@ -417,7 +471,7 @@ class ThreadListController extends ChangeNotifier {
     if (_disposed || cursor == null || !canLoadMore || catalogBusy) {
       return;
     }
-    final revision = _sectionOrderRevision;
+    final revision = _catalogRevision;
     _loadingMore = true;
     _errorMessage = null;
     _notify();
@@ -429,7 +483,7 @@ class ThreadListController extends ChangeNotifier {
           limit: remaining < pageSize ? remaining : pageSize,
         ),
       );
-      if (_disposed || revision != _sectionOrderRevision) {
+      if (_disposed || revision != _catalogRevision) {
         return;
       }
       final existingIds = _threads.map((thread) => thread.id).toSet();
@@ -443,7 +497,9 @@ class ThreadListController extends ChangeNotifier {
       _nextCursor = page.nextCursor;
       _synchronizeSelection();
     } catch (error) {
-      _errorMessage = _boundedError(error);
+      if (revision == _catalogRevision) {
+        _errorMessage = _boundedError(error);
+      }
     } finally {
       _loadingMore = false;
       _notify();
@@ -581,6 +637,7 @@ class ThreadListController extends ChangeNotifier {
         _synchronizeSelection();
       }
       _invalidateSectionOrder();
+      _invalidateSavedSearch();
       return true;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -604,6 +661,7 @@ class ThreadListController extends ChangeNotifier {
         return null;
       }
       _invalidateSectionOrder();
+      _invalidateSavedSearch();
       if (_showArchived) {
         final wasSelected = _selectedThread?.id == threadId;
         _threads.removeWhere((candidate) => candidate.id == threadId);
@@ -645,7 +703,11 @@ class ThreadListController extends ChangeNotifier {
       }
       if (_showArchived) {
         _showArchived = false;
+        if (_savedSearchTerm != null) {
+          _resetCatalogScope();
+        }
       }
+      _invalidateSavedSearch();
       final retained = _replaceOrPrepend(thread);
       _activateThread(retained);
       return retained;
@@ -682,6 +744,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _lastRevertedThreadId = retainedThread.id;
       _revertVersion += 1;
+      _invalidateSavedSearch();
       return retainedThread;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -740,6 +803,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _synchronizeSelection();
       _invalidateSectionOrder();
+      _invalidateSavedSearch();
       return true;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -996,8 +1060,8 @@ class ThreadListController extends ChangeNotifier {
       _sections.removeWhere((section) => section.id == normalizedId);
       if (_sectionScopeId == normalizedId) {
         _sectionScopeId = null;
-        _sectionOrderRevision += 1;
-        _refreshSectionOrder = true;
+        _catalogRevision += 1;
+        _refreshCatalogPending = true;
         _threads.clear();
         _nextCursor = null;
       }
@@ -1115,6 +1179,7 @@ class ThreadListController extends ChangeNotifier {
           }
           _synchronizeSelection();
           _invalidateSectionOrder();
+          _invalidateSavedSearch();
           _notify();
         }
       case ThreadUnarchivedEvent(:final threadId):
@@ -1125,14 +1190,17 @@ class ThreadListController extends ChangeNotifier {
             _selectedThread = _threads.isEmpty ? null : _threads.first;
           }
           _synchronizeSelection();
+          _invalidateSavedSearch();
           _notify();
-        } else if (_sectionScopeId != null) {
+        } else if (_sectionScopeId != null || _savedSearchTerm != null) {
           _invalidateSectionOrder();
+          _invalidateSavedSearch();
           _notify();
         }
       case ThreadRevertedEvent(:final threadId):
         _lastRevertedThreadId = threadId;
         _revertVersion += 1;
+        _invalidateSavedSearch();
         _notify();
     }
   }
@@ -1151,6 +1219,7 @@ class ThreadListController extends ChangeNotifier {
         clearName: threadName == null,
       );
     }
+    _invalidateSavedSearch();
   }
 
   void _applyStatusUpdate(String threadId, ThreadRuntimeStatus status) {
@@ -1390,6 +1459,9 @@ class ThreadListController extends ChangeNotifier {
       }
       return thread;
     }
+    if (_savedSearchTerm != null) {
+      return thread;
+    }
     _threads.removeWhere((candidate) => candidate.id == thread.id);
     _threads.insert(0, thread);
     if (_threads.length > maxRetainedThreads) {
@@ -1436,7 +1508,9 @@ class ThreadListController extends ChangeNotifier {
 
   void _activateThread(ThreadSummary thread) {
     _selectedThread = thread;
-    if (_sectionScopeId != null || _preserveOutsideCatalog) {
+    if (_sectionScopeId != null ||
+        _savedSearchTerm != null ||
+        _preserveOutsideCatalog) {
       _synchronizeSelection();
     }
   }
@@ -1444,7 +1518,10 @@ class ThreadListController extends ChangeNotifier {
   void _synchronizeSelection({bool preserveSelection = false}) {
     final selectedId = _selectedThread?.id;
     final keepSelected =
-        preserveSelection || _sectionScopeId != null || _preserveOutsideCatalog;
+        preserveSelection ||
+        _sectionScopeId != null ||
+        _savedSearchTerm != null ||
+        _preserveOutsideCatalog;
     final retainedIds = {
       for (final thread in _threads) thread.id,
       if (keepSelected && selectedId != null) selectedId,
@@ -1472,7 +1549,7 @@ class ThreadListController extends ChangeNotifier {
       return;
     }
     notifyListeners();
-    if (_refreshSectionOrder && !catalogBusy) {
+    if (_refreshCatalogPending && !catalogBusy) {
       unawaited(refresh(preserveSelection: true));
     }
   }
