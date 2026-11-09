@@ -6,6 +6,40 @@ import 'package:codex_native_unofficial/src/features/threads/thread_list_control
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('a newer catalog receipt supersedes a pending write response', () async {
+    const seen = ThreadReadReceipt(revision: 'seen', unread: true);
+    const newer = ThreadReadReceipt(
+      revision: 'catalog-after-write',
+      unread: true,
+    );
+    final gateway = _ReadReceiptGateway()..serverReceipt = seen;
+    final row = _thread('saved').copyWith(readReceipt: seen);
+    gateway.pages.add(ThreadPage(threads: [row], nextCursor: null));
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(gateway.dispose);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+
+    gateway.pendingPage = Completer<ThreadPage>();
+    gateway.pendingWrite = Completer<ThreadReadReceipt>();
+    final refresh = controller.refresh();
+    final write = controller.toggleReadReceipt('saved', seen);
+    gateway.pendingPage!.complete(
+      ThreadPage(threads: [row.copyWith(readReceipt: newer)], nextCursor: null),
+    );
+    await refresh;
+    gateway.pendingWrite!.complete(
+      const ThreadReadReceipt(revision: 'write-result', unread: false),
+    );
+    await write;
+
+    expect(
+      controller.threads.single.readReceipt?.revision,
+      'catalog-after-write',
+    );
+    expect(controller.threads.single.readReceipt?.unread, isTrue);
+  });
+
   test('stale receipt writes refresh state and require a new action', () async {
     const seen = ThreadReadReceipt(revision: 'seen', unread: true);
     const newer = ThreadReadReceipt(revision: 'newer', unread: true);

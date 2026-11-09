@@ -342,7 +342,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _unmaterializedThreadIds.remove(threadId);
       final reconciled = _replaceInPlace(
-        _applyReadThreadReceipt(latest, receiptVersion),
+        _acceptReceiptSnapshot(latest, receiptVersion),
       );
       if (_selectedThread?.id == threadId) {
         _selectedThread = reconciled;
@@ -542,7 +542,7 @@ class ThreadListController extends ChangeNotifier {
         _mergeThreadEmbeddedSections(uniqueThreads);
       }
       final reconciled = uniqueThreads
-          .map((thread) => _reconcileReceipt(thread, receiptVersion))
+          .map((thread) => _acceptReceiptSnapshot(thread, receiptVersion))
           .map(_syncThreadSection)
           .toList(growable: false);
       _threads
@@ -586,7 +586,7 @@ class ThreadListController extends ChangeNotifier {
           .where((thread) => existingIds.add(thread.id))
           .take(remaining)
           .map(_preserveTransientState)
-          .map((thread) => _reconcileReceipt(thread, receiptVersion))
+          .map((thread) => _acceptReceiptSnapshot(thread, receiptVersion))
           .toList(growable: false);
       _mergeThreadEmbeddedSections(appended);
       _threads.addAll(appended.map(_syncThreadSection));
@@ -651,7 +651,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _unmaterializedThreadIds.remove(threadId);
       final retainedThread = _replaceInPlace(
-        _applyReadThreadReceipt(thread, receiptVersion),
+        _acceptReceiptSnapshot(thread, receiptVersion),
       );
       _activateThread(retainedThread);
       _queueSelectedGoalHydration(threadId);
@@ -1380,7 +1380,7 @@ class ThreadListController extends ChangeNotifier {
         : thread.copyWith(readReceipt: receipt);
   }
 
-  ThreadSummary _applyReadThreadReceipt(ThreadSummary thread, int version) {
+  ThreadSummary _acceptReceiptSnapshot(ThreadSummary thread, int version) {
     final reconciled = _reconcileReceipt(thread, version);
     _applyReadReceipt(reconciled.id, reconciled.readReceipt);
     return reconciled;
