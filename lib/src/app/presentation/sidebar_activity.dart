@@ -6,6 +6,7 @@ class _ThreadPanel extends StatefulWidget {
     required this.settingsController,
     required this.runtimeController,
     required this.defaultWorkingDirectory,
+    this.userInputController,
     this.onToggleSidebar,
   });
 
@@ -13,6 +14,7 @@ class _ThreadPanel extends StatefulWidget {
   final ExecutionSettingsController settingsController;
   final RuntimeController runtimeController;
   final String defaultWorkingDirectory;
+  final UserInputController? userInputController;
   final VoidCallback? onToggleSidebar;
 
   @override
@@ -144,6 +146,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                       context: context,
                       builder: (context) => _EcosystemDialog(
                         gateway: widget.runtimeController,
+                        userInputController: widget.userInputController,
                         cwd:
                             widget.controller.selectedThread?.cwd ??
                             _workingDirectory,
@@ -2092,11 +2095,13 @@ class _EcosystemDialog extends StatefulWidget {
     required this.gateway,
     required this.cwd,
     this.threadId,
+    this.userInputController,
   });
 
   final EcosystemGateway gateway;
   final String cwd;
   final String? threadId;
+  final UserInputController? userInputController;
 
   @override
   State<_EcosystemDialog> createState() => _EcosystemDialogState();
@@ -2155,6 +2160,44 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   void initState() {
     super.initState();
     unawaited(_refresh());
+  }
+
+  @override
+  void didUpdateWidget(covariant _EcosystemDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userInputController != widget.userInputController ||
+        oldWidget.threadId != widget.threadId) {
+      _syncModalDirectMcpElicitationScope();
+    }
+  }
+
+  @override
+  void dispose() {
+    _modalDirectMcpElicitationClaims.updateScope(this, null);
+    super.dispose();
+  }
+
+  void _syncModalDirectMcpElicitationScope() {
+    final userInputController = widget.userInputController;
+    final threadId = widget.threadId?.trim();
+    if (!mounted ||
+        _loading ||
+        _section != _EcosystemSection.mcp ||
+        userInputController == null ||
+        threadId == null ||
+        threadId.isEmpty ||
+        _mcpServers.isEmpty) {
+      _modalDirectMcpElicitationClaims.updateScope(this, null);
+      return;
+    }
+    _modalDirectMcpElicitationClaims.updateScope(
+      this,
+      _ModalDirectMcpElicitationScope(
+        controller: userInputController,
+        threadId: threadId,
+        serverNames: _mcpServers.map((server) => server.name).toSet(),
+      ),
+    );
   }
 
   void _prunePluginCaches(
@@ -2217,6 +2260,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _loading = true;
       _error = null;
     });
+    _syncModalDirectMcpElicitationScope();
     unawaited(_refreshApps(forceRefetch: forceRefetch));
     final cwds = widget.cwd.trim().isEmpty
         ? const <String>[]
@@ -2241,6 +2285,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
         _loading = false;
       });
+      _syncModalDirectMcpElicitationScope();
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
         final expandedPlugins = nextPlugins
             .where((p) => _expandedPluginIds.contains(p.id))
@@ -2272,6 +2317,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _error = '$error';
         _loading = false;
       });
+      _syncModalDirectMcpElicitationScope();
     }
   }
 
@@ -2456,6 +2502,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pruneMcpCaches(servers, forceRefetch: true);
         _mcpNotice = 'MCP server configuration reloaded.';
       });
+      _syncModalDirectMcpElicitationScope();
     } catch (error) {
       if (mounted) {
         setState(() => _mcpNotice = 'Reload failed: $error');
@@ -2810,7 +2857,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                       ),
                     ],
                     selectedValue: _section,
-                    onSelected: (next) => setState(() => _section = next),
+                    onSelected: (next) {
+                      setState(() => _section = next);
+                      _syncModalDirectMcpElicitationScope();
+                    },
                   ),
                   const SizedBox(width: ThemeTokens.space2),
                   CodexIconButton(
@@ -3686,8 +3736,24 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   Widget _buildMcpList(BuildContext context) {
+    final userInputController = widget.userInputController;
+    if (userInputController == null) {
+      return _buildMcpListContent(context, null);
+    }
+    return AnimatedBuilder(
+      animation: userInputController,
+      builder: (context, _) =>
+          _buildMcpListContent(context, userInputController),
+    );
+  }
+
+  Widget _buildMcpListContent(
+    BuildContext context,
+    UserInputController? userInputController,
+  ) {
     final palette = ThemeTokens.of(context);
     final gateway = _mcpGateway;
+    final dialogThreadId = widget.threadId?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3723,90 +3789,139 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         for (final server in _mcpServers)
-          Container(
-            key: ValueKey('mcp-row-${server.name}'),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: palette.surfaceRaised,
-              border: Border.all(
-                color: palette.border,
-                width: OfficialCodexTheme.hairlineBorderWidth,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+          Builder(
+            builder: (context) {
+              final runtimeStatus = server.status.trim();
+              final authStatus = server.authStatus?.trim();
+              final directElicitations =
+                  userInputController == null ||
+                      dialogThreadId == null ||
+                      dialogThreadId.isEmpty
+                  ? const <McpElicitationRequest>[]
+                  : userInputController.pendingElicitations
+                        .where(
+                          (request) =>
+                              request.turnId == null &&
+                              request.threadId == dialogThreadId &&
+                              request.serverName == server.name,
+                        )
+                        .toList(growable: false);
+              final activeDirectElicitation = directElicitations.firstOrNull;
+              return Container(
+                key: ValueKey('mcp-row-${server.name}'),
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
+                  border: Border.all(
+                    color: palette.border,
+                    width: OfficialCodexTheme.hairlineBorderWidth,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            server.name,
-                            style: Theme.of(context).textTheme.titleSmall,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                server.name,
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${server.toolCount} tools · ${server.resourceCount} resources',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              if (authStatus != null &&
+                                  authStatus.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Auth: $authStatus',
+                                  key: ValueKey(
+                                    'mcp-auth-status-${server.name}',
+                                  ),
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: palette.textMuted),
+                                ),
+                              ],
+                            ],
                           ),
-                          const SizedBox(height: 4),
+                        ),
+                        if (runtimeStatus.isNotEmpty)
                           Text(
-                            '${server.toolCount} tools · ${server.resourceCount} resources',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            runtimeStatus,
+                            key: ValueKey('mcp-status-${server.name}'),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: palette.textSecondary),
                           ),
-                        ],
+                      ],
+                    ),
+                    const SizedBox(height: ThemeTokens.space2),
+                    Wrap(
+                      spacing: ThemeTokens.space2,
+                      runSpacing: ThemeTokens.space2,
+                      children: [
+                        CodexButton(
+                          key: ValueKey('mcp-read-resource-${server.name}'),
+                          variant: CodexButtonVariant.secondary,
+                          size: CodexButtonSize.sm,
+                          onPressed: gateway == null || _mcpBusyServer != null
+                              ? null
+                              : () => _readMcpResource(server),
+                          label: 'Read resource',
+                        ),
+                        CodexButton(
+                          key: ValueKey('mcp-call-tool-${server.name}'),
+                          variant: CodexButtonVariant.secondary,
+                          size: CodexButtonSize.sm,
+                          loading: _mcpBusyServer == server.name,
+                          onPressed: gateway == null || _mcpBusyServer != null
+                              ? null
+                              : () => _callMcpTool(server),
+                          label: 'Call tool',
+                        ),
+                      ],
+                    ),
+                    if (activeDirectElicitation != null &&
+                        userInputController != null) ...[
+                      const SizedBox(height: ThemeTokens.space3),
+                      _McpElicitationCard(
+                        key: ValueKey(
+                          'mcp-elicitation-${activeDirectElicitation.requestId}',
+                        ),
+                        controller: userInputController,
+                        request: activeDirectElicitation,
+                        pendingCount: directElicitations.length,
+                        errorMessage: userInputController.errorMessage,
+                        margin: EdgeInsets.zero,
                       ),
-                    ),
-                    Text(
-                      server.status,
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: palette.textSecondary),
-                    ),
+                    ],
+                    if (_mcpErrors[server.name] case final error?) ...[
+                      const SizedBox(height: ThemeTokens.space2),
+                      SelectableText(
+                        error,
+                        key: ValueKey('mcp-error-${server.name}'),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.danger),
+                      ),
+                    ],
+                    if (_mcpResults[server.name] case final result?) ...[
+                      const SizedBox(height: ThemeTokens.space3),
+                      _McpOperationResult(
+                        key: ValueKey('mcp-result-${server.name}'),
+                        result: result,
+                      ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: ThemeTokens.space2),
-                Wrap(
-                  spacing: ThemeTokens.space2,
-                  runSpacing: ThemeTokens.space2,
-                  children: [
-                    CodexButton(
-                      key: ValueKey('mcp-read-resource-${server.name}'),
-                      variant: CodexButtonVariant.secondary,
-                      size: CodexButtonSize.sm,
-                      onPressed: gateway == null || _mcpBusyServer != null
-                          ? null
-                          : () => _readMcpResource(server),
-                      label: 'Read resource',
-                    ),
-                    CodexButton(
-                      key: ValueKey('mcp-call-tool-${server.name}'),
-                      variant: CodexButtonVariant.secondary,
-                      size: CodexButtonSize.sm,
-                      loading: _mcpBusyServer == server.name,
-                      onPressed: gateway == null || _mcpBusyServer != null
-                          ? null
-                          : () => _callMcpTool(server),
-                      label: 'Call tool',
-                    ),
-                  ],
-                ),
-                if (_mcpErrors[server.name] case final error?) ...[
-                  const SizedBox(height: ThemeTokens.space2),
-                  SelectableText(
-                    error,
-                    key: ValueKey('mcp-error-${server.name}'),
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: palette.danger),
-                  ),
-                ],
-                if (_mcpResults[server.name] case final result?) ...[
-                  const SizedBox(height: ThemeTokens.space3),
-                  _McpOperationResult(
-                    key: ValueKey('mcp-result-${server.name}'),
-                    result: result,
-                  ),
-                ],
-              ],
-            ),
+              );
+            },
           ),
       ],
     );

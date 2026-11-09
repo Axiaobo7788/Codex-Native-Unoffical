@@ -191,6 +191,13 @@ class SimulatedRuntimeHarness extends RuntimeController {
   var mcpReloadCount = 0;
   final List<McpResourceReadQuery> mcpResourceReadQueries = [];
   final List<McpToolCallQuery> mcpToolCallQueries = [];
+  Future<McpToolCallResultModel> Function(McpToolCallQuery query)?
+  mcpToolCallHandler;
+  final Map<
+    Object,
+    Completer<({McpElicitationAction action, Map<String, Object?> content})>
+  >
+  _pendingElicitationCompleters = {};
   final List<
     ({
       Object requestId,
@@ -1141,7 +1148,22 @@ class SimulatedRuntimeHarness extends RuntimeController {
   @override
   Future<McpToolCallResultModel> callMcpTool(McpToolCallQuery query) async {
     mcpToolCallQueries.add(query);
+    final handler = mcpToolCallHandler;
+    if (handler != null) {
+      return handler(query);
+    }
     return mcpToolCallResult;
+  }
+
+  Future<({McpElicitationAction action, Map<String, Object?> content})>
+  emitMcpElicitationAndWait(McpElicitationRequest request) {
+    final completer =
+        Completer<
+          ({McpElicitationAction action, Map<String, Object?> content})
+        >();
+    _pendingElicitationCompleters[request.requestId] = completer;
+    emitMcpElicitation(request);
+    return completer.future;
   }
 
   @override
@@ -1150,14 +1172,19 @@ class SimulatedRuntimeHarness extends RuntimeController {
     required McpElicitationAction action,
     Map<String, Object?> content = const {},
   }) async {
+    final frozenContent = Map<String, Object?>.unmodifiable(content);
     mcpElicitationResponses.add((
       requestId: requestId,
       action: action,
-      content: Map.unmodifiable(content),
+      content: frozenContent,
     ));
     _mcpElicitationsController.add(
       McpElicitationResolvedEvent(requestId: requestId),
     );
+    _pendingElicitationCompleters.remove(requestId)?.complete((
+      action: action,
+      content: frozenContent,
+    ));
   }
 
   @override

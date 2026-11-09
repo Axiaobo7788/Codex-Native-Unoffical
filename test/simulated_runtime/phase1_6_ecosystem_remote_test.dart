@@ -70,6 +70,51 @@ void main() {
         final callTool = find.byKey(
           const ValueKey('mcp-call-tool-filesystem-mcp'),
         );
+        harness.mcpToolCallHandler = (query) async {
+          final response = await harness.emitMcpElicitationAndWait(
+            McpElicitationRequest(
+              requestId: 'elicitation-1',
+              serverName: query.server,
+              threadId: query.threadId,
+              message: 'Choose the write target.',
+              mode: McpElicitationMode.form,
+              fields: [
+                McpElicitationField(
+                  id: 'path',
+                  title: 'Path',
+                  description: 'Relative workspace path',
+                  kind: McpElicitationFieldKind.string,
+                  required: true,
+                ),
+                McpElicitationField(
+                  id: 'mode',
+                  title: 'Mode',
+                  description: '',
+                  kind: McpElicitationFieldKind.singleSelect,
+                  required: true,
+                  options: const [
+                    McpElicitationOption(value: 'replace', label: 'Replace'),
+                    McpElicitationOption(value: 'append', label: 'Append'),
+                  ],
+                ),
+              ],
+            ),
+          );
+          return McpToolCallResultModel(
+            content: [
+              McpToolContentModel(
+                kind: 'text',
+                summary: 'Text',
+                text:
+                    'Tool completed (${response.action.name}: '
+                    '${response.content['path']} / ${response.content['mode']}).',
+              ),
+            ],
+            isError: false,
+            structuredContentPreview: '{"changed":true}',
+          );
+        };
+
         await tester.ensureVisible(callTool);
         await tester.tap(callTool);
         await tester.pumpAndSettle();
@@ -83,52 +128,30 @@ void main() {
         );
         await tester.pump();
         await tester.tap(find.byKey(const ValueKey('mcp-tool-call-submit')));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
         expect(harness.mcpToolCallQueries.single.tool, 'read_file');
         expect(harness.mcpToolCallQueries.single.threadId, 'thread-mcp');
         expect(harness.mcpToolCallQueries.single.arguments, {
           'path': 'README.md',
         });
-        expect(find.text('Tool completed.'), findsOneWidget);
 
-        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-        await tester.pumpAndSettle();
-
-        harness.emitMcpElicitation(
-          McpElicitationRequest(
-            requestId: 'elicitation-1',
-            serverName: 'filesystem-mcp',
-            threadId: 'thread-mcp',
-            message: 'Choose the write target.',
-            mode: McpElicitationMode.form,
-            fields: [
-              McpElicitationField(
-                id: 'path',
-                title: 'Path',
-                description: 'Relative workspace path',
-                kind: McpElicitationFieldKind.string,
-                required: true,
-              ),
-              McpElicitationField(
-                id: 'mode',
-                title: 'Mode',
-                description: '',
-                kind: McpElicitationFieldKind.singleSelect,
-                required: true,
-                options: const [
-                  McpElicitationOption(value: 'replace', label: 'Replace'),
-                  McpElicitationOption(value: 'append', label: 'Append'),
-                ],
-              ),
-            ],
-          ),
-        );
-        await tester.pumpAndSettle();
-
+        // Direct elicitation (turnId == null) renders inside the open modal
+        // MCP server row rather than behind the modal barrier.
+        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
         expect(
           find.byKey(const ValueKey('mcp-elicitation-card')),
           findsOneWidget,
         );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-row-filesystem-mcp')),
+            matching: find.byKey(const ValueKey('mcp-elicitation-card')),
+          ),
+          findsOneWidget,
+        );
+
         await tester.enterText(
           find.byKey(const ValueKey('mcp-elicitation-field-path')),
           'README.md',
@@ -137,7 +160,11 @@ void main() {
           find.byKey(const ValueKey('mcp-elicitation-field-mode-replace')),
         );
         await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('mcp-elicitation-accept')));
+        final acceptButton = find.byKey(
+          const ValueKey('mcp-elicitation-accept'),
+        );
+        await tester.ensureVisible(acceptButton);
+        await tester.tap(acceptButton);
         await tester.pumpAndSettle();
 
         final response = harness.mcpElicitationResponses.single;
@@ -148,6 +175,123 @@ void main() {
           find.byKey(const ValueKey('mcp-elicitation-card')),
           findsNothing,
         );
+        // Result renders directly inside the still-open modal dialog.
+        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('mcp-result-filesystem-mcp')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Tool completed (accept: README.md / replace).'),
+          findsOneWidget,
+        );
+
+        // Model-turn elicitations (turnId != null) continue routing to the
+        // conversation banner after closing the dialog.
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+
+        harness.emitMcpElicitation(
+          McpElicitationRequest(
+            requestId: 'elicitation-turn-1',
+            serverName: 'filesystem-mcp',
+            threadId: 'thread-mcp',
+            turnId: 'turn-1',
+            message: 'Confirm turn-scoped path.',
+            mode: McpElicitationMode.form,
+            fields: [
+              McpElicitationField(
+                id: 'path',
+                title: 'Path',
+                description: 'Turn path',
+                kind: McpElicitationFieldKind.string,
+                required: true,
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('mcp-elicitation-card')),
+          findsOneWidget,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('mcp-elicitation-field-path')),
+          'NOTES.md',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('mcp-elicitation-accept')));
+        await tester.pumpAndSettle();
+        expect(
+          harness.mcpElicitationResponses.last.requestId,
+          'elicitation-turn-1',
+        );
+        expect(harness.mcpElicitationResponses.last.content, {
+          'path': 'NOTES.md',
+        });
+      },
+    );
+
+    testWidgets(
+      'separates MCP runtime status badge from labeled auth status without rendering bare unsupported',
+      (tester) async {
+        final harness = SimulatedRuntimeHarness(
+          initialThreads: [
+            createTestThread(
+              id: 'thread-mcp-status',
+              preview: 'MCP status test',
+            ),
+          ],
+        );
+        harness.mcpServers
+          ..clear()
+          ..addAll(const [
+            McpServerStatusModel(
+              name: 'catalog-idle-mcp',
+              status: '',
+              toolCount: 1,
+              resourceCount: 0,
+              authStatus: 'unsupported',
+            ),
+            McpServerStatusModel(
+              name: 'scoped-connected-mcp',
+              status: 'connected',
+              toolCount: 3,
+              resourceCount: 2,
+              authStatus: 'unsupported',
+            ),
+          ]);
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(
+          find.byKey(const ValueKey('thread-row-thread-mcp-status')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('MCP (2)'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('unsupported'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('mcp-status-catalog-idle-mcp')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('mcp-auth-status-catalog-idle-mcp')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('mcp-status-scoped-connected-mcp')),
+          findsOneWidget,
+        );
+        expect(find.text('connected'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('mcp-auth-status-scoped-connected-mcp')),
+          findsOneWidget,
+        );
+        expect(find.text('Auth: unsupported'), findsNWidgets(2));
       },
     );
 

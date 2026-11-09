@@ -47,6 +47,7 @@ class RuntimeStatusScreen extends StatelessWidget {
               controller: threadController,
               settingsController: settingsController,
               runtimeController: controller,
+              userInputController: userInputController,
               defaultWorkingDirectory: defaultWorkingDirectory,
             );
             final conversation = _ConversationPanel(
@@ -162,6 +163,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                   controller: widget.threadController,
                   settingsController: widget.settingsController,
                   runtimeController: widget.runtimeController,
+                  userInputController: widget.userInputController,
                   defaultWorkingDirectory: widget.defaultWorkingDirectory,
                   onToggleSidebar: _toggleSidebar,
                 ),
