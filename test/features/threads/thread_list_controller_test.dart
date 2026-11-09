@@ -294,9 +294,84 @@ void main() {
     );
     expect(forked?.id, 'fork-new');
   });
+
+  test('loads, creates, renames, deletes, and moves thread sections and reacts to section/changed events', () async {
+    final gateway = _FakeThreadGateway();
+    gateway.sections.add(const ThreadSection(id: 'sec-1', name: 'Priority'));
+    gateway.pages.add(
+      ThreadPage(
+        threads: [
+          _thread(
+            't-1',
+            status: ThreadRuntimeStatus.idle,
+            section: const ThreadSection(id: 'sec-1', name: 'Priority'),
+            sectionEnteredAtSeconds: 1700000010,
+          ),
+          _thread('t-2', status: ThreadRuntimeStatus.idle),
+        ],
+        nextCursor: null,
+      ),
+    );
+
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+
+    await controller.refresh();
+    expect(controller.supportsThreadSections, isTrue);
+    expect(controller.sections.map((s) => s.id), ['sec-1']);
+    expect(controller.threads.first.section?.id, 'sec-1');
+
+    final created = await controller.createSection('Backlog');
+    expect(created?.id, 'sec-2');
+    expect(controller.sections.map((s) => s.name), ['Priority', 'Backlog']);
+
+    final renamed = await controller.renameSection('sec-1', 'Urgent');
+    expect(renamed?.name, 'Urgent');
+    expect(controller.sections.first.name, 'Urgent');
+    expect(controller.threads.first.section?.name, 'Urgent');
+
+    final moved = await controller.moveThreadToSection(
+      threadId: 't-2',
+      sectionId: 'sec-2',
+      beforeThreadId: 't-1',
+    );
+    expect(moved, isTrue);
+    expect(gateway.movedSections.single.threadId, 't-2');
+    expect(gateway.movedSections.single.sectionId, 'sec-2');
+    expect(gateway.movedSections.single.beforeThreadId, 't-1');
+    ThreadSummary threadById(String id) =>
+        controller.threads.firstWhere((t) => t.id == id);
+    expect(threadById('t-2').section?.id, 'sec-2');
+
+    // Live notification for unknown section does not fabricate a raw-ID section name,
+    // and resolves authoritatively once background section reload completes.
+    gateway.sections.add(
+      const ThreadSection(id: 'sec-remote', name: 'Synced Section'),
+    );
+    gateway.events.add(
+      const ThreadSectionChangedEvent(threadId: 't-2', sectionId: 'sec-remote'),
+    );
+    expect(controller.sections.where((s) => s.name == 'sec-remote'), isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(threadById('t-2').section?.id, 'sec-remote');
+    expect(threadById('t-2').section?.name, 'Synced Section');
+
+    // Live notification clearing section
+    gateway.events.add(
+      const ThreadSectionChangedEvent(threadId: 't-2', sectionId: null),
+    );
+    expect(threadById('t-2').section, isNull);
+    expect(threadById('t-2').sectionEnteredAtSeconds, isNull);
+
+    final deleted = await controller.deleteSection('sec-1');
+    expect(deleted, isTrue);
+    expect(controller.sections.map((s) => s.id), isNot(contains('sec-1')));
+    expect(threadById('t-1').section, isNull);
+  });
 }
 
-class _FakeThreadGateway implements ThreadGateway {
+class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   final StreamController<ThreadLifecycleEvent> events =
       StreamController<ThreadLifecycleEvent>.broadcast(sync: true);
   final List<ThreadPage> pages = [];
@@ -310,6 +385,72 @@ class _FakeThreadGateway implements ThreadGateway {
   final List<(String, String)> revertedThreads = [];
   final List<String> compactedIds = [];
   final List<String> deletedIds = [];
+  final List<ThreadSection> sections = [];
+  final List<ThreadSectionCreateOptions> createdSections = [];
+  final List<ThreadSectionUpdateOptions> updatedSections = [];
+  final List<String> deletedSectionIds = [];
+  final List<ThreadSectionMoveOptions> movedSections = [];
+  bool sectionSupport = true;
+
+  @override
+  bool get supportsThreadSections => sectionSupport;
+
+  @override
+  Future<ThreadSectionPage> listThreadSections([
+    ThreadSectionListQuery query = const ThreadSectionListQuery(),
+  ]) async {
+    return ThreadSectionPage(
+      sections: List.unmodifiable(sections),
+      nextCursor: null,
+    );
+  }
+
+  @override
+  Future<ThreadSection> createThreadSection(
+    ThreadSectionCreateOptions options,
+  ) async {
+    createdSections.add(options);
+    final created = ThreadSection(
+      id: 'sec-${sections.length + 1}',
+      name: options.name,
+      appearance: options.appearance,
+    );
+    sections.add(created);
+    return created;
+  }
+
+  @override
+  Future<ThreadSection> updateThreadSection(
+    ThreadSectionUpdateOptions options,
+  ) async {
+    updatedSections.add(options);
+    final idx = sections.indexWhere((s) => s.id == options.sectionId);
+    final updated = ThreadSection(
+      id: options.sectionId,
+      name: options.name,
+      appearance: options.clearAppearance
+          ? null
+          : (options.appearance ??
+                (idx != -1 ? sections[idx].appearance : null)),
+    );
+    if (idx != -1) {
+      sections[idx] = updated;
+    } else {
+      sections.add(updated);
+    }
+    return updated;
+  }
+
+  @override
+  Future<void> deleteThreadSection(String sectionId) async {
+    deletedSectionIds.add(sectionId);
+    sections.removeWhere((s) => s.id == sectionId);
+  }
+
+  @override
+  Future<void> moveThreadSection(ThreadSectionMoveOptions options) async {
+    movedSections.add(options);
+  }
 
   @override
   Stream<ThreadLifecycleEvent> get threadEvents => events.stream;
@@ -392,6 +533,8 @@ ThreadSummary _thread(
   String cwd = '/workspace',
   String? name,
   ThreadRuntimeStatus status = ThreadRuntimeStatus.notLoaded,
+  ThreadSection? section,
+  int? sectionEnteredAtSeconds,
 }) => ThreadSummary(
   id: id,
   sessionId: 'session-$id',
@@ -402,4 +545,6 @@ ThreadSummary _thread(
   status: status,
   ephemeral: false,
   name: name,
+  section: section,
+  sectionEnteredAtSeconds: sectionEnteredAtSeconds,
 );

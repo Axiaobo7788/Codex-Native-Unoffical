@@ -19,6 +19,9 @@ final class ThreadProtocolAdapter {
   static const _maxGitShaLength = 128;
   static const _maxGoalObjectiveLength = 2048;
   static const _maxIdentifierLength = 512;
+  static const _maxSectionNameLength = 128;
+  static const _maxSectionAppearanceTokenLength = 64;
+  static const _maxSectionsPerPage = 64;
 
   ThreadProtocolAdapter({
     required this.request,
@@ -131,6 +134,122 @@ final class ThreadProtocolAdapter {
     await request('thread/delete', {'threadId': threadId});
   }
 
+  Future<ThreadSectionPage> listThreadSections([
+    ThreadSectionListQuery query = const ThreadSectionListQuery(),
+  ]) async {
+    final cursor = _optionalOpaqueArgumentId(
+      query.cursor,
+      'cursor',
+      _maxIdentifierLength,
+    );
+    final effectiveLimit = query.limit.clamp(1, _maxSectionsPerPage);
+    final response = await request('threadSection/list', {
+      'cursor': ?cursor,
+      'limit': effectiveLimit,
+    });
+    final data = response['data'];
+    if (data is! List<Object?>) {
+      throw const ProtocolViolation(
+        'threadSection/list data must be an array.',
+      );
+    }
+    final nextCursor = _optionalOpaqueIdentifier(
+      response,
+      'nextCursor',
+      _maxIdentifierLength,
+      context: 'threadSection/list',
+    );
+    if (data.length > _maxSectionsPerPage) {
+      throw const ProtocolViolation(
+        'threadSection/list returned more than 64 sections in a single page.',
+      );
+    }
+    final sections = <ThreadSection>[];
+    final seenIds = <String>{};
+    for (final raw in data) {
+      final section = _parseRequiredSection(raw);
+      if (seenIds.add(section.id)) {
+        sections.add(section);
+      }
+    }
+    return ThreadSectionPage(
+      sections: List.unmodifiable(sections),
+      nextCursor: nextCursor,
+    );
+  }
+
+  Future<ThreadSection> createThreadSection(
+    ThreadSectionCreateOptions options,
+  ) async {
+    final name = _requireArgumentText(
+      options.name,
+      'name',
+      _maxSectionNameLength,
+    );
+    final response = await request('threadSection/create', {
+      'name': name,
+      if (options.appearance case final appearance?)
+        'appearance': _encodeSectionAppearance(appearance),
+    });
+    return _parseSectionContainer(response, 'threadSection/create');
+  }
+
+  Future<ThreadSection> updateThreadSection(
+    ThreadSectionUpdateOptions options,
+  ) async {
+    final sectionId = _requireOpaqueArgumentId(
+      options.sectionId,
+      'sectionId',
+      _maxIdentifierLength,
+    );
+    final name = _requireArgumentText(
+      options.name,
+      'name',
+      _maxSectionNameLength,
+    );
+    final response = await request('threadSection/update', {
+      'sectionId': sectionId,
+      'name': name,
+      if (options.clearAppearance)
+        'appearance': null
+      else if (options.appearance case final appearance?)
+        'appearance': _encodeSectionAppearance(appearance),
+    });
+    return _parseSectionContainer(response, 'threadSection/update');
+  }
+
+  Future<void> deleteThreadSection(String sectionId) async {
+    final normalizedId = _requireOpaqueArgumentId(
+      sectionId,
+      'sectionId',
+      _maxIdentifierLength,
+    );
+    await request('threadSection/delete', {'sectionId': normalizedId});
+  }
+
+  Future<void> moveThreadSection(ThreadSectionMoveOptions options) async {
+    final threadId = _requireOpaqueArgumentId(
+      options.threadId,
+      'threadId',
+      _maxIdentifierLength,
+    );
+    final sectionId = _optionalOpaqueArgumentId(
+      options.sectionId,
+      'sectionId',
+      _maxIdentifierLength,
+    );
+    final beforeThreadId = _optionalOpaqueArgumentId(
+      options.beforeThreadId,
+      'beforeThreadId',
+      _maxIdentifierLength,
+    );
+    await request('thread/section/move', {
+      'threadId': threadId,
+      'sectionId': sectionId,
+      'beforeThreadId': ?beforeThreadId,
+    });
+  }
+
   static ThreadLifecycleEvent? _parseNotification(
     CodexNotification notification,
   ) {
@@ -158,6 +277,7 @@ final class ThreadProtocolAdapter {
       'thread/goal/cleared' => ThreadGoalClearedEvent(
         threadId: _requiredString(params, 'threadId'),
       ),
+      'thread/section/changed' => _parseSectionChanged(params),
       _ => null,
     };
   }
@@ -240,7 +360,171 @@ final class ThreadProtocolAdapter {
       model: _optionalString(value, 'model'),
       projectId: _optionalString(value, 'projectId'),
       gitInfo: _parseGitInfo(value['gitInfo']),
+      section: _parseSection(value['section']),
+      sectionEnteredAtSeconds: _optionalNonNegativeInt(
+        value,
+        'sectionEnteredAt',
+      ),
     );
+  }
+
+  static ThreadSectionChangedEvent _parseSectionChanged(JsonObject params) {
+    final threadId = _requiredOpaqueIdentifier(
+      params,
+      'threadId',
+      _maxIdentifierLength,
+      context: 'thread/section/changed',
+    );
+    if (!params.containsKey('sectionId')) {
+      throw const ProtocolViolation(
+        'thread/section/changed field sectionId is required.',
+      );
+    }
+    final rawSectionId = params['sectionId'];
+    String? sectionId;
+    if (rawSectionId != null) {
+      if (rawSectionId is! String) {
+        throw const ProtocolViolation(
+          'thread/section/changed field sectionId must be a string or null.',
+        );
+      }
+      final trimmed = rawSectionId.trim();
+      if (trimmed.isEmpty) {
+        throw const ProtocolViolation(
+          'thread/section/changed field sectionId must not be empty when non-null.',
+        );
+      }
+      if (trimmed.length > _maxIdentifierLength) {
+        throw const ProtocolViolation(
+          'thread/section/changed field sectionId exceeds maximum identifier length.',
+        );
+      }
+      sectionId = trimmed;
+    }
+    return ThreadSectionChangedEvent(threadId: threadId, sectionId: sectionId);
+  }
+
+  static ThreadSection _parseSectionContainer(
+    JsonObject response,
+    String method,
+  ) {
+    final section = response['section'];
+    if (section is! Map<String, Object?>) {
+      throw ProtocolViolation('$method response did not contain a section.');
+    }
+    return _parseRequiredSection(section);
+  }
+
+  static ThreadSection? _parseSection(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    return _parseRequiredSection(value);
+  }
+
+  static ThreadSection _parseRequiredSection(Object? value) {
+    if (value is! Map<String, Object?>) {
+      throw const ProtocolViolation('Thread section must be an object.');
+    }
+    return ThreadSection(
+      id: _requiredOpaqueIdentifier(
+        value,
+        'id',
+        _maxIdentifierLength,
+        context: 'ThreadSection',
+      ),
+      name: _requiredBoundedNonEmptyString(
+        value,
+        'name',
+        _maxSectionNameLength,
+        context: 'ThreadSection',
+      ),
+      appearance: _parseSectionAppearance(value['appearance']),
+    );
+  }
+
+  static ThreadSectionAppearance? _parseSectionAppearance(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is! Map<String, Object?>) {
+      throw const ProtocolViolation(
+        'ThreadSection field appearance must be an object or null.',
+      );
+    }
+    final color = _boundedOptionalString(
+      value,
+      'color',
+      _maxSectionAppearanceTokenLength,
+    );
+    final icon = _boundedOptionalString(
+      value,
+      'icon',
+      _maxSectionAppearanceTokenLength,
+    );
+    if (color == null && icon == null) {
+      return const ThreadSectionAppearance();
+    }
+    return ThreadSectionAppearance(color: color, icon: icon);
+  }
+
+  static JsonObject _encodeSectionAppearance(
+    ThreadSectionAppearance appearance,
+  ) {
+    final color = appearance.color?.trim();
+    final icon = appearance.icon?.trim();
+    return {
+      if (color != null && color.isNotEmpty)
+        'color': _truncate(color, _maxSectionAppearanceTokenLength),
+      if (icon != null && icon.isNotEmpty)
+        'icon': _truncate(icon, _maxSectionAppearanceTokenLength),
+    };
+  }
+
+  static String _requireArgumentText(String raw, String name, int maxLength) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(raw, name, '$name must not be empty.');
+    }
+    return _truncate(trimmed, maxLength);
+  }
+
+  static String _requireOpaqueArgumentId(
+    String raw,
+    String name,
+    int maxLength,
+  ) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(raw, name, '$name must not be empty.');
+    }
+    if (trimmed.length > maxLength) {
+      throw ArgumentError.value(
+        raw,
+        name,
+        '$name exceeds maximum identifier length ($maxLength).',
+      );
+    }
+    return trimmed;
+  }
+
+  static String? _optionalOpaqueArgumentId(
+    String? raw,
+    String name,
+    int maxLength,
+  ) {
+    final trimmed = raw?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.length > maxLength) {
+      throw ArgumentError.value(
+        raw,
+        name,
+        '$name exceeds maximum identifier length ($maxLength).',
+      );
+    }
+    return trimmed;
   }
 
   static ThreadGitInfo? _parseGitInfo(Object? value) {
@@ -358,6 +642,76 @@ final class ThreadProtocolAdapter {
     return _truncate(value, limit);
   }
 
+  static String _requiredBoundedNonEmptyString(
+    JsonObject object,
+    String key,
+    int limit, {
+    required String context,
+  }) {
+    final value = object[key];
+    if (value is! String) {
+      throw ProtocolViolation('$context field $key must be a string.');
+    }
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      throw ProtocolViolation('$context field $key must not be empty.');
+    }
+    return _truncate(trimmed, limit);
+  }
+
+  static String _requiredOpaqueIdentifier(
+    JsonObject object,
+    String key,
+    int limit, {
+    required String context,
+  }) {
+    final value = object[key];
+    if (value is! String) {
+      throw ProtocolViolation('$context field $key must be a string.');
+    }
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      throw ProtocolViolation('$context field $key must not be empty.');
+    }
+    if (trimmed.length > limit) {
+      throw ProtocolViolation(
+        '$context field $key exceeds maximum identifier length ($limit).',
+      );
+    }
+    return trimmed;
+  }
+
+  static String? _optionalOpaqueIdentifier(
+    JsonObject object,
+    String key,
+    int limit, {
+    required String context,
+  }) {
+    final value = _optionalString(object, key)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    if (value.length > limit) {
+      throw ProtocolViolation(
+        '$context field $key exceeds maximum identifier length ($limit).',
+      );
+    }
+    return value;
+  }
+
+  static int? _optionalNonNegativeInt(JsonObject object, String key) {
+    final value = object[key];
+    if (value == null) {
+      return null;
+    }
+    if (value is! int || value < 0) {
+      throw ProtocolViolation(
+        'Thread field $key must be a non-negative integer or null.',
+      );
+    }
+    return value;
+  }
+
   static int _nonNegativeInt(JsonObject object, String key) {
     final value = object[key];
     if (value is! int || value < 0) {
@@ -404,8 +758,19 @@ final class ThreadProtocolAdapter {
     _ => ThreadGoalStatus.unknown,
   };
 
-  static String _truncate(String value, int limit) =>
-      value.length <= limit ? value : '${value.substring(0, limit)}…';
+  static String _truncate(String value, int limit) {
+    if (value.length <= limit) {
+      return value;
+    }
+    var end = limit;
+    if (end > 0) {
+      final lastUnit = value.codeUnitAt(end - 1);
+      if (lastUnit >= 0xD800 && lastUnit <= 0xDBFF) {
+        end -= 1;
+      }
+    }
+    return '${value.substring(0, end)}…';
+  }
 
   static String _sortKey(ThreadSortKey key) => switch (key) {
     ThreadSortKey.createdAt => 'created_at',

@@ -38,6 +38,7 @@ import '../transport/remote/remote_secure_storage.dart';
 
 export '../domain/runtime_diagnostics_gateway.dart';
 export '../domain/runtime_diagnostics_models.dart';
+export '../domain/thread_gateway.dart';
 
 typedef TransportStarter = Future<ProcessTransport> Function(
   String hostExecutable,
@@ -49,6 +50,7 @@ class RuntimeController extends ChangeNotifier
         ConversationBackend,
         ExecutionBackend,
         ThreadGateway,
+        ThreadSectionGateway,
         TurnGateway,
         ApprovalGateway,
         ModelGateway,
@@ -171,6 +173,9 @@ class RuntimeController extends ChangeNotifier
 
   @override
   bool get supportsRuntimeDiagnostics => !_usesRemote;
+
+  @override
+  bool get supportsThreadSections => !_usesRemote;
 
   @override
   Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
@@ -323,6 +328,69 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<void> deleteThread(String threadId) =>
       _connectedTransport().deleteThread(threadId);
+
+  @override
+  Future<ThreadSectionPage> listThreadSections([
+    ThreadSectionListQuery query = const ThreadSectionListQuery(),
+  ]) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Thread sections are unavailable on read-only Remote.',
+      );
+    }
+    final transport = _transport;
+    if (transport == null &&
+        snapshot.state == RuntimeConnectionState.connected) {
+      return Future.value(
+        const ThreadSectionPage(sections: [], nextCursor: null),
+      );
+    }
+    return _connectedTransport().listThreadSections(query);
+  }
+
+  @override
+  Future<ThreadSection> createThreadSection(
+    ThreadSectionCreateOptions options,
+  ) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Creating thread sections is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().createThreadSection(options);
+  }
+
+  @override
+  Future<ThreadSection> updateThreadSection(
+    ThreadSectionUpdateOptions options,
+  ) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Updating thread sections is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().updateThreadSection(options);
+  }
+
+  @override
+  Future<void> deleteThreadSection(String sectionId) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Deleting thread sections is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().deleteThreadSection(sectionId);
+  }
+
+  @override
+  Future<void> moveThreadSection(ThreadSectionMoveOptions options) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Moving threads between sections is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().moveThreadSection(options);
+  }
 
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) =>

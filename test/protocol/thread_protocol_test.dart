@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
@@ -502,6 +503,268 @@ void main() {
       throwsA(isA<ProtocolViolation>()),
     );
   });
+
+  test('lists, deduplicates, bounds, creates, updates, deletes, and moves thread sections', () async {
+    responses['threadSection/list'] = {
+      'data': [
+        for (var i = 0; i < 64; i += 1)
+          {
+            'id': 'sec-${i == 1 ? 0 : i}',
+            'name': 'Section $i ${'x' * 200}',
+            'appearance': {'color': 'blue', 'icon': 'star'},
+          },
+      ],
+      'nextCursor': 'next-sec-cursor',
+    };
+    responses['threadSection/create'] = {
+      'section': {
+        'id': 'sec-created',
+        'name': 'Priority',
+        'appearance': {'color': 'amber', 'icon': 'flag'},
+      },
+    };
+    responses['threadSection/update'] = {
+      'section': {
+        'id': 'sec-created',
+        'name': 'Renamed Priority',
+        'appearance': null,
+      },
+    };
+    responses['threadSection/delete'] = const {};
+    responses['thread/section/move'] = const {};
+
+    final page = await adapter.listThreadSections(
+      const ThreadSectionListQuery(cursor: 'cur-0', limit: 64),
+    );
+    expect(page.sections, hasLength(63));
+    expect(page.sections.first.id, 'sec-0');
+    expect(page.sections.first.name, hasLength(129));
+    expect(page.sections.first.name, endsWith('…'));
+    expect(page.sections.first.appearance?.color, 'blue');
+    expect(page.sections.first.appearance?.icon, 'star');
+    expect(page.nextCursor, 'next-sec-cursor');
+
+    final created = await adapter.createThreadSection(
+      const ThreadSectionCreateOptions(
+        name: 'Priority',
+        appearance: ThreadSectionAppearance(color: 'amber', icon: 'flag'),
+      ),
+    );
+    expect(created.id, 'sec-created');
+    expect(created.name, 'Priority');
+    expect(created.appearance?.color, 'amber');
+
+    final updated = await adapter.updateThreadSection(
+      const ThreadSectionUpdateOptions(
+        sectionId: 'sec-created',
+        name: 'Renamed Priority',
+        clearAppearance: true,
+      ),
+    );
+    expect(updated.id, 'sec-created');
+    expect(updated.name, 'Renamed Priority');
+    expect(updated.appearance, isNull);
+
+    await adapter.deleteThreadSection('sec-created');
+    await adapter.moveThreadSection(
+      const ThreadSectionMoveOptions(
+        threadId: 'thread-5',
+        sectionId: 'sec-created',
+        beforeThreadId: 'thread-4',
+      ),
+    );
+    await adapter.moveThreadSection(
+      const ThreadSectionMoveOptions(threadId: 'thread-5', sectionId: null),
+    );
+
+    expect(requests, [
+      _Request('threadSection/list', {'cursor': 'cur-0', 'limit': 64}),
+      _Request('threadSection/create', {
+        'name': 'Priority',
+        'appearance': {'color': 'amber', 'icon': 'flag'},
+      }),
+      _Request('threadSection/update', {
+        'sectionId': 'sec-created',
+        'name': 'Renamed Priority',
+        'appearance': null,
+      }),
+      _Request('threadSection/delete', {'sectionId': 'sec-created'}),
+      _Request('thread/section/move', {
+        'threadId': 'thread-5',
+        'sectionId': 'sec-created',
+        'beforeThreadId': 'thread-4',
+      }),
+      _Request('thread/section/move', {
+        'threadId': 'thread-5',
+        'sectionId': null,
+      }),
+    ]);
+  });
+
+  test('fails closed on overlong opaque section/thread IDs and oversized unpaginated section pages', () async {
+    final maxId = 'm' * 512;
+    responses['threadSection/update'] = {
+      'section': {'id': maxId, 'name': 'Max ID Section'},
+    };
+    final exactUpdated = await adapter.updateThreadSection(
+      ThreadSectionUpdateOptions(sectionId: maxId, name: 'Max ID Section'),
+    );
+    expect(exactUpdated.id, maxId);
+
+    final overlongId = 's' * 513;
+    await expectLater(
+      () => adapter.updateThreadSection(
+        ThreadSectionUpdateOptions(sectionId: overlongId, name: 'Valid'),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      () => adapter.deleteThreadSection(overlongId),
+      throwsArgumentError,
+    );
+    await expectLater(
+      () => adapter.moveThreadSection(
+        ThreadSectionMoveOptions(threadId: overlongId, sectionId: 'sec-1'),
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      () => adapter.moveThreadSection(
+        ThreadSectionMoveOptions(threadId: 't-1', sectionId: overlongId),
+      ),
+      throwsArgumentError,
+    );
+
+    responses['threadSection/list'] = {
+      'data': [
+        for (var i = 0; i < 65; i += 1) {'id': 'sec-$i', 'name': 'Sec $i'},
+      ],
+      'nextCursor': null,
+    };
+    await expectLater(
+      adapter.listThreadSections(),
+      throwsA(isA<ProtocolViolation>()),
+    );
+
+    responses['threadSection/list'] = {
+      'data': [
+        for (var i = 0; i < 65; i += 1) {'id': 'sec-$i', 'name': 'Sec $i'},
+      ],
+      'nextCursor': 'cur-next',
+    };
+    await expectLater(
+      adapter.listThreadSections(),
+      throwsA(isA<ProtocolViolation>()),
+    );
+
+    responses['threadSection/list'] = {
+      'data': [
+        {'id': overlongId, 'name': 'Invalid ID'},
+      ],
+      'nextCursor': null,
+    };
+    await expectLater(
+      adapter.listThreadSections(),
+      throwsA(isA<ProtocolViolation>()),
+    );
+
+    final notificationError = expectLater(
+      adapter.events,
+      emitsError(isA<ProtocolViolation>()),
+    );
+    notifications.add(
+      CodexNotification(
+        method: 'thread/section/changed',
+        params: {'threadId': 't-1', 'sectionId': overlongId},
+      ),
+    );
+    await notificationError;
+  });
+
+  test('parses thread section metadata on Thread and thread/section/changed notifications', () async {
+    responses['thread/read'] = {
+      'thread': {
+        ..._threadJson(id: 'thread-sec'),
+        'section': {
+          'id': 'sec-active',
+          'name': 'Active Sprint',
+          'appearance': {'color': 'green', 'icon': 'bolt'},
+        },
+        'sectionEnteredAt': 1730000555,
+      },
+    };
+
+    final thread = await adapter.readThread('thread-sec');
+    expect(thread.section?.id, 'sec-active');
+    expect(thread.section?.name, 'Active Sprint');
+    expect(thread.section?.appearance?.color, 'green');
+    expect(thread.sectionEnteredAtSeconds, 1730000555);
+
+    final received = <ThreadLifecycleEvent>[];
+    final sub = adapter.events.listen(received.add);
+    addTearDown(sub.cancel);
+
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/section/changed',
+        params: {'threadId': 'thread-sec', 'sectionId': 'sec-next'},
+      ),
+    );
+    notifications.add(
+      const CodexNotification(
+        method: 'thread/section/changed',
+        params: {'threadId': 'thread-sec', 'sectionId': null},
+      ),
+    );
+
+    expect(received, hasLength(2));
+    expect(
+      received[0],
+      isA<ThreadSectionChangedEvent>()
+          .having((e) => e.threadId, 'threadId', 'thread-sec')
+          .having((e) => e.sectionId, 'sectionId', 'sec-next'),
+    );
+    expect(
+      received[1],
+      isA<ThreadSectionChangedEvent>()
+          .having((e) => e.threadId, 'threadId', 'thread-sec')
+          .having((e) => e.sectionId, 'sectionId', isNull),
+    );
+  });
+
+  test(
+    'RuntimeController fails closed for thread sections on Remote',
+    () async {
+      final remoteController = RuntimeController(useRemote: true);
+      expect(remoteController.supportsThreadSections, isFalse);
+      await expectLater(
+        () => remoteController.listThreadSections(),
+        throwsA(isA<UnsupportedError>()),
+      );
+      await expectLater(
+        () => remoteController.createThreadSection(
+          const ThreadSectionCreateOptions(name: 'Blocked'),
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+      await expectLater(
+        () => remoteController.updateThreadSection(
+          const ThreadSectionUpdateOptions(sectionId: 'sec-1', name: 'Blocked'),
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+      await expectLater(
+        () => remoteController.deleteThreadSection('sec-1'),
+        throwsA(isA<UnsupportedError>()),
+      );
+      await expectLater(
+        () => remoteController.moveThreadSection(
+          const ThreadSectionMoveOptions(threadId: 't-1', sectionId: 'sec-1'),
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+    },
+  );
 }
 
 JsonObject _threadJson({required String id}) => {
@@ -543,7 +806,15 @@ bool _mapsEqual(JsonObject left, JsonObject right) {
     return false;
   }
   for (final entry in left.entries) {
-    if (right[entry.key] != entry.value) {
+    final leftValue = entry.value;
+    final rightValue = right[entry.key];
+    if (leftValue is JsonObject && rightValue is JsonObject) {
+      if (!_mapsEqual(leftValue, rightValue)) {
+        return false;
+      }
+      continue;
+    }
+    if (rightValue != leftValue) {
       return false;
     }
   }
