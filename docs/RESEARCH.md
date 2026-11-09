@@ -3263,3 +3263,65 @@ assigns exact ownership.
   embedding critical and a cursor-theme warning; those environment-level
   warnings did not crash the app but remain negative evidence. This lifecycle
   check is not Human visual acceptance of Runtime details or notice density.
+
+## Peer Round 6: Bounded Thread Sections and Native Code Review
+
+### Peer ownership and supported boundary
+
+- Through the official interactive `agy` TUI, Gemini owned F13 thread sections,
+  sidebar Git/goal badges, and their presentation/tests; Codex owned F14 typed
+  review targets, review lifecycle projection, controller state, and tests.
+  Isolated branches/worktrees maintained one writer per overlapping surface.
+- F13 uses stable stock `threadSection/list|create|update|delete`,
+  `thread/section/move`, and `thread/section/changed`. It retains at most 64
+  section definitions, rejects any page larger than 64 even when `nextCursor`
+  is null, bounds names/appearance tokens, and keeps Remote read-only.
+- F14 uses stable stock `review/start`. Protocol coverage serializes
+  uncommitted-change, base-branch, commit, and custom targets. The first desktop
+  action deliberately exposes only `Review uncommitted changes`; the other
+  typed targets are protocol/domain capability rather than claimed UI actions.
+
+### Audit findings and corrections
+
+- Gemini's F14 audit reported no P0/P1 and two P2s: entered-review history was
+  represented as in-progress despite being a completed stored item, its
+  description was not explicitly bounded, and the review menu needed archived
+  and materialization guards. The owner fixed all findings in `23c04d1`.
+- Codex's F13 audit found that the 64-section protocol bound applied only when
+  an oversized response also returned a non-null cursor. Gemini amended the
+  owner commit `24dbe3b` so every 65-item response fails closed and added both
+  null- and non-null-cursor regressions.
+- F13 currently organizes the globally bounded recent-thread working set under
+  section definitions. It does not prove authoritative per-section
+  `section_position` pagination or unlimited section ordering; that distinction
+  remains a future research candidate.
+
+### Stock runtime and dependency-boundary evidence
+
+- The first `dart run tool/review_smoke.dart` invocation failed at compile time
+  before any protocol operation: `runtime_diagnostics_models.dart` imported
+  Flutter foundation solely for `@immutable`, which pulled `dart:ui` into the
+  pure-Dart `ProcessTransport` graph. This was a real regression affecting
+  existing `dart run` runtime tools and is preserved as negative evidence.
+- `d2947ae` replaced that import with the direct pure-Dart `meta` dependency.
+  The final review smoke created an isolated temporary Git repository, committed
+  a baseline, introduced an uncommitted defect, started a stock review, observed
+  both review lifecycle markers and terminal `completed`, retained a
+  `726`-character assistant result, cleaned the thread, and removed the fixture.
+  Existing runtime, thread, and model smokes passed afterward.
+- The shared gate passed formatting (`171` files), `dart analyze`, all `395`
+  Flutter tests, all `98` Rust tests, the bounded history benchmark
+  (`RETAINED_TURNS=100`, `RSS_TURN_DELTA=1445888`,
+  `RSS_HEAVY_OUTPUT_DELTA=32862208`), and a Linux debug build.
+- The integrated Linux client launched on KDE Wayland, connected, and visibly
+  rendered project/thread organization, a Git branch badge, and the composer.
+  GTK emitted the previously observed ATK embedding critical and cursor-theme
+  warning without a crash. No Human visual review of section density, review
+  banner/activity presentation, or action placement occurred.
+
+### Stop boundary
+
+The latest explicit user instruction requires stopping after this peer round.
+This is not evidence that the living convergence backlog is exhausted and does
+not reclassify remaining supported work as blocked. No next round was
+negotiated or started.

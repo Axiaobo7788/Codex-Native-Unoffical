@@ -2091,3 +2091,67 @@ contract.
 - Stable thread-section organization, `review/start`, and the remaining goal
   lifecycle require fresh ownership negotiation. Closing F11/F12 is a peer
   checkpoint and does not stop `SELF_ITERATION`.
+
+## ADR-040 — Thread Sections and Code Review Are Bounded Local Stock Projections
+
+**Date:** 2026-11-09
+**Status:** Accepted
+
+### Context
+
+The installed stock app-server exposes stable thread-section lifecycle RPCs and
+stable `review/start` with four target variants. The official Desktop uses
+sections, repository metadata, goals, and review-mode activity as first-class
+organization/workflow surfaces. Implementing them must not turn the Flutter
+sidebar into an unbounded catalog, invent Remote write parity, or make review
+lifecycle presentation the source of truth.
+
+### Decision
+
+1. **Thread sections remain a bounded local catalog**:
+   - Support `threadSection/list|create|update|delete`,
+     `thread/section/move`, and `thread/section/changed` through typed models,
+     adapters, and controller state.
+   - Retain at most 64 sections, reject every oversized page independent of
+     cursor shape, bound names and appearance tokens, and reconcile by opaque
+     stable IDs. Local section create/rename/delete/move actions are unavailable
+     on Track A Remote.
+   - Group only the already bounded global thread working set. Do not claim
+     authoritative per-section ordering or unlimited section-specific history
+     until stock `section_position` pagination behavior is separately proven.
+
+2. **Review start is local, typed, and lifecycle-driven**:
+   - Model uncommitted-changes, base-branch, commit, and custom review targets
+     and serialize them only through stock `review/start`.
+   - Project bounded `enteredReviewMode` / `exitedReviewMode` activity in live
+     and historical timelines. Treat app-server events and the returned turn as
+     authoritative; the UI banner is a projection.
+   - Expose only the uncommitted-changes target in the first desktop menu slice.
+     Hide or reject the action for archived/unmaterialized threads, absent Git
+     capability, busy review state, and read-only Remote.
+
+3. **Pure-Dart runtime tooling is an enforced boundary**:
+   - Domain models reachable from `ProcessTransport` must not import Flutter.
+     Immutability annotations use the direct pure-Dart `meta` dependency.
+   - Stock runtime smokes must continue to run with `dart run`; a Flutter-only
+     import that makes those tools require `dart:ui` is a regression.
+
+4. **Evidence stays granular**:
+   - Protocol/controller/E2E tests prove all section operations and all four
+     review target encodings. The real stock smoke currently proves only the
+     uncommitted-changes review target and lifecycle.
+   - Linux launch proves that the integrated shell renders and connects, not
+     subjective visual acceptance. Section/review presentation remains
+     `HUMAN_REVIEW_PENDING`.
+
+### Consequences
+
+- F13 adds useful official-style organization without weakening the existing
+  100-thread global working-set and 64-section bounds.
+- F14 adds a real local stock review workflow while preserving Track A Remote's
+  explicit read-only contract.
+- The initial review smoke exposed and permanently records an F11 pure-Dart
+  dependency regression; the final implementation fixes it rather than hiding
+  the failed run.
+- The user explicitly stopped execution after this F13/F14 round. No next peer
+  round begins until a later explicit continue instruction.
