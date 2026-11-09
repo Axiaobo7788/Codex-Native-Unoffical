@@ -32,6 +32,113 @@ void main() {
     await notifications.close();
   });
 
+  test(
+    'optional read receipts bind to listed IDs and metadata-only reads',
+    () async {
+      responses['thread/list'] = {
+        'data': [
+          _threadJson(id: 'saved'),
+          {..._threadJson(id: 'temporary'), 'ephemeral': true},
+          _threadJson(id: 'unknown-position'),
+        ],
+        'readStates': {
+          'saved': {
+            'revision': 'opaque-1',
+            'firstUnread': {'type': 'turn', 'turnId': 'turn-1'},
+          },
+          'temporary': {
+            'revision': 'opaque-2',
+            'firstUnread': {'type': 'threadStart'},
+          },
+          'unknown-position': {
+            'revision': 'opaque-3',
+            'firstUnread': {'type': 'future'},
+          },
+          'not-in-page': {'revision': 'opaque-4', 'firstUnread': null},
+        },
+      };
+      final page = await adapter.listThreads(const ThreadListQuery());
+      expect(page.threads.first.readReceipt?.revision, 'opaque-1');
+      expect(page.threads.first.readReceipt?.unread, isTrue);
+      expect(
+        page.threads.skip(1).map((row) => row.readReceipt),
+        everyElement(isNull),
+      );
+
+      responses['thread/read'] = {
+        'thread': _threadJson(id: 'saved'),
+        'readState': {'revision': 'opaque-5', 'firstUnread': null},
+      };
+      final cold = await adapter.readThread('saved');
+      expect(cold.readReceipt?.unread, isFalse);
+      expect(requests.last.params, {
+        'threadId': 'saved',
+        'includeTurns': false,
+      });
+    },
+  );
+
+  test(
+    'only sends an explicit revisioned mark and decodes valid receipt events',
+    () async {
+      final observed = <ThreadLifecycleEvent>[];
+      final subscription = adapter.events.listen(observed.add);
+      addTearDown(subscription.cancel);
+      const readState = {
+        'revision': 'opaque-new',
+        'firstUnread': {'type': 'threadStart'},
+      };
+      responses['thread/readState/update'] = {'readState': readState};
+
+      final updated = await adapter.setReadReceipt(
+        threadId: 'saved',
+        expectedRevision: 'opaque-seen',
+        unread: true,
+      );
+      expect(updated.unread, isTrue);
+      expect(requests.last.params, {
+        'threadId': 'saved',
+        'expectedRevision': 'opaque-seen',
+        'operation': {'type': 'unread'},
+      });
+      notifications.add(
+        const CodexNotification(
+          method: 'thread/readState/changed',
+          params: {'threadId': 'saved', 'readState': readState},
+        ),
+      );
+      notifications.add(
+        const CodexNotification(
+          method: 'thread/readState/changed',
+          params: {
+            'threadId': 'saved',
+            'readState': {'revision': '', 'firstUnread': null},
+          },
+        ),
+      );
+      final event = observed.single as ThreadReadReceiptChangedEvent;
+      expect(event.threadId, 'saved');
+      expect(event.receipt.revision, 'opaque-new');
+    },
+  );
+
+  test(
+    'direct Host read-only mode rejects local read receipt writes',
+    () async {
+      final runtime = RuntimeController(useRemote: true);
+      addTearDown(runtime.dispose);
+      expect(runtime.supportsThreadReadReceiptWrites, isFalse);
+      await expectLater(
+        runtime.setThreadReadReceipt(
+          threadId: 'thread-1',
+          expectedRevision: 'opaque',
+          unread: false,
+        ),
+        throwsUnsupportedError,
+      );
+    },
+  );
+
   test('writes only explicit user goal fields and validates replies', () async {
     final goal = {
       'threadId': 'thread-1',

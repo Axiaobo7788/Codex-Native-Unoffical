@@ -754,6 +754,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           );
         }
         final thread = row as ThreadSummary;
+        final receipt = thread.readReceipt;
         return _ThreadRow(
           key: ValueKey(thread.id),
           thread: thread,
@@ -770,6 +771,11 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           onSelect: () => unawaited(_selectThread(thread.id)),
           onResume: () => unawaited(_resumeThread(thread.id)),
           onTogglePin: () => unawaited(controller.togglePinThread(thread.id)),
+          onToggleReadReceipt:
+              receipt != null && controller.canChangeReadReceipt(thread)
+              ? () =>
+                    unawaited(controller.toggleReadReceipt(thread.id, receipt))
+              : null,
           onRename: () => _renameThreadDialog(thread),
           onManageGoal: controller.canManageGoal(thread.id)
               ? () => unawaited(_manageThreadGoal(thread))
@@ -1625,6 +1631,7 @@ class _ThreadRow extends StatefulWidget {
     required this.onSelect,
     required this.onResume,
     required this.onTogglePin,
+    this.onToggleReadReceipt,
     required this.onRename,
     this.onManageGoal,
     required this.onFork,
@@ -1648,6 +1655,7 @@ class _ThreadRow extends StatefulWidget {
   final VoidCallback onSelect;
   final VoidCallback onResume;
   final VoidCallback onTogglePin;
+  final VoidCallback? onToggleReadReceipt;
   final VoidCallback onRename;
   final VoidCallback? onManageGoal;
   final VoidCallback onFork;
@@ -1744,11 +1752,14 @@ class _ThreadRowState extends State<_ThreadRow> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final thread = widget.thread;
+    final unread = thread.readReceipt?.unread ?? false;
+    final toggleReadReceipt = widget.onToggleReadReceipt;
     final statusColor = switch (thread.status) {
       ThreadRuntimeStatus.active => palette.accent,
       ThreadRuntimeStatus.systemError => palette.danger,
       _ => null,
     };
+    final leadingColor = statusColor ?? (unread ? palette.accent : null);
 
     final pinBadge = _formatPinBadge();
     final gitBadge = _formatGitBadge(thread.gitInfo);
@@ -1761,14 +1772,18 @@ class _ThreadRowState extends State<_ThreadRow> {
       title: thread.displayTitle,
       selected: widget.selected,
       onTap: widget.enabled ? widget.onSelect : null,
-      padding: EdgeInsets.only(left: statusColor != null ? 8 : 10, right: 8),
-      leading: statusColor != null
-          ? Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
+      padding: EdgeInsets.only(left: leadingColor != null ? 8 : 10, right: 8),
+      leading: leadingColor != null
+          ? Semantics(
+              label: unread ? 'Unread thread' : null,
+              child: Container(
+                key: unread ? ValueKey('thread-unread-${thread.id}') : null,
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: leadingColor,
+                  shape: BoxShape.circle,
+                ),
               ),
             )
           : null,
@@ -1791,6 +1806,16 @@ class _ThreadRowState extends State<_ThreadRow> {
                 width: 212,
                 popoverBuilder: (context, close) => CodexMenu<String>(
                   items: [
+                    if (toggleReadReceipt != null)
+                      CodexMenuItem(
+                        value: 'toggle-read-receipt',
+                        label: unread ? 'Mark as read' : 'Mark as unread',
+                        icon: Icon(
+                          unread
+                              ? Icons.mark_chat_read_outlined
+                              : Icons.mark_chat_unread_outlined,
+                        ),
+                      ),
                     if (widget.canTogglePin)
                       CodexMenuItem(
                         value: 'pin',
@@ -1861,6 +1886,8 @@ class _ThreadRowState extends State<_ThreadRow> {
                   onSelected: (action) {
                     close();
                     switch (action) {
+                      case 'toggle-read-receipt':
+                        toggleReadReceipt?.call();
                       case 'pin':
                         widget.onTogglePin();
                       case 'rename':

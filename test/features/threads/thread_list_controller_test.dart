@@ -6,6 +6,103 @@ import 'package:codex_native_unofficial/src/features/threads/thread_list_control
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('stale receipt writes refresh state and require a new action', () async {
+    const seen = ThreadReadReceipt(revision: 'seen', unread: true);
+    const newer = ThreadReadReceipt(revision: 'newer', unread: true);
+    final gateway = _ReadReceiptGateway()..serverReceipt = newer;
+    gateway.pages.add(
+      ThreadPage(
+        threads: [_thread('saved').copyWith(readReceipt: seen)],
+        nextCursor: null,
+      ),
+    );
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(gateway.dispose);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+
+    await controller.toggleReadReceipt('saved', seen);
+    expect(gateway.writes, [('saved', 'seen', false)]);
+    expect(gateway.readIds, ['saved']);
+    expect(controller.threads.single.readReceipt?.revision, 'newer');
+    expect(controller.threads.single.readReceipt?.unread, isTrue);
+    expect(controller.errorMessage, contains('Read status changed'));
+
+    await controller.toggleReadReceipt('saved', newer);
+    expect(gateway.writes, [
+      ('saved', 'seen', false),
+      ('saved', 'newer', false),
+    ]);
+    expect(controller.threads.single.readReceipt?.unread, isFalse);
+    expect(controller.errorMessage, isNull);
+    expect(gateway.resumeIds, isEmpty);
+  });
+
+  test(
+    'late catalog and receipt-less resume cannot erase a newer event',
+    () async {
+      const original = ThreadReadReceipt(revision: 'before', unread: false);
+      const latest = ThreadReadReceipt(revision: 'after', unread: true);
+      final gateway = _ReadReceiptGateway();
+      final row = _thread('saved').copyWith(readReceipt: original);
+      gateway.pages.add(ThreadPage(threads: [row], nextCursor: null));
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(gateway.dispose);
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      gateway.pendingPage = Completer<ThreadPage>();
+      final refresh = controller.refresh(preserveSelection: true);
+      gateway.events.add(
+        const ThreadReadReceiptChangedEvent(threadId: 'saved', receipt: latest),
+      );
+      gateway.events.add(
+        const ThreadReadReceiptChangedEvent(
+          threadId: 'unknown',
+          receipt: latest,
+        ),
+      );
+      gateway.pendingPage!.complete(
+        ThreadPage(threads: [row], nextCursor: null),
+      );
+      await refresh;
+
+      expect(controller.threads.single.readReceipt?.revision, 'after');
+      expect(controller.threads.single.readReceipt?.unread, isTrue);
+      await controller.resumeThread('saved');
+      expect(controller.selectedThread?.readReceipt?.revision, 'after');
+      expect(gateway.writes, isEmpty);
+    },
+  );
+
+  test('a newer receipt notice supersedes a pending write response', () async {
+    const seen = ThreadReadReceipt(revision: 'seen', unread: true);
+    const notice = ThreadReadReceipt(revision: 'after', unread: true);
+    final gateway = _ReadReceiptGateway()..serverReceipt = seen;
+    gateway.pages.add(
+      ThreadPage(
+        threads: [_thread('saved').copyWith(readReceipt: seen)],
+        nextCursor: null,
+      ),
+    );
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(gateway.dispose);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    gateway.pendingWrite = Completer<ThreadReadReceipt>();
+
+    final write = controller.toggleReadReceipt('saved', seen);
+    gateway.events.add(
+      const ThreadReadReceiptChangedEvent(threadId: 'saved', receipt: notice),
+    );
+    gateway.pendingWrite!.complete(
+      const ThreadReadReceipt(revision: 'write-result', unread: false),
+    );
+    await write;
+
+    expect(controller.threads.single.readReceipt?.revision, 'after');
+    expect(controller.threads.single.readReceipt?.unread, isTrue);
+  });
+
   test(
     'searches saved threads with the existing page and selection bounds',
     () async {
@@ -978,6 +1075,44 @@ class _GoalReadGateway extends _FakeThreadGateway implements ThreadGoalGateway {
 
   @override
   Future<bool> clearThreadGoal(String threadId) => throw UnimplementedError();
+}
+
+class _ReadReceiptGateway extends _FakeThreadGateway
+    implements ThreadReadReceiptGateway {
+  ThreadReadReceipt? serverReceipt;
+  Completer<ThreadPage>? pendingPage;
+  Completer<ThreadReadReceipt>? pendingWrite;
+  final writes = <(String, String, bool)>[];
+
+  @override
+  bool get supportsThreadReadReceiptWrites => true;
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) =>
+      pendingPage?.future ?? super.listThreads(query);
+
+  @override
+  Future<ThreadSummary> readThread(String threadId) async =>
+      (await super.readThread(threadId)).copyWith(readReceipt: serverReceipt);
+
+  @override
+  Future<ThreadReadReceipt> setThreadReadReceipt({
+    required String threadId,
+    required String expectedRevision,
+    required bool unread,
+  }) async {
+    writes.add((threadId, expectedRevision, unread));
+    if (serverReceipt?.revision != expectedRevision) {
+      throw StateError('Synthetic stale receipt');
+    }
+    if (pendingWrite case final pending?) {
+      return pending.future;
+    }
+    return serverReceipt = ThreadReadReceipt(
+      revision: 'new-write',
+      unread: unread,
+    );
+  }
 }
 
 class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
