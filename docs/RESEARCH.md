@@ -3835,3 +3835,54 @@ probe before interpreting that result as a content-search limitation.
   the conversation. No Flutter overflow or exception was observed, and
   app, Host and stock shut down. The session verifies the packaged
   product. Human visual and physical Android checks remain separate.
+
+## F22 local read receipts and stored unlink evidence
+
+- The measured Desktop ASAR `26.1103.60933` contains sidebar Mark as read and
+  Mark as unread menu strings and calls `thread/readState/update`.
+  Installed stock `0.167.0-alpha.3.2` registers the write only in the
+  experimental request schema. Optional `readState` and `readStates`
+  response fields appear only in the experimental generated schema.
+  `thread/readState/changed` appears in the stable notification schema.
+  An initialization without experimental opt-in still returned passive
+  data in the tested runtime and rejected the write. [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+- In isolated bundled Host probes, completed turns in legacy and paginated
+  threads set the unread position to the completed turn when the prior
+  receipt was clear.
+  A later completion changed the revision. A stale mark failed with
+  `-32600` and a fresh explicit mark cleared the receipt while the reader's
+  thread stayed cold. Repeating a read mark with the fresh revision
+  advanced it in the sample. Archived saved threads returned receipts.
+  An ephemeral fixture had no receipt.
+- In a single stock server with two disposable local connections, a
+  metadata-only client received its own mark response while a subscribed
+  peer received the notification. With both subscribed, both received
+  the matching notice. In the separate-process completion sample the cold
+  observer saw the updated receipt through metadata read, with no matching
+  event during its observation window.
+- F22A (`2f1fbb6`, `e2c3fb1`) projects the optional state and offers an
+  explicit, revision-bound local mark. The first race regression showed
+  that a delayed successful write response could overwrite a more recent
+  catalog receipt. Applying catalog snapshots through the receipt ordering
+  guard fixed it. The current branch also tests stale catalog pages and writes,
+  receipt-less resume, and unsupported local writes.
+- F22B published the reviewed evidence tree as `eb07c25` from Gemini's
+  local tip `5c3e1db`. It records exact raw-key deletion, alias and
+  whitespace behavior, notification scope, and a reproducible re-add race.
+  The peer's original local research history remains intact. Single-key
+  deletion can leave an alias visible. Multi-key removal can partially
+  succeed and stock offers no compare-and-delete condition or safe
+  automatic retry. [Unlink evidence](reverse/THREAD_ATTACHMENT_UNLINK_EVIDENCE.md)
+- Shared `eb07c25` passed format and analyze, 450 default Flutter tests
+  with five opt-in skips, 5/5 isolated direct-stock tests, 98 Rust tests
+  with Clippy, the 64-root pure-Dart gate, Linux bundle and license checks,
+  and bundled Host MCP smoke. The history benchmark kept 100 of 1,000
+  turns and exercised ten 3 MiB command output payloads.
+- The integrated Linux package used bundled Host, stock
+  `0.167.0-alpha.3.2`, and a disposable profile. At 720×800, an independent
+  stock process changed the unread revision while the Native action menu
+  was open. The stale click displayed a conflict and preserved unread
+  state. A fresh explicit Mark as read cleared it. Mark as unread
+  restored it. Independent metadata reads verified unread, read, and
+  unread while the thread remained cold. App, Host, and stock shut down.
+  The Human visual and physical Android gates remain separate.

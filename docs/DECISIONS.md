@@ -2349,3 +2349,26 @@ lifecycle presentation the source of truth.
 - Replacing a window invalidates its pending item projection. Item detail,
   command output, and return to newest retain their existing bounded paths.
   The search capability stays in the local process transport. [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+
+---
+
+## ADR-050 — Use stock revisions for explicit local read markers
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Stock owns durable read receipts. Project optional receipts on retained
+  rows and the active selection. List and metadata reads provide snapshots.
+  A runtime event updates a known thread without adding a catalog row.
+- The local sidebar action sends the revision captured by the displayed menu
+  and the corresponding explicit operation. On failure, read back metadata
+  when available and require a new action. Thread selection leaves the
+  receipt unchanged.
+- Local ordering prevents a delayed response from replacing a more recent
+  projection observed while it was outstanding. Keep only bounded ordering
+  stamps alongside the retained catalog. Stock revisions remain opaque.
+- The read receipt fields are optional experimental projections in the
+  installed generated schema. Write capability requires the local
+  experimental runtime path. The existing Direct Host Remote surface stays
+  read-only. [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)

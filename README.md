@@ -18,6 +18,8 @@ and is not affiliated with or endorsed by OpenAI.
   explicitly search saved threads through the local runtime. Eligible pins
   are saved in stock Pinned. Quick pins on custom-section threads and older
   runtimes are labeled session-only.
+  Supported local threads show stock unread state and offer explicit Mark as
+  read and Mark as unread actions.
   Manage a local thread Goal from its sidebar menu. Desktop code review can
   target uncommitted changes, a base branch, a commit or ref, or custom
   instructions on an eligible thread. The conversation header can show and
