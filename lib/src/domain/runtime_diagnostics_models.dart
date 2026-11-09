@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 const maxPermissionProfiles = 32;
 const maxConfigLayers = 16;
