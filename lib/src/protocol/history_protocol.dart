@@ -8,6 +8,8 @@ import 'thread_protocol.dart';
 
 final class HistoryProtocolAdapter {
   static const _maxReviewDescriptionLength = 512;
+  static const _maxOccurrenceSnippetLength = 2048;
+  static const _maxOccurrenceTokenLength = 4096;
 
   const HistoryProtocolAdapter({
     required this.request,
@@ -20,6 +22,90 @@ final class HistoryProtocolAdapter {
   final int maxTextCharacters;
   final int maxSummaryItemsPerTurn;
 
+  Future<HistoryOccurrencePage> listOccurrences(
+    HistoryOccurrenceQuery query,
+  ) async {
+    if (query.searchTerm.trim().isEmpty ||
+        query.searchTerm.length > HistoryOccurrenceQuery.maxSearchTermLength) {
+      throw ArgumentError('Saved history search requires a bounded query.');
+    }
+    final cursor = query.cursor;
+    if (cursor != null) {
+      _validateOccurrenceToken(cursor);
+    }
+    final response = await request('thread/searchOccurrences', {
+      'threadId': query.threadId,
+      'searchTerm': query.searchTerm,
+      'limit': HistoryOccurrenceQuery.pageSize,
+      'cursor': ?cursor,
+    });
+    final data = response['data'];
+    if (data is! List<Object?> ||
+        data.length > HistoryOccurrenceQuery.pageSize) {
+      throw const ProtocolViolation('Invalid saved history result page.');
+    }
+    final nextCursor = _optionalString(response, 'nextCursor');
+    if (nextCursor != null) {
+      _validateOccurrenceToken(nextCursor);
+      if (nextCursor == cursor || data.isEmpty) {
+        throw const ProtocolViolation('Saved history cursor did not advance.');
+      }
+    }
+    return HistoryOccurrencePage(
+      occurrences: List.unmodifiable(data.map(_parseOccurrence)),
+      nextCursor: nextCursor,
+    );
+  }
+
+  HistoryOccurrence _parseOccurrence(Object? value) {
+    if (value is! Map<String, Object?>) {
+      throw const ProtocolViolation('Saved history result must be an object.');
+    }
+    final snippet = _requiredString(value, 'snippet');
+    final range = value['snippetMatchRange'];
+    final start = range is Map<String, Object?> ? range['start'] : null;
+    final end = range is Map<String, Object?> ? range['end'] : null;
+    if (snippet.length > _maxOccurrenceSnippetLength ||
+        start is! int ||
+        end is! int ||
+        start < 0 ||
+        end <= start ||
+        end > snippet.length ||
+        _splitsSurrogatePair(snippet, start) ||
+        _splitsSurrogatePair(snippet, end)) {
+      throw const ProtocolViolation('Invalid saved history match range.');
+    }
+    return HistoryOccurrence(
+      turnId: _validateOccurrenceToken(_requiredString(value, 'turnId')),
+      itemId: _validateOccurrenceToken(_requiredString(value, 'itemId')),
+      turnCursor: _validateOccurrenceToken(
+        _requiredString(value, 'turnCursor'),
+      ),
+      snippet: snippet,
+      matchStart: start,
+      matchEnd: end,
+    );
+  }
+
+  static String _validateOccurrenceToken(String token) {
+    if (token.isEmpty || token.length > _maxOccurrenceTokenLength) {
+      throw const ProtocolViolation('Invalid saved history identifier.');
+    }
+    return token;
+  }
+
+  static bool _splitsSurrogatePair(String text, int offset) {
+    if (offset == 0 || offset == text.length) {
+      return false;
+    }
+    final before = text.codeUnitAt(offset - 1);
+    final after = text.codeUnitAt(offset);
+    return before >= 0xd800 &&
+        before <= 0xdbff &&
+        after >= 0xdc00 &&
+        after <= 0xdfff;
+  }
+
   Future<HistoryTurnPage> listTurns(HistoryTurnQuery query) async {
     final response = await request('thread/turns/list', {
       'threadId': query.threadId,
@@ -29,8 +115,8 @@ final class HistoryProtocolAdapter {
       'itemsView': 'summary',
     });
     final data = response['data'];
-    if (data is! List<Object?>) {
-      throw const ProtocolViolation('thread/turns/list data must be an array.');
+    if (data is! List<Object?> || data.length > query.limit) {
+      throw const ProtocolViolation('Invalid thread/turns/list page.');
     }
     return HistoryTurnPage(
       turns: data.map(_parseTurn).toList(growable: false),

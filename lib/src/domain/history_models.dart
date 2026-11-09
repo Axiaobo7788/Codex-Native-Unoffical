@@ -95,6 +95,50 @@ class HistoryItemPage {
   final String? nextCursor;
 }
 
+class HistoryOccurrenceQuery {
+  const HistoryOccurrenceQuery({
+    required this.threadId,
+    required this.searchTerm,
+    this.cursor,
+  });
+
+  static const pageSize = 16;
+  static const maxSearchTermLength = 256;
+
+  final String threadId;
+  final String searchTerm;
+  final String? cursor;
+}
+
+class HistoryOccurrence {
+  const HistoryOccurrence({
+    required this.turnId,
+    required this.itemId,
+    required this.turnCursor,
+    required this.snippet,
+    required this.matchStart,
+    required this.matchEnd,
+  });
+
+  final String turnId;
+  final String itemId;
+  final String turnCursor;
+  final String snippet;
+  // Offsets are UTF-16 code units, as in the stock schema and Dart strings.
+  final int matchStart;
+  final int matchEnd;
+}
+
+class HistoryOccurrencePage {
+  const HistoryOccurrencePage({
+    required this.occurrences,
+    required this.nextCursor,
+  });
+
+  final List<HistoryOccurrence> occurrences;
+  final String? nextCursor;
+}
+
 class HistoryTurnQuery {
   const HistoryTurnQuery({
     required this.threadId,

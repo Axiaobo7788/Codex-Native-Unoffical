@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codex_native_unofficial/src/domain/history_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/output_models.dart';
@@ -7,6 +9,129 @@ import 'package:codex_native_unofficial/src/features/conversation/history_contro
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'opens a verified occurrence without retaining the previous window',
+    () async {
+      final gateway = _OccurrenceHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('thread-1'));
+      controller.searchOccurrences(' Old ');
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.occurrenceRequests.single.searchTerm, 'Old');
+      final result = controller.occurrencePage!.occurrences.single;
+      expect(controller.turns.first.id, 'turn-0');
+
+      gateway.anchorFirstId = 'different-turn';
+      expect(await controller.openOccurrence(result), isNull);
+      expect(controller.turns.first.id, 'turn-0');
+      expect(controller.canReturnToNewest, isFalse);
+      expect(controller.occurrenceError, contains('no longer available'));
+
+      gateway.anchorFirstId = 'turn-old';
+      expect((await controller.openOccurrence(result))?.id, 'turn-old');
+      expect(controller.turns.single.id, 'turn-old');
+      expect(controller.canReturnToNewest, isTrue);
+      await controller.refresh();
+      expect(controller.turns.first.id, 'turn-0');
+      expect(controller.canReturnToNewest, isFalse);
+    },
+  );
+
+  test('a newer refresh supersedes an in-flight search anchor', () async {
+    final gateway = _OccurrenceHistoryGateway();
+    final controller = HistoryController(gateway: gateway);
+    addTearDown(controller.dispose);
+    await controller.bindThread(_thread('thread-1'));
+    controller.searchOccurrences('Old');
+    await Future<void>.delayed(Duration.zero);
+    gateway.pendingAnchor = Completer<HistoryTurnPage>();
+    final open = controller.openOccurrence(
+      controller.occurrencePage!.occurrences.single,
+    );
+
+    await controller.refresh();
+    gateway.pendingAnchor!.complete(gateway.anchorPage);
+    expect(await open, isNull);
+    expect(controller.turns.first.id, 'turn-0');
+    expect(controller.canReturnToNewest, isFalse);
+  });
+
+  test(
+    'search retains one running request and the latest pending scope',
+    () async {
+      final gateway = _OccurrenceHistoryGateway()
+        ..pendingOccurrence = Completer<HistoryOccurrencePage>();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('thread-1'));
+      controller.searchOccurrences('running');
+      controller.searchOccurrences('discarded');
+      await controller.bindThread(_thread('thread-2'));
+      controller.searchOccurrences('latest');
+      expect(gateway.occurrenceRequests.map((query) => query.searchTerm), [
+        'running',
+      ]);
+
+      gateway.pendingOccurrence!.completeError(UnsupportedError('Old thread'));
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        gateway.occurrenceRequests.map(
+          (query) => (query.threadId, query.searchTerm),
+        ),
+        [('thread-1', 'running'), ('thread-2', 'latest')],
+      );
+      expect(controller.occurrenceUnsupported, isFalse);
+      expect(controller.occurrencePage!.occurrences.single.turnId, 'turn-old');
+
+      controller.loadMoreOccurrences();
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.occurrenceRequests.last.cursor, 'next-occurrence');
+      expect(gateway.occurrenceRequests.last.searchTerm, 'latest');
+      expect(controller.occurrencePage!.nextCursor, isNull);
+    },
+  );
+
+  test('legacy fallback belongs to the selected thread only', () async {
+    final gateway = _OccurrenceHistoryGateway()..unsupportedThread = 'thread-1';
+    final controller = HistoryController(gateway: gateway);
+    addTearDown(controller.dispose);
+    await controller.bindThread(_thread('thread-1'));
+    controller.searchOccurrences('Old');
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.occurrenceUnsupported, isTrue);
+    expect(controller.turns.first.id, 'turn-0');
+
+    await controller.bindThread(_thread('thread-2'));
+    controller.searchOccurrences('Old');
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.occurrenceUnsupported, isFalse);
+    expect(controller.occurrencePage, isNotNull);
+  });
+
+  test(
+    'refresh releases an outstanding item load from the old window',
+    () async {
+      final gateway = _DelayedItemGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('thread-1'));
+      final load = controller.loadTurnItems('turn-0');
+      expect(controller.loadingItems, isTrue);
+
+      await controller.refresh();
+      gateway.pending.complete(
+        const HistoryItemPage(items: [], nextCursor: null),
+      );
+      await load;
+
+      expect(controller.selectedTurnId, isNull);
+      expect(controller.loadingItems, isFalse);
+      await controller.loadTurnItems('turn-1');
+      expect(controller.selectedTurnId, 'turn-1');
+    },
+  );
+
   test('caps a synthetic 1000-turn history at the working-set limit', () async {
     final gateway = _HistoryGateway(turnCount: 1000, itemsPerTurn: 200);
     final controller = HistoryController(
@@ -136,6 +261,83 @@ void main() {
     expect(controller.lastEvictedItemIds, isEmpty);
     expect(controller.turns.first.id, 'turn-0');
   });
+}
+
+class _OccurrenceHistoryGateway extends _HistoryGateway
+    implements HistoryOccurrenceGateway {
+  _OccurrenceHistoryGateway() : super(turnCount: 3, itemsPerTurn: 2);
+
+  final occurrenceRequests = <HistoryOccurrenceQuery>[];
+  Completer<HistoryOccurrencePage>? pendingOccurrence;
+  Completer<HistoryTurnPage>? pendingAnchor;
+  String? unsupportedThread;
+  String anchorFirstId = 'turn-old';
+
+  @override
+  bool get supportsHistoryOccurrences => true;
+
+  HistoryTurnPage get anchorPage => HistoryTurnPage(
+    turns: [
+      HistoryTurn(
+        id: anchorFirstId,
+        status: TurnRuntimeStatus.completed,
+        items: [
+          HistoryItem(
+            id: 'old-user',
+            turnId: anchorFirstId,
+            kind: HistoryItemKind.user,
+            text: 'Old',
+          ),
+        ],
+      ),
+    ],
+    nextCursor: null,
+  );
+
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) async =>
+      query.cursor == 'turn-anchor'
+      ? (pendingAnchor?.future ?? anchorPage)
+      : super.listHistoryTurns(query);
+
+  @override
+  Future<HistoryOccurrencePage> listHistoryOccurrences(
+    HistoryOccurrenceQuery query,
+  ) async {
+    occurrenceRequests.add(query);
+    if (query.threadId == unsupportedThread) {
+      throw UnsupportedError('Synthetic unsupported thread');
+    }
+    if (pendingOccurrence case final pending?
+        when occurrenceRequests.length == 1) {
+      return pending.future;
+    }
+    return HistoryOccurrencePage(
+      occurrences: const [
+        HistoryOccurrence(
+          turnId: 'turn-old',
+          itemId: 'old-user',
+          turnCursor: 'turn-anchor',
+          snippet: 'Old',
+          matchStart: 0,
+          matchEnd: 3,
+        ),
+      ],
+      nextCursor: query.cursor == null ? 'next-occurrence' : null,
+    );
+  }
+}
+
+class _DelayedItemGateway extends _HistoryGateway {
+  _DelayedItemGateway() : super(turnCount: 3, itemsPerTurn: 2);
+
+  final pending = Completer<HistoryItemPage>();
+  var calls = 0;
+
+  @override
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) {
+    return calls++ == 0 ? pending.future : super.listHistoryItems(query);
+  }
 }
 
 class _HistoryGateway implements HistoryGateway {

@@ -89,6 +89,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   late final FocusNode _composerFocusNode;
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
+  final _conversationFocusNode = FocusNode();
   late final ScrollController _scrollController;
   final LinkedHashMap<String, _ThreadScrollBookmark> _threadScrollBookmarks =
       LinkedHashMap();
@@ -231,6 +232,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _bindAttachmentEvents();
     if (_activeThreadId case final activeId?) {
       _requestActiveThreadLinkedPrs(activeId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _conversationFocusNode.requestFocus();
+        }
+      });
     }
   }
 
@@ -592,6 +598,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..removeListener(_handleSearchQueryChanged)
       ..dispose();
     _searchFocusNode.dispose();
+    _conversationFocusNode.dispose();
     _composerFocusNode
       ..removeListener(_handleComposerFocusChanged)
       ..dispose();
@@ -605,6 +612,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return;
     }
     if (!_searchOpen) {
+      widget.historyController.clearOccurrenceSearch();
       setState(() {
         _searchOpen = true;
       });
@@ -628,6 +636,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (!_searchOpen) {
       return;
     }
+    widget.historyController.clearOccurrenceSearch();
     setState(() {
       _searchOpen = false;
       _searchController.clear();
@@ -667,6 +676,44 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  Future<void> _openSavedOccurrence(HistoryOccurrence occurrence) async {
+    final threadId = widget.controller.thread?.id;
+    final turn = await widget.historyController.openOccurrence(occurrence);
+    if (!mounted ||
+        !_searchOpen ||
+        widget.controller.thread?.id != threadId ||
+        turn == null) {
+      return;
+    }
+    final visibleItems = turn.items.where(
+      (item) =>
+          item.kind == HistoryItemKind.user ||
+          item.kind == HistoryItemKind.assistant,
+    );
+    final target =
+        visibleItems
+            .where((item) => item.id == occurrence.itemId)
+            .firstOrNull ??
+        visibleItems.firstOrNull;
+    if (target == null) {
+      return;
+    }
+    _pendingThreadRestore = false;
+    _preLoadOlderAnchor = null;
+    _pendingStreamAnchor = null;
+    if (_showChanges) {
+      setState(() => _showChanges = false);
+    }
+    _schedulePostLoadAnchorAlignment(
+      _VisibleAnchor(
+        itemKey: 'history-${target.id}',
+        turnId: turn.id,
+        viewportTopDy: 48,
+      ),
+      pass: 0,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
@@ -682,108 +729,114 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           }
         },
       },
-      child: ColoredBox(
-        color: theme.workspaceBackground,
-        child: AnimatedBuilder(
-          animation: Listenable.merge([
-            widget.controller,
-            if (widget.threadController != null) widget.threadController!,
-            widget.diffController,
-            widget.historyController,
-          ]),
-          builder: (context, _) {
-            final controller = widget.controller;
-            if (controller.thread == null &&
-                !(_showChanges && widget.diffController.snapshot != null)) {
-              _currentTimelineItemKeys = const [];
-              _searchMatchItemKeys = const [];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _conversationHeader(controller),
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal:
-                              OfficialCodexTheme.threadBodyInlinePadding,
-                          vertical: 20,
-                        ),
-                        child: ConstrainedBox(
-                          key: const ValueKey('conversation_reading_column'),
-                          constraints: const BoxConstraints(
-                            maxWidth: OfficialCodexTheme.maxContentWidth,
+      child: Focus(
+        focusNode: _conversationFocusNode,
+        skipTraversal: true,
+        child: ColoredBox(
+          color: theme.workspaceBackground,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([
+              widget.controller,
+              if (widget.threadController != null) widget.threadController!,
+              widget.diffController,
+              widget.historyController,
+            ]),
+            builder: (context, _) {
+              final controller = widget.controller;
+              if (controller.thread == null &&
+                  !(_showChanges && widget.diffController.snapshot != null)) {
+                _currentTimelineItemKeys = const [];
+                _searchMatchItemKeys = const [];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _conversationHeader(controller),
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal:
+                                OfficialCodexTheme.threadBodyInlinePadding,
+                            vertical: 20,
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _ConversationEmptyState(
-                                workingDirectory: _activeProjectDirectory,
-                                onChooseDirectory:
-                                    _activeCapabilities
-                                        .supportsWorkingDirectorySelection
-                                    ? _chooseProjectDirectory
-                                    : null,
-                              ),
-                              const SizedBox(height: 22),
-                              _ApprovalBanner(
-                                controller: widget.approvalController,
-                              ),
-                              _UserInputBanner(
-                                controller: widget.userInputController,
-                              ),
-                              _composer(controller, isHeroCentered: true),
-                              const SizedBox(height: 14),
-                              _StarterSuggestionRow(
-                                onSelectSuggestion: (prompt) {
-                                  setState(() {
-                                    _composerController.value =
-                                        TextEditingValue(
-                                          text: prompt,
-                                          selection: TextSelection.collapsed(
-                                            offset: prompt.length,
-                                          ),
-                                        );
-                                  });
-                                  _composerFocusNode.requestFocus();
-                                },
-                              ),
-                            ],
+                          child: ConstrainedBox(
+                            key: const ValueKey('conversation_reading_column'),
+                            constraints: const BoxConstraints(
+                              maxWidth: OfficialCodexTheme.maxContentWidth,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _ConversationEmptyState(
+                                  workingDirectory: _activeProjectDirectory,
+                                  onChooseDirectory:
+                                      _activeCapabilities
+                                          .supportsWorkingDirectorySelection
+                                      ? _chooseProjectDirectory
+                                      : null,
+                                ),
+                                const SizedBox(height: 22),
+                                _ApprovalBanner(
+                                  controller: widget.approvalController,
+                                ),
+                                _UserInputBanner(
+                                  controller: widget.userInputController,
+                                ),
+                                _composer(controller, isHeroCentered: true),
+                                const SizedBox(height: 14),
+                                _StarterSuggestionRow(
+                                  onSelectSuggestion: (prompt) {
+                                    setState(() {
+                                      _composerController.value =
+                                          TextEditingValue(
+                                            text: prompt,
+                                            selection: TextSelection.collapsed(
+                                              offset: prompt.length,
+                                            ),
+                                          );
+                                    });
+                                    _composerFocusNode.requestFocus();
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
+                );
+              }
+              final timelineChild =
+                  _showChanges && widget.diffController.snapshot != null
+                  ? _DiffView(controller: widget.diffController)
+                  : _timeline(controller);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _conversationHeader(controller),
+                  if (_searchOpen && controller.thread != null) ...[
+                    _conversationSearchBar(),
+                    _savedOccurrenceResults(),
+                  ],
+                  if (controller.thread != null &&
+                      (controller.latestWarning != null ||
+                          controller.latestModelReroute != null))
+                    _telemetryNoticeBar(controller),
+                  if (controller.thread != null &&
+                      controller.latestTurnPlan != null &&
+                      controller.latestTurnPlan!.steps.isNotEmpty)
+                    _turnPlanBanner(controller),
+                  if (controller.thread != null && controller.reviewModeActive)
+                    _reviewModeBanner(controller),
+                  Expanded(child: timelineChild),
+                  _ApprovalBanner(controller: widget.approvalController),
+                  _UserInputBanner(controller: widget.userInputController),
+                  _composer(controller),
                 ],
               );
-            }
-            final timelineChild =
-                _showChanges && widget.diffController.snapshot != null
-                ? _DiffView(controller: widget.diffController)
-                : _timeline(controller);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _conversationHeader(controller),
-                if (_searchOpen && controller.thread != null)
-                  _conversationSearchBar(),
-                if (controller.thread != null &&
-                    (controller.latestWarning != null ||
-                        controller.latestModelReroute != null))
-                  _telemetryNoticeBar(controller),
-                if (controller.thread != null &&
-                    controller.latestTurnPlan != null &&
-                    controller.latestTurnPlan!.steps.isNotEmpty)
-                  _turnPlanBanner(controller),
-                if (controller.thread != null && controller.reviewModeActive)
-                  _reviewModeBanner(controller),
-                Expanded(child: timelineChild),
-                _ApprovalBanner(controller: widget.approvalController),
-                _UserInputBanner(controller: widget.userInputController),
-                _composer(controller),
-              ],
-            );
-          },
+            },
+          ),
         ),
       ),
     );
@@ -791,13 +844,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Widget _conversationSearchBar() {
     final palette = ThemeTokens.of(context);
+    final history = widget.historyController;
     final query = _searchController.text.trim();
     final matchCount = _searchMatchItemKeys.length;
+    final scope = history.supportsOccurrenceSearch ? ' loaded' : '';
     final statusLabel = query.isEmpty
         ? 'Type to search'
         : matchCount == 0
-        ? '0 matches'
-        : '${(_activeSearchMatchIndex + 1).clamp(1, matchCount)} of $matchCount';
+        ? '0$scope matches'
+        : '${(_activeSearchMatchIndex + 1).clamp(1, matchCount)} of $matchCount$scope';
     return Container(
       key: const ValueKey('conversation-search-bar'),
       height: 40,
@@ -826,15 +881,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   controller: _searchController,
                   focusNode: _searchFocusNode,
                   style: Theme.of(context).textTheme.bodySmall,
-                  decoration: const InputDecoration(
-                    hintText: 'Find in conversation…',
+                  decoration: InputDecoration(
+                    hintText: history.supportsOccurrenceSearch
+                        ? 'Find in loaded messages…'
+                        : 'Find in conversation…',
                     isDense: true,
                     filled: false,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 6),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 6),
                   ),
+                  onChanged: (_) => history.clearOccurrenceSearch(),
                   onSubmitted: (_) {
                     if (matchCount > 0) {
                       _jumpToSearchMatch(_activeSearchMatchIndex + 1);
@@ -868,6 +926,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     : null,
                 icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
               ),
+              if (history.supportsOccurrenceSearch)
+                CodexIconButton(
+                  key: const ValueKey('conversation-search-saved'),
+                  tooltip: 'Search saved messages',
+                  size: 26,
+                  onPressed:
+                      query.isNotEmpty &&
+                          query.length <=
+                              HistoryOccurrenceQuery.maxSearchTermLength &&
+                          !history.occurrenceUnsupported
+                      ? () => history.searchOccurrences(query)
+                      : null,
+                  icon: const Icon(Icons.manage_search_rounded, size: 16),
+                ),
               CodexIconButton(
                 key: const ValueKey('conversation-search-close'),
                 tooltip: 'Close search (Esc)',
@@ -876,6 +948,137 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 icon: const Icon(Icons.close_rounded, size: 15),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _savedOccurrenceResults() {
+    final history = widget.historyController;
+    final page = history.occurrencePage;
+    final error = history.occurrenceError;
+    if (page == null &&
+        error == null &&
+        !history.occurrenceLoading &&
+        !history.occurrenceUnsupported) {
+      return const SizedBox.shrink();
+    }
+    final palette = ThemeTokens.of(context);
+    final textStyle = Theme.of(context).textTheme.bodySmall;
+    final status = history.occurrenceUnsupported
+        ? 'Saved search is unavailable for this thread. Find still searches loaded messages.'
+        : error ??
+              (history.occurrenceLoading
+                  ? 'Searching saved messages…'
+                  : history.openingOccurrence
+                  ? 'Opening saved match…'
+                  : page!.occurrences.isEmpty
+                  ? 'No matches in saved messages'
+                  : 'Saved matches');
+    return ColoredBox(
+      color: palette.surfaceRaised,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: ThemeTokens.space1,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          status,
+                          key: const ValueKey(
+                            'conversation-saved-search-status',
+                          ),
+                          style: textStyle?.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ),
+                      if (page?.nextCursor != null)
+                        CodexButton(
+                          key: const ValueKey('conversation-saved-search-next'),
+                          variant: CodexButtonVariant.ghost,
+                          size: CodexButtonSize.sm,
+                          label: 'Next page',
+                          onPressed:
+                              history.occurrenceLoading ||
+                                  history.openingOccurrence
+                              ? null
+                              : history.loadMoreOccurrences,
+                        ),
+                    ],
+                  ),
+                ),
+                if (page != null && page.occurrences.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 128),
+                    child: ListView.builder(
+                      key: ObjectKey(page),
+                      padding: EdgeInsets.zero,
+                      primary: false,
+                      shrinkWrap: true,
+                      itemCount: page.occurrences.length,
+                      itemBuilder: (context, index) {
+                        final occurrence = page.occurrences[index];
+                        final snippet = occurrence.snippet;
+                        return CodexButton(
+                          key: ValueKey('conversation-saved-search-hit-$index'),
+                          variant: CodexButtonVariant.ghost,
+                          size: CodexButtonSize.sm,
+                          onPressed:
+                              history.loadingTurns ||
+                                  history.occurrenceLoading ||
+                                  history.openingOccurrence
+                              ? null
+                              : () => _openSavedOccurrence(occurrence),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: snippet.substring(
+                                      0,
+                                      occurrence.matchStart,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: snippet.substring(
+                                      occurrence.matchStart,
+                                      occurrence.matchEnd,
+                                    ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: snippet.substring(
+                                      occurrence.matchEnd,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

@@ -9,3 +9,11 @@ abstract interface class HistoryGateway {
     required List<String> itemIds,
   });
 }
+
+/// Optional local stock operation. A particular saved thread can be unsupported.
+abstract interface class HistoryOccurrenceGateway {
+  bool get supportsHistoryOccurrences;
+  Future<HistoryOccurrencePage> listHistoryOccurrences(
+    HistoryOccurrenceQuery query,
+  );
+}

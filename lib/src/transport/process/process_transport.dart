@@ -5,6 +5,7 @@ import 'dart:io';
 import '../../domain/approval_models.dart';
 import '../../domain/ecosystem_gateway.dart';
 import '../../domain/ecosystem_models.dart';
+import '../../domain/history_gateway.dart';
 import '../../domain/history_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
@@ -43,6 +44,7 @@ class ProcessExit {
 class ProcessTransport
     implements
         CodexTransport,
+        HistoryOccurrenceGateway,
         ThreadGoalGateway,
         ThreadSectionGateway,
         ThreadAttachmentGateway,
@@ -263,6 +265,23 @@ class ProcessTransport
   @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
       _historyProtocol.listTurns(query);
+
+  @override
+  bool get supportsHistoryOccurrences => !_closing;
+
+  @override
+  Future<HistoryOccurrencePage> listHistoryOccurrences(
+    HistoryOccurrenceQuery query,
+  ) async {
+    try {
+      return await _historyProtocol.listOccurrences(query);
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601) {
+        throw UnsupportedError('Saved search is unavailable for this thread.');
+      }
+      rethrow;
+    }
+  }
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>

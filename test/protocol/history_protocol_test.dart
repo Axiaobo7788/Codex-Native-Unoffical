@@ -8,9 +8,83 @@ import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/history_protocol.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
+import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'requests a bounded saved occurrence page and keeps UTF-16 ranges',
+    () async {
+      final adapter = HistoryProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          expect(method, 'thread/searchOccurrences');
+          expect(params, {
+            'threadId': 'thread-1',
+            'searchTerm': 'Find',
+            'limit': HistoryOccurrenceQuery.pageSize,
+            'cursor': 'opaque-search',
+          });
+          return {
+            'data': [_occurrenceFixture()],
+            'nextCursor': 'following-page',
+          };
+        },
+      );
+      final page = await adapter.listOccurrences(
+        const HistoryOccurrenceQuery(
+          threadId: 'thread-1',
+          searchTerm: 'Find',
+          cursor: 'opaque-search',
+        ),
+      );
+      final hit = page.occurrences.single;
+      expect(hit.snippet.substring(hit.matchStart, hit.matchEnd), 'Find');
+      expect(hit.itemId, 'message-1');
+      expect(hit.turnCursor, 'opaque-turn-anchor');
+      expect(page.nextCursor, 'following-page');
+    },
+  );
+
+  test(
+    'rejects malformed ranges, oversized result pages and stalled cursors',
+    () async {
+      final invalid = [
+        {
+          'data': [_occurrenceFixture(start: 1)],
+        },
+        {
+          'data': [_occurrenceFixture(end: 99)],
+        },
+        {
+          'data': List.filled(
+            HistoryOccurrenceQuery.pageSize + 1,
+            _occurrenceFixture(),
+          ),
+        },
+        {
+          'data': [_occurrenceFixture()],
+          'nextCursor': 'opaque-search',
+        },
+        {'data': [], 'nextCursor': 'empty-page'},
+      ];
+      for (final result in invalid) {
+        final adapter = HistoryProtocolAdapter(
+          request: (_, [params = const {}]) async => result,
+        );
+        await expectLater(
+          adapter.listOccurrences(
+            const HistoryOccurrenceQuery(
+              threadId: 'thread-1',
+              searchTerm: 'Find',
+              cursor: 'opaque-search',
+            ),
+          ),
+          throwsA(isA<ProtocolViolation>()),
+        );
+      }
+    },
+  );
+
   late List<(String, JsonObject)> requests;
   late HistoryProtocolAdapter adapter;
 
@@ -850,3 +924,11 @@ String _multiMegabyteOutput() {
   final kibibyte = List.filled(1024, 'x').join();
   return List.filled(3 * 1024, kibibyte).join();
 }
+
+JsonObject _occurrenceFixture({int start = 3, int end = 7}) => {
+  'itemId': 'message-1',
+  'turnId': 'turn-1',
+  'turnCursor': 'opaque-turn-anchor',
+  'snippet': '🧪 Find the marker.',
+  'snippetMatchRange': {'start': start, 'end': end},
+};
