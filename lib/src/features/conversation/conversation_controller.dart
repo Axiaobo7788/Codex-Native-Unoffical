@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -17,6 +18,7 @@ class ConversationEntry {
     required this.text,
     required this.completed,
     this.turnId,
+    this.stockItemId,
     this.status,
     this.attachments = const [],
   });
@@ -26,6 +28,7 @@ class ConversationEntry {
   final String text;
   final bool completed;
   final String? turnId;
+  final String? stockItemId;
   final String? status;
   final List<UserAttachment> attachments;
 
@@ -33,6 +36,7 @@ class ConversationEntry {
     String? text,
     bool? completed,
     String? turnId,
+    String? stockItemId,
     String? status,
     List<UserAttachment>? attachments,
   }) => ConversationEntry(
@@ -41,6 +45,7 @@ class ConversationEntry {
     text: text ?? this.text,
     completed: completed ?? this.completed,
     turnId: turnId ?? this.turnId,
+    stockItemId: stockItemId ?? this.stockItemId,
     status: status ?? this.status,
     attachments: attachments ?? this.attachments,
   );
@@ -99,11 +104,14 @@ class ConversationController extends ChangeNotifier {
   String? _latestWarning;
   String? _activeReviewDescription;
   var _busy = false;
-  var _steering = false;
+  String? _startingUserEntryId;
+  String? _steeringUserEntryId;
   var _startingReview = false;
   var _interruptReady = false;
   var _disposed = false;
   var _localEntrySequence = 0;
+  var _bindingGeneration = 0;
+  late final String _clientMessageNonce = _newClientMessageNonce();
 
   List<ConversationEntry> get entries => List.unmodifiable(_entries);
   ThreadSummary? get thread => _thread;
@@ -117,7 +125,10 @@ class ConversationController extends ChangeNotifier {
   bool get busy => _busy;
   bool get canInterrupt => _busy && _interruptReady;
   bool get canSteer =>
-      _busy && _interruptReady && _activeTurnId != null && !_steering;
+      _busy &&
+      _interruptReady &&
+      _activeTurnId != null &&
+      _steeringUserEntryId == null;
   bool get canStartReview =>
       reviewStarter != null && _thread != null && !_busy && !_startingReview;
 
@@ -158,6 +169,8 @@ class ConversationController extends ChangeNotifier {
     _reasoningSummaries.clear();
     _mcpBaseSummaries.clear();
     _entries.clear();
+    _bindingGeneration += 1;
+    _startingUserEntryId = null;
     _thread = thread;
     _activeTurnId = null;
     _latestTurnPlan = null;
@@ -166,13 +179,15 @@ class ConversationController extends ChangeNotifier {
     _latestWarning = _processWarning;
     _activeReviewDescription = null;
     _busy = false;
-    _steering = false;
+    _steeringUserEntryId = null;
     _startingReview = false;
     _interruptReady = false;
     _notify();
   }
 
   void clearEntries() {
+    _bindingGeneration += 1;
+    _startingUserEntryId = null;
     _flushTimer?.cancel();
     _flushTimer = null;
     _deltaBuffers.clear();
@@ -198,7 +213,7 @@ class ConversationController extends ChangeNotifier {
     _latestWarning = _processWarning;
     _activeReviewDescription = null;
     _busy = false;
-    _steering = false;
+    _steeringUserEntryId = null;
     _startingReview = false;
     _interruptReady = false;
     _notify();
@@ -221,7 +236,11 @@ class ConversationController extends ChangeNotifier {
     }
 
     _busy = true;
-    final entryId = 'local-user-${_localEntrySequence++}';
+    _interruptReady = false;
+    _activeTurnId = null;
+    final generation = _bindingGeneration;
+    final entryId = _nextLocalUserId();
+    _startingUserEntryId = entryId;
     _append(
       ConversationEntry(
         id: entryId,
@@ -239,25 +258,38 @@ class ConversationController extends ChangeNotifier {
           threadId: currentThread.id,
           text: trimmed,
           attachments: normalizedAttachments,
+          clientUserMessageId: entryId,
         ),
       );
-      if (_disposed || _thread?.id != currentThread.id) {
+      if (!_isCurrentBinding(generation)) {
         return true;
       }
-      _activeTurnId ??= turn.id;
       _assignTurnIdToEntry(entryId, turn.id);
-      _busy = turn.status == TurnRuntimeStatus.inProgress;
+      if (_startingUserEntryId == entryId &&
+          _busy &&
+          (_activeTurnId == null || _activeTurnId == turn.id)) {
+        _activeTurnId = turn.id;
+        _busy = turn.status == TurnRuntimeStatus.inProgress;
+      }
       _notify();
       return true;
     } catch (error) {
-      if (!_disposed && _thread?.id == currentThread.id) {
-        _busy = false;
-        _interruptReady = false;
-        _activeTurnId = null;
+      if (_isCurrentBinding(generation)) {
+        if (_wasUserItemEchoed(entryId)) {
+          return true;
+        }
+        if (_startingUserEntryId == entryId && !_interruptReady) {
+          _busy = false;
+          _activeTurnId = null;
+        }
         _appendError(error.toString());
         _notify();
       }
       return false;
+    } finally {
+      if (_isCurrentBinding(generation) && _startingUserEntryId == entryId) {
+        _startingUserEntryId = null;
+      }
     }
   }
 
@@ -276,8 +308,9 @@ class ConversationController extends ChangeNotifier {
       return false;
     }
 
-    _steering = true;
-    final entryId = 'local-user-${_localEntrySequence++}';
+    final generation = _bindingGeneration;
+    final entryId = _nextLocalUserId();
+    _steeringUserEntryId = entryId;
     _append(
       ConversationEntry(
         id: entryId,
@@ -297,9 +330,10 @@ class ConversationController extends ChangeNotifier {
           expectedTurnId: turnId,
           text: trimmed,
           attachments: normalizedAttachments,
+          clientUserMessageId: entryId,
         ),
       );
-      if (!_disposed && _thread?.id == currentThread.id) {
+      if (_isCurrentBinding(generation)) {
         if (_busy && _activeTurnId == turnId) {
           _activeTurnId = steeredTurnId;
         }
@@ -307,14 +341,19 @@ class ConversationController extends ChangeNotifier {
       }
       return true;
     } catch (error) {
-      if (!_disposed && _thread?.id == currentThread.id) {
+      if (_isCurrentBinding(generation)) {
+        if (_wasUserItemEchoed(entryId)) {
+          return true;
+        }
         _entries.removeWhere((entry) => entry.id == entryId);
         _appendError(error.toString());
       }
       return false;
     } finally {
-      if (!_disposed) {
-        _steering = false;
+      if (_isCurrentBinding(generation)) {
+        if (_steeringUserEntryId == entryId) {
+          _steeringUserEntryId = null;
+        }
         _notify();
       }
     }
@@ -388,7 +427,7 @@ class ConversationController extends ChangeNotifier {
       return;
     }
     final index = _entries.indexWhere((entry) => entry.id == entryId);
-    if (index != -1) {
+    if (index != -1 && _entries[index].stockItemId == null) {
       _entries[index] = _entries[index].copyWith(turnId: turnId);
     }
   }
@@ -436,7 +475,7 @@ class ConversationController extends ChangeNotifier {
         _finalizeTurnEntries(event.turnId, event.status);
         _activeTurnId = null;
         _busy = false;
-        _steering = false;
+        _steeringUserEntryId = null;
         _interruptReady = false;
         _activeReviewDescription = null;
         if (event.errorMessage case final message?) {
@@ -455,6 +494,8 @@ class ConversationController extends ChangeNotifier {
           );
         }
         _notify();
+      case UserMessageEvent():
+        _handleUserMessage(event);
       case AssistantTextDeltaEvent():
         _bufferDelta(event.itemId, event.delta);
       case AssistantMessageEvent():
@@ -822,6 +863,59 @@ class ConversationController extends ChangeNotifier {
     } else {
       _entries[index] = entry;
     }
+  }
+
+  void _handleUserMessage(UserMessageEvent event) {
+    if (_entries.any((entry) => entry.stockItemId == event.itemId)) {
+      return;
+    }
+    final clientId = event.clientMessageId;
+    final optimisticIndex = clientId == null
+        ? -1
+        : _entries.indexWhere(
+            (entry) =>
+                entry.kind == ConversationEntryKind.user &&
+                entry.id == clientId &&
+                entry.stockItemId == null,
+          );
+    if (optimisticIndex != -1) {
+      // Keep the existing row key and the locally authored attachment details.
+      _entries[optimisticIndex] = _entries[optimisticIndex].copyWith(
+        turnId: event.turnId,
+        stockItemId: event.itemId,
+      );
+    } else {
+      _append(
+        ConversationEntry(
+          id: event.itemId,
+          stockItemId: event.itemId,
+          kind: ConversationEntryKind.user,
+          text: _bounded(event.text),
+          completed: true,
+          turnId: event.turnId,
+          attachments: event.attachments,
+        ),
+      );
+    }
+    _notify();
+  }
+
+  bool _wasUserItemEchoed(String entryId) =>
+      _entries.any((entry) => entry.id == entryId && entry.stockItemId != null);
+
+  bool _isCurrentBinding(int generation) =>
+      !_disposed && _bindingGeneration == generation;
+
+  String _nextLocalUserId() =>
+      'local-user-$_clientMessageNonce-${_localEntrySequence++}';
+
+  static String _newClientMessageNonce() {
+    final random = Random.secure();
+    final nonce = StringBuffer();
+    for (var index = 0; index < 16; index += 1) {
+      nonce.write(random.nextInt(256).toRadixString(16).padLeft(2, '0'));
+    }
+    return nonce.toString();
   }
 
   void _appendError(

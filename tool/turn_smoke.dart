@@ -76,6 +76,7 @@ Future<void> main() async {
           // The smoke prompt forbids tools; any approval request is handled below.
           case TurnDiffUpdatedEvent():
           // The smoke prompt forbids file changes.
+          case UserMessageEvent():
         }
       },
       onError: (Object error, StackTrace stackTrace) {

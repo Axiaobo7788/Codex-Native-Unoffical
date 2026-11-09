@@ -4,6 +4,7 @@ import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
 import 'unified_diff_parser.dart';
+import 'user_message_protocol.dart';
 
 final class TurnProtocolAdapter {
   static const _maxTurnPlanSteps = 50;
@@ -17,13 +18,22 @@ final class TurnProtocolAdapter {
   static const _maxToolIdentifierLength = 80;
   static const _maxWarningMessageLength = 320;
   static const _maxReviewDescriptionLength = 512;
+  static const _maxLiveUserTextLength = 64 * 1024;
+  static const _maxUserItemIdentifierLength = 512;
 
   TurnProtocolAdapter({
     required this.request,
     required Stream<CodexNotification> notifications,
+    bool includeUserMessages = false,
     UnifiedDiffParser diffParser = const UnifiedDiffParser(),
   }) : events = notifications
-           .map((notification) => _parseNotification(notification, diffParser))
+           .map(
+             (notification) => _parseNotification(
+               notification,
+               diffParser,
+               includeUserMessages: includeUserMessages,
+             ),
+           )
            .where((event) => event != null)
            .cast<TurnEvent>();
 
@@ -33,6 +43,7 @@ final class TurnProtocolAdapter {
   Future<TurnHandle> startTurn(TurnStartOptions options) async {
     final response = await request('turn/start', {
       'threadId': options.threadId,
+      'clientUserMessageId': ?options.clientUserMessageId,
       'input': _serializeUserInput(options.text, options.attachments),
       if (options.model != null) 'model': options.model,
       if (options.reasoningEffort != null) 'effort': options.reasoningEffort,
@@ -49,6 +60,7 @@ final class TurnProtocolAdapter {
     final response = await request('turn/steer', {
       'threadId': options.threadId,
       'expectedTurnId': options.expectedTurnId,
+      'clientUserMessageId': ?options.clientUserMessageId,
       'input': _serializeUserInput(options.text, options.attachments),
     });
     return _requiredString(response, 'turnId');
@@ -163,8 +175,9 @@ final class TurnProtocolAdapter {
 
   static TurnEvent? _parseNotification(
     CodexNotification notification,
-    UnifiedDiffParser diffParser,
-  ) {
+    UnifiedDiffParser diffParser, {
+    required bool includeUserMessages,
+  }) {
     final params = notification.params;
     return switch (notification.method) {
       'turn/started' => _parseTurnStarted(params),
@@ -176,7 +189,11 @@ final class TurnProtocolAdapter {
         delta: _requiredString(params, 'delta'),
       ),
       'item/started' => _parseItem(params, completed: false),
-      'item/completed' => _parseItem(params, completed: true),
+      'item/completed' => _parseItem(
+        params,
+        completed: true,
+        includeUserMessages: includeUserMessages,
+      ),
       'turn/diff/updated' => TurnDiffUpdatedEvent(
         snapshot: diffParser.parse(
           threadId: _requiredString(params, 'threadId'),
@@ -450,7 +467,11 @@ final class TurnProtocolAdapter {
     );
   }
 
-  static TurnEvent? _parseItem(JsonObject params, {required bool completed}) {
+  static TurnEvent? _parseItem(
+    JsonObject params, {
+    required bool completed,
+    bool includeUserMessages = false,
+  }) {
     final item = _requiredObject(params, 'item', 'item lifecycle');
     final type = _requiredString(item, 'type');
     final threadId = _requiredString(params, 'threadId');
@@ -458,7 +479,30 @@ final class TurnProtocolAdapter {
     final itemId = _requiredString(item, 'id');
 
     if (type == 'userMessage') {
-      return null;
+      final clientId = item['clientId'];
+      final content = item['content'];
+      // Older stock echoes may omit the client ID. Keep their existing
+      // optimistic display rather than guessing which input to replace.
+      if (!includeUserMessages ||
+          clientId is! String ||
+          content is! List<Object?> ||
+          itemId.isEmpty ||
+          itemId.length > _maxUserItemIdentifierLength) {
+        return null;
+      }
+      return UserMessageEvent(
+        threadId: threadId,
+        turnId: turnId,
+        itemId: itemId,
+        clientMessageId: clientId.length <= _maxUserItemIdentifierLength
+            ? clientId
+            : null,
+        text: parseStockUserText(
+          content,
+          maxCharacters: _maxLiveUserTextLength,
+        ),
+        attachments: parseStockUserAttachments(content),
+      );
     }
     if (type == 'agentMessage') {
       return AssistantMessageEvent(

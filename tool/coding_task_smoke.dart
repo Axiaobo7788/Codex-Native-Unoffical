@@ -77,6 +77,7 @@ Future<void> _runSmoke() async {
           if (!event.willRetry && !terminal.isCompleted) {
             terminal.completeError(StateError(event.message));
           }
+        case UserMessageEvent():
         case AssistantTextDeltaEvent():
         case AssistantMessageEvent():
         case ActivityEvent():

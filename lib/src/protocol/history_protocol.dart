@@ -5,6 +5,7 @@ import 'jsonl_decoder.dart';
 import 'output_protocol.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
+import 'user_message_protocol.dart';
 
 final class HistoryProtocolAdapter {
   static const _maxReviewDescriptionLength = 512;
@@ -210,8 +211,11 @@ final class HistoryProtocolAdapter {
         id: id,
         turnId: turnId,
         kind: HistoryItemKind.user,
-        text: _bounded(_userText(value['content'])),
-        attachments: _userAttachments(value['content']),
+        text: parseStockUserText(
+          value['content'],
+          maxCharacters: maxTextCharacters,
+        ),
+        attachments: parseStockUserAttachments(value['content']),
       ),
       'agentMessage' => HistoryItem(
         id: id,
@@ -387,82 +391,6 @@ final class HistoryProtocolAdapter {
       return 'Plan updated (${steps.length} step(s))';
     }
     return 'Plan updated';
-  }
-
-  String _userText(Object? content) {
-    if (content is! List<Object?>) {
-      return 'User message';
-    }
-    return content
-        .whereType<Map<String, Object?>>()
-        .where((part) => part['type'] == 'text')
-        .map((part) => part['text'])
-        .whereType<String>()
-        .join('\n');
-  }
-
-  static List<UserAttachment> _userAttachments(Object? content) {
-    if (content is! List<Object?>) {
-      return const [];
-    }
-    final candidates = <UserAttachment>[];
-    for (final part in content.whereType<Map<String, Object?>>()) {
-      if (candidates.length >= maxUserAttachments * 4) {
-        break;
-      }
-      final type = part['type'];
-      switch (type) {
-        case 'localImage':
-          final path = (_optionalString(part, 'path') ?? '').trim();
-          candidates.add(
-            UserAttachment(
-              kind: UserAttachmentKind.image,
-              label: path.isEmpty ? 'Local image' : '',
-              path: path.isEmpty ? null : path,
-            ),
-          );
-        case 'image':
-          final url = _optionalString(part, 'url');
-          candidates.add(
-            UserAttachment(
-              kind: UserAttachmentKind.image,
-              label: 'Image',
-              path: url,
-            ),
-          );
-        case 'file':
-          final path = (_optionalString(part, 'path') ?? '').trim();
-          final name = (_optionalString(part, 'name') ?? '').trim();
-          candidates.add(
-            UserAttachment(
-              kind: UserAttachmentKind.file,
-              label: name,
-              path: path.isEmpty ? null : path,
-            ),
-          );
-        case 'skill':
-          final name = (_optionalString(part, 'name') ?? '').trim();
-          final path = _optionalString(part, 'path');
-          candidates.add(
-            UserAttachment(
-              kind: UserAttachmentKind.skill,
-              label: name.isEmpty ? 'Skill' : name,
-              path: path,
-            ),
-          );
-        case 'mention':
-          final name = (_optionalString(part, 'name') ?? '').trim();
-          final path = _optionalString(part, 'path');
-          candidates.add(
-            UserAttachment(
-              kind: UserAttachmentKind.mention,
-              label: name.isEmpty ? 'Mention' : name,
-              path: path,
-            ),
-          );
-      }
-    }
-    return normalizeUserAttachments(candidates);
   }
 
   String _bounded(String value) => value.length <= maxTextCharacters

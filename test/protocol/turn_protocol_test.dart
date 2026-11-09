@@ -23,6 +23,7 @@ void main() {
         return responses[method] ?? const {};
       },
       notifications: notifications.stream,
+      includeUserMessages: true,
     );
   });
 
@@ -242,6 +243,102 @@ void main() {
       });
     },
   );
+
+  test('passes distinct client IDs for start and steer', () async {
+    responses['turn/start'] = {
+      'turn': {'id': 'turn-1', 'status': 'inProgress'},
+    };
+    responses['turn/steer'] = {'turnId': 'turn-1'};
+
+    await adapter.startTurn(
+      const TurnStartOptions(
+        threadId: 'thread-1',
+        text: 'Start',
+        clientUserMessageId: 'native-start',
+      ),
+    );
+    await adapter.steerTurn(
+      const TurnSteerOptions(
+        threadId: 'thread-1',
+        expectedTurnId: 'turn-1',
+        text: 'Steer',
+        clientUserMessageId: 'native-steer',
+      ),
+    );
+
+    expect(requests.map((request) => request.params['clientUserMessageId']), [
+      'native-start',
+      'native-steer',
+    ]);
+  });
+
+  test('projects identified completed user items with bounded input', () async {
+    final events = <TurnEvent>[];
+    final subscription = adapter.events.listen(events.add);
+    addTearDown(subscription.cancel);
+    final defaultEvents = <TurnEvent>[];
+    final defaultProjection = TurnProtocolAdapter(
+      request: (_, [_ = const {}]) async => const {},
+      notifications: notifications.stream,
+    ).events.listen(defaultEvents.add);
+    addTearDown(defaultProjection.cancel);
+    final params = <String, Object?>{
+      'threadId': 'thread-1',
+      'turnId': 'turn-1',
+      'item': {
+        'id': 'user-1',
+        'type': 'userMessage',
+        'clientId': 'originating-client',
+        'content': [
+          {'type': 'text', 'text': 'Inspect'},
+          {'type': 'text', 'text': 'this file'},
+          {'type': 'mention', 'name': 'main.dart', 'path': 'lib/main.dart'},
+        ],
+      },
+    };
+    notifications
+      ..add(CodexNotification(method: 'item/started', params: params))
+      ..add(
+        CodexNotification(
+          method: 'item/completed',
+          params: {
+            ...params,
+            'item': {'id': 'anonymous', 'type': 'userMessage', 'content': []},
+          },
+        ),
+      )
+      ..add(CodexNotification(method: 'item/completed', params: params))
+      ..add(
+        CodexNotification(
+          method: 'item/completed',
+          params: {
+            ...params,
+            'item': {
+              'id': 'user-2',
+              'type': 'userMessage',
+              'clientId': 'c' * 1024,
+              'content': [
+                {'type': 'text', 'text': '${'x' * (64 * 1024 - 1)}😀b'},
+                for (var i = 0; i < 20; i++)
+                  {'type': 'mention', 'name': 'file $i', 'path': 'file-$i'},
+              ],
+            },
+          },
+        ),
+      );
+
+    final projected = events.cast<UserMessageEvent>();
+    expect(projected, hasLength(2));
+    expect(defaultEvents, isEmpty);
+    expect(projected.first.itemId, 'user-1');
+    expect(projected.first.clientMessageId, 'originating-client');
+    expect(projected.first.text, 'Inspect\nthis file');
+    expect(projected.first.attachments.single.path, 'lib/main.dart');
+    expect(projected.last.itemId, 'user-2');
+    expect(projected.last.clientMessageId, isNull);
+    expect(projected.last.text, '${'x' * (64 * 1024 - 1)}…');
+    expect(projected.last.attachments, hasLength(maxUserAttachments));
+  });
 
   test('maps lifecycle and assistant delta notifications', () async {
     final events = <TurnEvent>[];

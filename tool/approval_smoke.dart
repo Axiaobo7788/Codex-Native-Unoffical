@@ -76,6 +76,7 @@ Future<void> main() async {
           if (!event.willRetry && !turnCompleted.isCompleted) {
             turnCompleted.completeError(StateError(event.message));
           }
+        case UserMessageEvent():
         case AssistantTextDeltaEvent():
         case AssistantMessageEvent():
         case ActivityEvent():
