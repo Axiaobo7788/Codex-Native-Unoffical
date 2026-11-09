@@ -3515,3 +3515,79 @@ and grounded PR identity in the public app-server contract.
   process exit was verified. The existing GTK accessibility warning
   occurred. This is an agent real-use walkthrough; Human review is
   pending.
+
+## F17 saved pins and stock subscription boundaries
+
+The official `agy` TUI coordinated two worktrees from `075bdf2`.
+Gemini owned the saved/session Pin implementation (`0ba969a`,
+`9d23964`, `bfcffa1`, `47cff8e`). Codex owned the
+[subscription evidence](reverse/THREAD_SUBSCRIPTION_EVIDENCE.md)
+(`48225fa`). Gemini audited the seven reported probe outcomes and
+their limits. Its review reported no P0, P1, or P2 findings on the
+evidence slice.
+
+- Stock source defines the built-in Pinned identity and protects its
+  rename/delete operations. The installed ASAR also embeds the same
+  identity. The prior packaged Native app offered both invalid actions.
+  A custom Section can share the display name and keeps ordinary
+  management. [Pinned seed migration](https://github.com/openai/codex/blob/main/codex-rs/state/migrations/0045_threads_section.sql)
+  [Stock Section handlers](https://github.com/openai/codex/blob/main/codex-rs/app-server/src/request_processors/thread_sections.rs)
+- The first implementation selected a saved move using cached
+  membership. A two-process disposable stock probe reproduced a
+  custom-section move from another process with no notification to
+  the first. A stale unconditional move could overwrite that
+  membership. The follow-up reads and verifies the thread immediately
+  before either saved write, reconciles the projected row, and declines
+  the action when current membership is custom. Regression tests cover
+  both stale directions and a mismatched response identity. Stock has
+  no atomic compare-and-move field. A cross-process change after the
+  read can still race the write.
+- Peer review also replaced repeated retained-row lookup with one
+  sidebar partition, kept an active custom Section in the capped
+  catalog, labeled session fallback in the sidebar and conversation
+  header, and made loaded counts explicit.
+- The subscription probes established per-connection membership,
+  delayed unload, cold metadata reads, active-turn persistence, and
+  approval replay after resume. A detached connection missed an
+  approval until it resumed the thread, including through the bundled
+  Host. Automatic detachment is blocked on a policy that preserves
+  execution and approval delivery.
+- Follow-up audit found a testable non-WebView MCP evidence gap.
+  An offline stdio MCP fixture succeeded through both direct stock
+  and the bundled Host for catalog discovery, global/thread resource
+  reads and a typed text/structured tool result at the wire. A direct
+  tool call with a nested form received a decline in the sampled
+  fixture. A model-driven call with a disposable loopback Responses
+  server instead routed the stock consent form and the MCP server's
+  form as two requests and reached terminal completion. A typed Native
+  smoke remains queued. [App-server MCP contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)
+
+### Integrated F17 verification
+
+- Dart format and analyze passed, as did the standalone boundary
+  (61 roots), 412 default Flutter cases with five explicit opt-in
+  skips, 5/5 isolated direct stock cases, Rust formatting and Clippy,
+  and all 98 Rust tests. The Linux debug bundle and source license
+  packaging checks passed.
+- The history benchmark retained 100 of 1,000 source turns and
+  discarded ten 3 MiB command outputs. RSS deltas were 1,908,736
+  bytes for retained history and 29,593,600 bytes for heavy outputs.
+- A packaged Linux walkthrough used the bundled Host and stock in a
+  private Xvfb desktop and disposable profile. A separate stock process
+  moved an unsectioned thread and then a saved pin into a custom Section.
+  The stale actions in the conversation header declined both writes
+  and rendered the current membership. A subsequent ordinary Pin
+  persisted in stock. A custom-section session pin kept the stock
+  membership and disappeared when the app restarted.
+- The built-in menu initially clipped its long Browse label in the
+  packaged app. The follow-up shortened it to “Browse saved pins”.
+  The fresh bundle displayed the full label, entered the stock-only
+  Pinned scope, and omitted the session pin from that scope. A saved
+  Unpin removed the row while leaving the selected conversation open.
+  A separate stock process confirmed the persisted Pin, persisted
+  Unpin, and preserved custom membership after app exit. The
+  same-named custom Section still offered Rename and Delete.
+- The first private display reached its test deadline. The final
+  launch exited on request, and the app, Host and stock processes
+  were gone. The environment emitted the existing GTK accessibility
+  and software-display warnings. Human visual acceptance is pending.

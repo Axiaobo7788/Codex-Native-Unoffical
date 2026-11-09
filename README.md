@@ -12,7 +12,9 @@ and is not affiliated with or endorsed by OpenAI.
   a 704 px reading/composer column, and a compact layout for narrow windows.
 - **Organization and review:** archive, rename, pin, and group local threads into
   sections. Global section counts describe loaded rows. Browse one local section
-  at a time in stock order with bounded pagination.
+  at a time in stock order with bounded pagination. Eligible pins are saved in
+  stock Pinned. Quick pins on custom-section threads and older runtimes are
+  labeled session-only.
   Manage a local thread Goal from its sidebar menu. Desktop code review can
   target uncommitted changes, a base branch, a commit or ref, or custom
   instructions on an eligible thread.

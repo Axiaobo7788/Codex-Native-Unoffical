@@ -2225,3 +2225,26 @@ lifecycle presentation the source of truth.
   reconcile membership without changing the active conversation.
 - Scope is local. Track A rejects section filters and ordering. Keep the
   64-section catalog cap, virtualized rows, and bounded thread metadata.
+
+---
+
+## ADR-044 — Keep saved pins and thread subscriptions stock-owned
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Recognize stock Pinned by the reserved Section ID. Protect that
+  Section from rename/delete and retain ordinary management for custom
+  Sections with the same name.
+- Saved Pin and Unpin validate a fresh thread read before a stock
+  membership move. Decline the saved action when the read reveals a
+  custom section. Keep the explicitly labeled, bounded session pin
+  for custom-section threads and older runtimes. Use Move to section
+  when the user explicitly changes custom membership.
+- Global pin counts describe loaded rows. Browsing the saved Pinned
+  Section uses the same stock-scoped pager and bounds as other Sections.
+- Flutter projection eviction is independent of stock subscription.
+  Automatic detach requires a separate policy for turns, approval
+  delivery and reconnect recovery.
+  [Stock subscription evidence](reverse/THREAD_SUBSCRIPTION_EVIDENCE.md)
