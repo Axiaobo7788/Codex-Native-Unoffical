@@ -62,6 +62,7 @@ class RuntimeController extends ChangeNotifier
         ModelGateway,
         OutputGateway,
         HistoryGateway,
+        HistoryOccurrenceGateway,
         RemoteAdminGateway,
         EcosystemGateway,
         EcosystemCatalogGateway,
@@ -299,6 +300,22 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) =>
       _connectedTransport().listHistoryTurns(query);
+
+  @override
+  bool get supportsHistoryOccurrences =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsHistoryOccurrences ?? false);
+
+  @override
+  Future<HistoryOccurrencePage> listHistoryOccurrences(
+    HistoryOccurrenceQuery query,
+  ) async {
+    if (!supportsHistoryOccurrences) {
+      throw UnsupportedError('Saved history search requires a local runtime.');
+    }
+    return _transport!.listHistoryOccurrences(query);
+  }
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>

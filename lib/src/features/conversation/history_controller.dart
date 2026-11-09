@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../domain/history_gateway.dart';
@@ -36,7 +38,17 @@ class HistoryController extends ChangeNotifier {
   var _evictionVersion = 0;
   List<String> _lastEvictedItemIds = const [];
   var _generation = 0;
+  var _itemGeneration = 0;
+  var _turnWindowRevision = 0;
   var _disposed = false;
+  HistoryOccurrenceQuery? _occurrenceRequest;
+  HistoryOccurrenceQuery? _pendingOccurrenceRequest;
+  HistoryOccurrencePage? _occurrencePage;
+  String? _occurrenceError;
+  String? _openingOccurrenceThreadId;
+  var _occurrenceRequestInFlight = false;
+  var _occurrenceLoading = false;
+  var _occurrenceUnsupported = false;
 
   List<HistoryTurn> get turns => List.unmodifiable(_turns);
   String? get selectedTurnId => _selectedTurnId;
@@ -51,6 +63,189 @@ class HistoryController extends ChangeNotifier {
   List<String> get lastEvictedItemIds => _lastEvictedItemIds;
   bool get canLoadMoreItems =>
       _itemCursor != null && _selectedTurnItems.length < maxRetainedItems;
+
+  HistoryOccurrenceGateway? get _occurrenceGateway => switch (gateway) {
+    final HistoryOccurrenceGateway search => search,
+    _ => null,
+  };
+
+  bool get supportsOccurrenceSearch =>
+      _thread?.ephemeral == false &&
+      (_occurrenceGateway?.supportsHistoryOccurrences ?? false);
+  bool get occurrenceUnsupported => _occurrenceUnsupported;
+  bool get occurrenceLoading => _occurrenceLoading;
+  bool get openingOccurrence =>
+      _openingOccurrenceThreadId != null &&
+      _openingOccurrenceThreadId == _thread?.id;
+  bool get canOpenOccurrence =>
+      _openingOccurrenceThreadId == null &&
+      !_loadingTurns &&
+      !_occurrenceLoading;
+  HistoryOccurrencePage? get occurrencePage => _occurrencePage;
+  String? get occurrenceError => _occurrenceError;
+
+  void searchOccurrences(String searchTerm) {
+    final thread = _thread;
+    final term = searchTerm.trim();
+    if (thread == null ||
+        !supportsOccurrenceSearch ||
+        _occurrenceUnsupported ||
+        term.isEmpty ||
+        term.length > HistoryOccurrenceQuery.maxSearchTermLength) {
+      return;
+    }
+    if (_occurrenceLoading &&
+        _occurrenceRequest?.searchTerm == term &&
+        _occurrenceRequest?.cursor == null) {
+      return;
+    }
+    _occurrencePage = null;
+    _queueOccurrenceSearch(
+      HistoryOccurrenceQuery(threadId: thread.id, searchTerm: term),
+    );
+  }
+
+  void loadMoreOccurrences() {
+    final query = _occurrenceRequest;
+    final cursor = _occurrencePage?.nextCursor;
+    if (query == null ||
+        cursor == null ||
+        _occurrenceLoading ||
+        openingOccurrence ||
+        !supportsOccurrenceSearch) {
+      return;
+    }
+    _queueOccurrenceSearch(
+      HistoryOccurrenceQuery(
+        threadId: query.threadId,
+        searchTerm: query.searchTerm,
+        cursor: cursor,
+      ),
+    );
+  }
+
+  void clearOccurrenceSearch() {
+    if (_occurrenceRequest == null) {
+      return;
+    }
+    _resetOccurrenceSearch();
+    _notify();
+  }
+
+  void _resetOccurrenceSearch() {
+    _occurrenceRequest = null;
+    _pendingOccurrenceRequest = null;
+    _occurrencePage = null;
+    _occurrenceError = null;
+    _occurrenceLoading = false;
+  }
+
+  void _queueOccurrenceSearch(HistoryOccurrenceQuery query) {
+    _occurrenceRequest = query;
+    _pendingOccurrenceRequest = query;
+    _occurrenceError = null;
+    _occurrenceLoading = true;
+    _notify();
+    unawaited(_drainOccurrenceSearch());
+  }
+
+  Future<void> _drainOccurrenceSearch() async {
+    if (_occurrenceRequestInFlight) {
+      return;
+    }
+    _occurrenceRequestInFlight = true;
+    try {
+      while (!_disposed) {
+        final query = _pendingOccurrenceRequest;
+        if (query == null) {
+          break;
+        }
+        _pendingOccurrenceRequest = null;
+        try {
+          final page = await _occurrenceGateway!.listHistoryOccurrences(query);
+          if (identical(query, _occurrenceRequest)) {
+            _occurrencePage = page;
+          }
+        } on UnsupportedError {
+          if (identical(query, _occurrenceRequest)) {
+            _occurrenceUnsupported = true;
+            _occurrencePage = null;
+          }
+        } catch (_) {
+          if (identical(query, _occurrenceRequest)) {
+            _occurrenceError = 'Could not search saved messages. Try again.';
+          }
+        } finally {
+          if (identical(query, _occurrenceRequest)) {
+            _occurrenceLoading = false;
+            _notify();
+          }
+        }
+      }
+    } finally {
+      _occurrenceRequestInFlight = false;
+    }
+  }
+
+  Future<HistoryTurn?> openOccurrence(HistoryOccurrence occurrence) async {
+    final thread = _thread;
+    final query = _occurrenceRequest;
+    if (thread == null ||
+        query == null ||
+        !canOpenOccurrence ||
+        !(_occurrencePage?.occurrences.contains(occurrence) ?? false)) {
+      return null;
+    }
+    final generation = _generation;
+    final revision = _turnWindowRevision;
+    bool stillRequested() =>
+        _isCurrent(thread.id, generation) &&
+        identical(query, _occurrenceRequest) &&
+        revision == _turnWindowRevision;
+    _openingOccurrenceThreadId = thread.id;
+    _occurrenceError = null;
+    _notify();
+    try {
+      final page = await gateway.listHistoryTurns(
+        HistoryTurnQuery(
+          threadId: thread.id,
+          cursor: occurrence.turnCursor,
+          limit: turnPageSize,
+        ),
+      );
+      if (!stillRequested()) {
+        return null;
+      }
+      final target = page.turns.firstOrNull;
+      if (target == null ||
+          target.id != occurrence.turnId ||
+          !target.items.any(
+            (item) =>
+                item.kind == HistoryItemKind.user ||
+                item.kind == HistoryItemKind.assistant,
+          )) {
+        _occurrenceError = 'This match is no longer available. Search again.';
+        return null;
+      }
+      _turns
+        ..clear()
+        ..addAll(page.turns.take(turnPageSize));
+      _clearSelectedItems();
+      _turnCursor = page.nextCursor;
+      _windowShifted = true;
+      _lastEvictedItemIds = const [];
+      _errorMessage = null;
+      return target;
+    } catch (_) {
+      if (stillRequested()) {
+        _occurrenceError = 'Could not open this match. Search again.';
+      }
+      return null;
+    } finally {
+      _openingOccurrenceThreadId = null;
+      _notify();
+    }
+  }
 
   HistoryTurn? turnForId(String turnId) {
     for (final turn in _turns) {
@@ -84,9 +279,7 @@ class HistoryController extends ChangeNotifier {
     if (_selectedTurnId == null && _selectedTurnItems.isEmpty) {
       return;
     }
-    _selectedTurnId = null;
-    _selectedTurnItems.clear();
-    _itemCursor = null;
+    _clearSelectedItems();
     _notify();
   }
 
@@ -112,14 +305,13 @@ class HistoryController extends ChangeNotifier {
     _generation += 1;
     _thread = thread;
     _turns.clear();
-    _selectedTurnItems.clear();
+    _clearSelectedItems();
+    _resetOccurrenceSearch();
+    _occurrenceUnsupported = false;
     _turnCursor = null;
-    _itemCursor = null;
-    _selectedTurnId = null;
     _errorMessage = null;
     _loadingTurns = false;
     _loadingOlderTurns = false;
-    _loadingItems = false;
     _windowShifted = false;
     _lastEvictedItemIds = const [];
     _notify();
@@ -134,6 +326,7 @@ class HistoryController extends ChangeNotifier {
       return;
     }
     final generation = _generation;
+    _turnWindowRevision += 1;
     _loadingTurns = true;
     _loadingOlderTurns = false;
     _errorMessage = null;
@@ -151,9 +344,7 @@ class HistoryController extends ChangeNotifier {
       _turnCursor = page.nextCursor;
       _windowShifted = false;
       _lastEvictedItemIds = const [];
-      _selectedTurnItems.clear();
-      _selectedTurnId = null;
-      _itemCursor = null;
+      _clearSelectedItems();
     } catch (error) {
       if (_isCurrent(thread.id, generation)) {
         _errorMessage = error.toString();
@@ -173,10 +364,12 @@ class HistoryController extends ChangeNotifier {
     if (thread == null ||
         cursor == null ||
         _loadingTurns ||
+        _openingOccurrenceThreadId == thread.id ||
         !canLoadOlderTurns) {
       return;
     }
     final generation = _generation;
+    _turnWindowRevision += 1;
     _loadingTurns = true;
     _loadingOlderTurns = true;
     _notify();
@@ -207,9 +400,7 @@ class HistoryController extends ChangeNotifier {
         }
         _lastEvictedItemIds = List.unmodifiable(evictedIds);
         if (evictedTurns.any((turn) => turn.id == _selectedTurnId)) {
-          _selectedTurnId = null;
-          _selectedTurnItems.clear();
-          _itemCursor = null;
+          _clearSelectedItems();
         }
         _turns.removeRange(0, removeCount);
         _windowShifted = true;
@@ -237,7 +428,7 @@ class HistoryController extends ChangeNotifier {
     if (thread == null || _loadingItems) {
       return;
     }
-    final generation = _generation;
+    final itemGeneration = ++_itemGeneration;
     _selectedTurnId = turnId;
     _selectedTurnItems.clear();
     _itemCursor = null;
@@ -252,17 +443,17 @@ class HistoryController extends ChangeNotifier {
           limit: itemPageSize,
         ),
       );
-      if (!_isCurrent(thread.id, generation) || _selectedTurnId != turnId) {
+      if (!_isCurrentItemLoad(turnId, itemGeneration)) {
         return;
       }
       _selectedTurnItems.addAll(page.items.take(maxRetainedItems));
       _itemCursor = page.nextCursor;
     } catch (error) {
-      if (_isCurrent(thread.id, generation)) {
+      if (_isCurrentItemLoad(turnId, itemGeneration)) {
         _errorMessage = error.toString();
       }
     } finally {
-      if (_isCurrent(thread.id, generation) && _selectedTurnId == turnId) {
+      if (_isCurrentItemLoad(turnId, itemGeneration)) {
         _loadingItems = false;
         _notify();
       }
@@ -280,7 +471,7 @@ class HistoryController extends ChangeNotifier {
         !canLoadMoreItems) {
       return;
     }
-    final generation = _generation;
+    final itemGeneration = _itemGeneration;
     _loadingItems = true;
     _notify();
     try {
@@ -292,7 +483,7 @@ class HistoryController extends ChangeNotifier {
           limit: itemPageSize,
         ),
       );
-      if (!_isCurrent(thread.id, generation) || _selectedTurnId != turnId) {
+      if (!_isCurrentItemLoad(turnId, itemGeneration)) {
         return;
       }
       final known = _selectedTurnItems.map((item) => item.id).toSet();
@@ -303,11 +494,11 @@ class HistoryController extends ChangeNotifier {
       );
       _itemCursor = page.nextCursor;
     } catch (error) {
-      if (_isCurrent(thread.id, generation)) {
+      if (_isCurrentItemLoad(turnId, itemGeneration)) {
         _errorMessage = error.toString();
       }
     } finally {
-      if (_isCurrent(thread.id, generation) && _selectedTurnId == turnId) {
+      if (_isCurrentItemLoad(turnId, itemGeneration)) {
         _loadingItems = false;
         _notify();
       }
@@ -322,7 +513,7 @@ class HistoryController extends ChangeNotifier {
         item.turnId != _selectedTurnId) {
       return;
     }
-    final generation = _generation;
+    final itemGeneration = _itemGeneration;
     _loadingItems = true;
     _errorMessage = null;
     _notify();
@@ -332,8 +523,7 @@ class HistoryController extends ChangeNotifier {
         turnId: item.turnId,
         itemIds: [item.id],
       );
-      if (!_isCurrent(thread.id, generation) ||
-          _selectedTurnId != item.turnId) {
+      if (!_isCurrentItemLoad(item.turnId, itemGeneration)) {
         return;
       }
       final replacement = items.where((candidate) => candidate.id == item.id);
@@ -352,16 +542,29 @@ class HistoryController extends ChangeNotifier {
       }
       _selectedTurnItems[index] = replacement.single;
     } catch (error) {
-      if (_isCurrent(thread.id, generation)) {
+      if (_isCurrentItemLoad(item.turnId, itemGeneration)) {
         _errorMessage = error.toString();
       }
     } finally {
-      if (_isCurrent(thread.id, generation) && _selectedTurnId == item.turnId) {
+      if (_isCurrentItemLoad(item.turnId, itemGeneration)) {
         _loadingItems = false;
         _notify();
       }
     }
   }
+
+  void _clearSelectedItems() {
+    _itemGeneration += 1;
+    _selectedTurnId = null;
+    _selectedTurnItems.clear();
+    _itemCursor = null;
+    _loadingItems = false;
+  }
+
+  bool _isCurrentItemLoad(String turnId, int itemGeneration) =>
+      !_disposed &&
+      _selectedTurnId == turnId &&
+      _itemGeneration == itemGeneration;
 
   bool _isCurrent(String threadId, int generation) =>
       !_disposed && _thread?.id == threadId && _generation == generation;
@@ -376,6 +579,7 @@ class HistoryController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _generation += 1;
+    _resetOccurrenceSearch();
     super.dispose();
   }
 }
