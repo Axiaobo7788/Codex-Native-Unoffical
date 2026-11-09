@@ -417,23 +417,30 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       if (result.outcome == ThreadPullRequestLinkOutcome.scanIncomplete) {
         setState(() {
           _linkedPrMutationError =
-              'Could not verify existing links for ${result.pullRequest.displayLabel} '
-              'because this thread exceeds the 100-attachment scan limit.';
+              'Could not verify existing links for ${result.displayLabel} '
+              'because the attachment scan was incomplete.';
           _linkedPrMutationNotice = null;
           _notifyLinkedPrViewChanged();
         });
         return;
       }
+      final hiddenByCap = result.hiddenByDisplayCap;
       _linkedPrUrlController.clear();
       _linkedPrBranchController.clear();
       setState(() {
         _linkedPrFormOpen = false;
         _linkedPrMutationError = null;
         _linkedPrMutationNotice = switch (result.outcome) {
+          ThreadPullRequestLinkOutcome.created when hiddenByCap =>
+            'Saved ${result.displayLabel} to this thread '
+                '(outside the displayed pull requests).',
           ThreadPullRequestLinkOutcome.created =>
-            'Linked ${result.pullRequest.displayLabel} to this thread.',
+            'Linked ${result.displayLabel} to this thread.',
+          ThreadPullRequestLinkOutcome.existing when hiddenByCap =>
+            'Already linked to ${result.displayLabel} '
+                '(existing stored record preserved; outside the displayed pull requests).',
           ThreadPullRequestLinkOutcome.existing =>
-            'Already linked to ${result.pullRequest.displayLabel} '
+            'Already linked to ${result.displayLabel} '
                 '(existing stored record preserved).',
           ThreadPullRequestLinkOutcome.scanIncomplete => null,
         };

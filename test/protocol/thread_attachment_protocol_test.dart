@@ -439,16 +439,19 @@ void main() {
       );
 
       expect(result.outcome, ThreadPullRequestLinkOutcome.created);
-      expect(result.pullRequest.attachmentId, 'att-created-1');
+      expect(result.displayLabel, 'OpenAI/Codex#888');
+      expect(result.hiddenByDisplayCap, isFalse);
+      expect(result.pullRequest, isNotNull);
+      expect(result.pullRequest!.attachmentId, 'att-created-1');
       expect(
-        result.pullRequest.canonicalIdentityKey,
+        result.pullRequest!.canonicalIdentityKey,
         '["github.com","openai","codex",888]',
       );
       expect(
-        result.pullRequest.canonicalUrl,
+        result.pullRequest!.canonicalUrl,
         'https://github.com/OpenAI/Codex/pull/888',
       );
-      expect(result.pullRequest.headBranch, 'feat/link-888');
+      expect(result.pullRequest!.headBranch, 'feat/link-888');
       expect(recordedCalls, hasLength(2));
       expect(recordedCalls[0].method, 'thread/attachment/list');
       expect(recordedCalls[0].params, {
@@ -545,13 +548,16 @@ void main() {
       );
 
       expect(legacyResult.outcome, ThreadPullRequestLinkOutcome.existing);
-      expect(legacyResult.pullRequest.attachmentId, 'att-legacy-412');
-      expect(legacyResult.pullRequest.headBranch, 'legacy-branch');
+      expect(legacyResult.displayLabel, 'OpenAI/Codex#412');
+      expect(legacyResult.hiddenByDisplayCap, isFalse);
+      expect(legacyResult.pullRequest, isNotNull);
+      expect(legacyResult.pullRequest!.attachmentId, 'att-legacy-412');
+      expect(legacyResult.pullRequest!.headBranch, 'legacy-branch');
       // Never issued thread/attachment/add because legacy row already links this PR.
       expect(recordedMethods, ['thread/attachment/list']);
 
       // When preflight hits the 100-row scan cap without confirming absence,
-      // returns scanIncomplete without calling thread/attachment/add.
+      // returns scanIncomplete with null pullRequest without calling thread/attachment/add.
       final truncatedMethods = <String>[];
       var page = 0;
       final truncatedAdapter = ThreadAttachmentProtocolAdapter(
@@ -583,11 +589,88 @@ void main() {
         incompleteResult.outcome,
         ThreadPullRequestLinkOutcome.scanIncomplete,
       );
-      expect(incompleteResult.pullRequest.displayLabel, 'OpenAI/Codex#900');
+      expect(incompleteResult.displayLabel, 'OpenAI/Codex#900');
+      expect(incompleteResult.pullRequest, isNull);
       expect(
         truncatedMethods.every((m) => m == 'thread/attachment/list'),
         isTrue,
       );
+
+      // Empty page with non-null nextCursor is treated as incomplete (truncated)
+      // on both readLinkedPullRequests and linkPullRequest preflight.
+      final emptyPageMethods = <String>[];
+      final emptyPageWithCursorAdapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          emptyPageMethods.add(method);
+          return {'data': const <Object?>[], 'nextCursor': 'cursor-incomplete'};
+        },
+      );
+
+      final emptyPageSnapshot = await emptyPageWithCursorAdapter
+          .readLinkedPullRequests('thread-empty-cursor');
+      expect(emptyPageSnapshot.truncated, isTrue);
+      expect(emptyPageSnapshot.pullRequests, isEmpty);
+
+      final emptyPageLinkResult = await emptyPageWithCursorAdapter
+          .linkPullRequest(
+            'thread-empty-cursor',
+            url: 'https://github.com/OpenAI/Codex/pull/901',
+          );
+      expect(
+        emptyPageLinkResult.outcome,
+        ThreadPullRequestLinkOutcome.scanIncomplete,
+      );
+      expect(emptyPageLinkResult.displayLabel, 'OpenAI/Codex#901');
+      expect(emptyPageLinkResult.pullRequest, isNull);
+      expect(
+        emptyPageMethods.every((m) => m == 'thread/attachment/list'),
+        isTrue,
+      );
+
+      // Linking a 17th distinct PR when 16 PRs are already present sets hiddenByDisplayCap=true.
+      final cappedAdapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          if (method == 'thread/attachment/list') {
+            return {
+              'data': [
+                for (var i = 1; i <= 16; i++)
+                  {
+                    'id': 'att-pr-$i',
+                    'attachmentType': 'pull_request',
+                    'identityKey': '["github.com","openai","codex",$i]',
+                    'payload': {
+                      'url': 'https://github.com/OpenAI/Codex/pull/$i',
+                    },
+                    'createdAt': 1700000000 + i,
+                  },
+              ],
+              'nextCursor': null,
+            };
+          }
+          if (method == 'thread/attachment/add') {
+            return {
+              'outcome': 'created',
+              'attachment': {
+                'id': 'att-pr-17',
+                'attachmentType': 'pull_request',
+                'identityKey': params['identityKey'],
+                'payload': params['payload'],
+                'createdAt': 1700000017,
+              },
+            };
+          }
+          throw StateError('Unexpected method: $method');
+        },
+      );
+
+      final cappedCreateResult = await cappedAdapter.linkPullRequest(
+        'thread-capped',
+        url: 'https://github.com/OpenAI/Codex/pull/17',
+      );
+      expect(cappedCreateResult.outcome, ThreadPullRequestLinkOutcome.created);
+      expect(cappedCreateResult.displayLabel, 'OpenAI/Codex#17');
+      expect(cappedCreateResult.hiddenByDisplayCap, isTrue);
+      expect(cappedCreateResult.pullRequest?.number, 17);
     });
 
     test('ProcessTransport latches supportsThreadAttachmentWrites=false on add -32601 while preserving readLinkedPullRequests capability', () async {

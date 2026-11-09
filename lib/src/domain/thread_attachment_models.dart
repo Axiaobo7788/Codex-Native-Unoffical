@@ -35,11 +35,22 @@ class ThreadLinkedPullRequest {
 class ThreadPullRequestLinkResult {
   const ThreadPullRequestLinkResult({
     required this.outcome,
-    required this.pullRequest,
+    required this.displayLabel,
+    this.pullRequest,
+    this.hiddenByDisplayCap = false,
   });
 
   final ThreadPullRequestLinkOutcome outcome;
-  final ThreadLinkedPullRequest pullRequest;
+  final String displayLabel;
+
+  /// Populated when [outcome] is [ThreadPullRequestLinkOutcome.created] or
+  /// [ThreadPullRequestLinkOutcome.existing]; null when
+  /// [ThreadPullRequestLinkOutcome.scanIncomplete] prevented verification.
+  final ThreadLinkedPullRequest? pullRequest;
+
+  /// True when the linked PR falls past the retained 16-PR display cap for the
+  /// thread.
+  final bool hiddenByDisplayCap;
 }
 
 /// Bounded per-thread projection of sanitized linked Pull Requests.

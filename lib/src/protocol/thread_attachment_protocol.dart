@@ -117,10 +117,11 @@ final class ThreadAttachmentProtocolAdapter {
       if (truncated) {
         break;
       }
-      if (nextCursor == null || data.isEmpty) {
+      if (nextCursor == null) {
         break;
       }
-      if (scannedCount >= maxScannedAttachments ||
+      if (data.isEmpty ||
+          scannedCount >= maxScannedAttachments ||
           scannedPages >= maxScannedPages) {
         truncated = true;
         break;
@@ -141,9 +142,10 @@ final class ThreadAttachmentProtocolAdapter {
   ///
   /// Performs a bounded fresh same-thread preflight scan so an already-linked
   /// legacy URL row does not receive a duplicate canonical backing row. If the
-  /// bounded preflight scan stops early at the 100-row / 16-page bound before
-  /// confirming absence, returns [ThreadPullRequestLinkOutcome.scanIncomplete]
-  /// without issuing a write.
+  /// bounded preflight scan stops early at the 100-row / 16-page bound (or sees
+  /// an empty page with a non-null continuation cursor) before confirming
+  /// absence, returns [ThreadPullRequestLinkOutcome.scanIncomplete] with a null
+  /// [ThreadPullRequestLinkResult.pullRequest] without issuing a write.
   Future<ThreadPullRequestLinkResult> linkPullRequest(
     String threadId, {
     required String url,
@@ -171,6 +173,8 @@ final class ThreadAttachmentProtocolAdapter {
     final sanitizedBranch = headBranch == null || headBranch.trim().isEmpty
         ? null
         : _requireSanitizedHeadBranchArgument(headBranch);
+    final targetDisplayLabel =
+        '${canonicalParts.owner}/${canonicalParts.repository}#${canonicalParts.number}';
 
     final preflight = await _preflightFindExistingPullRequest(
       normalizedThreadId,
@@ -179,23 +183,15 @@ final class ThreadAttachmentProtocolAdapter {
     if (preflight.existing case final existingPr?) {
       return ThreadPullRequestLinkResult(
         outcome: ThreadPullRequestLinkOutcome.existing,
+        displayLabel: existingPr.displayLabel,
         pullRequest: existingPr,
+        hiddenByDisplayCap: preflight.beyondDisplayCap,
       );
     }
     if (preflight.truncated) {
       return ThreadPullRequestLinkResult(
         outcome: ThreadPullRequestLinkOutcome.scanIncomplete,
-        pullRequest: ThreadLinkedPullRequest(
-          attachmentId: 'unverified',
-          canonicalIdentityKey: canonicalParts.canonicalIdentityKey,
-          canonicalHost: canonicalParts.canonicalHost,
-          owner: canonicalParts.owner,
-          repository: canonicalParts.repository,
-          number: canonicalParts.number,
-          canonicalUrl: canonicalParts.canonicalUrl,
-          createdAtSeconds: 0,
-          headBranch: sanitizedBranch,
-        ),
+        displayLabel: targetDisplayLabel,
       );
     }
 
@@ -230,15 +226,23 @@ final class ThreadAttachmentProtocolAdapter {
         'thread/attachment/add returned an invalid pull_request attachment.',
       );
     }
-    return ThreadPullRequestLinkResult(outcome: outcome, pullRequest: parsed);
+    return ThreadPullRequestLinkResult(
+      outcome: outcome,
+      displayLabel: parsed.displayLabel,
+      pullRequest: parsed,
+      hiddenByDisplayCap: preflight.beyondDisplayCap,
+    );
   }
 
-  Future<({ThreadLinkedPullRequest? existing, bool truncated})>
+  Future<
+    ({ThreadLinkedPullRequest? existing, bool truncated, bool beyondDisplayCap})
+  >
   _preflightFindExistingPullRequest(
     String normalizedThreadId,
     String targetCanonicalIdentityKey,
   ) async {
     final seenCursors = <String>{};
+    final seenCanonicalKeys = <String>{};
     String? cursor;
     var scannedCount = 0;
     var scannedPages = 0;
@@ -282,23 +286,44 @@ final class ThreadAttachmentProtocolAdapter {
       scannedCount += data.length;
       for (final rawItem in data) {
         final parsed = _parseLinkedPullRequestItem(rawItem);
-        if (parsed != null &&
-            parsed.canonicalIdentityKey == targetCanonicalIdentityKey) {
-          return (existing: parsed, truncated: false);
+        if (parsed == null) {
+          continue;
         }
+        if (parsed.canonicalIdentityKey == targetCanonicalIdentityKey) {
+          return (
+            existing: parsed,
+            truncated: false,
+            beyondDisplayCap:
+                seenCanonicalKeys.length >= maxRetainedPullRequests,
+          );
+        }
+        seenCanonicalKeys.add(parsed.canonicalIdentityKey);
       }
 
-      if (nextCursor == null || data.isEmpty) {
-        return (existing: null, truncated: false);
+      if (nextCursor == null) {
+        return (
+          existing: null,
+          truncated: false,
+          beyondDisplayCap: seenCanonicalKeys.length >= maxRetainedPullRequests,
+        );
       }
-      if (scannedCount >= maxScannedAttachments ||
+      if (data.isEmpty ||
+          scannedCount >= maxScannedAttachments ||
           scannedPages >= maxScannedPages) {
-        return (existing: null, truncated: true);
+        return (
+          existing: null,
+          truncated: true,
+          beyondDisplayCap: seenCanonicalKeys.length >= maxRetainedPullRequests,
+        );
       }
       cursor = nextCursor;
     }
 
-    return (existing: null, truncated: true);
+    return (
+      existing: null,
+      truncated: true,
+      beyondDisplayCap: seenCanonicalKeys.length >= maxRetainedPullRequests,
+    );
   }
 
   static String _requireSanitizedHeadBranchArgument(String raw) {

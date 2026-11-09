@@ -114,6 +114,8 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
       headBranch: sanitizedBranch,
     ));
 
+    final targetDisplayLabel =
+        '${canonicalParts.owner}/${canonicalParts.repository}#${canonicalParts.number}';
     final currentSnapshot =
         snapshotsByThreadId[threadId] ??
         ThreadLinkedPullRequestsSnapshot(
@@ -122,32 +124,31 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
           scannedAttachmentCount: 0,
           truncated: false,
         );
-    for (final existing in currentSnapshot.pullRequests) {
+    for (var i = 0; i < currentSnapshot.pullRequests.length; i++) {
+      final existing = currentSnapshot.pullRequests[i];
       if (existing.canonicalIdentityKey ==
           canonicalParts.canonicalIdentityKey) {
         return ThreadPullRequestLinkResult(
           outcome: ThreadPullRequestLinkOutcome.existing,
+          displayLabel: existing.displayLabel,
           pullRequest: existing,
+          hiddenByDisplayCap:
+              i >= ThreadAttachmentProtocolAdapter.maxRetainedPullRequests,
         );
       }
     }
-    if (currentSnapshot.truncated) {
+    if (currentSnapshot.truncated &&
+        currentSnapshot.pullRequests.length <
+            ThreadAttachmentProtocolAdapter.maxRetainedPullRequests) {
       return ThreadPullRequestLinkResult(
         outcome: ThreadPullRequestLinkOutcome.scanIncomplete,
-        pullRequest: ThreadLinkedPullRequest(
-          attachmentId: 'unverified',
-          canonicalIdentityKey: canonicalParts.canonicalIdentityKey,
-          canonicalHost: canonicalParts.canonicalHost,
-          owner: canonicalParts.owner,
-          repository: canonicalParts.repository,
-          number: canonicalParts.number,
-          canonicalUrl: canonicalParts.canonicalUrl,
-          createdAtSeconds: 0,
-          headBranch: sanitizedBranch,
-        ),
+        displayLabel: targetDisplayLabel,
       );
     }
 
+    final hiddenByDisplayCap =
+        currentSnapshot.pullRequests.length >=
+        ThreadAttachmentProtocolAdapter.maxRetainedPullRequests;
     final createdPr = ThreadLinkedPullRequest(
       attachmentId: 'att-created-${linkedPrCalls.length}',
       canonicalIdentityKey: canonicalParts.canonicalIdentityKey,
@@ -159,15 +160,20 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
       createdAtSeconds: 1700001000 + linkedPrCalls.length,
       headBranch: sanitizedBranch,
     );
+    final updatedPrs = hiddenByDisplayCap
+        ? currentSnapshot.pullRequests
+        : [...currentSnapshot.pullRequests, createdPr];
     snapshotsByThreadId[threadId] = ThreadLinkedPullRequestsSnapshot(
       threadId: threadId,
-      pullRequests: [...currentSnapshot.pullRequests, createdPr],
+      pullRequests: updatedPrs,
       scannedAttachmentCount: currentSnapshot.scannedAttachmentCount + 1,
-      truncated: false,
+      truncated: hiddenByDisplayCap || currentSnapshot.truncated,
     );
     return ThreadPullRequestLinkResult(
       outcome: ThreadPullRequestLinkOutcome.created,
+      displayLabel: createdPr.displayLabel,
       pullRequest: createdPr,
+      hiddenByDisplayCap: hiddenByDisplayCap,
     );
   }
 
@@ -688,8 +694,48 @@ void main() {
           hasLength(1),
         );
 
+        // When 16 PRs are already displayed on the thread, linking a 17th PR
+        // reports that it was saved and explains the 16-PR display cap.
+        harness.snapshotsByThreadId['thread-cold-link'] =
+            ThreadLinkedPullRequestsSnapshot(
+              threadId: 'thread-cold-link',
+              pullRequests: [
+                for (var i = 1; i <= 16; i++)
+                  ThreadLinkedPullRequest(
+                    attachmentId: 'att-cap-$i',
+                    canonicalIdentityKey: '["github.com","openai","codex",$i]',
+                    canonicalHost: 'github.com',
+                    owner: 'OpenAI',
+                    repository: 'Codex',
+                    number: i,
+                    canonicalUrl: 'https://github.com/OpenAI/Codex/pull/$i',
+                    createdAtSeconds: 1700000100 + i,
+                  ),
+              ],
+              scannedAttachmentCount: 16,
+              truncated: false,
+            );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-toggle')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://github.com/OpenAI/Codex/pull/717',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Saved OpenAI/Codex#717 to this thread (outside the displayed pull requests).',
+          ),
+          findsOneWidget,
+        );
+
         // Close popover and switch to the truncated thread; linking an unverified PR
-        // reports the 100-attachment scan limit instead of blindly writing.
+        // reports incomplete attachment scan instead of blindly writing.
         await tester.tap(
           find.byKey(const ValueKey('thread-linked-pr-popover-close')),
         );
@@ -715,7 +761,7 @@ void main() {
 
         expect(
           find.textContaining(
-            'Could not verify existing links for OpenAI/Codex#702 because this thread exceeds the 100-attachment scan limit.',
+            'Could not verify existing links for OpenAI/Codex#702 because the attachment scan was incomplete.',
           ),
           findsOneWidget,
         );
