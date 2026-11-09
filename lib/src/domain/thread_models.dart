@@ -78,6 +78,13 @@ class ThreadGoal {
   final int? tokenBudget;
 }
 
+class ThreadReadReceipt {
+  const ThreadReadReceipt({required this.revision, required this.unread});
+
+  final String revision;
+  final bool unread;
+}
+
 class ThreadSummary {
   const ThreadSummary({
     required this.id,
@@ -93,6 +100,7 @@ class ThreadSummary {
     this.projectId,
     this.gitInfo,
     this.goal,
+    this.readReceipt,
     this.section,
     this.sectionEnteredAtSeconds,
   });
@@ -110,6 +118,7 @@ class ThreadSummary {
   final String? projectId;
   final ThreadGitInfo? gitInfo;
   final ThreadGoal? goal;
+  final ThreadReadReceipt? readReceipt;
   final ThreadSection? section;
   final int? sectionEnteredAtSeconds;
 
@@ -128,6 +137,8 @@ class ThreadSummary {
     bool clearGitInfo = false,
     ThreadGoal? goal,
     bool clearGoal = false,
+    ThreadReadReceipt? readReceipt,
+    bool clearReadReceipt = false,
     ThreadSection? section,
     bool clearSection = false,
     int? sectionEnteredAtSeconds,
@@ -146,6 +157,7 @@ class ThreadSummary {
     projectId: projectId ?? this.projectId,
     gitInfo: clearGitInfo ? null : (gitInfo ?? this.gitInfo),
     goal: clearGoal ? null : (goal ?? this.goal),
+    readReceipt: clearReadReceipt ? null : (readReceipt ?? this.readReceipt),
     section: clearSection ? null : (section ?? this.section),
     sectionEnteredAtSeconds: clearSectionEnteredAtSeconds
         ? null
@@ -346,6 +358,15 @@ final class ThreadGoalUpdatedEvent extends ThreadLifecycleEvent {
 
 final class ThreadGoalClearedEvent extends ThreadLifecycleEvent {
   const ThreadGoalClearedEvent({required super.threadId});
+}
+
+final class ThreadReadReceiptChangedEvent extends ThreadLifecycleEvent {
+  const ThreadReadReceiptChangedEvent({
+    required super.threadId,
+    required this.receipt,
+  });
+
+  final ThreadReadReceipt receipt;
 }
 
 final class ThreadSectionChangedEvent extends ThreadLifecycleEvent {

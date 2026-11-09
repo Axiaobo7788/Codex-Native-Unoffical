@@ -55,6 +55,7 @@ class RuntimeController extends ChangeNotifier
         ExecutionBackend,
         ThreadGateway,
         ThreadGoalGateway,
+        ThreadReadReceiptGateway,
         ThreadSectionGateway,
         ThreadAttachmentGateway,
         TurnGateway,
@@ -189,6 +190,28 @@ class RuntimeController extends ChangeNotifier
       !_usesRemote &&
       snapshot.state == RuntimeConnectionState.connected &&
       (_transport?.supportsThreadGoals ?? false);
+
+  @override
+  bool get supportsThreadReadReceiptWrites =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsThreadReadReceiptWrites ?? false);
+
+  @override
+  Future<ThreadReadReceipt> setThreadReadReceipt({
+    required String threadId,
+    required String expectedRevision,
+    required bool unread,
+  }) async {
+    if (!supportsThreadReadReceiptWrites) {
+      throw UnsupportedError('Local read receipt changes are unavailable.');
+    }
+    return _transport!.setThreadReadReceipt(
+      threadId: threadId,
+      expectedRevision: expectedRevision,
+      unread: unread,
+    );
+  }
 
   @override
   bool get supportsThreadSections => !_usesRemote;

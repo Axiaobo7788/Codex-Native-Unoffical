@@ -46,6 +46,7 @@ class ProcessTransport
         CodexTransport,
         HistoryOccurrenceGateway,
         ThreadGoalGateway,
+        ThreadReadReceiptGateway,
         ThreadSectionGateway,
         ThreadAttachmentGateway,
         EcosystemCatalogGateway,
@@ -119,6 +120,7 @@ class ProcessTransport
   var _closing = false;
   var _threadAttachmentsUnsupported = false;
   var _threadAttachmentWritesUnsupported = false;
+  var _threadReceiptWritesUnsupported = false;
 
   static Future<ProcessTransport> start({
     required String executablePath,
@@ -345,6 +347,34 @@ class ProcessTransport
 
   @override
   bool get supportsThreadGoals => !_closing;
+
+  @override
+  bool get supportsThreadReadReceiptWrites =>
+      !_closing && !_threadReceiptWritesUnsupported;
+
+  @override
+  Future<ThreadReadReceipt> setThreadReadReceipt({
+    required String threadId,
+    required String expectedRevision,
+    required bool unread,
+  }) async {
+    if (!supportsThreadReadReceiptWrites) {
+      throw UnsupportedError('Local read receipt changes are unavailable.');
+    }
+    try {
+      return await _threadProtocol.setReadReceipt(
+        threadId: threadId,
+        expectedRevision: expectedRevision,
+        unread: unread,
+      );
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601) {
+        _threadReceiptWritesUnsupported = true;
+        throw UnsupportedError('Local read receipt changes are unavailable.');
+      }
+      rethrow;
+    }
+  }
 
   @override
   Future<ThreadGoal?> readThreadGoal(String threadId) =>

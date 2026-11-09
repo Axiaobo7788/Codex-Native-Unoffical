@@ -65,7 +65,18 @@ final class ThreadProtocolAdapter {
         'Scoped thread page exceeds the requested limit.',
       );
     }
-    final threads = data.map(_parseThread).toList(growable: false);
+    final receipts = response['readStates'];
+    final threads = data
+        .map((row) {
+          final thread = _parseThread(row);
+          final receipt = receipts is Map<String, Object?>
+              ? _parseReadReceipt(receipts[thread.id])
+              : null;
+          return thread.ephemeral || receipt == null
+              ? thread
+              : thread.copyWith(readReceipt: receipt);
+        })
+        .toList(growable: false);
     if (query.section != null &&
         threads.any((thread) => thread.section?.id != sectionId)) {
       throw const ProtocolViolation(
@@ -108,7 +119,35 @@ final class ThreadProtocolAdapter {
         'thread/read returned a different thread ID than requested.',
       );
     }
-    return thread;
+    final receipt = _parseReadReceipt(response['readState']);
+    return thread.ephemeral || receipt == null
+        ? thread
+        : thread.copyWith(readReceipt: receipt);
+  }
+
+  Future<ThreadReadReceipt> setReadReceipt({
+    required String threadId,
+    required String expectedRevision,
+    required bool unread,
+  }) async {
+    final response = await request('thread/readState/update', {
+      'threadId': _requireOpaqueArgumentId(
+        threadId,
+        'threadId',
+        _maxIdentifierLength,
+      ),
+      'expectedRevision': _requireOpaqueArgumentId(
+        expectedRevision,
+        'expectedRevision',
+        _maxIdentifierLength,
+      ),
+      'operation': {'type': unread ? 'unread' : 'read'},
+    });
+    final receipt = _parseReadReceipt(response['readState']);
+    if (receipt == null) {
+      throw const ProtocolViolation('Invalid updated thread read receipt.');
+    }
+    return receipt;
   }
 
   Future<ThreadSummary> resumeThread(String threadId) async {
@@ -396,10 +435,49 @@ final class ThreadProtocolAdapter {
       'thread/goal/cleared' => ThreadGoalClearedEvent(
         threadId: _requiredString(params, 'threadId'),
       ),
+      'thread/readState/changed' => _parseReadReceiptChanged(params),
       'thread/section/changed' => _parseSectionChanged(params),
       _ => null,
     };
   }
+
+  static ThreadReadReceiptChangedEvent? _parseReadReceiptChanged(
+    JsonObject params,
+  ) {
+    final threadId = params['threadId'];
+    final receipt = _parseReadReceipt(params['readState']);
+    if (!_isReadReceiptToken(threadId) || receipt == null) {
+      return null;
+    }
+    return ThreadReadReceiptChangedEvent(
+      threadId: threadId as String,
+      receipt: receipt,
+    );
+  }
+
+  static ThreadReadReceipt? _parseReadReceipt(Object? value) {
+    if (value is! Map<String, Object?>) {
+      return null;
+    }
+    final revision = value['revision'];
+    if (!_isReadReceiptToken(revision)) {
+      return null;
+    }
+    final unread = switch (value['firstUnread']) {
+      null => false,
+      {'type': 'threadStart'} => true,
+      {'type': 'turn', 'turnId': final id} when _isReadReceiptToken(id) => true,
+      _ => null,
+    };
+    return unread == null
+        ? null
+        : ThreadReadReceipt(revision: revision as String, unread: unread);
+  }
+
+  static bool _isReadReceiptToken(Object? value) =>
+      value is String &&
+      value.trim().isNotEmpty &&
+      value.length <= _maxIdentifierLength;
 
   static ThreadStatusChangedEvent _parseStatusChanged(JsonObject params) {
     final statusValue = params['status'];

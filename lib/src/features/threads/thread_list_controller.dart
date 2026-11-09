@@ -35,11 +35,14 @@ class ThreadListController extends ChangeNotifier {
   final List<ThreadSection> _sections = [];
   final Set<String> _unmaterializedThreadIds = {};
   final Set<String> _pinnedThreadIds = {};
+  // Local ordering for in-flight snapshots. Stock revisions remain opaque.
+  final Map<String, int> _readReceiptVersions = {};
   StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
   String? _nextCursor;
   String? _sectionScopeId;
   String? _savedSearchTerm;
   var _catalogRevision = 0;
+  var _readReceiptVersion = 0;
   var _refreshCatalogPending = false;
   var _preserveOutsideCatalog = false;
   ThreadSummary? _selectedThread;
@@ -108,6 +111,89 @@ class ThreadListController extends ChangeNotifier {
       goalGateway,
     _ => null,
   };
+
+  ThreadReadReceiptGateway? get _readReceiptGateway => switch (gateway) {
+    final ThreadReadReceiptGateway receiptGateway
+        when receiptGateway.supportsThreadReadReceiptWrites =>
+      receiptGateway,
+    _ => null,
+  };
+
+  bool canChangeReadReceipt(ThreadSummary thread) =>
+      !_disposed &&
+      !thread.ephemeral &&
+      thread.readReceipt != null &&
+      _readReceiptGateway != null;
+
+  Future<void> toggleReadReceipt(
+    String threadId,
+    ThreadReadReceipt seenReceipt,
+  ) async {
+    final receiptGateway = _readReceiptGateway;
+    final thread = _findThread(threadId);
+    if (_disposed ||
+        _mutating ||
+        receiptGateway == null ||
+        thread == null ||
+        thread.ephemeral) {
+      return;
+    }
+    if (thread.readReceipt?.revision != seenReceipt.revision) {
+      _errorMessage =
+          'Read status changed. Check the updated status and try again.';
+      _notify();
+      return;
+    }
+    final version = _readReceiptVersion;
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final receipt = await receiptGateway.setThreadReadReceipt(
+        threadId: threadId,
+        expectedRevision: seenReceipt.revision,
+        unread: !seenReceipt.unread,
+      );
+      if (!_disposed && !_receiptChangedAfter(threadId, version)) {
+        _applyReadReceipt(threadId, receipt);
+      }
+    } on UnsupportedError {
+      if (!_disposed) {
+        _errorMessage = 'This runtime cannot change saved read status.';
+      }
+    } catch (_) {
+      if (!_disposed) {
+        await _refreshReceiptAfterFailedWrite(threadId, seenReceipt);
+      }
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<void> _refreshReceiptAfterFailedWrite(
+    String threadId,
+    ThreadReadReceipt seenReceipt,
+  ) async {
+    final version = _readReceiptVersion;
+    try {
+      final latest = await gateway.readThread(threadId);
+      if (!_disposed &&
+          latest.id == threadId &&
+          !_receiptChangedAfter(threadId, version)) {
+        _applyReadReceipt(threadId, latest.readReceipt);
+      }
+    } catch (_) {
+      // Keep the last displayed receipt. The next explicit action can retry.
+    }
+    if (!_disposed) {
+      final current = _findThread(threadId)?.readReceipt;
+      _errorMessage =
+          current != null && current.revision != seenReceipt.revision
+          ? 'Read status changed. Check the updated status and try again.'
+          : 'Could not change saved read status. Try again.';
+    }
+  }
 
   ThreadSectionGateway? get _sectionGateway => switch (gateway) {
     final ThreadSectionGateway sectionGateway
@@ -245,6 +331,7 @@ class ThreadListController extends ChangeNotifier {
     _errorMessage = null;
     _notify();
     try {
+      final receiptVersion = _readReceiptVersion;
       final latest = await gateway.readThread(threadId);
       if (_disposed) {
         return false;
@@ -254,7 +341,9 @@ class ThreadListController extends ChangeNotifier {
         return false;
       }
       _unmaterializedThreadIds.remove(threadId);
-      final reconciled = _replaceInPlace(latest);
+      final reconciled = _replaceInPlace(
+        _acceptReceiptSnapshot(latest, receiptVersion),
+      );
       if (_selectedThread?.id == threadId) {
         _selectedThread = reconciled;
       }
@@ -397,6 +486,7 @@ class ThreadListController extends ChangeNotifier {
       return;
     }
     final revision = _catalogRevision;
+    final receiptVersion = _readReceiptVersion;
     _refreshCatalogPending = false;
     _initialLoadStarted = true;
     _loading = true;
@@ -451,9 +541,13 @@ class ThreadListController extends ChangeNotifier {
       } else {
         _mergeThreadEmbeddedSections(uniqueThreads);
       }
+      final reconciled = uniqueThreads
+          .map((thread) => _acceptReceiptSnapshot(thread, receiptVersion))
+          .map(_syncThreadSection)
+          .toList(growable: false);
       _threads
         ..clear()
-        ..addAll(uniqueThreads.map(_syncThreadSection));
+        ..addAll(reconciled);
       _nextCursor = cursor;
       _synchronizeSelection(preserveSelection: preserveSelection);
     } catch (error) {
@@ -472,6 +566,7 @@ class ThreadListController extends ChangeNotifier {
       return;
     }
     final revision = _catalogRevision;
+    final receiptVersion = _readReceiptVersion;
     _loadingMore = true;
     _errorMessage = null;
     _notify();
@@ -491,6 +586,7 @@ class ThreadListController extends ChangeNotifier {
           .where((thread) => existingIds.add(thread.id))
           .take(remaining)
           .map(_preserveTransientState)
+          .map((thread) => _acceptReceiptSnapshot(thread, receiptVersion))
           .toList(growable: false);
       _mergeThreadEmbeddedSections(appended);
       _threads.addAll(appended.map(_syncThreadSection));
@@ -548,12 +644,15 @@ class ThreadListController extends ChangeNotifier {
     _errorMessage = null;
     _notify();
     try {
+      final receiptVersion = _readReceiptVersion;
       final thread = await gateway.readThread(threadId);
       if (_disposed) {
         return null;
       }
       _unmaterializedThreadIds.remove(threadId);
-      final retainedThread = _replaceInPlace(thread);
+      final retainedThread = _replaceInPlace(
+        _acceptReceiptSnapshot(thread, receiptVersion),
+      );
       _activateThread(retainedThread);
       _queueSelectedGoalHydration(threadId);
       return retainedThread;
@@ -579,7 +678,7 @@ class ThreadListController extends ChangeNotifier {
         return null;
       }
       _unmaterializedThreadIds.remove(threadId);
-      final retainedThread = _replaceInPlace(thread);
+      final retainedThread = _replaceInPlace(_retainReceipt(thread));
       _activateThread(retainedThread);
       _queueSelectedGoalHydration(threadId);
       return retainedThread;
@@ -671,7 +770,7 @@ class ThreadListController extends ChangeNotifier {
         _synchronizeSelection();
         return thread;
       } else {
-        final retained = _replaceOrPrepend(thread);
+        final retained = _replaceOrPrepend(_retainReceipt(thread));
         _activateThread(retained);
         return retained;
       }
@@ -738,7 +837,7 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return null;
       }
-      final retainedThread = _replaceInPlace(thread);
+      final retainedThread = _replaceInPlace(_retainReceipt(thread));
       if (_selectedThread?.id == retainedThread.id) {
         _selectedThread = retainedThread;
       }
@@ -1166,6 +1265,10 @@ class ThreadListController extends ChangeNotifier {
         _goalEventObserved |= threadId == _goalOperationThreadId;
         _clearGoal(threadId);
         _notify();
+      case ThreadReadReceiptChangedEvent(:final threadId, :final receipt):
+        if (_applyReadReceipt(threadId, receipt)) {
+          _notify();
+        }
       case ThreadSectionChangedEvent(:final threadId, :final sectionId):
         _applySectionChanged(threadId, sectionId);
         _invalidateSectionOrder();
@@ -1250,6 +1353,68 @@ class ThreadListController extends ChangeNotifier {
     if (_selectedThread?.id == threadId) {
       _selectedThread = _selectedThread!.copyWith(clearGoal: true);
     }
+  }
+
+  bool _receiptChangedAfter(String threadId, int version) =>
+      (_readReceiptVersions[threadId] ?? 0) > version;
+
+  ThreadSummary _reconcileReceipt(ThreadSummary thread, int version) {
+    if (!_receiptChangedAfter(thread.id, version)) {
+      return thread;
+    }
+    final retained = _findThread(thread.id);
+    if (retained == null) {
+      return thread;
+    }
+    final current = retained.readReceipt;
+    return thread.copyWith(
+      readReceipt: current,
+      clearReadReceipt: current == null,
+    );
+  }
+
+  ThreadSummary _retainReceipt(ThreadSummary thread) {
+    final receipt = _findThread(thread.id)?.readReceipt;
+    return thread.readReceipt != null || receipt == null
+        ? thread
+        : thread.copyWith(readReceipt: receipt);
+  }
+
+  ThreadSummary _acceptReceiptSnapshot(ThreadSummary thread, int version) {
+    final reconciled = _reconcileReceipt(thread, version);
+    _applyReadReceipt(reconciled.id, reconciled.readReceipt);
+    return reconciled;
+  }
+
+  bool _applyReadReceipt(String threadId, ThreadReadReceipt? receipt) {
+    final thread = _findThread(threadId);
+    if (thread == null ||
+        thread.ephemeral ||
+        (thread.readReceipt?.revision == receipt?.revision &&
+            thread.readReceipt?.unread == receipt?.unread)) {
+      return false;
+    }
+    final index = _threads.indexWhere((row) => row.id == threadId);
+    if (index != -1) {
+      _threads[index] = _threads[index].copyWith(
+        readReceipt: receipt,
+        clearReadReceipt: receipt == null,
+      );
+    }
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = _selectedThread!.copyWith(
+        readReceipt: receipt,
+        clearReadReceipt: receipt == null,
+      );
+    }
+    _readReceiptVersions[threadId] = ++_readReceiptVersion;
+    if (_readReceiptVersions.length > maxRetainedThreads + 1) {
+      final retainedIds = _threads.map((row) => row.id).toSet();
+      _readReceiptVersions.removeWhere(
+        (id, _) => !retainedIds.contains(id) && _selectedThread?.id != id,
+      );
+    }
+    return true;
   }
 
   void _applySectionChanged(String threadId, String? sectionId) {

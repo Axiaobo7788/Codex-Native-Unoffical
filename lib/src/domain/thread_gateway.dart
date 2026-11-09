@@ -32,6 +32,17 @@ abstract interface class ThreadGoalGateway {
   Future<bool> clearThreadGoal(String threadId);
 }
 
+/// Explicit local receipt writes compare against a revision the user saw.
+abstract interface class ThreadReadReceiptGateway {
+  bool get supportsThreadReadReceiptWrites;
+
+  Future<ThreadReadReceipt> setThreadReadReceipt({
+    required String threadId,
+    required String expectedRevision,
+    required bool unread,
+  });
+}
+
 abstract interface class ThreadSectionGateway {
   bool get supportsThreadSections;
 
