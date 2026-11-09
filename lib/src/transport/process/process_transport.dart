@@ -11,6 +11,8 @@ import '../../domain/output_models.dart';
 import '../../domain/remote_admin_models.dart';
 import '../../domain/runtime_diagnostics_gateway.dart';
 import '../../domain/runtime_diagnostics_models.dart';
+import '../../domain/thread_attachment_gateway.dart';
+import '../../domain/thread_attachment_models.dart';
 import '../../domain/thread_gateway.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
@@ -25,6 +27,7 @@ import '../../protocol/protocol_models.dart';
 import '../../protocol/remote_admin_protocol.dart';
 import '../../protocol/runtime_diagnostics_protocol.dart';
 import '../../protocol/server_request_protocol.dart';
+import '../../protocol/thread_attachment_protocol.dart';
 import '../../protocol/thread_protocol.dart';
 import '../../protocol/turn_protocol.dart';
 import '../codex_transport.dart';
@@ -42,6 +45,7 @@ class ProcessTransport
         CodexTransport,
         ThreadGoalGateway,
         ThreadSectionGateway,
+        ThreadAttachmentGateway,
         EcosystemCatalogGateway,
         McpCapabilityGateway,
         RuntimeDiagnosticsGateway {
@@ -57,6 +61,10 @@ class ProcessTransport
       writer: process.write,
     );
     _threadProtocol = ThreadProtocolAdapter(
+      request: _request,
+      notifications: _peer.notifications,
+    );
+    _threadAttachmentProtocol = ThreadAttachmentProtocolAdapter(
       request: _request,
       notifications: _peer.notifications,
     );
@@ -93,6 +101,7 @@ class ProcessTransport
       StreamController<ProcessExit>.broadcast();
   late final JsonRpcPeer _peer;
   late final ThreadProtocolAdapter _threadProtocol;
+  late final ThreadAttachmentProtocolAdapter _threadAttachmentProtocol;
   late final HistoryProtocolAdapter _historyProtocol;
   late final ModelProtocolAdapter _modelProtocol;
   late final OutputProtocolAdapter _outputProtocol;
@@ -357,6 +366,18 @@ class ProcessTransport
   @override
   Future<void> moveThreadSection(ThreadSectionMoveOptions options) =>
       _threadProtocol.moveThreadSection(options);
+
+  @override
+  bool get supportsThreadAttachments => !_closing;
+
+  @override
+  Stream<ThreadAttachmentEvent> get threadAttachmentEvents =>
+      _threadAttachmentProtocol.events;
+
+  @override
+  Future<ThreadLinkedPullRequestsSnapshot> readLinkedPullRequests(
+    String threadId,
+  ) => _threadAttachmentProtocol.readLinkedPullRequests(threadId);
 
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) =>

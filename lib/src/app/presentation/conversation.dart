@@ -122,9 +122,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
   final _composerAttachPopoverController = CodexPopoverController();
+  final _linkedPrsPopoverController = CodexPopoverController();
+  final _linkedPrViewNotifier = ValueNotifier<int>(0);
   final List<UserAttachment> _composerAttachments = <UserAttachment>[];
+  StreamSubscription<ThreadAttachmentEvent>? _attachmentEventSubscription;
+  ThreadLinkedPullRequestsSnapshot? _activeThreadLinkedPrs;
+  String? _linkedPrLoadError;
+  String? _linkedPrLaunchError;
+  String? _queuedLinkedPrThreadId;
+  var _linkedPrScanInFlight = false;
 
   BackendCapabilities get _activeCapabilities => widget.transportCapabilities;
+
+  ThreadAttachmentGateway? get _attachmentGateway =>
+      switch (widget.outputGateway) {
+        final ThreadAttachmentGateway g => g,
+        _ => null,
+      };
 
   String get _activeProjectDirectory {
     final selectedCwd = widget.controller.thread?.cwd;
@@ -204,6 +218,153 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     widget.controller.addListener(_handleConversationChanged);
     widget.historyController.addListener(_handleHistoryChanged);
     widget.threadController?.addListener(_handleThreadListChanged);
+    _bindAttachmentEvents();
+    if (_activeThreadId case final activeId?) {
+      _requestActiveThreadLinkedPrs(activeId);
+    }
+  }
+
+  void _bindAttachmentEvents() {
+    unawaited(_attachmentEventSubscription?.cancel());
+    _attachmentEventSubscription = _attachmentGateway?.threadAttachmentEvents
+        .listen(_handleThreadAttachmentEvent, onError: (_) {});
+  }
+
+  void _handleThreadAttachmentEvent(ThreadAttachmentEvent event) {
+    if (!mounted) {
+      return;
+    }
+    if (event is ThreadAttachmentUpdatedEvent &&
+        event.attachmentType == 'pull_request' &&
+        event.threadId == _activeThreadId) {
+      _requestActiveThreadLinkedPrs(event.threadId);
+    }
+  }
+
+  void _notifyLinkedPrViewChanged() {
+    _linkedPrViewNotifier.value += 1;
+  }
+
+  void _requestActiveThreadLinkedPrs(String threadId) {
+    final gateway = _attachmentGateway;
+    if (gateway == null || !gateway.supportsThreadAttachments) {
+      _queuedLinkedPrThreadId = null;
+      if ((_activeThreadLinkedPrs != null ||
+              _linkedPrLoadError != null ||
+              _linkedPrLaunchError != null) &&
+          mounted) {
+        setState(() {
+          _activeThreadLinkedPrs = null;
+          _linkedPrLoadError = null;
+          _linkedPrLaunchError = null;
+          _notifyLinkedPrViewChanged();
+        });
+      }
+      return;
+    }
+    _queuedLinkedPrThreadId = threadId;
+    if (_linkedPrScanInFlight) {
+      return;
+    }
+    unawaited(_drainQueuedLinkedPrScan());
+  }
+
+  Future<void> _drainQueuedLinkedPrScan() async {
+    if (_linkedPrScanInFlight) {
+      return;
+    }
+    _linkedPrScanInFlight = true;
+    if (mounted) {
+      setState(_notifyLinkedPrViewChanged);
+    }
+    try {
+      while (mounted && _queuedLinkedPrThreadId != null) {
+        final targetThreadId = _queuedLinkedPrThreadId!;
+        _queuedLinkedPrThreadId = null;
+        if (targetThreadId != _activeThreadId) {
+          continue;
+        }
+        final gateway = _attachmentGateway;
+        if (gateway == null || !gateway.supportsThreadAttachments) {
+          if (mounted && _activeThreadId == targetThreadId) {
+            setState(() {
+              _activeThreadLinkedPrs = null;
+              _linkedPrLoadError = null;
+              _linkedPrLaunchError = null;
+              _notifyLinkedPrViewChanged();
+            });
+          }
+          break;
+        }
+        try {
+          final snapshot = await gateway.readLinkedPullRequests(targetThreadId);
+          if (!mounted || _activeThreadId != targetThreadId) {
+            continue;
+          }
+          setState(() {
+            _activeThreadLinkedPrs = snapshot;
+            _linkedPrLoadError = null;
+            _linkedPrLaunchError = null;
+            _notifyLinkedPrViewChanged();
+          });
+        } on Object catch (error) {
+          if (!mounted || _activeThreadId != targetThreadId) {
+            continue;
+          }
+          setState(() {
+            _activeThreadLinkedPrs = null;
+            _linkedPrLoadError = 'Could not load linked pull requests: $error';
+            _notifyLinkedPrViewChanged();
+          });
+        }
+      }
+    } finally {
+      _linkedPrScanInFlight = false;
+      if (mounted) {
+        setState(_notifyLinkedPrViewChanged);
+      }
+    }
+  }
+
+  Future<void> _openSanitizedPullRequest(ThreadLinkedPullRequest pr) async {
+    final uri = Uri.tryParse(pr.canonicalUrl);
+    if (uri == null ||
+        !uri.isAbsolute ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        uri.hasPort ||
+        (uri.host != 'github.com' && uri.host != 'gitlab.com')) {
+      if (mounted) {
+        setState(() {
+          _linkedPrLaunchError =
+              'Refused to open non-canonical pull request URL.';
+          _notifyLinkedPrViewChanged();
+        });
+      }
+      return;
+    }
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        setState(() {
+          _linkedPrLaunchError =
+              'The browser could not open ${pr.canonicalUrl}.';
+          _notifyLinkedPrViewChanged();
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          _linkedPrLaunchError = 'The browser could not open the URL: $error';
+          _notifyLinkedPrViewChanged();
+        });
+      }
+    }
   }
 
   void _handleComposerFocusChanged() {
@@ -220,10 +381,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
       widget.threadController?.addListener(_handleThreadListChanged);
     }
+    if (!identical(oldWidget.outputGateway, widget.outputGateway)) {
+      _bindAttachmentEvents();
+      if (_activeThreadId case final activeId?) {
+        _requestActiveThreadLinkedPrs(activeId);
+      }
+    }
   }
 
   @override
   void dispose() {
+    unawaited(_attachmentEventSubscription?.cancel());
     widget.threadController?.removeListener(_handleThreadListChanged);
     widget.controller.removeListener(_handleConversationChanged);
     widget.historyController.removeListener(_handleHistoryChanged);
@@ -232,6 +400,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..dispose();
     _threadActionsPopoverController.dispose();
     _composerAttachPopoverController.dispose();
+    _linkedPrsPopoverController.dispose();
+    _linkedPrViewNotifier.dispose();
     _searchController
       ..removeListener(_handleSearchQueryChanged)
       ..dispose();
@@ -827,6 +997,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                   ),
                             ),
                           ),
+                          if (_attachmentGateway?.supportsThreadAttachments ??
+                              false) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: _buildLinkedPrHeaderPill(
+                                context,
+                                thread.id,
+                                _activeThreadLinkedPrs?.threadId == thread.id
+                                    ? _activeThreadLinkedPrs
+                                    : null,
+                              ),
+                            ),
+                          ],
                           if (projectCwd.isNotEmpty &&
                               _activeCapabilities
                                   .supportsWorkingDirectorySelection &&
@@ -1135,6 +1318,298 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLinkedPrHeaderPill(
+    BuildContext context,
+    String threadId,
+    ThreadLinkedPullRequestsSnapshot? linkedPrs,
+  ) {
+    final palette = ThemeTokens.of(context);
+    final hasPrs = linkedPrs != null && linkedPrs.isNotEmpty;
+    final firstPr = hasPrs ? linkedPrs.pullRequests.first : null;
+    final extraCount = hasPrs ? linkedPrs.pullRequests.length - 1 : 0;
+    final countSuffix = hasPrs
+        ? (extraCount > 0
+              ? '+$extraCount${linkedPrs.truncated ? '+' : ''}'
+              : (linkedPrs.truncated ? '+' : null))
+        : (linkedPrs != null && linkedPrs.truncated ? '0+' : null);
+    final pillLabel = firstPr != null
+        ? firstPr.displayLabel
+        : (_linkedPrLoadError != null ? 'Linked PRs · Error' : 'Linked PRs');
+    final tooltipMessage = switch ((firstPr, linkedPrs, _linkedPrLoadError)) {
+      (_, _, final error?) => error,
+      (final pr?, final snapshot?, _)
+          when snapshot.pullRequests.length == 1 && !snapshot.truncated =>
+        '${pr.canonicalUrl}'
+            '${pr.headBranch != null ? '\nBranch: ${pr.headBranch}' : ''}',
+      (_, final snapshot?, _) when snapshot.isNotEmpty =>
+        '${snapshot.pullRequests.length}'
+            '${snapshot.truncated ? '+' : ''} linked pull requests',
+      _ => 'Inspect linked pull requests for this thread',
+    };
+
+    return CodexPopoverAnchor(
+      controller: _linkedPrsPopoverController,
+      targetAnchor: Alignment.bottomLeft,
+      followerAnchor: Alignment.topLeft,
+      width: 360,
+      popoverBuilder: (context, close) => ValueListenableBuilder<int>(
+        valueListenable: _linkedPrViewNotifier,
+        builder: (context, _, _) => _buildLinkedPrPopover(
+          context,
+          threadId,
+          _activeThreadLinkedPrs?.threadId == threadId
+              ? _activeThreadLinkedPrs
+              : null,
+          close,
+        ),
+      ),
+      child: CodexButton(
+        key: const ValueKey('thread-linked-pr-pill'),
+        size: CodexButtonSize.sm,
+        variant: CodexButtonVariant.secondary,
+        tooltip: tooltipMessage,
+        onPressed: () {
+          if (_linkedPrLaunchError != null) {
+            setState(() {
+              _linkedPrLaunchError = null;
+              _notifyLinkedPrViewChanged();
+            });
+          }
+          final wasOpen = _linkedPrsPopoverController.isOpen;
+          _linkedPrsPopoverController.toggle();
+          if (!wasOpen &&
+              linkedPrs == null &&
+              _linkedPrLoadError == null &&
+              !_linkedPrScanInFlight) {
+            _requestActiveThreadLinkedPrs(threadId);
+          }
+        },
+        icon: Icon(
+          Icons.call_merge_rounded,
+          size: 12,
+          color: _linkedPrLoadError != null ? palette.danger : palette.accent,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                pillLabel,
+                key: const ValueKey('thread-linked-pr-pill-label'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: _linkedPrLoadError != null
+                      ? palette.danger
+                      : palette.textSecondary,
+                  fontSize: 11.5,
+                ),
+              ),
+            ),
+            if (countSuffix != null) ...[
+              const SizedBox(width: 4),
+              Text(
+                countSuffix,
+                key: const ValueKey('thread-linked-pr-pill-count'),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted, fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinkedPrPopover(
+    BuildContext context,
+    String threadId,
+    ThreadLinkedPullRequestsSnapshot? linkedPrs,
+    VoidCallback close,
+  ) {
+    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
+    final countText = linkedPrs != null
+        ? ' (${linkedPrs.pullRequests.length}${linkedPrs.truncated ? '+' : ''})'
+        : '';
+    return Container(
+      key: const ValueKey('thread-linked-pr-popover'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.modalSurface,
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        border: Border.all(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 280),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Linked Pull Requests$countText',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                CodexIconButton(
+                  key: const ValueKey('thread-linked-pr-popover-close'),
+                  tooltip: 'Close',
+                  size: 22,
+                  onPressed: close,
+                  icon: const Icon(Icons.close_rounded, size: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (_linkedPrLoadError case final loadError?) ...[
+              Text(
+                loadError,
+                key: const ValueKey('thread-linked-pr-error'),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.danger),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: CodexButton(
+                  key: const ValueKey('thread-linked-pr-retry'),
+                  size: CodexButtonSize.sm,
+                  variant: CodexButtonVariant.secondary,
+                  onPressed: () => _requestActiveThreadLinkedPrs(threadId),
+                  label: 'Retry',
+                ),
+              ),
+            ] else if (linkedPrs == null) ...[
+              Text(
+                'Loading linked pull requests...',
+                key: const ValueKey('thread-linked-pr-loading'),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ] else if (linkedPrs.isEmpty) ...[
+              Text(
+                'No linked pull requests for this thread.',
+                key: const ValueKey('thread-linked-pr-empty'),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ] else ...[
+              Flexible(
+                child: SingleChildScrollView(
+                  key: const ValueKey('thread-linked-pr-popover-scroll'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < linkedPrs.pullRequests.length; i++)
+                        _buildLinkedPrPopoverRow(
+                          context,
+                          linkedPrs.pullRequests[i],
+                          i,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (linkedPrs != null && linkedPrs.truncated) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Showing first ${linkedPrs.pullRequests.length} linked pull requests '
+                '(scanned ${linkedPrs.scannedAttachmentCount} attachments; limit reached).',
+                key: const ValueKey('thread-linked-pr-limit-notice'),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ],
+            if (_linkedPrLaunchError case final launchError?) ...[
+              const SizedBox(height: 6),
+              Text(
+                launchError,
+                key: const ValueKey('thread-linked-pr-launch-error'),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.danger),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinkedPrPopoverRow(
+    BuildContext context,
+    ThreadLinkedPullRequest pr,
+    int index,
+  ) {
+    final palette = ThemeTokens.of(context);
+    return Container(
+      key: ValueKey('thread-linked-pr-item-$index'),
+      margin: EdgeInsets.only(
+        bottom: index == 0 ? 0 : 6,
+        top: index == 0 ? 0 : 2,
+      ),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  pr.displayLabel,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                if (pr.headBranch case final headBranch?) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Branch: $headBranch',
+                    key: ValueKey('thread-linked-pr-branch-$index'),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: palette.textSecondary,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 2),
+                SelectableText(
+                  pr.canonicalUrl,
+                  key: ValueKey('thread-linked-pr-url-$index'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: palette.textMuted,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          CodexButton(
+            key: ValueKey('thread-linked-pr-open-$index'),
+            size: CodexButtonSize.sm,
+            variant: CodexButtonVariant.secondary,
+            onPressed: () => unawaited(_openSanitizedPullRequest(pr)),
+            label: 'Open',
+          ),
+        ],
       ),
     );
   }
@@ -2806,6 +3281,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(_activeThreadId!);
     }
     _activeThreadId = nextThreadId;
+    _queuedLinkedPrThreadId = nextThreadId;
+    _activeThreadLinkedPrs = null;
+    _linkedPrLoadError = null;
+    _linkedPrLaunchError = null;
+    _linkedPrsPopoverController.hide();
     _pendingThreadRestore = nextThreadId != null;
     _restorePagesLoaded = 0;
     _restoreAlignmentPasses = 0;
@@ -2823,6 +3303,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
     if (nextThreadId != null) {
       _scheduleThreadScrollRestore();
+      _requestActiveThreadLinkedPrs(nextThreadId);
     }
   }
 
