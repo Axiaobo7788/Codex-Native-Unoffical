@@ -116,6 +116,95 @@ void main() {
     expect(gateway.interrupted, [('thread-1', 'turn-1')]);
   });
 
+  test('starts a typed review and projects review-mode state', () async {
+    ReviewStartOptions? requested;
+
+    expect(controller.canStartReview, isFalse);
+    final started = await controller.startReview(
+      const UncommittedChangesReviewTarget(),
+      starter: (options) async {
+        requested = options;
+        return const ReviewHandle(
+          reviewThreadId: 'thread-1',
+          turn: TurnHandle(
+            id: 'review-turn-1',
+            status: TurnRuntimeStatus.inProgress,
+          ),
+        );
+      },
+    );
+
+    expect(started, isTrue);
+    expect(requested?.threadId, 'thread-1');
+    expect(requested?.target, isA<UncommittedChangesReviewTarget>());
+    expect(controller.activeTurnId, 'review-turn-1');
+    expect(controller.busy, isTrue);
+
+    gateway.events.add(
+      const ReviewModeEvent(
+        threadId: 'thread-1',
+        turnId: 'review-turn-1',
+        itemId: 'review-entered',
+        phase: ReviewModePhase.entered,
+        review: 'Uncommitted changes',
+        status: 'completed',
+        completed: true,
+      ),
+    );
+    expect(controller.reviewModeActive, isTrue);
+    expect(controller.activeReviewDescription, 'Uncommitted changes');
+    expect(controller.entries.single.kind, ConversationEntryKind.review);
+    expect(controller.entries.single.text, startsWith('Review started:'));
+
+    gateway.events.add(
+      const ReviewModeEvent(
+        threadId: 'thread-1',
+        turnId: 'review-turn-1',
+        itemId: 'review-exited',
+        phase: ReviewModePhase.exited,
+        review: 'Uncommitted changes',
+        status: 'completed',
+        completed: true,
+      ),
+    );
+    expect(controller.reviewModeActive, isFalse);
+    expect(controller.entries.last.kind, ConversationEntryKind.review);
+    expect(controller.entries.last.text, startsWith('Review completed:'));
+  });
+
+  test(
+    'does not resurrect review turn when completion races the response',
+    () async {
+      final response = Completer<ReviewHandle>();
+      final start = controller.startReview(
+        const UncommittedChangesReviewTarget(),
+        starter: (_) => response.future,
+      );
+      expect(controller.busy, isTrue);
+
+      gateway.events.add(
+        const TurnCompletedEvent(
+          threadId: 'thread-1',
+          turnId: 'review-turn-1',
+          status: TurnRuntimeStatus.completed,
+        ),
+      );
+      response.complete(
+        const ReviewHandle(
+          reviewThreadId: 'thread-1',
+          turn: TurnHandle(
+            id: 'review-turn-1',
+            status: TurnRuntimeStatus.inProgress,
+          ),
+        ),
+      );
+
+      expect(await start, isTrue);
+      expect(controller.busy, isFalse);
+      expect(controller.activeTurnId, isNull);
+    },
+  );
+
   test('does not interrupt before turn/started is observed', () async {
     await controller.submit('Run it');
 

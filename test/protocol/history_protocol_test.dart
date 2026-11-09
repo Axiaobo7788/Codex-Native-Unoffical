@@ -128,6 +128,54 @@ void main() {
     expect(page.nextCursor, 'older');
   });
 
+  test('projects review-mode markers from summary and paged history', () async {
+    final oversizedReview = 'R' * 600;
+    final reviewAdapter = HistoryProtocolAdapter(
+      request: (method, [params = const {}]) async => {
+        'data': [
+          if (method == 'thread/turns/list')
+            {
+              'id': 'review-turn-1',
+              'status': 'completed',
+              'items': [
+                {
+                  'id': 'review-entered',
+                  'type': 'enteredReviewMode',
+                  'review': 'Uncommitted changes',
+                },
+              ],
+            }
+          else
+            {
+              'turnId': 'review-turn-1',
+              'item': {
+                'id': 'review-exited',
+                'type': 'exitedReviewMode',
+                'review': oversizedReview,
+              },
+            },
+        ],
+        'nextCursor': null,
+      },
+    );
+
+    final turns = await reviewAdapter.listTurns(
+      const HistoryTurnQuery(threadId: 'thread-1'),
+    );
+    final entered = turns.turns.single.items.single;
+    expect(entered.kind, HistoryItemKind.review);
+    expect(entered.text, 'Review started: Uncommitted changes');
+    expect(entered.status, 'completed');
+
+    final items = await reviewAdapter.listItems(
+      const HistoryItemQuery(threadId: 'thread-1', turnId: 'review-turn-1'),
+    );
+    final exited = items.items.single;
+    expect(exited.kind, HistoryItemKind.review);
+    expect(exited.text, 'Review completed: ${'R' * 512}…');
+    expect(exited.status, 'completed');
+  });
+
   test('pages full items only for one selected turn', () async {
     final page = await adapter.listItems(
       const HistoryItemQuery(

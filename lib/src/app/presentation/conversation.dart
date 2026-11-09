@@ -422,6 +422,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     controller.latestTurnPlan != null &&
                     controller.latestTurnPlan!.steps.isNotEmpty)
                   _turnPlanBanner(controller),
+                if (controller.thread != null && controller.reviewModeActive)
+                  _reviewModeBanner(controller),
                 Expanded(child: timelineChild),
                 _ApprovalBanner(controller: widget.approvalController),
                 _UserInputBanner(controller: widget.userInputController),
@@ -706,6 +708,50 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           ?.copyWith(color: palette.textMuted),
                     ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _reviewModeBanner(ConversationController controller) {
+    final palette = ThemeTokens.of(context);
+    return Container(
+      key: const ValueKey('conversation-review-mode-banner'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: ThemeTokens.space4,
+        vertical: 7,
+      ),
+      decoration: BoxDecoration(
+        color: palette.accent.withValues(alpha: 0.06),
+        border: Border(
+          bottom: BorderSide(
+            color: palette.accent.withValues(alpha: 0.22),
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.rate_review_outlined, size: 15, color: palette.accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Reviewing ${controller.activeReviewDescription}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1017,6 +1063,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             label: 'Compact context',
                             icon: Icon(Icons.compress_rounded),
                           ),
+                        if (!archived &&
+                            threadController.isMaterialized(thread.id) &&
+                            controller.canStartReview)
+                          const CodexMenuItem(
+                            value: 'review',
+                            label: 'Review uncommitted changes',
+                            icon: Icon(Icons.rate_review_outlined),
+                          ),
                         CodexMenuItem(
                           value: 'archive',
                           label: archived
@@ -1060,6 +1114,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           case 'compact':
                             unawaited(
                               threadController.compactThread(thread.id),
+                            );
+                          case 'review':
+                            unawaited(
+                              controller.startReview(
+                                const UncommittedChangesReviewTarget(),
+                              ),
                             );
                           case 'archive':
                             if (archived) {
@@ -1399,6 +1459,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               (e) =>
                   e.kind == ConversationEntryKind.user ||
                   e.kind == ConversationEntryKind.assistant ||
+                  e.kind == ConversationEntryKind.review ||
                   e.kind == ConversationEntryKind.error,
             )
             .toList(growable: false),
@@ -1408,6 +1469,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               (e) =>
                   e.kind == ConversationEntryKind.user ||
                   e.kind == ConversationEntryKind.assistant ||
+                  e.kind == ConversationEntryKind.review ||
                   e.kind == ConversationEntryKind.error ||
                   !e.completed ||
                   e ==
@@ -1429,14 +1491,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             .where(
               (item) =>
                   item.kind == HistoryItemKind.user ||
-                  item.kind == HistoryItemKind.assistant,
+                  item.kind == HistoryItemKind.assistant ||
+                  item.kind == HistoryItemKind.review,
             )
             .toList(growable: false),
       PresentationDetailMode.commands =>
         rawHistoryItems
             .where((item) {
               if (item.kind == HistoryItemKind.user ||
-                  item.kind == HistoryItemKind.assistant) {
+                  item.kind == HistoryItemKind.assistant ||
+                  item.kind == HistoryItemKind.review) {
                 return true;
               }
               final turn = widget.historyController.turnForId(item.turnId);
@@ -3383,7 +3447,8 @@ class _ConversationEntryView extends StatelessWidget {
       );
     }
 
-    final isActivity = entry.kind == ConversationEntryKind.activity;
+    final isReview = entry.kind == ConversationEntryKind.review;
+    final isActivity = entry.kind == ConversationEntryKind.activity || isReview;
     final isError = entry.kind == ConversationEntryKind.error;
     final showAssistantCopy =
         entry.kind == ConversationEntryKind.assistant &&
@@ -3418,7 +3483,9 @@ class _ConversationEntryView extends StatelessWidget {
                   color: isError
                       ? palette.danger.withValues(alpha: 0.08)
                       : isActivity
-                      ? palette.surfaceRaised
+                      ? isReview
+                            ? palette.accent.withValues(alpha: 0.06)
+                            : palette.surfaceRaised
                       : isActiveSearchMatch
                       ? palette.accent.withValues(alpha: 0.06)
                       : Colors.transparent,
@@ -4208,6 +4275,9 @@ class _ActivityContent extends StatelessWidget {
     final isWebSearch = entry.text.startsWith('Web search');
     final isPlan = entry.text.startsWith('Plan');
     final isCompaction = entry.text.startsWith('Context compacted');
+    final isReview =
+        entry.text.startsWith('Review started:') ||
+        entry.text.startsWith('Review completed:');
     final statusBadge = _nonNominalStatus(entry.status);
     final icon = !entry.completed
         ? Icons.hourglass_top_rounded
@@ -4223,6 +4293,8 @@ class _ActivityContent extends StatelessWidget {
         ? Icons.checklist_rounded
         : isCompaction
         ? Icons.compress_rounded
+        : isReview
+        ? Icons.rate_review_outlined
         : Icons.check_circle_outline_rounded;
     final iconColor = !entry.completed
         ? palette.accent
@@ -4233,7 +4305,8 @@ class _ActivityContent extends StatelessWidget {
               isToolCall ||
               isWebSearch ||
               isPlan ||
-              isCompaction
+              isCompaction ||
+              isReview
         ? palette.textSecondary
         : palette.success;
 

@@ -4,7 +4,7 @@ import 'turn_models.dart';
 
 export 'user_message_presentation.dart';
 
-enum HistoryItemKind { user, assistant, activity, reasoning, unknown }
+enum HistoryItemKind { user, assistant, activity, reasoning, review, unknown }
 
 class HistoryItem {
   const HistoryItem({
