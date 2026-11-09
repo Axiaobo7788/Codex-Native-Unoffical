@@ -669,10 +669,17 @@ class EcosystemProtocolAdapter {
         final List<Object?> l => l.length,
         _ => 0,
       };
-      final authStatus = (raw['authStatus'] as String?)?.trim();
+      final authStatus = _nonEmptyString(
+        _optionalOutputString(raw, 'authStatus', maxMcpIdentifierLength),
+      );
       final status =
-          (raw['status'] as String?)?.trim() ??
-          (authStatus != null && authStatus.isNotEmpty ? authStatus : 'ready');
+          _nonEmptyString(
+            _optionalOutputString(raw, 'runtimeStatus', maxMcpIdentifierLength),
+          ) ??
+          _nonEmptyString(
+            _optionalOutputString(raw, 'status', maxMcpIdentifierLength),
+          ) ??
+          '';
       servers.add(
         McpServerStatusModel(
           name: name,

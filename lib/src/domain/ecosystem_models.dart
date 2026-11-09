@@ -290,9 +290,13 @@ class McpServerStatusModel {
   });
 
   final String name;
+
+  /// Reported runtime status, or an empty string when no state was reported.
   final String status;
   final int toolCount;
   final int resourceCount;
+
+  /// Authentication capability or state reported by the server catalog.
   final String? authStatus;
 }
 
