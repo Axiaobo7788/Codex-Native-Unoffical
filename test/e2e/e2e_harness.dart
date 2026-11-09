@@ -10,6 +10,7 @@ import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/output_models.dart';
+import 'package:codex_native_unofficial/src/domain/product_mode.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
@@ -388,6 +389,7 @@ class E2ERuntimeHarness extends RuntimeController {
   // Action audit trails for assertion verification
   final List<String> startedThreadCwds = [];
   final List<TurnStartOptions> startedTurns = [];
+  final List<ReviewStartOptions> startedReviews = [];
   final List<TurnSteerOptions> steeredTurns = [];
   final List<String> deletedThreadIds = [];
   final List<({String threadId, String name})> renamedThreads = [];
@@ -444,6 +446,11 @@ class E2ERuntimeHarness extends RuntimeController {
 
   @override
   bool get usesRemote => remoteModeOverride;
+
+  @override
+  BackendCapabilities get capabilities => remoteModeOverride
+      ? const BackendCapabilities.directHostRemoteReadOnly()
+      : super.capabilities;
 
   @override
   bool get supportsMcpCapabilities =>
@@ -774,6 +781,35 @@ class E2ERuntimeHarness extends RuntimeController {
       TurnStartedEvent(threadId: options.threadId, turnId: handle.id),
     );
     return handle;
+  }
+
+  @override
+  Future<ReviewHandle> startReview(ReviewStartOptions options) async {
+    if (remoteModeOverride) {
+      throw UnsupportedError(
+        'Code review is unavailable on the read-only Remote product surface.',
+      );
+    }
+    startedReviews.add(options);
+    final turn = TurnHandle(
+      id: 'review-turn-${startedReviews.length}',
+      status: TurnRuntimeStatus.inProgress,
+    );
+    _turnsController.add(
+      TurnStartedEvent(threadId: options.threadId, turnId: turn.id),
+    );
+    _turnsController.add(
+      ReviewModeEvent(
+        threadId: options.threadId,
+        turnId: turn.id,
+        itemId: 'review-entered-${startedReviews.length}',
+        phase: ReviewModePhase.entered,
+        review: options.target.displayLabel,
+        status: 'completed',
+        completed: true,
+      ),
+    );
+    return ReviewHandle(reviewThreadId: options.threadId, turn: turn);
   }
 
   @override

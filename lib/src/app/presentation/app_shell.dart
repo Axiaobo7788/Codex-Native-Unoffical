@@ -58,6 +58,7 @@ class RuntimeStatusScreen extends StatelessWidget {
               settingsController: settingsController,
               diffController: diffController,
               outputGateway: controller,
+              transportCapabilities: controller.capabilities,
               defaultWorkingDirectory: defaultWorkingDirectory,
             );
             return _CompactWorkspace(
@@ -194,6 +195,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                   settingsController: widget.settingsController,
                   diffController: widget.diffController,
                   outputGateway: widget.runtimeController,
+                  transportCapabilities: widget.runtimeController.capabilities,
                   defaultWorkingDirectory: widget.defaultWorkingDirectory,
                   sidebarCollapsed: _sidebarCollapsed,
                   onToggleSidebar: _toggleSidebar,

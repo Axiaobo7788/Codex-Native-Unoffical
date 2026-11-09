@@ -103,6 +103,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _conversationController = ConversationController(
       gateway: _controller,
       settings: _settingsController,
+      reviewStarter: _controller.startReview,
     );
     _historyController = HistoryController(gateway: _controller);
     _diffController = DiffController(gateway: _controller);

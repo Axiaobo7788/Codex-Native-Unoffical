@@ -12,6 +12,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.settingsController,
     required this.diffController,
     required this.outputGateway,
+    this.transportCapabilities = const BackendCapabilities.stockCodexLocal(),
     this.defaultWorkingDirectory = '',
     this.sidebarCollapsed = false,
     this.onToggleSidebar,
@@ -25,6 +26,7 @@ class _ConversationPanel extends StatefulWidget {
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final OutputGateway outputGateway;
+  final BackendCapabilities transportCapabilities;
   final String defaultWorkingDirectory;
   final bool sidebarCollapsed;
   final VoidCallback? onToggleSidebar;
@@ -124,7 +126,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   final List<UserAttachment> _composerAttachments = <UserAttachment>[];
 
   BackendCapabilities get _activeCapabilities => resolveEffectiveCapabilities(
-    transportCapabilities: const BackendCapabilities.stockCodexLocal(),
+    transportCapabilities: widget.transportCapabilities,
     mode: _productMode,
   );
 
@@ -1063,7 +1065,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             label: 'Compact context',
                             icon: Icon(Icons.compress_rounded),
                           ),
-                        if (!archived &&
+                        if (capabilities.supportsGitDiff &&
+                            !archived &&
                             threadController.isMaterialized(thread.id) &&
                             controller.canStartReview)
                           const CodexMenuItem(

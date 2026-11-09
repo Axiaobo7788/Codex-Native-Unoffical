@@ -396,6 +396,15 @@ class RuntimeController extends ChangeNotifier
   Future<TurnHandle> startTurn(TurnStartOptions options) =>
       _connectedTransport().startTurn(options);
 
+  Future<ReviewHandle> startReview(ReviewStartOptions options) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Code review is unavailable on the read-only Remote product surface.',
+      );
+    }
+    return _connectedTransport().startReview(options);
+  }
+
   @override
   Future<String> steerTurn(TurnSteerOptions options) =>
       _connectedTransport().steerTurn(options);

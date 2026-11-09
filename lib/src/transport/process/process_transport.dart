@@ -339,6 +339,9 @@ class ProcessTransport
   Future<TurnHandle> startTurn(TurnStartOptions options) =>
       _turnProtocol.startTurn(options);
 
+  Future<ReviewHandle> startReview(ReviewStartOptions options) =>
+      _turnProtocol.startReview(options);
+
   @override
   Future<String> steerTurn(TurnSteerOptions options) =>
       _turnProtocol.steerTurn(options);

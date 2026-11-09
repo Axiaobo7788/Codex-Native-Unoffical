@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/protocol/thread_protocol.dart';
@@ -760,6 +761,15 @@ void main() {
       await expectLater(
         () => remoteController.moveThreadSection(
           const ThreadSectionMoveOptions(threadId: 't-1', sectionId: 'sec-1'),
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+      await expectLater(
+        () => remoteController.startReview(
+          const ReviewStartOptions(
+            threadId: 't-1',
+            target: UncommittedChangesReviewTarget(),
+          ),
         ),
         throwsA(isA<UnsupportedError>()),
       );

@@ -31,6 +31,62 @@ class _ReviewModeE2EHarness extends E2ERuntimeHarness {
 }
 
 void main() {
+  testWidgets('starts a typed uncommitted review from the local thread menu', (
+    tester,
+  ) async {
+    final harness = E2ERuntimeHarness(
+      initialThreads: [
+        createTestThread(
+          id: 'review-action-thread',
+          preview: 'Review Action Thread',
+        ),
+      ],
+    );
+    await pumpE2EApp(tester, harness: harness);
+
+    await tester.tap(find.text('Review Action Thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('thread-actions-menu-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Review uncommitted changes'), findsOneWidget);
+
+    await tester.tap(find.text('Review uncommitted changes'));
+    await tester.pumpAndSettle();
+
+    expect(harness.startedReviews, hasLength(1));
+    expect(harness.startedReviews.single.threadId, 'review-action-thread');
+    expect(
+      harness.startedReviews.single.target,
+      isA<UncommittedChangesReviewTarget>(),
+    );
+    expect(
+      find.byKey(const ValueKey('conversation-review-mode-banner')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('hides review action on the read-only Remote surface', (
+    tester,
+  ) async {
+    final harness = E2ERuntimeHarness(
+      initialThreads: [
+        createTestThread(
+          id: 'remote-review-thread',
+          preview: 'Remote Review Thread',
+        ),
+      ],
+    )..remoteModeOverride = true;
+    await pumpE2EApp(tester, harness: harness);
+
+    await tester.tap(find.text('Remote Review Thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('thread-actions-menu-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review uncommitted changes'), findsNothing);
+    expect(harness.startedReviews, isEmpty);
+  });
+
   testWidgets(
     'renders review-mode banner and lifecycle markers without hiding them in prose mode',
     (tester) async {

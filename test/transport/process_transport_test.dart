@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
+import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:codex_native_unofficial/src/domain/user_input_models.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/transport/process/child_process.dart';
@@ -106,6 +107,35 @@ void main() {
     await expectLater(lateRequest, throwsA(isA<TransportClosedException>()));
     await closeFuture;
     expect(child.writesAfterInputClosed, 0);
+  });
+
+  test('routes typed review/start through the guarded process peer', () async {
+    final reviewFuture = transport.startReview(
+      const ReviewStartOptions(
+        threadId: 'thread-review',
+        target: UncommittedChangesReviewTarget(),
+      ),
+    );
+    await pumpEventQueue();
+
+    final request = jsonDecode(child.writes.single) as Map<String, Object?>;
+    expect(request['method'], 'review/start');
+    expect(request['params'], {
+      'threadId': 'thread-review',
+      'target': {'type': 'uncommittedChanges'},
+    });
+
+    child.addStdout({
+      'id': request['id'],
+      'result': {
+        'reviewThreadId': 'thread-review',
+        'turn': {'id': 'review-turn-1', 'status': 'inProgress'},
+      },
+    });
+    final review = await reviewFuture;
+    expect(review.reviewThreadId, 'thread-review');
+    expect(review.turn.id, 'review-turn-1');
+    expect(review.turn.status, TurnRuntimeStatus.inProgress);
   });
 
   test(
