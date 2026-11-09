@@ -2155,3 +2155,31 @@ lifecycle presentation the source of truth.
   the failed run.
 - The user explicitly stopped execution after this F13/F14 round. No next peer
   round begins until a later explicit continue instruction.
+
+---
+
+## ADR-041 — Keep product claims, tokens, and verification tied to their owners
+
+**Status:** Accepted
+
+- Production shows the connected Codex backend and derives availability from its
+  transport capabilities. Work and Chat policies remain internal compatibility
+  seams. Timeline detail is a separate presentation choice. Add a backend
+  identity selector when multiple backends are wired and independently verified.
+  This supersedes the exposed selector described in ADR-034 and ADR-035.
+- `OfficialCodexTheme` is the sole source for shared visual values. Flutter's
+  `ThemeTokens` and `CodexPalette` adapt those values. Opaque control roles
+  and composited semantic roles have distinct meanings and retain their
+  existing values. The same theme serves the existing widget contracts.
+- Simulated runtime tests cover typed presentation outcomes and failures. Schema
+  fixtures and real processes own protocol evidence. Direct stock tests are
+  opt-in and use disposable state. Host-backed and packaged-app checks remain
+  separate. CI compiles the pure-Dart domain/protocol/transport roots for the
+  standalone VM, excluding the Android secure-storage entry point as a root.
+- Editing, regenerating, retrying through rollback, and explicitly reverting a
+  turn require confirmation that saved history will be truncated. Session-local
+  sibling previews do not retain the stock history that was removed.
+- Current state lives in `PROJECT_STATUS.md`, historical checkpoints in
+  `docs/history/`, and feature/evidence classification in the matrix. Prior
+  ADR measurements and test counts are historical evidence. Broad visual parity
+  or fully eliminated Material styling cannot be inferred from those records.

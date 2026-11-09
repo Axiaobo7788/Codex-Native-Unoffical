@@ -5,7 +5,7 @@ import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
 void main() {
   group('Tier 4: Real-World Application Scenarios (End-to-End User Journeys)', () {
@@ -13,8 +13,8 @@ void main() {
       tester,
     ) async {
       // App starts fresh with zero threads
-      final harness = E2ERuntimeHarness(initialThreads: const []);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: const []);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       // 1. Landing view is visible
       expect(find.text('Let’s build'), findsOneWidget);
@@ -81,13 +81,13 @@ void main() {
         cwd: '/projects/migration-core',
       );
       const outRef = 'migration-out-ref';
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
       harness.storeOutput(
         outRef,
         'Migration v2 applied: 3 tables created, 1 index added.',
       );
 
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       // 1. User selects project thread
       await tester.tap(find.text('Refactor database migrations'));
@@ -189,11 +189,11 @@ void main() {
           ),
         );
 
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [thread],
           initialHistoryTurns: turns,
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         // 1. User opens long research thread
         await tester.tap(find.text('Deep research log'));
@@ -244,8 +244,14 @@ void main() {
           cwd: '/projects/fura-project',
         );
 
-        final harness = E2ERuntimeHarness(initialThreads: [thread1, thread2]);
-        await pumpE2EApp(tester, harness: harness, size: const Size(1400, 900));
+        final harness = SimulatedRuntimeHarness(
+          initialThreads: [thread1, thread2],
+        );
+        await pumpSimulatedRuntimeApp(
+          tester,
+          harness: harness,
+          size: const Size(1400, 900),
+        );
 
         // 1. Project headings visible
         expect(find.text('Codex-Native'), findsOneWidget);
@@ -286,8 +292,8 @@ void main() {
         id: 't-safety-flow',
         preview: 'Production deployment script',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Production deployment script'));
       await tester.pumpAndSettle();
@@ -349,8 +355,8 @@ void main() {
           revokedAtMs: null,
         );
 
-        final harness = E2ERuntimeHarness(initialPairedDevices: [device]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialPairedDevices: [device]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         // 1. Open Remote setup from sidebar footer
         final remoteBtn = find.byKey(const ValueKey('remote-setup-button'));

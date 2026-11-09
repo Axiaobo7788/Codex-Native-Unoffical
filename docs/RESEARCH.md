@@ -3325,3 +3325,51 @@ The latest explicit user instruction requires stopping after this peer round.
 This is not evidence that the living convergence backlog is exhausted and does
 not reclassify remaining supported work as blocked. No next round was
 negotiated or started.
+
+## Third-party consolidation
+
+Base: `f8de0e9a9057a26ee3a23f85582b4a1d737c99d4`. Codex audited the repository independently, then Gemini challenged the findings read-only through the official `agy` TUI. Both traced the actual runtime and UI paths. Gemini elevated the hidden Section destinations from P2 to P1. It independently confirmed the history-truncation risk and highlighted thread identity checks after asynchronous actions.
+
+| Severity and claim | Actual evidence and affected files | Risk | Minimal correction | Verification |
+|---|---|---|---|---|
+| P0 — critical defect | No P0 confirmed in the reviewed product, theme, evidence and boundary surfaces. | Scope-limited finding. | Keep the confirmed P1s distinct. | Independent peer challenge. |
+| P1-A — separate Chat/Work products | `conversation.dart` changed badges, placeholders, detail mode and capability intersection. `RuntimeController` still called the same Codex transport. | A user can reasonably read a product switch or hidden execution controls as a change of backend or authority. | Hide the public selector and badges. Keep the internal compatibility seams and the existing Prose/Commands/Execution control. Defer an extra `BackendKind` enum until there is a second real backend. | Simulated UI checks verify detail switching and Codex composer controls. |
+| P1-B — shared token values had two owners | `theme_tokens.dart`, `theme/official_codex_theme.dart` and the app shell repeated geometry and palette values. Opaque widget fills and translucent primitive states deliberately differ. | Independent edits can drift and flattening state roles changes visible contrast. | Keep one canonical file and alias shared geometry and colors. Preserve existing adapter-specific role values. | Adapter regression and viewport/layout tests. |
+| P1-C — green counted as live proof | Three tests returned successfully if stock Codex was absent. One used the user's normal profile and called `remoteControl/disable`. `E2ERuntimeHarness` substituted the typed controller and did not exercise RPC. | False positives and potential mutation of the user's Remote setting. | Rename simulated coverage and move direct stock tests to an explicit, disposable profile. Remove the live disable call. Keep protocol fixture coverage for the removed account/config-dependent expectations. | Default suite reports direct stock cases skipped. Opt-in suite exercises its declared routes. |
+| P1-D — stale current-state claims | Prior status was 2,357 lines and mixed old `264/760` geometry with 260/704 production values. README used the old 360 px split and Phase 1–4 snapshot. Architecture overstated Android write capability and lagged F7 projection behavior. | Conflicting instructions and misleading install expectations. | Preserve the old status byte-for-byte, shorten current status, refresh README and repair current architecture/matrix descriptions. | Compare archive to Git baseline and inspect current claims against production code. |
+| P1-E — inaccessible Section destinations | `sidebar_activity.dart` used `.take(8)` in the row menu while the controller retains up to 64 catalog definitions. Adding all targets to the original unbounded-height menu would risk clipping. | Users cannot move to many valid sections. | One action opens a scrollable picker. Check target, thread and action availability again on selection. | Simulated 16-section test selects the last destination at a smaller viewport. |
+| P1-F — immediate history truncation | Edit, regenerate, rollback retry and explicit revert in `conversation.dart` dispatched `thread/revert` immediately. The simulated suite expected this. | Opening edit can remove saved history even when the replacement is abandoned. | Explicit, cancelable confirmation with the affected history stated. Guard thread identity and action availability around async continuation. Bind pre-turn-ID retries to the clicked failed send; assigned IDs require the rollback path. | Simulated cancel, confirm, resubmit and regenerate flows, plus two failed sends with retry on the older row. |
+| P2-A — pure-Dart boundary relied on convention | F14's first smoke failed through `dart:ui`; the repaired graph currently compiles. `remote_secure_storage.dart` intentionally uses Flutter. | An indirect Flutter import can break all standalone runtime tools. | Compile every core root with standalone Dart in CI; the platform storage file is excluded only from root selection. | Positive probe plus negative controls for Flutter foundation and a VM-compatible Flutter annotations import. |
+| P2-B — Section and review scope | Section counts came from loaded rows. The protocol encodes four review targets, while the UI exposes only uncommitted review. | Product claims can imply complete ordering or four selectable targets. | Label loaded counts and clarify README/status/matrix. Keep stock `section_position` ordering as research. | Widget flows and stock evidence tracked separately. |
+| P2-C — Material leakage | Section input and dialog use Flutter Material hosting with explicit Codex palette, shape and buttons. Other dialogs still use shared Material defaults. | A broader visual parity claim is premature. | Reuse themed controls and Codex buttons. Leave a larger dialog migration to a separately scoped review. | Check token wiring and keep subjective Human gates pending. |
+| REJECTED / NOT REPRODUCED | Chat/Work backend implementation, a second app-server inside the fake, full-process proof from a test count, and authoritative per-section pagination were not established. The fake has typed mutable state and canned outcomes, but no JSONL server, model or Host. | Shipping conclusions on unsupported evidence. | Grow the fake only for presentation-relevant typed outcomes; use adapter fixtures/schema/real-process checks for protocol. Avoid introducing an extra framework. | Source and test-entrypoint inspection. |
+
+### Consolidation verification
+
+- `dart format` checked 173 files; `dart analyze` reported no issues.
+  The default Flutter suite passed 395 cases with three explicit opt-in
+  skips. The isolated direct-stock suite passed 3/3, including a non-empty
+  Section create/rename/list/delete round-trip. It used a disposable Codex home,
+  workspace and XDG paths. Existing account-specific diagnostics and
+  Official Remote calls remain historical evidence.
+- The standalone Dart probe compiled 61 roots. A temporary foundation import
+  reproduced the `dart:ui` failure. A VM-compatible Flutter annotations import
+  also failed the compiler depfile check. Both intentional probes were removed.
+- Rust formatting, Clippy and 98 tests passed. The memory benchmark retained
+  100 of 1,000 turns and discarded ten 3 MiB outputs (RSS deltas
+  1,560,576 / 29,302,784 bytes).
+- Packaged Host runtime, thread, model, and uncommitted review smokes passed.
+  Review observed both lifecycle markers and terminal completion with 1,008
+  assistant characters and cleaned its test thread.
+- The Linux debug bundle opened under XWayland with an isolated Codex home.
+  The app window showed the connected Codex composer and the Host/app-server
+  process chain was observed. Host exit was verified. The ATK embed warning
+  still occurred. This observation covers the shell and connection path.
+  Subjective visual review and live UI mutation of saved threads remain
+  separate gates.
+- The picker regression initially found a test click before the final row had
+  scrolled into the visible hit-test region. Settling the scroll and ensuring
+  visibility made the last retained destination actionable. In the targeted
+  peer audit, Gemini flagged the live Retry fallback and fixture isolation.
+  The correction limits rollback retries to eligible threads, binds pre-ID
+  retries to the clicked failure, and isolates XDG paths.

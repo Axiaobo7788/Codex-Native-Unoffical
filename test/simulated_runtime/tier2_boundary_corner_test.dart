@@ -10,15 +10,15 @@ import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
 void main() {
   group('Tier 2: Boundary & Corner Cases — Thread & Catalog Boundaries', () {
     testWidgets('T2.1.1: Empty thread catalog displays clean empty state', (
       tester,
     ) async {
-      final harness = E2ERuntimeHarness(initialThreads: const []);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: const []);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       expect(find.text('No threads yet'), findsOneWidget);
       expect(find.text('Let’s build'), findsOneWidget);
@@ -34,8 +34,8 @@ void main() {
           updatedAt: DateTime.utc(2026, 1, 1, 10, i % 60),
         ),
       );
-      final harness = E2ERuntimeHarness(initialThreads: threads);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: threads);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       expect(find.textContaining('Cap thread preview'), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -53,8 +53,8 @@ void main() {
         ),
       );
 
-      final harness = E2ERuntimeHarness(initialThreads: duplicates);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: duplicates);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       // Deduplication retains the first unique thread ID entry
       expect(
@@ -74,8 +74,8 @@ void main() {
         preview: superLongTitle,
       );
 
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       expect(
         find.byKey(const ValueKey('thread-row-extreme-title-thread')),
@@ -91,8 +91,8 @@ void main() {
         id: 'sample-thread',
         preview: 'Alpha project thread',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.byKey(const ValueKey('thread-search-toggle')));
       await tester.pumpAndSettle();
@@ -125,11 +125,11 @@ void main() {
           ),
         );
 
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [thread],
           initialHistoryTurns: turns,
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Eviction thread'));
         await tester.pumpAndSettle();
@@ -155,11 +155,11 @@ void main() {
             ),
           );
 
-          final harness = E2ERuntimeHarness(
+          final harness = SimulatedRuntimeHarness(
             initialThreads: [thread],
             initialHistoryTurns: turns,
           );
-          await pumpE2EApp(tester, harness: harness);
+          await pumpSimulatedRuntimeApp(tester, harness: harness);
 
           await tester.tap(find.text('Deep history thread'));
           await tester.pumpAndSettle();
@@ -182,11 +182,11 @@ void main() {
             assistantProse: 'Short single line answer',
           );
 
-          final harness = E2ERuntimeHarness(
+          final harness = SimulatedRuntimeHarness(
             initialThreads: [thread],
             initialHistoryTurns: [turn],
           );
-          await pumpE2EApp(tester, harness: harness);
+          await pumpSimulatedRuntimeApp(tester, harness: harness);
 
           await tester.tap(find.text('Short thread'));
           await tester.pumpAndSettle();
@@ -212,11 +212,11 @@ void main() {
           preview: 'Empty history thread',
         );
 
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [thread],
           initialHistoryTurns: const [],
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Empty history thread'));
         await tester.pumpAndSettle();
@@ -246,11 +246,11 @@ void main() {
           ),
         );
 
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [thread],
           initialHistoryTurns: turns,
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Rapid page thread'));
         await tester.pumpAndSettle();
@@ -283,11 +283,11 @@ void main() {
           assistantProse: 'Handled.',
         );
 
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [thread],
           initialHistoryTurns: [turn],
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Oversize envelope thread'));
         await tester.pumpAndSettle();
@@ -317,11 +317,11 @@ void main() {
         attachments: attachments,
       );
 
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialThreads: [thread],
         initialHistoryTurns: [turn],
       );
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Attachment cap thread'));
       await tester.pumpAndSettle();
@@ -344,11 +344,11 @@ void main() {
           assistantProse: 'Escaping verified.',
         );
 
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [thread],
           initialHistoryTurns: [turn],
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Adversarial escape thread'));
         await tester.pumpAndSettle();
@@ -373,11 +373,11 @@ void main() {
         assistantProse: unclosedMarkdown,
       );
 
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialThreads: [thread],
         initialHistoryTurns: [turn],
       );
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Unclosed code thread'));
       await tester.pumpAndSettle();
@@ -401,11 +401,11 @@ void main() {
         assistantProse: giantAssistantText,
       );
 
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialThreads: [thread],
         initialHistoryTurns: [turn],
       );
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Giant prose thread'));
       await tester.pumpAndSettle();
@@ -429,8 +429,8 @@ void main() {
         id: 'ws-prompt-thread',
         preview: 'Whitespace test thread',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Whitespace test thread'));
       await tester.pumpAndSettle();
@@ -452,8 +452,8 @@ void main() {
           id: 'cancel-danger-thread',
           preview: 'Cancel danger thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Cancel danger thread'));
         await tester.pumpAndSettle();
@@ -486,8 +486,12 @@ void main() {
           id: 'resize-thread',
           preview: 'Resize thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness, size: const Size(1400, 900));
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(
+          tester,
+          harness: harness,
+          size: const Size(1400, 900),
+        );
 
         expect(
           find.byKey(const ValueKey('desktop-split-workspace')),
@@ -522,11 +526,11 @@ void main() {
         supportedReasoningEfforts: [],
       );
 
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialThreads: [thread],
         initialModels: [singleModel],
       );
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Single model thread'));
       await tester.pumpAndSettle();
@@ -542,8 +546,8 @@ void main() {
         id: 'long-text-thread',
         preview: 'Long text thread',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Long text thread'));
       await tester.pumpAndSettle();
@@ -571,8 +575,8 @@ void main() {
           id: 'giant-diff-thread',
           preview: 'Giant diff thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Giant diff thread'));
         await tester.pumpAndSettle();
@@ -613,8 +617,8 @@ void main() {
           id: 'many-diff-thread',
           preview: 'Many files diff thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Many files diff thread'));
         await tester.pumpAndSettle();
@@ -651,7 +655,7 @@ void main() {
       testWidgets('T2.5.3: Output viewer UTF-8 multibyte edge cut', (
         tester,
       ) async {
-        final harness = E2ERuntimeHarness();
+        final harness = SimulatedRuntimeHarness();
         const ref = 'multibyte-output-ref';
         const multibyteText = '这是测试多字节UTF-8边界分割的内容。';
         harness.storeOutput(ref, multibyteText);
@@ -673,8 +677,8 @@ void main() {
             id: 'unsupp-appr-thread',
             preview: 'Unsupported approval thread',
           );
-          final harness = E2ERuntimeHarness(initialThreads: [thread]);
-          await pumpE2EApp(tester, harness: harness);
+          final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+          await pumpSimulatedRuntimeApp(tester, harness: harness);
 
           await tester.tap(find.text('Unsupported approval thread'));
           await tester.pumpAndSettle();
@@ -704,8 +708,8 @@ void main() {
           id: 'minimal-appr-thread',
           preview: 'Minimal approval thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Minimal approval thread'));
         await tester.pumpAndSettle();
@@ -736,13 +740,13 @@ void main() {
     testWidgets(
       'T2.6.1: Child process termination / process exited state banner',
       (tester) async {
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialSnapshot: const RuntimeSnapshot(
             state: RuntimeConnectionState.processExited,
             message: 'Process exited unexpectedly with code 1',
           ),
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         expect(find.text('Process exited'), findsOneWidget);
         expect(
@@ -759,8 +763,8 @@ void main() {
           id: 'turn-err-thread',
           preview: 'Turn error thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Turn error thread'));
         await tester.pumpAndSettle();
@@ -783,8 +787,8 @@ void main() {
     testWidgets('T2.6.3: Expired pairing ticket message displayed', (
       tester,
     ) async {
-      final harness = E2ERuntimeHarness();
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness();
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
       await tester.pumpAndSettle();
@@ -801,7 +805,7 @@ void main() {
     testWidgets(
       'T2.6.4: Remote pairing when listener disabled displays disabled notice',
       (tester) async {
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialHostStatus: const RemoteHostStatus(
             hostVersion: '0.1.0',
             enabled: false,
@@ -812,7 +816,7 @@ void main() {
             pairingTrust: null,
           ),
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
         await tester.pumpAndSettle();
@@ -827,7 +831,7 @@ void main() {
     testWidgets(
       'T2.6.5: Advertised endpoint missing displays warning indicator',
       (tester) async {
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialHostStatus: const RemoteHostStatus(
             hostVersion: '0.1.0',
             enabled: true,
@@ -838,7 +842,7 @@ void main() {
             pairingTrust: RemotePairingTrustMode.system,
           ),
         );
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('remote-setup-button')));
         await tester.pumpAndSettle();

@@ -27,8 +27,7 @@ abstract interface class ExecutionBackend
 /// backend capabilities with the active `ProductMode` presentation policy.
 BackendCapabilities resolveEffectiveCapabilities({
   required ProductMode mode,
-  BackendCapabilities transportCapabilities =
-      const BackendCapabilities.stockCodexLocal(),
+  required BackendCapabilities transportCapabilities,
 }) {
   final modeCaps = mode.capabilities;
   return BackendCapabilities(

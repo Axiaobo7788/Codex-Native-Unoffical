@@ -1,3 +1,5 @@
+/// Internal product-policy identifiers for compatibility research. A policy
+/// does not identify a connected backend or grant execution authority.
 enum ProductMode {
   codex,
   work,
@@ -7,38 +9,6 @@ enum ProductMode {
     ProductMode.codex => 'codex',
     ProductMode.work => 'work',
     ProductMode.chat => 'chat',
-  };
-
-  String get label => switch (this) {
-    ProductMode.codex => 'Codex',
-    ProductMode.work => 'Work',
-    ProductMode.chat => 'Chat',
-  };
-
-  String get description => switch (this) {
-    ProductMode.codex =>
-      'Code, terminal commands, diffs, and workspace execution.',
-    ProductMode.work =>
-      'Everyday tasks with intermediate tool steps collapsed by default.',
-    ProductMode.chat => 'Conversational prose and structured attachments.',
-  };
-
-  String get composerPlaceholder => switch (this) {
-    ProductMode.codex => 'Send a message to Codex',
-    ProductMode.work => 'Describe a task for Work',
-    ProductMode.chat => 'Message Chat',
-  };
-
-  String get steerPlaceholder => switch (this) {
-    ProductMode.codex => 'Steer active turn in Codex',
-    ProductMode.work => 'Steer active task in Work',
-    ProductMode.chat => 'Steer active response in Chat',
-  };
-
-  String get modeBadgeLabel => switch (this) {
-    ProductMode.codex => 'Codex',
-    ProductMode.work => 'Work · Auto',
-    ProductMode.chat => 'Chat · Prose',
   };
 
   /// Default client-side presentation detail policy for this product mode.

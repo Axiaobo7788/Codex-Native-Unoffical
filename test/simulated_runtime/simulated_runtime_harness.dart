@@ -18,11 +18,12 @@ import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Opaque-box E2E test harness that emulates the complete Codex app-server
-/// and Native Host transport boundary, allowing test suites to interact
-/// with [CodexNativeApp] as an opaque end-user UI.
-class E2ERuntimeHarness extends RuntimeController {
-  E2ERuntimeHarness({
+/// Typed fake [RuntimeController] for product integration through [CodexNativeApp].
+///
+/// Add only presentation-relevant outcomes and failure injection here. Adapter
+/// fixtures and real processes establish JSON-RPC, Host, and stock-server truth.
+class SimulatedRuntimeHarness extends RuntimeController {
+  SimulatedRuntimeHarness({
     List<ThreadSummary>? initialThreads,
     List<CodexModel>? initialModels,
     List<HistoryTurn>? initialHistoryTurns,
@@ -1438,9 +1439,9 @@ class E2ERuntimeHarness extends RuntimeController {
 }
 
 /// Helper to pump [CodexNativeApp] in an opaque-box widget test environment.
-Future<void> pumpE2EApp(
+Future<void> pumpSimulatedRuntimeApp(
   WidgetTester tester, {
-  required E2ERuntimeHarness harness,
+  required SimulatedRuntimeHarness harness,
   Size size = const Size(1400, 900),
   double devicePixelRatio = 1.0,
 }) async {

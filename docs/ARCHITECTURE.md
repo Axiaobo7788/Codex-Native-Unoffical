@@ -95,42 +95,29 @@ The app-server/thread store is authoritative. Flutter retains only the current w
 
 The target is bounded UI memory even when a Codex session has accumulated very large historical context.
 
-## Product sequencing and UI fidelity
+## Product and presentation
 
-The current product priority is to close the daily-use functional loop: Android
-Remote session and write flows, approvals, bounded output and attachments, a
-headless Host lifecycle, and the required Skills/MCP/Plugins surfaces. Physical
-device evidence remains a release gate, but unavailable hardware must not stop
-independent implementation of those bounded product paths.
+Production Desktop connects to stock Codex through the Host. The
+`ConversationBackend` and `ExecutionBackend` interfaces describe typed
+contracts. The Work and Chat `ProductMode` policies remain internal
+compatibility seams. The connected transport supplies production capabilities.
+Prose, Commands and Execution change the timeline projection.
 
-As soon as that core loop is daily-usable, official Codex Desktop UI fidelity
-becomes the highest-priority workstream. Re-research the then-current official
-product rather than relying on a stale screenshot or this project's bootstrap
-UI. Reproduce its information architecture, layout, density, interaction
-patterns, component states, and visual language as native Flutter components.
-This is presentation fidelity, not permission to copy the agent harness,
-hydrate complete history, retain unbounded widget/model state, or replace lazy
-output/diff loading. Virtualization, bounded projections, and native performance
-remain architectural constraints.
-
-After this switch, CI, release, packaging, and infrastructure work is justified
-only when it blocks functional correctness, supported-platform execution,
-security, realistic validation, or delivery. Non-blocking expansion must not
-displace the UI-fidelity track.
+`OfficialCodexTheme` owns shared geometry and palette values. The Flutter
+theme maps them into controls and keeps separate roles for opaque control
+colors and composited semantic states. See [project status](../PROJECT_STATUS.md)
+for the current workstream.
 
 ## Remote model
 
 The phone is a control plane.
 
-It can:
-
-- create/resume/steer threads;
-- approve or reject tool actions;
-- inspect task state, diffs, and selected logs;
-- receive completion/approval notifications;
-- upload selected files/images.
-
-It should not need the user's OpenAI credentials. Credentials remain on the host running Codex.
+The current Direct Host client can pair and read bounded model/thread data.
+Its transport also supports bounded history reads and sequenced lifecycle
+updates. Android currently shows the metadata projection. Turn writes,
+approvals, command-output reads, diffs and attachment uploads require a
+separately designed and supported capability. OpenAI credentials stay on the
+Host.
 
 A local trusted `host/remote/*` administration surface owns pairing-ticket
 creation, paired-device metadata, and revocation. Device records are loaded only
@@ -222,11 +209,10 @@ reads from claiming a newer invalidation. The held suffix is bounded to 512
 events and 8 MiB. Command-output range reads (`statOutput`, `readOutputRange`,
 `readOutputTail`), thread/turn writes, approvals, and server requests fail
 closed locally because the Host has not made those semantics remotely safe.
-Note that while `RemoteTransport` and the Rust Host allowlist and sequence
-`thread/name/updated`, `thread/archived`, `thread/unarchived`, and
-`thread/reverted`, `BoundedRemoteProjection.apply()` currently folds only
-`turn/started`, `turn/completed`, `thread/status/changed`, `item/started`,
-`item/completed`, and `error` into the cached metadata snapshot.
+`BoundedRemoteProjection` applies rename and archive to the retained rows.
+Unarchive and revert request authoritative hydration instead of synthesizing
+thread contents. The applied cursor advances only through the lifecycle
+coordinator's projection and resync rules.
 
 The Android client now has a platform-backed owner for one versioned WSS device
 record. Version 2 stores endpoint, bearer, bounded device metadata, and either

@@ -956,7 +956,7 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
       child: CodexSidebarRow(
         containerKey: ValueKey('thread-section-heading-${section.id}'),
         height: 32.0,
-        tooltip: section.name,
+        tooltip: '${section.name} · ${widget.heading.count} loaded threads',
         title: section.name,
         leading: Icon(leadingIcon, size: 15, color: palette.textSecondary),
         onTap: widget.onToggleCollapse,
@@ -965,7 +965,7 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '${widget.heading.count}',
+                '${widget.heading.count} loaded',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
               if (canMutate) ...[
@@ -1133,6 +1133,61 @@ class _ThreadRowState extends State<_ThreadRow> {
     super.dispose();
   }
 
+  Future<void> _chooseSection() async {
+    final threadId = widget.thread.id;
+    final currentSectionId = widget.thread.section?.id;
+    final destinations = [
+      for (final section in widget.sections)
+        if (section.id != currentSectionId) section,
+    ];
+    final sectionId = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: OfficialCodexTheme.of(context).modalSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+          side: BorderSide(
+            color: OfficialCodexTheme.of(context).hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+        title: const Text('Move to section'),
+        content: SizedBox(
+          width: 360,
+          height: 240,
+          child: ListView.builder(
+            primary: false,
+            itemCount: destinations.length,
+            itemBuilder: (context, index) {
+              final section = destinations[index];
+              return CodexSidebarRow(
+                title: section.name,
+                tooltip: section.name,
+                onTap: () => Navigator.of(context).pop(section.id),
+              );
+            },
+          ),
+        ),
+        actions: [
+          CodexButton(
+            variant: CodexButtonVariant.ghost,
+            onPressed: () => Navigator.of(context).pop(),
+            label: 'Cancel',
+          ),
+        ],
+      ),
+    );
+    if (sectionId != null &&
+        mounted &&
+        widget.thread.id == threadId &&
+        widget.thread.section?.id == currentSectionId &&
+        widget.enabled &&
+        widget.supportsSections &&
+        widget.sections.any((section) => section.id == sectionId)) {
+      widget.onMoveToSection?.call(sectionId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
@@ -1202,13 +1257,15 @@ class _ThreadRowState extends State<_ThreadRow> {
                       icon: Icon(Icons.call_split_rounded),
                     ),
                     if (widget.supportsSections && !widget.archived) ...[
-                      for (final section in widget.sections.take(8))
-                        if (section.id != thread.section?.id)
-                          CodexMenuItem(
-                            value: 'move-section:${section.id}',
-                            label: 'Move to ${section.name}',
-                            icon: const Icon(Icons.label_outline_rounded),
-                          ),
+                      if (widget.onMoveToSection != null &&
+                          widget.sections.any(
+                            (section) => section.id != thread.section?.id,
+                          ))
+                        const CodexMenuItem(
+                          value: 'move-section',
+                          label: 'Move to section…',
+                          icon: Icon(Icons.label_outline_rounded),
+                        ),
                       if (widget.onMoveToNewSection != null)
                         const CodexMenuItem(
                           value: 'move-new-section',
@@ -1241,13 +1298,6 @@ class _ThreadRowState extends State<_ThreadRow> {
                   ],
                   onSelected: (action) {
                     close();
-                    if (action.startsWith('move-section:')) {
-                      final sectionId = action.substring(
-                        'move-section:'.length,
-                      );
-                      widget.onMoveToSection?.call(sectionId);
-                      return;
-                    }
                     switch (action) {
                       case 'pin':
                         widget.onTogglePin();
@@ -1255,6 +1305,8 @@ class _ThreadRowState extends State<_ThreadRow> {
                         widget.onRename();
                       case 'fork':
                         widget.onFork();
+                      case 'move-section':
+                        unawaited(_chooseSection());
                       case 'move-new-section':
                         widget.onMoveToNewSection?.call();
                       case 'remove-section':

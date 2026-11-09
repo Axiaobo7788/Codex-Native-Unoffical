@@ -4,9 +4,9 @@ import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
-class _ReviewModeE2EHarness extends E2ERuntimeHarness {
+class _ReviewModeE2EHarness extends SimulatedRuntimeHarness {
   _ReviewModeE2EHarness()
     : super(
         initialThreads: [
@@ -34,7 +34,7 @@ void main() {
   testWidgets('starts a typed uncommitted review from the local thread menu', (
     tester,
   ) async {
-    final harness = E2ERuntimeHarness(
+    final harness = SimulatedRuntimeHarness(
       initialThreads: [
         createTestThread(
           id: 'review-action-thread',
@@ -42,7 +42,7 @@ void main() {
         ),
       ],
     );
-    await pumpE2EApp(tester, harness: harness);
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
 
     await tester.tap(find.text('Review Action Thread'));
     await tester.pumpAndSettle();
@@ -68,7 +68,7 @@ void main() {
   testWidgets('hides review action on the read-only Remote surface', (
     tester,
   ) async {
-    final harness = E2ERuntimeHarness(
+    final harness = SimulatedRuntimeHarness(
       initialThreads: [
         createTestThread(
           id: 'remote-review-thread',
@@ -76,7 +76,7 @@ void main() {
         ),
       ],
     )..remoteModeOverride = true;
-    await pumpE2EApp(tester, harness: harness);
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
 
     await tester.tap(find.text('Remote Review Thread'));
     await tester.pumpAndSettle();
@@ -91,7 +91,7 @@ void main() {
     'renders review-mode banner and lifecycle markers without hiding them in prose mode',
     (tester) async {
       final harness = _ReviewModeE2EHarness();
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Review Mode Test Thread'));
       await tester.pumpAndSettle();

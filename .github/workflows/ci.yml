@@ -48,6 +48,7 @@ jobs:
       - run: dart run tool/verify_android_release_signing.dart
       - run: dart run tool/verify_android_pairing_scanner.dart
       - run: dart format --output=none --set-exit-if-changed lib test tool
+      - run: dart run tool/verify_pure_dart_boundary.dart
       - run: cargo fmt --all -- --check
       - run: rustfmt --edition 2024 --check tool/fixtures/large_output_app_server.rs
       - run: cargo clippy --workspace --all-targets -- -D warnings

@@ -1,11 +1,7 @@
-import 'dart:io';
-
 import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
-import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/protocol/ecosystem_protocol.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
-import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -690,90 +686,5 @@ void main() {
     final unsupported = await adapter.readOfficialRemoteControlStatus();
     expect(unsupported.supported, isFalse);
     expect(unsupported.errorMessage, contains('unknown variant'));
-  });
-
-  test('live stock codex app-server integration exercises thread lifecycle and ecosystem RPCs', () async {
-    const stockCodexPath = '/opt/codex-desktop/resources/codex';
-    if (!File(stockCodexPath).existsSync()) {
-      return;
-    }
-
-    final transport = await ProcessTransport.start(
-      executablePath: stockCodexPath,
-    );
-    addTearDown(() async {
-      await transport.close();
-    });
-
-    final init = await transport.initialize(const InitializeRequest());
-    expect(init.userAgent, isNotEmpty);
-
-    // 1. Ecosystem discovery (Skills, Plugins, Apps, MCP, Track B Remote Control)
-    final skills = await transport.listSkills(cwds: [Directory.current.path]);
-    expect(skills, isNotEmpty);
-
-    final plugins = await transport.listPlugins(cwds: [Directory.current.path]);
-    expect(plugins, isNotEmpty);
-    final firstPlugin = plugins.first;
-    final pluginDetail = await transport.readPlugin(
-      pluginName: firstPlugin.effectivePluginName,
-      marketplacePath: firstPlugin.marketplacePath,
-      remoteMarketplaceName: firstPlugin.marketplacePath == null
-          ? firstPlugin.marketplaceName
-          : null,
-    );
-    expect(pluginDetail.summary.id, firstPlugin.id);
-
-    final installedApps = await transport.listInstalledApps();
-    expect(installedApps, isA<List<InstalledAppSnapshotModel>>());
-    if (installedApps.isNotEmpty) {
-      final appRead = await transport.readApps(
-        appIds: [installedApps.first.id],
-        includeTools: true,
-      );
-      expect(
-        appRead.apps.isNotEmpty || appRead.missingAppIds.isNotEmpty,
-        isTrue,
-      );
-    }
-
-    final mcpServers = await transport.listMcpServerStatus();
-    expect(mcpServers, isA<List<Object?>>());
-    await transport.reloadMcpServers();
-
-    final remoteControl = await transport.readOfficialRemoteControlStatus();
-    expect(remoteControl.supported, isTrue);
-    expect(remoteControl.stateLabel, 'disabled');
-    expect(remoteControl.serverName, isNotEmpty);
-
-    final disabledAgain = await transport.setOfficialRemoteControlEnabled(
-      false,
-    );
-    expect(disabledAgain.supported, isTrue);
-    expect(disabledAgain.enabled, isFalse);
-
-    // 2. Thread lifecycle (start, rename, archive, unarchive, delete)
-    final created = await transport.startThread(
-      ThreadStartOptions(cwd: Directory.current.path),
-    );
-    expect(created.id, isNotEmpty);
-
-    await transport.renameThread(
-      threadId: created.id,
-      name: 'Convergence Smoke Thread',
-    );
-
-    await transport.archiveThread(created.id);
-
-    final archivedPage = await transport.listThreads(
-      const ThreadListQuery(limit: 20, archived: true),
-    );
-    expect(archivedPage.threads.any((t) => t.id == created.id), isTrue);
-
-    final unarchived = await transport.unarchiveThread(created.id);
-    expect(unarchived.id, created.id);
-    expect(unarchived.name, 'Convergence Smoke Thread');
-
-    await transport.deleteThread(created.id);
   });
 }

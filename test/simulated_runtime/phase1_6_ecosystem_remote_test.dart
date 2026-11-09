@@ -6,20 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
 void main() {
-  group('F8 Stable MCP Capabilities E2E', () {
+  group('F8 Stable MCP Capabilities simulated runtime', () {
     testWidgets(
       'reloads MCP config, reads bounded resources, calls tools, and submits form elicitation',
       (tester) async {
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [
             createTestThread(id: 'thread-mcp', preview: 'MCP capability test'),
           ],
         );
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
         await tester.pumpAndSettle();
@@ -154,13 +154,13 @@ void main() {
     testWidgets('keeps non-finite MCP number elicitation values unsubmitable', (
       tester,
     ) async {
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialThreads: [
           createTestThread(id: 'thread-mcp', preview: 'MCP number test'),
         ],
       );
 
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
       await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
       await tester.pumpAndSettle();
 
@@ -204,11 +204,11 @@ void main() {
     });
   });
 
-  group('F9 Apps & Plugins Lifecycle E2E', () {
+  group('F9 Apps & Plugins Lifecycle simulated runtime', () {
     testWidgets(
       'inspects plugin details, installs and uninstalls plugins with refresh, and surfaces auth requirements',
       (tester) async {
-        final harness = E2ERuntimeHarness();
+        final harness = SimulatedRuntimeHarness();
         harness.plugins
           ..clear()
           ..addAll([
@@ -245,7 +245,7 @@ void main() {
           ),
         );
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
@@ -342,7 +342,7 @@ void main() {
     testWidgets(
       'presents installed connector runtime, paginated app catalog, app/read tool summaries, and 100-item bound',
       (tester) async {
-        final harness = E2ERuntimeHarness();
+        final harness = SimulatedRuntimeHarness();
         harness.catalogPageSizeOverride = 25;
         harness.installedApps
           ..clear()
@@ -383,7 +383,7 @@ void main() {
               ),
           ]);
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
@@ -490,11 +490,11 @@ void main() {
     testWidgets(
       'delayed or offline app/list does not block Skills, Plugins, or MCP sections',
       (tester) async {
-        final harness = E2ERuntimeHarness();
+        final harness = SimulatedRuntimeHarness();
         final appListCompleter = Completer<AppListPage>();
         harness.listAppsOverride = (_) => appListCompleter.future;
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
@@ -556,7 +556,7 @@ void main() {
     testWidgets(
       'prunes detail, missing, and expansion caches across catalog refreshes when IDs change',
       (tester) async {
-        final harness = E2ERuntimeHarness();
+        final harness = SimulatedRuntimeHarness();
         harness.plugins
           ..clear()
           ..add(
@@ -593,7 +593,7 @@ void main() {
             ),
           );
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
@@ -748,8 +748,8 @@ void main() {
     testWidgets(
       'fails closed visibly when backend does not support ecosystem catalog mutations',
       (tester) async {
-        final harness = E2ERuntimeHarness()..catalogSupported = false;
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness()..catalogSupported = false;
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();

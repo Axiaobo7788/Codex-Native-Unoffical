@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/chat_conversation_dag.dart';
-import '../domain/conversation_backend.dart';
 import '../domain/diff_models.dart';
 import '../domain/ecosystem_gateway.dart';
 import '../domain/ecosystem_models.dart';
@@ -60,8 +59,8 @@ part 'presentation/remote_setup.dart';
 part 'presentation/runtime_details.dart';
 part 'presentation/user_input.dart';
 
-const _desktopSplitMinimumWidth = 760.0;
-const _desktopSidebarWidth = 260.0;
+const _desktopSplitMinimumWidth = OfficialCodexTheme.splitBreakpoint;
+const _desktopSidebarWidth = OfficialCodexTheme.sidebarWidth;
 
 class CodexNativeApp extends StatefulWidget {
   const CodexNativeApp({

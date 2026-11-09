@@ -30,7 +30,7 @@ abstract final class OfficialCodexTheme {
   static const double maxUserBubbleWidthFactor = 0.75;
 
   /// Composer max width (44rem / 704px).
-  static const double composerMaxWidth = 704.0;
+  static const double composerMaxWidth = maxContentWidth;
 
   /// Floating composer corner radius (24px / 1.5rem).
   static const double composerRadius = 24.0;
@@ -107,6 +107,26 @@ abstract final class OfficialCodexTheme {
   static const double threadBodyInlinePadding = 24.0;
 
   // --- Palette Definitions ---
+
+  // Opaque control roles for the Flutter adapter. Semantic primitives use
+  // translucent interaction tints and hairline borders over their own surfaces.
+  static const Color lightControlRaisedSurface = Color(0xFFEDEDED);
+  static const Color lightControlHover = Color(0xFFEBEBEB);
+  static const Color lightControlSelected = Color(0xFFE5E5E5);
+  static const Color lightControlBorder = Color(0xFFE5E5E5);
+  static const Color lightControlBorderStrong = Color(0xFFD4D4D4);
+  static const Color onAccent = Color(0xFFFFFFFF);
+  static const Color lightControlWarning = Color(0xFFD97706);
+  static const Color lightControlDanger = Color(0xFFDC2626);
+  static const Color codeSurface = Color(0xFF171717);
+  static const Color lightControlShadow = Color(0x14000000);
+  static const Color darkControlRaisedSurface = Color(0xFF383838);
+  static const Color darkControlHover = Color(0xFF2A2A2A);
+  static const Color darkControlSelected = Color(0xFF343434);
+  static const Color darkControlBorder = Color(0xFF2E2E2E);
+  static const Color darkControlBorderStrong = Color(0xFF424242);
+  static const Color darkControlWarning = Color(0xFFFBBF24);
+  static const Color darkControlShadow = Color(0x66000000);
 
   // Dark Mode Surface Hierarchy
   static const Color darkShellBackground = Color(0xFF171717); // Tier 0

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/protocol/runtime_diagnostics_protocol.dart';
-import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -500,57 +498,6 @@ void main() {
         throwsUnsupportedError,
       );
       expect(() => controller.listHooks(), throwsUnsupportedError);
-    });
-
-    test('live stock codex app-server integration exercises all 7 F11 read-only diagnostics RPCs', () async {
-      const stockCodexPath = '/opt/codex-desktop/resources/codex';
-      if (!File(stockCodexPath).existsSync()) {
-        return;
-      }
-
-      final transport = await ProcessTransport.start(
-        executablePath: stockCodexPath,
-      );
-      addTearDown(() async {
-        await transport.close();
-      });
-
-      final init = await transport.initialize(const InitializeRequest());
-      expect(init.userAgent, isNotEmpty);
-
-      final account = await transport.readAccountDiagnostics();
-      expect(account.accountType, isNotEmpty);
-
-      final rateLimits = await transport.readAccountRateLimits();
-      expect(
-        rateLimits.primaryBucket.primary == null ||
-            (rateLimits.primaryBucket.primary!.usedPercent >= 0 &&
-                rateLimits.primaryBucket.primary!.usedPercent <= 100),
-        isTrue,
-      );
-
-      final profiles = await transport.listPermissionProfiles(
-        cwd: Directory.current.path,
-      );
-      expect(profiles.profiles, isNotEmpty);
-      expect(profiles.profiles.any((p) => p.id == ':read-only'), isTrue);
-
-      final config = await transport.readConfigDiagnostics(
-        cwd: Directory.current.path,
-        includeLayers: true,
-      );
-      expect(config.configKeyCount, greaterThan(0));
-      expect(config.originCount, greaterThan(0));
-      expect(config.layers, isNotEmpty);
-
-      final requirements = await transport.readConfigRequirements();
-      expect(requirements, isA<ConfigRequirementsSummaryModel>());
-
-      final capabilities = await transport.readModelProviderCapabilities();
-      expect(capabilities, isA<ModelProviderCapabilitiesSnapshot>());
-
-      final hooks = await transport.listHooks(cwds: [Directory.current.path]);
-      expect(hooks.entries, isNotEmpty);
     });
   });
 }

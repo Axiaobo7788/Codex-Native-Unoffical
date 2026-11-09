@@ -4,9 +4,9 @@ import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
-class _TelemetryE2EHarness extends E2ERuntimeHarness {
+class _TelemetryE2EHarness extends SimulatedRuntimeHarness {
   _TelemetryE2EHarness()
     : super(
         initialThreads: [
@@ -31,12 +31,12 @@ class _TelemetryE2EHarness extends E2ERuntimeHarness {
 }
 
 void main() {
-  group('F10 Live Turn Telemetry & Plan Projection E2E', () {
+  group('F10 Live Turn Telemetry & Plan Projection simulated runtime', () {
     testWidgets(
       'renders token usage header pill, live turn plan banner, telemetry notice bar, and activity rows across turn lifecycle',
       (tester) async {
         final harness = _TelemetryE2EHarness();
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Telemetry Test Thread'));
         await tester.pumpAndSettle();

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'theme/official_codex_theme.dart';
+
 @immutable
 final class CodexPalette extends ThemeExtension<CodexPalette> {
   const CodexPalette({
@@ -51,53 +53,53 @@ final class CodexPalette extends ThemeExtension<CodexPalette> {
   final Color shadow;
 
   static const light = CodexPalette(
-    canvas: Color(0xFFFFFFFF),
-    sidebar: Color(0xFFF9F9F9),
-    surface: Color(0xFFF4F4F4),
-    surfaceRaised: Color(0xFFEDEDED),
-    hover: Color(0xFFEBEBEB),
-    selected: Color(0xFFE5E5E5),
-    border: Color(0xFFE5E5E5),
-    borderStrong: Color(0xFFD4D4D4),
-    textPrimary: Color(0xFF0D0D0D),
-    textSecondary: Color(0xFF5D5D5D),
-    textMuted: Color(0xFF8F8F8F),
-    accent: Color(0xFF10A37F),
-    onAccent: Color(0xFFFFFFFF),
-    success: Color(0xFF15803D),
-    warning: Color(0xFFD97706),
-    danger: Color(0xFFDC2626),
-    codeSurface: Color(0xFF171717),
-    diffAdded: Color(0xFFDCFCE7),
-    diffRemoved: Color(0xFFFEE2E2),
-    userBubble: Color(0xFFF4F4F4),
-    onUserBubble: Color(0xFF0D0D0D),
-    shadow: Color(0x14000000),
+    canvas: OfficialCodexTheme.lightWorkspaceBackground,
+    sidebar: OfficialCodexTheme.lightShellBackground,
+    surface: OfficialCodexTheme.lightElevatedSurface,
+    surfaceRaised: OfficialCodexTheme.lightControlRaisedSurface,
+    hover: OfficialCodexTheme.lightControlHover,
+    selected: OfficialCodexTheme.lightControlSelected,
+    border: OfficialCodexTheme.lightControlBorder,
+    borderStrong: OfficialCodexTheme.lightControlBorderStrong,
+    textPrimary: OfficialCodexTheme.lightTextPrimary,
+    textSecondary: OfficialCodexTheme.lightTextSecondary,
+    textMuted: OfficialCodexTheme.lightTextMuted,
+    accent: OfficialCodexTheme.lightAccent,
+    onAccent: OfficialCodexTheme.onAccent,
+    success: OfficialCodexTheme.lightDiffAddedText,
+    warning: OfficialCodexTheme.lightControlWarning,
+    danger: OfficialCodexTheme.lightControlDanger,
+    codeSurface: OfficialCodexTheme.codeSurface,
+    diffAdded: OfficialCodexTheme.lightDiffAddedFill,
+    diffRemoved: OfficialCodexTheme.lightDiffRemovedFill,
+    userBubble: OfficialCodexTheme.lightUserBubbleBackground,
+    onUserBubble: OfficialCodexTheme.lightTextPrimary,
+    shadow: OfficialCodexTheme.lightControlShadow,
   );
 
   static const dark = CodexPalette(
-    canvas: Color(0xFF212121),
-    sidebar: Color(0xFF171717),
-    surface: Color(0xFF2F2F2F),
-    surfaceRaised: Color(0xFF383838),
-    hover: Color(0xFF2A2A2A),
-    selected: Color(0xFF343434),
-    border: Color(0xFF2E2E2E),
-    borderStrong: Color(0xFF424242),
-    textPrimary: Color(0xFFECECEC),
-    textSecondary: Color(0xFFB4B4B4),
-    textMuted: Color(0xFF8E8E8E),
-    accent: Color(0xFF10A37F),
-    onAccent: Color(0xFFFFFFFF),
-    success: Color(0xFF4ADE80),
-    warning: Color(0xFFFBBF24),
-    danger: Color(0xFFF87171),
-    codeSurface: Color(0xFF171717),
-    diffAdded: Color(0xFF1E4620),
-    diffRemoved: Color(0xFF5A1E1E),
-    userBubble: Color(0xFF2F2F2F),
-    onUserBubble: Color(0xFFECECEC),
-    shadow: Color(0x66000000),
+    canvas: OfficialCodexTheme.darkWorkspaceBackground,
+    sidebar: OfficialCodexTheme.darkShellBackground,
+    surface: OfficialCodexTheme.darkElevatedSurface,
+    surfaceRaised: OfficialCodexTheme.darkControlRaisedSurface,
+    hover: OfficialCodexTheme.darkControlHover,
+    selected: OfficialCodexTheme.darkControlSelected,
+    border: OfficialCodexTheme.darkControlBorder,
+    borderStrong: OfficialCodexTheme.darkControlBorderStrong,
+    textPrimary: OfficialCodexTheme.darkTextPrimary,
+    textSecondary: OfficialCodexTheme.darkTextSecondary,
+    textMuted: OfficialCodexTheme.darkTextMuted,
+    accent: OfficialCodexTheme.darkAccent,
+    onAccent: OfficialCodexTheme.onAccent,
+    success: OfficialCodexTheme.darkDiffAddedText,
+    warning: OfficialCodexTheme.darkControlWarning,
+    danger: OfficialCodexTheme.darkDiffRemovedText,
+    codeSurface: OfficialCodexTheme.codeSurface,
+    diffAdded: OfficialCodexTheme.darkDiffAddedFill,
+    diffRemoved: OfficialCodexTheme.darkDiffRemovedFill,
+    userBubble: OfficialCodexTheme.darkUserBubbleBackground,
+    onUserBubble: OfficialCodexTheme.darkTextPrimary,
+    shadow: OfficialCodexTheme.darkControlShadow,
   );
 
   @override
@@ -182,26 +184,27 @@ final class CodexPalette extends ThemeExtension<CodexPalette> {
 }
 
 abstract final class ThemeTokens {
-  static const double space1 = 4;
-  static const double space2 = 8;
-  static const double space3 = 12;
-  static const double space4 = 16;
-  static const double space5 = 20;
-  static const double space6 = 24;
-  static const double space8 = 32;
-  static const double space10 = 40;
+  static const double space1 = OfficialCodexTheme.baseGrid;
+  static const double space2 = OfficialCodexTheme.baseGrid * 2;
+  static const double space3 = OfficialCodexTheme.baseGrid * 3;
+  static const double space4 = OfficialCodexTheme.baseGrid * 4;
+  static const double space5 = OfficialCodexTheme.baseGrid * 5;
+  static const double space6 = OfficialCodexTheme.baseGrid * 6;
+  static const double space8 = OfficialCodexTheme.baseGrid * 8;
+  static const double space10 = OfficialCodexTheme.baseGrid * 10;
 
-  static const double radiusSmall = 8;
-  static const double radiusMedium = 12;
-  static const double radiusLarge = 18;
-  static const double radiusComposer = 24;
+  static const double radiusSmall = OfficialCodexTheme.iconButtonRadius;
+  static const double radiusMedium = OfficialCodexTheme.mainSurfaceRadius;
+  static const double radiusLarge = OfficialCodexTheme.userMessageRadius;
+  static const double radiusComposer = OfficialCodexTheme.composerRadius;
 
-  static const double maxContentWidth = 704;
-  static const double sidebarWidth = 260;
-  static const double titlebarHeight = 46;
-  static const double navRowHeight = 36;
-  static const double mainSurfaceRadius = 12;
-  static const double hairlineBorderWidth = 0.5;
+  static const double maxContentWidth = OfficialCodexTheme.maxContentWidth;
+  static const double sidebarWidth = OfficialCodexTheme.sidebarWidth;
+  static const double titlebarHeight = OfficialCodexTheme.titlebarHeight;
+  static const double navRowHeight = OfficialCodexTheme.navRowHeight;
+  static const double mainSurfaceRadius = OfficialCodexTheme.mainSurfaceRadius;
+  static const double hairlineBorderWidth =
+      OfficialCodexTheme.hairlineBorderWidth;
 
   static CodexPalette of(BuildContext context) =>
       Theme.of(context).extension<CodexPalette>() ??

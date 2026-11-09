@@ -6,15 +6,15 @@ import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
 void main() {
   group('Tier 3: Cross-Feature Combinations (Pairwise)', () {
     testWidgets(
       'T3.1: Composer submission + Landing State Auto-Start (Seamless start and turn execution)',
       (tester) async {
-        final harness = E2ERuntimeHarness(initialThreads: const []);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: const []);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         // Landing view
         expect(find.text('Let’s build'), findsOneWidget);
@@ -60,11 +60,11 @@ void main() {
         ),
       );
 
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialThreads: [thread],
         initialHistoryTurns: turns,
       );
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Eviction stream thread'));
       await tester.pump();
@@ -91,8 +91,8 @@ void main() {
           id: 'diff-appr-thread',
           preview: 'Diff and approval thread',
         );
-        final harness = E2ERuntimeHarness(initialThreads: [thread]);
-        await pumpE2EApp(tester, harness: harness);
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Diff and approval thread'));
         await tester.pumpAndSettle();
@@ -154,9 +154,15 @@ void main() {
         cwd: '/frontend',
       );
 
-      final harness = E2ERuntimeHarness(initialThreads: [thread1, thread2]);
+      final harness = SimulatedRuntimeHarness(
+        initialThreads: [thread1, thread2],
+      );
       // Narrow viewport
-      await pumpE2EApp(tester, harness: harness, size: const Size(600, 800));
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(600, 800),
+      );
 
       expect(find.text('Database schema migration'), findsOneWidget);
       expect(find.text('Frontend styling'), findsOneWidget);
@@ -192,8 +198,8 @@ void main() {
         id: 'settings-combo-thread',
         preview: 'Settings combo thread',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Settings combo thread'));
       await tester.pumpAndSettle();
@@ -235,7 +241,7 @@ void main() {
         preview: 'Work output thread',
       );
       const ref = 'out-combo-ref';
-      final harness = E2ERuntimeHarness();
+      final harness = SimulatedRuntimeHarness();
       harness.storeOutput(ref, 'Unit tests completed: 15 passed, 0 failed.');
 
       final turn = createTestTurn(
@@ -257,7 +263,7 @@ void main() {
       harness.historyTurns.add(turn);
       harness.historyItems.add(activity);
 
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Work output thread'));
       await tester.pumpAndSettle();
@@ -288,13 +294,13 @@ void main() {
     testWidgets('T3.7: Remote Read-Only + App Lifecycle Suspend/Resume', (
       tester,
     ) async {
-      final harness = E2ERuntimeHarness(
+      final harness = SimulatedRuntimeHarness(
         initialSnapshot: const RuntimeSnapshot(
           state: RuntimeConnectionState.remoteReadOnly,
           message: 'Connected (read-only)',
         ),
       );
-      await pumpE2EApp(tester, harness: harness);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       expect(
         find.byKey(const ValueKey('remote-read-only-panel')),
@@ -329,8 +335,10 @@ void main() {
         preview: 'Remaining thread',
       );
 
-      final harness = E2ERuntimeHarness(initialThreads: [thread1, thread2]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(
+        initialThreads: [thread1, thread2],
+      );
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       // Select thread 1
       await tester.tap(find.text('Selected thread to delete'));
@@ -354,8 +362,8 @@ void main() {
         id: 't-search-new',
         preview: 'Existing project thread',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       // Filter search
       await tester.tap(find.byKey(const ValueKey('thread-search-toggle')));
@@ -382,8 +390,8 @@ void main() {
         id: 're-submit-thread',
         preview: 'Resubmit thread',
       );
-      final harness = E2ERuntimeHarness(initialThreads: [thread]);
-      await pumpE2EApp(tester, harness: harness);
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       await tester.tap(find.text('Resubmit thread'));
       await tester.pumpAndSettle();

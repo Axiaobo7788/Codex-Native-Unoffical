@@ -1,17 +1,12 @@
-import 'dart:io';
-
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
-import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
-import 'package:codex_native_unofficial/src/transport/process/codex_executable_locator.dart';
-import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
 void main() {
-  group('Phase 1.6 Thread Sections & Sidebar Metadata E2E', () {
+  group('Phase 1.6 Thread Sections & Sidebar Metadata simulated runtime', () {
     testWidgets(
       'creates, renames, moves, and deletes thread sections and renders bounded git/goal badges',
       (tester) async {
@@ -20,7 +15,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
 
-        final harness = E2ERuntimeHarness();
+        final harness = SimulatedRuntimeHarness();
         harness.threadSections.add(
           const ThreadSection(id: 'sec-initial', name: 'In Progress'),
         );
@@ -117,7 +112,14 @@ void main() {
         await tester.tap(alphaMenuBtn);
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Move to Release Blockers'));
+        await tester.tap(find.text('Move to section…'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Release Blockers'),
+          ),
+        );
         await tester.pumpAndSettle();
 
         expect(harness.movedThreadSections, hasLength(1));
@@ -175,6 +177,64 @@ void main() {
     );
 
     testWidgets(
+      'moves to a retained section beyond the first eight destinations',
+      (tester) async {
+        tester.view.physicalSize = const Size(900, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final harness = SimulatedRuntimeHarness();
+        harness.threadSections.addAll([
+          for (var index = 0; index < 16; index++)
+            ThreadSection(id: 'section-$index', name: 'Section $index'),
+        ]);
+        harness.threads.add(
+          ThreadSummary(
+            id: 'movable',
+            sessionId: 'session',
+            preview: '',
+            cwd: '/workspace',
+            createdAt: DateTime.utc(2026),
+            updatedAt: DateTime.utc(2026),
+            status: ThreadRuntimeStatus.idle,
+            ephemeral: false,
+            name: 'Movable thread',
+            section: harness.threadSections.first,
+          ),
+        );
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+
+        await tester.tap(find.text('Movable thread'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('thread-menu-movable')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Move to section…'));
+        await tester.pumpAndSettle();
+
+        final dialog = find.byType(AlertDialog);
+        final destination = find.descendant(
+          of: dialog,
+          matching: find.text('Section 15'),
+        );
+        await tester.scrollUntilVisible(
+          destination,
+          160,
+          scrollable: find.descendant(
+            of: dialog,
+            matching: find.byType(Scrollable),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(destination);
+        await tester.pumpAndSettle();
+        await tester.tap(destination);
+        await tester.pumpAndSettle();
+        expect(harness.movedThreadSections.single.sectionId, 'section-15');
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'read-only Remote hides thread section creation and mutation actions',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 900);
@@ -182,7 +242,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
 
-        final harness = E2ERuntimeHarness()..remoteModeOverride = true;
+        final harness = SimulatedRuntimeHarness()..remoteModeOverride = true;
         harness.threads.add(
           ThreadSummary(
             id: 'thread-remote',
@@ -206,26 +266,5 @@ void main() {
         );
       },
     );
-
-    test('live stock codex app-server responds to threadSection/list with bounded schema', () async {
-      final locator = CodexExecutableLocator();
-      final resolved = await locator.locate();
-      if (resolved == null || !File(resolved).existsSync()) {
-        return;
-      }
-      final transport = await ProcessTransport.start(executablePath: resolved);
-      addTearDown(transport.close);
-
-      await transport.initialize(const InitializeRequest());
-
-      final page = await transport.listThreadSections(
-        const ThreadSectionListQuery(limit: 16),
-      );
-      expect(page.sections.length, lessThanOrEqualTo(16));
-      for (final section in page.sections) {
-        expect(section.id, isNotEmpty);
-        expect(section.name.length, lessThanOrEqualTo(129));
-      }
-    });
   });
 }

@@ -12,7 +12,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.settingsController,
     required this.diffController,
     required this.outputGateway,
-    this.transportCapabilities = const BackendCapabilities.stockCodexLocal(),
+    required this.transportCapabilities,
     this.defaultWorkingDirectory = '',
     this.sidebarCollapsed = false,
     this.onToggleSidebar,
@@ -119,16 +119,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
-  var _productMode = ProductMode.codex;
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
   final _composerAttachPopoverController = CodexPopoverController();
   final List<UserAttachment> _composerAttachments = <UserAttachment>[];
 
-  BackendCapabilities get _activeCapabilities => resolveEffectiveCapabilities(
-    transportCapabilities: widget.transportCapabilities,
-    mode: _productMode,
-  );
+  BackendCapabilities get _activeCapabilities => widget.transportCapabilities;
 
   String get _activeProjectDirectory {
     final selectedCwd = widget.controller.thread?.cwd;
@@ -383,7 +379,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               _composer(controller, isHeroCentered: true),
                               const SizedBox(height: 14),
                               _StarterSuggestionRow(
-                                productMode: _productMode,
                                 onSelectSuggestion: (prompt) {
                                   setState(() {
                                     _composerController.value =
@@ -797,7 +792,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final showProductMode = constraints.maxWidth >= 600;
           final showSegment = thread != null && constraints.maxWidth >= 380;
           final showSearchButton =
               thread != null &&
@@ -942,44 +936,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       : 'Changes ${widget.diffController.snapshot!.files.length}',
                 ),
                 const SizedBox(width: ThemeTokens.space2),
-              ],
-              if (showProductMode) ...[
-                CodexSegment<ProductMode>(
-                  key: const ValueKey('product-mode-selector'),
-                  items: const [
-                    CodexSegmentItem(
-                      value: ProductMode.codex,
-                      label: 'Codex',
-                      tooltip:
-                          'Codex engineering workspace (Commands projection)',
-                    ),
-                    CodexSegmentItem(
-                      value: ProductMode.work,
-                      label: 'Work',
-                      tooltip: 'Work task projection (Prose projection)',
-                    ),
-                    CodexSegmentItem(
-                      value: ProductMode.chat,
-                      label: 'Chat',
-                      tooltip: 'Conversational reading projection (Prose projection)',
-                    ),
-                  ],
-                  selectedValue: _productMode,
-                  onSelected: (mode) {
-                    setState(() {
-                      _productMode = mode;
-                      _detailMode = switch (mode.defaultDetailPolicy) {
-                        PresentationDetailPolicy.prose =>
-                          PresentationDetailMode.prose,
-                        PresentationDetailPolicy.commands =>
-                          PresentationDetailMode.commands,
-                        PresentationDetailPolicy.execution =>
-                          PresentationDetailMode.execution,
-                      };
-                    });
-                  },
-                ),
-                if (showSegment) const SizedBox(width: ThemeTokens.space1),
               ],
               if (showSegment)
                 CodexSegment<PresentationDetailMode>(
@@ -1142,7 +1098,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   },
                   child: CodexIconButton(
                     key: const ValueKey('thread-actions-menu-button'),
-                    tooltip: 'Thread actions (${_productMode.label})',
+                    tooltip: 'Thread actions (Codex)',
                     onPressed: threadController.mutating
                         ? null
                         : _threadActionsPopoverController.toggle,
@@ -1201,6 +1157,47 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     });
   }
 
+  bool _canRollBackTurn(String threadId) =>
+      mounted &&
+      widget.controller.thread?.id == threadId &&
+      widget.threadController?.showArchived == false &&
+      !widget.controller.busy &&
+      widget.threadController?.mutating == false &&
+      _activeCapabilities.supportsThreadRevert;
+
+  Future<bool> _confirmTurnRollback(String threadId, String action) async {
+    if (!_canRollBackTurn(threadId)) {
+      return false;
+    }
+    final confirmed = await _confirmDesktopAction(
+      context,
+      title: '$action this turn?',
+      message:
+          'This removes the selected turn and every later turn from this '
+          'thread’s saved conversation. Fork first to keep the original.',
+      confirmLabel: '$action and truncate',
+    );
+    return confirmed && _canRollBackTurn(threadId);
+  }
+
+  Future<void> _revertTurn(String threadId, String turnId) async {
+    if (!await _confirmTurnRollback(threadId, 'Revert')) {
+      return;
+    }
+    _pendingBranchEdit = null;
+    final reverted = await widget.threadController!.revertThread(
+      threadId: threadId,
+      beforeTurnId: turnId,
+    );
+    if (reverted != null && mounted) {
+      _threadScrollBookmarks.remove(threadId);
+      if (widget.controller.thread?.id == threadId) {
+        widget.controller.clearEntries();
+        await widget.historyController.refresh();
+      }
+    }
+  }
+
   Future<void> _editTurn({
     required String threadId,
     required String turnId,
@@ -1208,12 +1205,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     required List<UserAttachment> attachments,
     String? assistantText,
   }) async {
-    final threadController = widget.threadController;
-    if (threadController == null ||
-        widget.controller.busy ||
-        !_activeCapabilities.supportsThreadRevert) {
+    if (!await _confirmTurnRollback(threadId, 'Edit')) {
       return;
     }
+    final threadController = widget.threadController!;
     final presentation = parseUserMessagePresentation(
       rawText,
       attachments: attachments,
@@ -1238,7 +1233,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       threadId: threadId,
       beforeTurnId: turnId,
     );
-    if (reverted != null && mounted) {
+    if (reverted != null &&
+        mounted &&
+        widget.controller.thread?.id == threadId) {
+      widget.controller.clearEntries();
+      _threadScrollBookmarks.remove(threadId);
+      await widget.historyController.refresh();
+      if (!mounted || widget.controller.thread?.id != threadId) {
+        return;
+      }
       _pendingBranchEdit = _PendingTurnBranchEdit(
         threadId: threadId,
         turnId: turnId,
@@ -1246,12 +1249,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         attachments: normalizedAttachments,
         assistantText: assistantText,
       );
-      widget.controller.clearEntries();
-      _threadScrollBookmarks.remove(threadId);
-      await widget.historyController.refresh();
-      if (!mounted) {
-        return;
-      }
       setState(() {
         _composerController.value = TextEditingValue(
           text: bodyText,
@@ -1271,11 +1268,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     required String rawText,
     required List<UserAttachment> attachments,
     String? assistantText,
+    String action = 'Regenerate',
   }) async {
-    final threadController = widget.threadController;
-    if (threadController == null ||
-        widget.controller.busy ||
-        !_activeCapabilities.supportsThreadRevert) {
+    if (!_canRollBackTurn(threadId)) {
       return;
     }
     final presentation = parseUserMessagePresentation(
@@ -1289,6 +1284,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (bodyText.isEmpty && normalizedAttachments.isEmpty) {
       return;
     }
+    if (!await _confirmTurnRollback(threadId, action)) {
+      return;
+    }
+    final threadController = widget.threadController!;
     if (assistantText != null &&
         assistantText.trim().isNotEmpty &&
         _threadChatDags[threadId] != null) {
@@ -1305,18 +1304,22 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       threadId: threadId,
       beforeTurnId: turnId,
     );
-    if (reverted != null && mounted) {
+    if (reverted != null &&
+        mounted &&
+        widget.controller.thread?.id == threadId) {
       widget.controller.clearEntries();
       _threadScrollBookmarks.remove(threadId);
       await widget.historyController.refresh();
-      if (!mounted) {
+      if (!mounted ||
+          widget.controller.thread?.id != threadId ||
+          widget.controller.busy) {
         return;
       }
       final submitted = await widget.controller.submit(
         bodyText,
         attachments: normalizedAttachments,
       );
-      if (submitted && mounted) {
+      if (submitted && mounted && widget.controller.thread?.id == threadId) {
         final nextTurnId =
             widget.controller.activeTurnId ??
             _latestLiveUserTurnId() ??
@@ -1387,41 +1390,58 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         rawText: userItem.text,
         attachments: userItem.attachments,
         assistantText: assistantText,
+        action: 'Retry',
       );
     }
   }
 
   Future<void> _retryFailedLiveTurn(
-    String? threadId,
-    String turnId,
+    String threadId,
+    ConversationEntry failure,
     List<ConversationEntry> rawLiveEntries,
   ) async {
+    if (!_canRollBackTurn(threadId)) {
+      return;
+    }
+    final failureIndex = rawLiveEntries.indexWhere(
+      (entry) => entry.id == failure.id,
+    );
+    final turnId = failure.turnId ?? '';
     ConversationEntry? userEntry;
     String? assistantText;
-    for (var i = rawLiveEntries.length - 1; i >= 0; i -= 1) {
+    for (var i = failureIndex - 1; i >= 0; i -= 1) {
       final candidate = rawLiveEntries[i];
-      if (candidate.kind == ConversationEntryKind.user &&
-          (turnId.isEmpty || candidate.turnId == turnId)) {
-        userEntry ??= candidate;
-      } else if (candidate.kind == ConversationEntryKind.assistant &&
-          turnId.isNotEmpty &&
-          candidate.turnId == turnId) {
-        assistantText ??= candidate.text;
+      if (turnId.isEmpty) {
+        if (candidate.kind == ConversationEntryKind.user) {
+          if (candidate.turnId == null || candidate.turnId!.isEmpty) {
+            userEntry = candidate;
+          }
+          break;
+        }
+        if (candidate.kind == ConversationEntryKind.error) {
+          break;
+        }
+      } else if (candidate.turnId == turnId) {
+        if (candidate.kind == ConversationEntryKind.user) {
+          userEntry = candidate;
+          break;
+        }
+        if (candidate.kind == ConversationEntryKind.assistant) {
+          assistantText ??= candidate.text;
+        }
       }
     }
     if (userEntry == null) {
       return;
     }
-    final effectiveTurnId = userEntry.turnId ?? turnId;
-    if (threadId != null &&
-        effectiveTurnId.isNotEmpty &&
-        widget.threadController != null) {
+    if (turnId.isNotEmpty) {
       await _regenerateTurn(
         threadId: threadId,
-        turnId: effectiveTurnId,
+        turnId: turnId,
         rawText: userEntry.text,
         attachments: userEntry.attachments,
         assistantText: assistantText,
+        action: 'Retry',
       );
       return;
     }
@@ -1724,6 +1744,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         item.turnId.isNotEmpty &&
                         activeThread != null &&
                         threadController != null &&
+                        !threadController.showArchived &&
                         !controller.busy &&
                         !threadController.mutating;
                     String? assistantTextForTurn;
@@ -1778,8 +1799,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         isLastInTurn &&
                         historyTurn?.status == TurnRuntimeStatus.failed &&
                         activeThread != null &&
-                        capabilities.supportsThreadRevert &&
-                        !controller.busy;
+                        _canRollBackTurn(activeThread.id);
                     return _MeasuredTimelineItem(
                       key: ValueKey('measured-$itemKey'),
                       itemKey: itemKey,
@@ -1864,21 +1884,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             : null,
                         onRevertFromTurn:
                             canMutateTurn && capabilities.supportsThreadRevert
-                            ? () async {
-                                _pendingBranchEdit = null;
-                                final reverted = await threadController
-                                    .revertThread(
-                                      threadId: activeThread.id,
-                                      beforeTurnId: item.turnId,
-                                    );
-                                if (reverted != null && mounted) {
-                                  widget.controller.clearEntries();
-                                  _threadScrollBookmarks.remove(
-                                    activeThread.id,
-                                  );
-                                  await widget.historyController.refresh();
-                                }
-                              }
+                            ? () => _revertTurn(activeThread.id, item.turnId)
                             : null,
                       ),
                     );
@@ -1892,6 +1898,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       liveTurnId.isNotEmpty &&
                       activeThread != null &&
                       threadController != null &&
+                      !threadController.showArchived &&
                       !controller.busy &&
                       !threadController.mutating;
                   String? assistantTextForLiveTurn;
@@ -1945,7 +1952,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       entry.kind == ConversationEntryKind.error &&
                       entry.status != 'interrupted' &&
                       entry.status != 'retrying' &&
-                      !controller.busy;
+                      activeThread != null &&
+                      _canRollBackTurn(activeThread.id);
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -2007,8 +2015,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       onRetryTurn: showLiveRetry
                           ? () => unawaited(
                               _retryFailedLiveTurn(
-                                activeThread?.id,
-                                liveTurnId,
+                                activeThread.id,
+                                entry,
                                 rawLiveEntries,
                               ),
                             )
@@ -2027,19 +2035,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           : null,
                       onRevertFromTurn:
                           canMutateLiveTurn && capabilities.supportsThreadRevert
-                          ? () async {
-                              _pendingBranchEdit = null;
-                              final reverted = await threadController
-                                  .revertThread(
-                                    threadId: activeThread.id,
-                                    beforeTurnId: liveTurnId,
-                                  );
-                              if (reverted != null && mounted) {
-                                widget.controller.clearEntries();
-                                _threadScrollBookmarks.remove(activeThread.id);
-                                await widget.historyController.refresh();
-                              }
-                            }
+                          ? () => _revertTurn(activeThread.id, liveTurnId)
                           : null,
                     ),
                   );
@@ -2141,8 +2137,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     hintText: thread == null && !canCreateOnSend
                         ? 'Select or create a thread'
                         : canSteer
-                        ? _productMode.steerPlaceholder
-                        : _productMode.composerPlaceholder,
+                        ? 'Steer active turn in Codex'
+                        : 'Send a message to Codex',
                     filled: false,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -2219,23 +2215,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       if (capabilities.supportsSandboxConfiguration)
                         _ExecutionSettingsButton(
                           controller: widget.settingsController,
-                        )
-                      else
-                        Container(
-                          key: const ValueKey('composer-mode-badge'),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: palette.surface,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _productMode.modeBadgeLabel,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(color: palette.textSecondary),
-                          ),
                         ),
                       if (projectCwd.isNotEmpty &&
                           !isHeroCentered &&
@@ -2350,8 +2329,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (text.trim().isEmpty && attachments.isEmpty) {
       return;
     }
+    var targetThreadId = widget.controller.thread?.id;
     if (widget.threadController case final threadController?) {
-      if (widget.controller.thread == null) {
+      if (targetThreadId == null) {
         final cwd = _activeProjectDirectory;
         if (cwd.isEmpty) {
           return;
@@ -2362,6 +2342,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         if (created == null) {
           return;
         }
+        targetThreadId = created.id;
       } else {
         final ready = await threadController.ensureSelectedThreadLoaded();
         if (!ready) {
@@ -2369,17 +2350,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
       }
     }
-    if (_activeThreadId case final threadId?) {
-      _threadScrollBookmarks.remove(threadId);
+    if (!mounted ||
+        targetThreadId == null ||
+        widget.controller.thread?.id != targetThreadId) {
+      return;
     }
+    _threadScrollBookmarks.remove(targetThreadId);
     if (widget.historyController.canReturnToNewest) {
       unawaited(widget.historyController.refresh());
     }
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     }
-    if (await widget.controller.submit(text, attachments: attachments)) {
-      final pendingBranch = _pendingBranchEdit;
+    final pendingBranch = _pendingBranchEdit;
+    final submitted = await widget.controller.submit(
+      text,
+      attachments: attachments,
+    );
+    if (submitted &&
+        mounted &&
+        widget.controller.thread?.id == targetThreadId) {
       _pendingBranchEdit = null;
       _composerController.clear();
       setState(() {
@@ -4406,72 +4396,30 @@ class _ConversationEmptyState extends StatelessWidget {
 }
 
 class _StarterSuggestionRow extends StatelessWidget {
-  const _StarterSuggestionRow({
-    required this.productMode,
-    required this.onSelectSuggestion,
-  });
+  const _StarterSuggestionRow({required this.onSelectSuggestion});
 
-  final ProductMode productMode;
   final ValueChanged<String> onSelectSuggestion;
 
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
-    final suggestions = switch (productMode) {
-      ProductMode.codex => const [
-        (
-          icon: Icons.account_tree_outlined,
-          label: 'Explore codebase architecture',
-          prompt: 'Explore this repository and summarize its architecture and key modules.',
-        ),
-        (
-          icon: Icons.difference_outlined,
-          label: 'Review local git changes',
-          prompt: 'Review uncommitted git changes and highlight any potential regressions.',
-        ),
-        (
-          icon: Icons.bug_report_outlined,
-          label: 'Run tests & fix failures',
-          prompt:
-              'Run the test suite and diagnose any failing or flaky checks.',
-        ),
-      ],
-      ProductMode.work => const [
-        (
-          icon: Icons.checklist_rounded,
-          label: 'Draft an implementation plan',
-          prompt: 'Draft a step-by-step engineering plan for the next task.',
-        ),
-        (
-          icon: Icons.summarize_outlined,
-          label: 'Summarize recent progress',
-          prompt: 'Summarize recent commits and current project status.',
-        ),
-        (
-          icon: Icons.fact_check_outlined,
-          label: 'Audit release readiness',
-          prompt: 'Audit open blockers and verification gates before the next milestone.',
-        ),
-      ],
-      ProductMode.chat => const [
-        (
-          icon: Icons.lightbulb_outline_rounded,
-          label: 'Brainstorm design tradeoffs',
-          prompt: 'Help me evaluate architectural tradeoffs for a new feature.',
-        ),
-        (
-          icon: Icons.code_rounded,
-          label: 'Explain a complex algorithm',
-          prompt:
-              'Walk through the core state management and streaming pipeline.',
-        ),
-        (
-          icon: Icons.edit_note_rounded,
-          label: 'Refine technical documentation',
-          prompt: 'Help me write concise technical documentation and ADRs.',
-        ),
-      ],
-    };
+    const suggestions = [
+      (
+        icon: Icons.account_tree_outlined,
+        label: 'Explore codebase architecture',
+        prompt: 'Explore this repository and summarize its architecture and key modules.',
+      ),
+      (
+        icon: Icons.difference_outlined,
+        label: 'Review local git changes',
+        prompt: 'Review uncommitted git changes and highlight any potential regressions.',
+      ),
+      (
+        icon: Icons.bug_report_outlined,
+        label: 'Run tests & fix failures',
+        prompt: 'Run the test suite and diagnose any failing or flaky checks.',
+      ),
+    ];
 
     return Wrap(
       spacing: 8,
@@ -5024,7 +4972,7 @@ class _ExecutionSettingsDialog extends StatelessWidget {
       _ => null,
     };
     if (policy == ApprovalPolicyOverride.never &&
-        !await _confirm(
+        !await _confirmDesktopAction(
           context,
           title: 'Disable approval prompts?',
           message:
@@ -5045,7 +4993,7 @@ class _ExecutionSettingsDialog extends StatelessWidget {
       _ => null,
     };
     if (sandbox == SandboxModeOverride.dangerFullAccess &&
-        !await _confirm(
+        !await _confirmDesktopAction(
           context,
           title: 'Allow full filesystem access?',
           message:
@@ -5057,44 +5005,6 @@ class _ExecutionSettingsDialog extends StatelessWidget {
     }
     controller.selectSandbox(sandbox);
   }
-
-  static Future<bool> _confirm(
-    BuildContext context, {
-    required String title,
-    required String message,
-    required String confirmLabel,
-  }) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (context) {
-          final theme = OfficialCodexTheme.of(context);
-          return AlertDialog(
-            backgroundColor: theme.modalSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: theme.hairlineBorder,
-                width: OfficialCodexTheme.hairlineBorderWidth,
-              ),
-            ),
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              CodexButton(
-                variant: CodexButtonVariant.ghost,
-                onPressed: () => Navigator.of(context).pop(false),
-                label: 'Cancel',
-              ),
-              CodexButton(
-                variant: CodexButtonVariant.danger,
-                onPressed: () => Navigator.of(context).pop(true),
-                label: confirmLabel,
-              ),
-            ],
-          );
-        },
-      ) ??
-      false;
 
   static String _approvalValue(ApprovalPolicyOverride? policy) =>
       switch (policy) {
@@ -5112,3 +5022,41 @@ class _ExecutionSettingsDialog extends StatelessWidget {
         null => _inherit,
       };
 }
+
+Future<bool> _confirmDesktopAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final theme = OfficialCodexTheme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.modalSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: theme.hairlineBorder,
+              width: OfficialCodexTheme.hairlineBorderWidth,
+            ),
+          ),
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            CodexButton(
+              variant: CodexButtonVariant.ghost,
+              onPressed: () => Navigator.of(context).pop(false),
+              label: 'Cancel',
+            ),
+            CodexButton(
+              variant: CodexButtonVariant.danger,
+              onPressed: () => Navigator.of(context).pop(true),
+              label: confirmLabel,
+            ),
+          ],
+        );
+      },
+    ) ??
+    false;

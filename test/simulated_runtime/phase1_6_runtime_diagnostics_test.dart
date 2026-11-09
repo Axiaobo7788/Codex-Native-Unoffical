@@ -4,14 +4,14 @@ import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'e2e_harness.dart';
+import 'simulated_runtime_harness.dart';
 
 void main() {
-  group('F11 Bounded Local Runtime Diagnostics E2E', () {
+  group('F11 Bounded Local Runtime Diagnostics simulated runtime', () {
     testWidgets(
       'renders all 6 bounded diagnostic cards in Runtime details and refreshes on account/updated and account/rateLimits/updated',
       (tester) async {
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialThreads: [
             createTestThread(
               id: 'thread-diag-1',
@@ -20,7 +20,7 @@ void main() {
           ],
         );
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         // Open Runtime details from the sidebar footer status button.
         await tester.tap(find.text('Connected'));
@@ -158,12 +158,12 @@ void main() {
       'isolates and bounds oversized partial RPC failure, clears stale error on targeted refresh, and handles stream errors cleanly',
       (tester) async {
         final oversizedTail = 'X' * 4000;
-        final harness = E2ERuntimeHarness()
+        final harness = SimulatedRuntimeHarness()
           ..accountDiagnosticsError = StateError(
             'Simulated account/read failure $oversizedTail',
           );
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(find.text('Connected'));
         await tester.pumpAndSettle();
@@ -251,14 +251,14 @@ void main() {
     testWidgets(
       'fails closed on read-only Remote surface without dispatching local diagnostics RPCs',
       (tester) async {
-        final harness = E2ERuntimeHarness(
+        final harness = SimulatedRuntimeHarness(
           initialSnapshot: const RuntimeSnapshot(
             state: RuntimeConnectionState.remoteReadOnly,
             message: 'Read-only Remote metadata is ready.',
           ),
         )..remoteModeOverride = true;
 
-        await pumpE2EApp(tester, harness: harness);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         await tester.tap(
           find.byWidgetPredicate(
