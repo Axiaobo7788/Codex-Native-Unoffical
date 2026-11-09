@@ -7,6 +7,106 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'searches saved threads with the existing page and selection bounds',
+    () async {
+      final gateway = _FakeThreadGateway()
+        ..pages.addAll([
+          ThreadPage(threads: [_thread('recent')], nextCursor: 'catalog'),
+          ThreadPage(
+            threads: [_thread('saved-1'), _thread('saved-2')],
+            nextCursor: 'saved',
+          ),
+          ThreadPage(threads: [_thread('saved-3')], nextCursor: 'remaining'),
+          ThreadPage(threads: [_thread('saved-2')], nextCursor: null),
+          ThreadPage(threads: [_thread('newer')], nextCursor: null),
+          const ThreadPage(threads: [], nextCursor: null),
+          const ThreadPage(threads: [], nextCursor: null),
+        ]);
+      final controller = ThreadListController(
+        gateway: gateway,
+        pageSize: 2,
+        maxRetainedThreads: 3,
+      );
+      addTearDown(gateway.dispose);
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      await controller.selectThread('recent');
+
+      await controller.setSavedSearch('  Cobalt  ');
+      expect(gateway.queries.last.searchTerm, 'Cobalt');
+      expect(gateway.queries.last.cursor, isNull);
+      expect(gateway.queries.last.section, isNull);
+      expect(controller.selectedThread?.id, 'recent');
+      expect(controller.threads.map((row) => row.id), ['saved-1', 'saved-2']);
+
+      await controller.loadMore();
+      expect(gateway.queries.last.searchTerm, 'Cobalt');
+      expect(gateway.queries.last.cursor, 'saved');
+      expect(gateway.queries.last.limit, 1);
+      expect(controller.threads.map((row) => row.id), [
+        'saved-1',
+        'saved-2',
+        'saved-3',
+      ]);
+      expect(controller.retentionLimitReached, isTrue);
+
+      gateway.events.add(
+        const ThreadNameUpdatedEvent(
+          threadId: 'saved-1',
+          threadName: 'Changed elsewhere',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.queries.last.searchTerm, 'Cobalt');
+      expect(gateway.queries.last.cursor, isNull);
+      expect(controller.threads.map((row) => row.id), ['saved-2']);
+
+      await controller.setSavedSearch(null);
+      expect(gateway.queries.last.searchTerm, isNull);
+      expect(gateway.queries.last.cursor, isNull);
+      expect(controller.selectedThread?.id, 'recent');
+      expect(controller.threads.map((row) => row.id), ['newer']);
+
+      await controller.setShowArchived(true);
+      await controller.setSavedSearch('Historical');
+      expect(gateway.queries.last.archived, isTrue);
+      expect(gateway.queries.last.searchTerm, 'Historical');
+    },
+  );
+
+  test('closing saved search discards a pending result page', () async {
+    final gateway = _DelayedCatalogGateway()
+      ..pages.addAll([
+        ThreadPage(threads: [_thread('selected')], nextCursor: null),
+        ThreadPage(threads: [_thread('match')], nextCursor: 'stale'),
+        ThreadPage(threads: [_thread('restored')], nextCursor: null),
+      ]);
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(gateway.dispose);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    await controller.selectThread('selected');
+    await controller.setSavedSearch('Needle');
+    final paging = controller.loadMore();
+    await controller.setSavedSearch(null);
+    expect(controller.savedSearchTerm, isNull);
+    expect(controller.canLoadMore, isFalse);
+    expect(controller.threads, isEmpty);
+    expect(controller.selectedThread?.id, 'selected');
+
+    gateway.pageReply.complete(
+      ThreadPage(threads: [_thread('stale-row')], nextCursor: 'stale-next'),
+    );
+    await paging;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(gateway.queries.last.searchTerm, isNull);
+    expect(gateway.queries.last.cursor, isNull);
+    expect(controller.threads.map((row) => row.id), ['restored']);
+    expect(controller.selectedThread?.id, 'selected');
+  });
+
+  test(
     'opens one ordered section, preserves the active thread, and caps pages',
     () async {
       const section = ThreadSection(id: 'queue', name: 'Queue');
@@ -71,7 +171,7 @@ void main() {
     'a section event discards an in-flight page and reloads from the start',
     () async {
       const section = ThreadSection(id: 'queue', name: 'Queue');
-      final gateway = _DelayedSectionGateway()
+      final gateway = _DelayedCatalogGateway()
         ..sections.add(section)
         ..pages.addAll([
           const ThreadPage(threads: [], nextCursor: null),
@@ -846,7 +946,7 @@ class _DraftSectionGateway extends _FakeThreadGateway {
       );
 }
 
-class _DelayedSectionGateway extends _FakeThreadGateway {
+class _DelayedCatalogGateway extends _FakeThreadGateway {
   final pageReply = Completer<ThreadPage>();
 
   @override
