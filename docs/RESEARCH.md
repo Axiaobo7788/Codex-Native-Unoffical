@@ -3958,3 +3958,67 @@ probe before interpreting that result as a content-search limitation.
   prompts without another model request. App, Host, and stock shut
   down in both runs. Subjective Desktop review and physical Android
   remain separate.
+
+## F24 authoritative local user items and output deferral evidence
+
+- Installed stock `0.167.0-alpha.3.2`, public stable `0.167.0`, and public
+  alpha `0.169.0-alpha.7` echoed independently supplied
+  `clientUserMessageId` values on direct start and steer in disposable
+  bundled Host probes. Installed and public alpha both emitted distinct
+  stock item IDs for queued entries sharing one client ID. The stable
+  item lifecycle carries the echo separately from the stock item ID.
+  [Upstream user-item test](https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/turn_start.rs)
+- F24A (`f6bcf5c`) projects completed identified local user items and
+  reconciles optimistic rows through the originating client ID. It keeps
+  each visual key and the locally authored attachment representation.
+  History and repeated events deduplicate on stock item identity. Stock
+  user messages without a client ID keep the older optimistic/history
+  behavior. Only the local process enables the projection.
+- Controlled regressions reproduced a failed old Start clearing a
+  subsequent active turn, an old Steer reply releasing a newer Steer,
+  and a prior Send response clearing a newly typed draft. Response
+  ownership now follows the originating request and binding. The
+  composer clears only the submitted draft in that selection.
+- The packaged Linux app and bundled Host with installed stock displayed
+  two saved queue prompts sharing one client ID, including a file mention,
+  followed by one native Start and one native Steer. Independent bounded
+  item reads verified distinct stock IDs, two saved queue turns, and the
+  Start/Steer inputs in one turn. The first synthetic pointer/clipboard
+  pass did not submit the Steer. A longer controlled model window and
+  direct typing passed. Cold summary contained only the first input of
+  the steered turn. Expanding its bounded details showed both without
+  another model request.
+- The exact alpha binary also exercised Native's existing command-output
+  path. For a saved 2,594 ms turn, opening details showed Fetch output
+  safely while the private Host cache had no output payload. Fetch
+  produced one spool entry and the viewer displayed the 29-byte fixture
+  marker. In a separate 206 ms turn, stock's summary contained only user
+  and assistant items and the per-turn page contained a deferred command.
+  Commands and Execution had no details affordance because the divider
+  currently requires a formatted work duration. This is a separate
+  machine-actionable history presentation gap. Native main before F24
+  reproduced it with installed stock in a 221 ms saved turn, where the
+  per-turn command output was inline on stock and spooled by Host.
+  On the longer alpha turn, clicking the divider in Execution mode
+  did not load the command, while the same divider loaded it in Commands
+  mode. Execution currently treats the view mode itself as expansion.
+- F24B published the reviewed evidence tree from Gemini's `f4d2766` as
+  `757fd27`. The owner corrected provider write schema claims, identified
+  concrete Desktop ASAR occurrences, and separated installed package,
+  public releases, source and probe provenance. The original research
+  commits remain on the peer branch. Gemini's independent audit of F24A
+  found no unresolved P0, P1 or P2. Both audits ran in the official
+  `agy` TUI. [Output deferral evidence](reverse/OUTPUT_DEFERRAL_EVIDENCE.md)
+- Shared `757fd27` passed Dart format and analyze, 467 Flutter cases
+  with five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust
+  tests with Clippy, the 65-root pure-Dart gate, Linux bundle and license
+  checks, and bundled Host MCP smoke. Loopback-backed Turn and
+  uncommitted Review smoke passed, including interruption and both review
+  lifecycle markers. The history benchmark retained 100 of 1,000 turns
+  and exercised ten 3 MiB command outputs.
+- The integrated Linux package repeated the identified queue, attachment,
+  Start, Steer and cold expanded-history walkthrough at 1280×720.
+  Stock readback matched one initial user item, two queued items and
+  two local inputs. Cold selection and expansion made no model calls.
+  App, Host, and stock shut down. Human visual and physical Android
+  checks remain separate.

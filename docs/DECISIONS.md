@@ -2394,3 +2394,26 @@ lifecycle presentation the source of truth.
   state and turn identity. Queue writes, retry policy, live user-item
   reconciliation and the Remote contract remain separate.
   [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+
+---
+
+## ADR-052 — Reconcile local live input using stock item identity
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Local start and steer send a fresh client message ID. Use the stock
+  echo to reconcile one local optimistic row and preserve its visual key
+  and local attachment details. Treat the client ID as correlation only.
+  Separate stock items can share it.
+- Use stock item identity for repeated notification and live/history
+  deduplication. Project only completed identified local user items.
+  Older anonymous notifications retain the existing optimistic and
+  bounded history paths. Keep text, attachments, and the active working
+  set within existing limits.
+- Bind outstanding responses to their originating selection and request.
+  A confirmed stock echo survives an unsuccessful RPC reply. The
+  composer clears only the submitted draft and retains newer edits.
+  The Direct Host Remote projection stays on its existing boundary.
+  [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
