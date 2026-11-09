@@ -15,7 +15,8 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 - F19 integrated explicit saved-thread search and local review references. [Hosted CI 42693609933](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42693609933) passed on `4ec5651`.
 - F20 integrated explicit local review linking and [stored conversation search evidence](docs/reverse/THREAD_SEARCH_OCCURRENCE_EVIDENCE.md). [Hosted CI 42700634339](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42700634339) passed on `bc5bde7`.
 - F21 integrated bounded saved-conversation search and compact thread reselection. [Hosted CI 42706318373](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42706318373) passed on `d67290e`.
-- F22 integrated explicit local read receipts and [stock unlink evidence](docs/reverse/THREAD_ATTACHMENT_UNLINK_EVIDENCE.md) at `eb07c25`.
+- F22 integrated explicit local read receipts and [stock unlink evidence](docs/reverse/THREAD_ATTACHMENT_UNLINK_EVIDENCE.md). [Hosted CI 42712715875](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42712715875) passed on `f76e9dc`.
+- F23 integrated the local cold Send guard and [workspace file search evidence](docs/reverse/WORKSPACE_FILE_SEARCH_EVIDENCE.md) at `4da0413`.
 
 ## Current product and architecture
 
@@ -25,6 +26,7 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 - App-server owns persisted conversation state. Flutter retains bounded thread/history/active-turn projections, virtualizes lists, coalesces streaming, evicts inactive history, and lazily loads bounded output and diffs. Host spooling keeps large command payloads off the Flutter heap. Stock `deferOutput` did not defer the sampled command output. Experimental `thread/items/read` remains a whole-item fallback.
 - The global sidebar groups and filters loaded threads. Local Section browsing and explicit saved-thread search reuse its 100-thread working-set cap. Section definitions remain capped at 64. Switching scopes preserves the active conversation outside the list.
 - Saved local threads can show an unread marker from stock. The sidebar Mark as read and Mark as unread actions use the displayed revision. A conflict refreshes the receipt and requires a fresh user action.
+- Local composer Send checks queue presence before implicitly resuming a cold thread. Pending or inconclusive results offer a separate Resume and retain the draft. Live queued user items remain an open timeline gap.
 - Conversation Find filters loaded messages. A separate action searches saved messages on eligible local stock threads, one 16-hit page at a time. Opening a hit verifies a bounded turn window before replacing the current one. Legacy threads retain loaded-message Find.
 - Stock Pinned is protected by its reserved ID. Eligible unsectioned pins use stock membership after a fresh read. Custom-section threads and runtimes without that built-in retain explicitly labeled session pins.
 - Local Goal actions load the selected thread’s persisted goal on demand and support explicit paused creation, objective changes, pause/resume, and confirmed clear. Stock owns continuation. Desktop Review offers working-tree, base-branch, commit/ref, and custom targets through stock `review/start`.
@@ -34,6 +36,7 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- F23 passed 457 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust tests, the 64-root pure-Dart gate, the bounded-history benchmark, Linux bundle validation, and Host-backed MCP smoke. The packaged walkthrough verified cancellation, separate saved and new turns, and cold history readback. See [F23 evidence](docs/RESEARCH.md#f23-cold-composer-sends-and-workspace-file-evidence).
 - F22 passed 450 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust tests, the 64-root pure-Dart gate, the bounded-history benchmark, Linux bundle validation, and Host-backed MCP smoke. The packaged walkthrough verified a stale revision, fresh explicit marks and cold stock readback. See [F22 evidence](docs/RESEARCH.md#f22-local-read-receipts-and-stored-unlink-evidence).
 - F21 passed 441 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust tests, the 64-root pure-Dart gate, the bounded-history benchmark, Linux bundle validation, and Host-backed MCP smoke. Packaged Linux verified the oldest hit in a 108-turn thread, stale and legacy fallback, and compact keyboard, reselection and resume behavior. See [F21 evidence](docs/RESEARCH.md#f21-saved-message-search-and-compact-thread-navigation).
 - F20 passed 431 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust tests, the 64-root pure-Dart gate, the bounded-history benchmark, Linux bundle validation, and Host-backed MCP smoke. Packaged Linux verified input rejection, local add, duplicate handling, legacy record preservation, and the compact form. See [F20 evidence](docs/RESEARCH.md#f20-explicit-review-links-and-occurrence-search-evidence).

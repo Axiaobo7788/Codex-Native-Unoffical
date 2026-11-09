@@ -2372,3 +2372,25 @@ lifecycle presentation the source of truth.
   installed generated schema. Write capability requires the local
   experimental runtime path. The existing Direct Host Remote surface stays
   read-only. [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+
+---
+
+## ADR-051 — Confirm cold composer resume when queued work is present
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- The local composer queries experimental stock queue presence only before
+  an implicit resume for a cold Send. Read at most one queue entry with a
+  single outstanding transport request. Project presence and discard
+  prompt content. A timeout or failure leaves the result inconclusive.
+- A pending or inconclusive result offers explicit Resume and retains the
+  draft and attachments. A verified empty response or the legacy
+  unknown-method path retains ordinary cold Send. Hold the draft if the
+  thread is already active after resume. Validate the originating selection
+  and draft across asynchronous preflight.
+- The probe is a snapshot. Stock owns admission, dispatch, durable queue
+  state and turn identity. Queue writes, retry policy, live user-item
+  reconciliation and the Remote contract remain separate.
+  [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)

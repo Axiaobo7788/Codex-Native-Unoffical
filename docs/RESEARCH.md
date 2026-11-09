@@ -3886,3 +3886,75 @@ probe before interpreting that result as a content-search limitation.
   restored it. Independent metadata reads verified unread, read, and
   unread while the thread remained cold. App, Host, and stock shut down.
   The Human visual and physical Android gates remain separate.
+
+## F23 cold composer sends and workspace file evidence
+
+- Stock `0.167.0-alpha.3.2` registers experimental `thread/queue/*`.
+  In a disposable bundled Host probe, two adds with the same
+  `clientUserMessageId` created separate saved entries. A second, cold
+  process listed them. The loaded process dispatched both after its
+  foreground turn completed. Adding while loaded and idle dispatched
+  immediately in the sample. Cold add, edit and exact reorder persisted
+  without model calls. A partial reorder and cold `queue/start` failed
+  with `-32600`. After a restart, explicit `thread/resume` ran the saved
+  entries. A list limit of zero was clamped to one.
+  [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+- The F22 Linux package reproduced a cold Send dispatching a saved
+  prompt and steering its new composer draft into the same persisted
+  turn. F23A adds one local `thread/queue/list` request at limit one and
+  projects presence only. A pending or inconclusive response requires
+  a separate Resume action, which leaves the draft intact. A conclusively
+  empty response and the older unknown-method path keep ordinary Send.
+  The guard retains the draft when it observes an active resumed turn.
+  Queue inspection and resume are separate RPCs. Concurrent stock work
+  can change the state between them, and stock `turn/start` can accept
+  input on an already active turn.
+  [Upstream turn admission test](https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/turn_start.rs)
+- The Linux package with F23A used a disposable profile, bundled Host,
+  the installed stock binary and a loopback model. Cancel left the model
+  request count unchanged. Confirming Resume ran the saved prompt with the
+  composer draft intact. After the saved turn completed, Send created a separate turn for the
+  draft. Bounded item reads verified the two prompts and their distinct
+  persisted turn IDs. After a cold app restart, bounded history showed both
+  prompts without a model call. The live timeline still omitted the
+  queued user bubble while displaying the reply. The live adapter currently
+  discards user-message lifecycle items.
+- A separate stock probe received paired `item/started` and
+  `item/completed` notifications for each queued user message. Two queue
+  entries sharing a client message ID received distinct stock item IDs.
+  This makes authoritative live input a separate follow-up. Deduplicate
+  lifecycle events by stock item identity, and use a client message ID
+  only to reconcile an optimistic entry originating from this client.
+  The installed stable schemas and a second bundled probe verified the
+  echo independently for direct `turn/start` and `turn/steer`. They
+  produced distinct stock user items in the same turn.
+- F23B separated concrete Desktop composer and file-tree session calls
+  from generic ASAR registration and the direct artifact lookup.
+  A stable one-shot stock query works with experimental opt-in disabled.
+  Disposable debug Host and independent packaged Host probes found that
+  the stock walker can return paths through workspace symlinks that point
+  outside the root. A canonical client filter can check suggestions and
+  selection after traversal. Stock can still inspect external filenames
+  and return them over local stdio. The evidence document records these
+  boundaries and distinguishes the sample from a general performance or
+  cancellation guarantee. [Workspace file search evidence](reverse/WORKSPACE_FILE_SEARCH_EVIDENCE.md)
+- Gemini reviewed F23A `e0834b8` with no unresolved findings. Codex
+  audited F23B and the original owner corrected the Native experimental
+  default, claimed queue writes, Host provenance, traversal boundary,
+  sample calibration and ASAR prose. The reviewed evidence tree from
+  `545ca29` was published as `4da0413`. The peer branch retains its
+  original commits. Both audits ran through the official `agy` TUI.
+- Shared `4da0413` passed Dart format and analyze, 457 Flutter cases with
+  five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust tests with
+  Clippy, the 64-root pure-Dart gate, Linux bundle and license checks,
+  and bundled Host MCP smoke. The benchmark retained 100 of 1,000 turns
+  and exercised ten 3 MiB command output payloads.
+- The shared Linux build repeated the queue walkthrough at 1280×720.
+  The first fixture assertion mistakenly treated a model request's full
+  context as the current turn's input. The third model request contained
+  the saved prompt as prior context. Independent bounded stock item reads
+  identified three completed turns and verified the saved prompt and
+  new draft belonged to two distinct turns. Cold relaunch showed both
+  prompts without another model request. App, Host, and stock shut
+  down in both runs. Subjective Desktop review and physical Android
+  remain separate.
