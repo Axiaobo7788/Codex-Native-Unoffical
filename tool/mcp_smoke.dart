@@ -167,20 +167,41 @@ tool_timeout_sec = 8
     final withApprovals = await start(ApprovalPolicyOverride.onRequest);
     final formEvents = StreamIterator(connection.mcpElicitationEvents);
     forms = formEvents;
-    final directForm = _nextForm(formEvents);
-    await Future.wait<void>([
-      call(withApprovals.id, 'needs-form').then((result) {
+    await _exerciseDirectForm(
+      connection,
+      formEvents,
+      threadId: withApprovals.id,
+      operation: () async {
+        final result = await call(withApprovals.id, 'needs-form');
         _check(
           !result.isError && result.content.single.text == 'accept: answer',
           'Direct form response was not delivered to the MCP tool.',
         );
-      }),
-      () async {
-        final request = await directForm;
-        _verifyForm(request, threadId: withApprovals.id, expectsValue: true);
-        await _acceptForm(connection, request);
-      }(),
-    ], eagerError: true);
+      },
+    );
+    await _exerciseDirectForm(
+      connection,
+      formEvents,
+      threadId: withApprovals.id,
+      operation: () async {
+        final resource = await connection
+            .readMcpResource(
+              McpResourceReadQuery(
+                server: fixture.fixtureServer,
+                uri: fixture.fixtureFormUri,
+                threadId: withApprovals.id,
+              ),
+            )
+            .timeout(_deadline);
+        final content = resource.contents.single;
+        _check(
+          content is McpTextResourceContentModel &&
+              content.uri == fixture.fixtureFormUri &&
+              content.text == 'accept: answer',
+          'Direct form response was not delivered to the MCP resource read.',
+        );
+      },
+    );
 
     final terminal = Completer<TurnCompletedEvent>();
     turns = connection.turnEvents.listen((event) {
@@ -234,6 +255,23 @@ tool_timeout_sec = 8
       await scratch.delete(recursive: true);
     }
   }
+}
+
+Future<void> _exerciseDirectForm(
+  ProcessTransport connection,
+  StreamIterator<McpElicitationEvent> events, {
+  required String threadId,
+  required Future<void> Function() operation,
+}) async {
+  final request = _nextForm(events);
+  await Future.wait<void>([
+    operation(),
+    () async {
+      final form = await request;
+      _verifyForm(form, threadId: threadId, expectsValue: true);
+      await _acceptForm(connection, form);
+    }(),
+  ], eagerError: true);
 }
 
 Future<McpElicitationRequest> _nextForm(
