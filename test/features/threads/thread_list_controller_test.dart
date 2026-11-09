@@ -144,11 +144,15 @@ void main() {
   });
 
   test('keeps only the active draft outside the scoped catalog', () async {
-    final gateway = _DraftSectionGateway()
-      ..sections.add(const ThreadSection(id: 'queue', name: 'Queue'))
+    const section = ThreadSection(id: 'queue', name: 'Queue');
+    final gateway = _DraftSectionGateway(section)
+      ..sections.add(section)
       ..pages.addAll([
         const ThreadPage(threads: [], nextCursor: null),
-        const ThreadPage(threads: [], nextCursor: null),
+        ThreadPage(
+          threads: [_thread('row', section: section)],
+          nextCursor: null,
+        ),
       ]);
     final controller = ThreadListController(gateway: gateway);
     addTearDown(controller.dispose);
@@ -166,7 +170,11 @@ void main() {
     expect(controller.selectedThread?.id, second!.id);
     expect(controller.isMaterialized(second.id), isFalse);
     expect(controller.isMaterialized(first.id), isTrue);
-    expect(controller.threads, isEmpty);
+    expect(controller.threads.map((thread) => thread.id), ['row']);
+
+    await controller.selectThread('row');
+    expect(controller.selectedThread?.id, 'row');
+    expect(controller.isMaterialized(second.id), isTrue);
   });
 
   test(
@@ -599,7 +607,14 @@ void main() {
 }
 
 class _DraftSectionGateway extends _FakeThreadGateway {
+  _DraftSectionGateway(this.section);
+
+  final ThreadSection section;
   var _draft = 0;
+
+  @override
+  Future<ThreadSummary> readThread(String threadId) async =>
+      _thread(threadId, section: section);
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) async =>

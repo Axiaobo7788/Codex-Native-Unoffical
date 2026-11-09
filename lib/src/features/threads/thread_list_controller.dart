@@ -303,10 +303,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _unmaterializedThreadIds.add(thread.id);
       final retained = _replaceOrPrepend(thread);
-      _selectedThread = retained;
-      if (_sectionScopeId != null) {
-        _synchronizeSelection();
-      }
+      _activateThread(retained);
       return retained;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -324,7 +321,7 @@ class ThreadListController extends ChangeNotifier {
     if (_unmaterializedThreadIds.contains(threadId)) {
       final index = _threads.indexWhere((thread) => thread.id == threadId);
       if (index != -1) {
-        _selectedThread = _threads[index];
+        _activateThread(_threads[index]);
         _queueSelectedGoalHydration(threadId);
         _notify();
         return _selectedThread;
@@ -340,7 +337,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _unmaterializedThreadIds.remove(threadId);
       final retainedThread = _replaceInPlace(thread);
-      _selectedThread = retainedThread;
+      _activateThread(retainedThread);
       _queueSelectedGoalHydration(threadId);
       return retainedThread;
     } catch (error) {
@@ -366,7 +363,7 @@ class ThreadListController extends ChangeNotifier {
       }
       _unmaterializedThreadIds.remove(threadId);
       final retainedThread = _replaceInPlace(thread);
-      _selectedThread = retainedThread;
+      _activateThread(retainedThread);
       _queueSelectedGoalHydration(threadId);
       return retainedThread;
     } catch (error) {
@@ -456,7 +453,7 @@ class ThreadListController extends ChangeNotifier {
         return thread;
       } else {
         final retained = _replaceOrPrepend(thread);
-        _selectedThread = retained;
+        _activateThread(retained);
         return retained;
       }
     } catch (error) {
@@ -489,7 +486,7 @@ class ThreadListController extends ChangeNotifier {
         _showArchived = false;
       }
       final retained = _replaceOrPrepend(thread);
-      _selectedThread = retained;
+      _activateThread(retained);
       return retained;
     } catch (error) {
       _errorMessage = _boundedError(error);
@@ -1221,6 +1218,13 @@ class ThreadListController extends ChangeNotifier {
     }
     final goal = retained?.goal;
     return goal == null ? thread : thread.copyWith(goal: goal);
+  }
+
+  void _activateThread(ThreadSummary thread) {
+    _selectedThread = thread;
+    if (_sectionScopeId != null || _preserveOutsideCatalog) {
+      _synchronizeSelection();
+    }
   }
 
   void _synchronizeSelection({bool preserveSelection = false}) {
