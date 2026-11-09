@@ -89,6 +89,20 @@ void main() {
           'memory://native-fixture/needs-form',
         );
         expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-call-tool-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsNothing,
+        );
+        expect(
           find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
           findsOneWidget,
         );
@@ -187,6 +201,20 @@ void main() {
         expect(harness.mcpToolCallQueries.single.arguments, {
           'path': 'README.md',
         });
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-call-tool-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsNothing,
+        );
 
         // Direct elicitation (turnId == null) renders inside the open modal
         // scroll-bounded slot and is hit-testable above the modal barrier.

@@ -2090,6 +2090,8 @@ String _shortTime(DateTime time) {
 
 enum _EcosystemSection { skills, plugins, apps, mcp }
 
+enum _McpOperationKind { readResource, callTool }
+
 class _EcosystemDialog extends StatefulWidget {
   const _EcosystemDialog({
     required this.gateway,
@@ -2129,6 +2131,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   final Map<String, String> _mcpErrors = <String, String>{};
   String? _mcpBusyServer;
   String? _mcpBusyThreadId;
+  _McpOperationKind? _mcpBusyOperation;
   var _reloadingMcp = false;
   String? _mcpNotice;
 
@@ -2513,6 +2516,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     setState(() {
       _mcpBusyServer = server.name;
       _mcpBusyThreadId = activeThreadId;
+      _mcpBusyOperation = _McpOperationKind.readResource;
       _mcpErrors.remove(server.name);
     });
     try {
@@ -2535,6 +2539,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         setState(() {
           _mcpBusyServer = null;
           _mcpBusyThreadId = null;
+          _mcpBusyOperation = null;
         });
       }
     }
@@ -2564,6 +2569,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     setState(() {
       _mcpBusyServer = server.name;
       _mcpBusyThreadId = normalizedThreadId;
+      _mcpBusyOperation = _McpOperationKind.callTool;
       _mcpErrors.remove(server.name);
     });
     try {
@@ -2587,6 +2593,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         setState(() {
           _mcpBusyServer = null;
           _mcpBusyThreadId = null;
+          _mcpBusyOperation = null;
         });
       }
     }
@@ -3860,6 +3867,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                           key: ValueKey('mcp-read-resource-${server.name}'),
                           variant: CodexButtonVariant.secondary,
                           size: CodexButtonSize.sm,
+                          loading:
+                              _mcpBusyServer == server.name &&
+                              _mcpBusyOperation ==
+                                  _McpOperationKind.readResource,
                           onPressed: gateway == null || _mcpBusyServer != null
                               ? null
                               : () => _readMcpResource(server),
@@ -3869,7 +3880,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                           key: ValueKey('mcp-call-tool-${server.name}'),
                           variant: CodexButtonVariant.secondary,
                           size: CodexButtonSize.sm,
-                          loading: _mcpBusyServer == server.name,
+                          loading:
+                              _mcpBusyServer == server.name &&
+                              _mcpBusyOperation == _McpOperationKind.callTool,
                           onPressed: gateway == null || _mcpBusyServer != null
                               ? null
                               : () => _callMcpTool(server),
