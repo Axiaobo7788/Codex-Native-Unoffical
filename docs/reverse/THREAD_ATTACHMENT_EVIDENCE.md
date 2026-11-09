@@ -1,33 +1,33 @@
 # Persistent Thread Attachments (`thread/attachment/*`) — Static & Live Evidence Packet
 
-**Date:** 2026-11-10  
-**Target Baseline:** `f70a21016325f6615da50755a1e38d1a2bd9e896`  
-**Inspected Stock Runtime:** `codex-cli 0.167.0-alpha.3.2` (`/opt/codex-desktop/resources/codex`)  
-**Inspected Official Desktop Bundle:** Linux-packaged ChatGPT / Codex Desktop `26.1103.60933` (build `25894`, `/opt/codex-desktop/resources/app.asar`, SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)  
-**Evidence Grade:** `PUBLIC_SOURCE` (generated JSON schema), `STATIC_BUNDLE` (ASAR + binary SQL/error strings), `LIVE_CALLED` (disposable `CODEX_HOME` stock `codex app-server` probes)
+- **Date:** 2026-11-10
+- **Target Baseline:** `f70a21016325f6615da50755a1e38d1a2bd9e896`
+- **Inspected Stock Runtime:** `codex-cli 0.167.0-alpha.3.2` (`/opt/codex-desktop/resources/codex`)
+- **Inspected Official Desktop Bundle:** Linux-packaged ChatGPT / Codex Desktop `26.1103.60933` (build `25894`, `/opt/codex-desktop/resources/app.asar`, SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)
+- **Evidence Grade:** `PUBLIC_DOC` / `PUBLIC_SOURCE` (upstream `app-server` README `#stored-thread-attachments` + generated JSON schema), `STATIC_BUNDLE` (ASAR + binary SQL/error strings), `LIVE_CALLED` (disposable `CODEX_HOME` stock `codex app-server` probes)
 
 ---
 
 ## 1. Executive Summary
 
-`thread/attachment/add`, `thread/attachment/list`, `thread/attachment/remove`, `thread/attachmentOwner/list`, and the `thread/attachment/updated` notification are **stable (`PUBLIC_SUPPORTED`)** in `codex-cli 0.167.0-alpha.3.2`, but **they are not user-authored composer file, image, or prompt attachments**:
+`thread/attachment/add`, `thread/attachment/list`, `thread/attachment/remove`, `thread/attachmentOwner/list`, and the `thread/attachment/updated` notification are **stable (`PUBLIC_SUPPORTED`)** in `codex-cli 0.167.0-alpha.3.2`. Based on the upstream `app-server` README (`#stored-thread-attachments`), generated v2 schemas, static ASAR/binary inspection, and disposable runtime probes, they form a persisted thread-metadata/artifact store rather than per-turn composer prompt inputs:
 
-1. ** Composer inputs vs. Thread attachments:**
-   - Per-turn prompt attachments (files, images, local images, skills, mentions, audio) use the `UserInput` union in `turn/start` and `turn/steer` (already implemented in Native Slice F2).
-   - The `thread_attachments` SQLite table in `state_5.sqlite` was renamed directly from `thread_artifacts` (`ALTER TABLE thread_artifacts RENAME TO thread_attachments; ALTER TABLE thread_attachments RENAME COLUMN artifact_type TO attachment_type;`).
-   - `codex app-server` treats `thread_attachments` as an opaque, bounded per-thread JSON key-value store keyed by `(thread_id, attachment_type, identity_key)`. It **never** injects `thread_attachments` into model prompts during `turn/start`, and it **never** embeds them in `Thread` objects returned by `thread/list` or `thread/read`.
-2. **Official Desktop (`26.1103.60933`) usage:**
-   - Official Desktop (`WiNP`, `TkUj`, `Ygco`, `n2eO`, `rUmy`, `$f`, `$y`) uses `thread/attachment/*` exclusively to persist and query **three task-level artifact types**:
+1. **Composer prompt inputs vs. Stored thread attachments:**
+   - Per-turn prompt inputs use the `UserInput` union in `turn/start` and `turn/steer` (stock schema variants: `text`, `image`, `localImage`, `skill`, `mention`, `localAudio`; Native Slice F2 currently encodes and renders `text`, `image`/`localImage`, `skill`, and `mention`, with local file paths attached via `mention`).
+   - In `state_5.sqlite`, `thread_attachments` was renamed by migration from `thread_artifacts` (`ALTER TABLE thread_artifacts RENAME TO thread_attachments; ALTER TABLE thread_attachments RENAME COLUMN artifact_type TO attachment_type;`).
+   - Per the upstream `app-server` README (`#stored-thread-attachments`) and observed `0.167.0-alpha.3.2` behavior, `thread_attachments` is a non-loading, paginated SQLite metadata store keyed by `(thread_id, attachment_type, identity_key)`. Reading or mutating stored attachments does not load the thread into active memory, and `thread/list` / `thread/read` `Thread` payloads do not include `thread_attachments` rows. No prompt-injection path from `thread_attachments` into `turn/start` was observed in the inspected `codex` binary; in the audited Desktop ASAR, the model accesses stored thread attachments through client-handled dynamic tools (`list_artifacts`, `attach_artifact`, `remove_artifact`).
+2. **Audited Official Desktop (`26.1103.60933`) call sites:**
+   - In the audited Desktop bundle (`WiNP`, `TkUj`, `Ygco`, `n2eO`, `rUmy`, `$f`, `$y`, `YQVA`), the observed `thread/attachment/*` call sites read and write three task-level artifact types:
      - `"worktree"` — active Desktop-managed Git worktree checkout metadata (`root`, `workspaceRoot`, `sourceCwd`, optional `hostId`, `environmentId`, `operationId`).
-     - `"archived_worktree"` — recovery metadata + associated PR snapshots saved when detaching/archiving a managed worktree.
-     - `"pull_request"` — linked GitHub/GitLab Pull Request metadata (`url`, `root`, `headBranch`), mutated either by the local Git/PR UI (`Ygco`) or by client-handled `codex_app` dynamic tools (`attach_artifact`, `list_artifacts`, `remove_artifact`).
-   - `thread/attachmentOwner/list` is used by Desktop's worktree cleanup and `WorktreesSettingsPage` (`YQVA`) as a reverse index to check whether any non-archived thread still owns a given worktree root before deleting the checkout on disk.
+     - `"archived_worktree"` — recovery metadata and associated PR snapshots saved when detaching or archiving a managed worktree.
+     - `"pull_request"` — linked GitHub/GitLab Pull Request metadata (`url`, `root`, `headBranch`), mutated by the local Git/PR UI (`Ygco`) or client-handled `codex_app` dynamic tools (`attach_artifact`, `list_artifacts`, `remove_artifact`).
+   - `thread/attachmentOwner/list` is used by Desktop's worktree archive cleanup (`hasOtherAttachmentOwner`) and `WorktreesSettingsPage` (`YQVA`) as a reverse lookup to check whether any non-archived thread still owns a given worktree root.
 
 ---
 
-## 2. Stock Protocol Contract (`0.167.0-alpha.3.2` Stable Schema)
+## 2. Stock Protocol Contract (`0.167.0-alpha.3.2` Stable Schema & Upstream README)
 
-All four `ClientRequest` methods and one `ServerNotification` are present in the non-experimental (`codex app-server generate-json-schema`) v2 schema:
+All four `ClientRequest` methods and one `ServerNotification` are present in the non-experimental (`codex app-server generate-json-schema`) v2 schema and documented in the upstream `app-server` README (`#stored-thread-attachments`):
 
 | Method / Notification | Direction | Request / Notification Params | Response Shape |
 |---|---|---|---|
@@ -55,6 +55,13 @@ Where:
     "archived": false
   }
   ```
+- **Documented canonical `pull_request` identity (`#stored-thread-attachments` + ASAR `Ygco`)**:
+  - Upstream `app-server` README `#stored-thread-attachments` documents that `pull_request` attachments use the canonical 4-tuple JSON array string as `identityKey`:
+    ```js
+    JSON.stringify([canonicalHostname, lowercaseOwner, lowercaseRepository, pullRequestNumber])
+    ```
+    with `payload` carrying `{ url, root?, headBranch? }`.
+  - In ASAR `Ygco` (`offset 115749800`), `(0, l.Tx)(pullRequest, url)` produces this canonical identity key and falls back to normalized URL comparison for legacy entries.
 
 ---
 
@@ -67,7 +74,7 @@ Inspection of `/opt/codex-desktop/resources/codex` (`0.167.0-alpha.3.2`) locates
 - `thread-store/src/local/thread_attachments.rs`
 - `state/src/runtime/thread_attachments.rs`
 
-The underlying SQLite migration in `state_5.sqlite` establishes both the origin and constraints of the table:
+The underlying SQLite migration in `state_5.sqlite` establishes the table schema and uniqueness constraint:
 
 ```sql
 CREATE TABLE thread_artifacts (
@@ -90,17 +97,17 @@ CREATE INDEX idx_thread_attachments_identity_thread
     ON thread_attachments(attachment_type, identity_key, thread_id);
 ```
 
-### 3.2 Official Desktop ASAR (`26.1103.60933`) Call Sites & Zod Schemas
+### 3.2 Audited Official Desktop ASAR (`26.1103.60933`) Call Sites & Parsers
 
-Every occurrence of `thread/attachment/*` and `WiNP` / `TkUj` in `/opt/codex-desktop/resources/app.asar` maps to worktree and PR artifact tracking:
+The inspected `thread/attachment/*` and `WiNP` / `TkUj` call sites in `/opt/codex-desktop/resources/app.asar` cover:
 
 1. **Transport adapter (`TkUj` @ offset `111034326`)**:
    - For local hosts, wraps `sendRequest("thread/attachment/list")`, `sendRequest("thread/attachment/add")`, and `sendRequest("thread/attachment/remove")`.
    - For cloud hosts, delegates to `appServices.cloudThreadAttachments` (`addThreadAttachment`, `listThreadAttachments`, `removeThreadAttachment` unary RPCs where `payload` is serialized as `payloadJson`).
 2. **Renderer query & payload parsers (`WiNP` @ offset `111034460`)**:
    - Pages through `thread/attachment/list` with `limit: 100` until `nextCursor == null`.
-   - Parses **only** two `attachmentType` values for thread UI state:
-     - `attachmentType === "worktree"`: parsed via `C = z.object({ root: z.string().min(1), workspaceRoot: z.string().min(1), environmentId: z.string().min(1).optional() })`, computing `latestWorktree` (highest `createdAt`) to override the thread's default terminal/file cwd (`JM0a`, `eU`, `aqTO`).
+   - Parses two `attachmentType` values into thread query state:
+     - `attachmentType === "worktree"`: parsed via `C = z.object({ root: z.string().min(1), workspaceRoot: z.string().min(1), environmentId: z.string().min(1).optional() })`, computing `latestWorktree` (highest `createdAt`) to select the thread's active worktree directory (`JM0a`, `eU`, `aqTO`).
      - `attachmentType === "pull_request"`: parsed via `T = z.object({ url: z.string(), root: z.string().nullable().optional(), headBranch: z.string().nullable().optional() })`, validated as a GitHub/GitLab PR URL (`m.g0(url)`).
    - Subscribes to `thread/attachment/updated` (`offset 110971195`):
      ```js
@@ -110,7 +117,7 @@ Every occurrence of `thread/attachment/*` and `WiNP` / `TkUj` in `/opt/codex-des
 3. **Client-side dynamic tools (`n2eO` @ offset `110494200`, `rUmy` @ offset `317457355`)**:
    - Exposes `attach_artifact`, `list_artifacts`, and `remove_artifact` inside the `codex_app` dynamic tool namespace.
    - `attach_artifact` and `remove_artifact` accept `z.strictObject({ artifact_type: z.enum(["pull_request"]), url: z.string().min(1) })` and call `Ygco.op` (`thread/attachment/add` with `attachmentType: "pull_request"`) and `Ygco.Z$` (`thread/attachment/remove`).
-   - `list_artifacts` returns `{ artifacts: [...] }` combining the thread's attachments and any parent owner thread's `"worktree"` / `"archived_worktree"` attachments.
+   - `list_artifacts` returns `{ artifacts: [...] }` combining the thread's stored attachments and any parent owner thread's `"worktree"` / `"archived_worktree"` attachments.
 4. **Worktree ownership reverse lookup (`hasOtherAttachmentOwner` @ offset `10620617`, `WorktreesSettingsPage` `YQVA` @ offset `486998000`)**:
    - Calls `thread/attachmentOwner/list` with `{ attachmentType: "worktree", identityKey: worktreeRoot, archived: false, cursor, limit: 100 }` to determine which active threads reference each managed worktree.
 
@@ -120,14 +127,16 @@ Every occurrence of `thread/attachment/*` and `WiNP` / `TkUj` in `/opt/codex-des
 
 Four isolated Python probes were executed against stock `codex app-server` (`0.167.0-alpha.3.2`) using disposable `CODEX_HOME` and `XDG_*` directories (cleaned up immediately after execution).
 
-### 4.1 Materialization Gate (`threads` Foreign Key)
+### 4.1 Attachment-Store Eligibility vs. `thread/list` Visibility
 
 | Thread State | `thread/attachment/list` | `thread/attachment/add` | `thread/attachment/remove` |
 |---|---|---|---|
-| Fresh `thread/start` (no SQLite row in `threads` yet) | Returns `{"data": [], "nextCursor": null}` | Fails `-32602`: `"thread not found: <threadId>"` | Fails `-32602`: `"thread not found: <threadId>"` |
-| Materialized in `state_5.sqlite` (e.g., after `thread/name/set` or `thread/goal/set`) | Returns persisted rows + `nextCursor` | Succeeds (`outcome: "created"` or `"existing"`) | Succeeds (`{}`) |
+| Fresh `thread/start` (before a `threads` row exists in `state_5.sqlite`) | Returns `{"data": [], "nextCursor": null}` | Fails `-32602`: `"thread not found: <threadId>"` | Fails `-32602`: `"thread not found: <threadId>"` |
+| Persisted in `state_5.sqlite` `threads` (e.g., after `thread/name/set` or `thread/goal/set`) | Returns persisted rows + `nextCursor` | Succeeds (`outcome: "created"` or `"existing"`) | Succeeds (`{}`) |
 
-- **Side effect on `thread/list`**: Materializing a thread via `thread/goal/set` (or `thread/name/set`) inserts its row into `threads` in `state_5.sqlite` and creates a rollout file path, making the thread visible in `thread/list` even before the first user turn.
+- **Attachment eligibility vs. global `thread/list` visibility**:
+  - `thread/name/set` and `thread/goal/set` both satisfy the `threads(id)` foreign-key prerequisite required by `thread/attachment/add` and `thread/attachment/remove` (and `thread/attachmentOwner/list` returns both threads because its SQL joins `thread_attachments` with `threads`).
+  - However, global `thread/list` visibility remains conditional on what materialized the thread: in the same probe (`tid_a` with `thread/name/set` only vs. `tid_b` with `thread/goal/set`), `thread/list` (both default and `useStateDbOnly: true`) returned only `tid_b` and omitted `tid_a` (though `tid_a` could be read via `thread/read` or listed under an explicit section scope after `thread/section/move`).
 
 ### 4.2 Idempotency, Immutability & Notification Semantics
 
@@ -161,10 +170,10 @@ Four isolated Python probes were executed against stock `codex app-server` (`0.1
 2. **Duplicate `thread/attachment/add` with the same `(threadId, attachmentType, identityKey)` (same OR different `payload`)**:
    - Returns `"outcome": "existing"` and the **original unmodified `attachment` (including the original `payload` and `id`)**.
    - Emits **no** `thread/attachment/updated` notification.
-   - **Implication**: `thread/attachment/add` is a create-or-get operation, **not** an upsert. Updating `payload` for an existing `(attachmentType, identityKey)` requires `thread/attachment/remove` followed by `thread/attachment/add`.
+   - **Implication**: `thread/attachment/add` is a create-or-get operation, **not** an upsert. Replacing `payload` for an existing `(attachmentType, identityKey)` requires `thread/attachment/remove` followed by `thread/attachment/add`.
 3. **`thread/attachment/remove` idempotency**:
    - Removing an existing `(threadId, attachmentType, identityKey)` returns `{}` and emits `thread/attachment/updated` with `"operation": "deleted"` and the deleted `"attachmentId"`.
-   - Removing an already-removed or non-existent `(threadId, attachmentType, identityKey)` on an existing thread returns `{}` and emits **no** notification.
+   - Removing an already-removed or non-existent `(threadId, attachmentType, identityKey)` on an eligible thread returns `{}` and emits **no** notification.
 
 ### 4.3 Hard Bounds & Validation Errors (`LIVE_CALLED`)
 
@@ -188,17 +197,3 @@ Four isolated Python probes were executed against stock `codex app-server` (`0.1
   - `archived: null` (or omitted) returns all owner threads regardless of archive status.
 - **`thread/delete`**: Cascades (`ON DELETE CASCADE`) to remove all `thread_attachments` rows owned by the deleted thread while preserving copies on any forked threads.
 - **Process restart**: Stopping and restarting `codex app-server` against the same `CODEX_HOME` preserves all `thread_attachments` rows and owner index entries in `state_5.sqlite`.
-
----
-
-## 5. Architecture & Backlog Classification Decision
-
-1. **Do not conflate with Composer attachments**:
-   - Native composer attachments (`UserAttachment` -> `UserInput` in `turn/start` & `turn/steer`) are already implemented in Slice F2 and match official per-turn user attachments. `thread/attachment/*` must **not** be wired as a composer file-upload store.
-2. **Managed worktrees (`attachmentType: "worktree" | "archived_worktree"`) remain out of scope**:
-   - Official Desktop uses `worktree` attachments to track checkouts created by its internal Electron Git worker (`create-worktree`) and cloud executor (`cloudWorktrees`). Native intentionally does not implement a managed Git worktree manager (`docs/RESEARCH.md` "Deliberate non-adoptions").
-3. **Reclassification of Matrix §3.6 `Persistent thread attachments` row**:
-   - The protocol contract, SQLite origin (`thread_artifacts`), `64 KiB` / `100`-item bounds, materialization requirement, fork-copy behavior, and official Desktop UX (`pull_request` + `worktree` artifacts) are now completely established (`PUBLIC_SOURCE`, `STATIC_BUNDLE`, `LIVE_CALLED`).
-   - Reclassify the `RESEARCH_MORE` row in `docs/reverse/OFFICIAL_FEATURE_MATRIX.md` §3.6:
-     - Either **`RESEARCH_EXHAUSTED` (`DEFERRED_WORKTREE_PR_ARTIFACT_STORE`)** while managed worktrees and PR artifact dynamic tools remain outside the core Native workflow; or
-     - Scope a small, bounded **Thread Linked PRs / Artifacts (`thread/attachment/list|add|remove`)** slice in `READY` if user-visible PR link / worktree badge inspection on materialized local threads is desired after the current `Scoped Section ordering and pagination` slice.
