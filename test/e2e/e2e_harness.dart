@@ -171,6 +171,8 @@ class E2ERuntimeHarness extends RuntimeController {
 
   final List<ThreadSummary> threads = [];
   final List<ThreadSummary> archivedThreads = [];
+  final List<ThreadSection> threadSections = [];
+  var threadSectionsSupported = true;
   final List<CodexModel> models = [];
   final List<HistoryTurn> historyTurns = [];
   final List<HistoryItem> historyItems = [];
@@ -394,6 +396,10 @@ class E2ERuntimeHarness extends RuntimeController {
   final List<ThreadForkOptions> forkedThreads = [];
   final List<({String threadId, String beforeTurnId})> revertedThreads = [];
   final List<String> compactedThreadIds = [];
+  final List<ThreadSectionCreateOptions> createdThreadSections = [];
+  final List<ThreadSectionUpdateOptions> updatedThreadSections = [];
+  final List<String> deletedThreadSectionIds = [];
+  final List<ThreadSectionMoveOptions> movedThreadSections = [];
   final List<({String path, bool enabled})> toggledSkills = [];
   final List<AppListQuery> appListQueries = [];
   final List<({String? threadId, bool forceRefresh})> installedAppsQueries = [];
@@ -603,6 +609,137 @@ class E2ERuntimeHarness extends RuntimeController {
     deletedThreadIds.add(threadId);
     threads.removeWhere((t) => t.id == threadId);
     notifyListeners();
+  }
+
+  @override
+  bool get supportsThreadSections =>
+      threadSectionsSupported && !remoteModeOverride;
+
+  @override
+  Future<ThreadSectionPage> listThreadSections([
+    ThreadSectionListQuery query = const ThreadSectionListQuery(),
+  ]) async {
+    if (!supportsThreadSections) {
+      throw UnsupportedError(
+        'Thread sections are unavailable on read-only Remote.',
+      );
+    }
+    return ThreadSectionPage(
+      sections: List.unmodifiable(threadSections),
+      nextCursor: null,
+    );
+  }
+
+  @override
+  Future<ThreadSection> createThreadSection(
+    ThreadSectionCreateOptions options,
+  ) async {
+    if (!supportsThreadSections) {
+      throw UnsupportedError(
+        'Thread sections are unavailable on read-only Remote.',
+      );
+    }
+    createdThreadSections.add(options);
+    final created = ThreadSection(
+      id: 'section-${createdThreadSections.length}',
+      name: options.name,
+      appearance: options.appearance,
+    );
+    threadSections.add(created);
+    notifyListeners();
+    return created;
+  }
+
+  @override
+  Future<ThreadSection> updateThreadSection(
+    ThreadSectionUpdateOptions options,
+  ) async {
+    if (!supportsThreadSections) {
+      throw UnsupportedError(
+        'Thread sections are unavailable on read-only Remote.',
+      );
+    }
+    updatedThreadSections.add(options);
+    final idx = threadSections.indexWhere((s) => s.id == options.sectionId);
+    final existing = idx != -1
+        ? threadSections[idx]
+        : ThreadSection(id: options.sectionId, name: options.name);
+    final updated = existing.copyWith(
+      name: options.name,
+      appearance: options.appearance,
+      clearAppearance: options.clearAppearance,
+    );
+    if (idx != -1) {
+      threadSections[idx] = updated;
+    } else {
+      threadSections.add(updated);
+    }
+    for (var i = 0; i < threads.length; i += 1) {
+      if (threads[i].section?.id == updated.id) {
+        threads[i] = threads[i].copyWith(section: updated);
+      }
+    }
+    notifyListeners();
+    return updated;
+  }
+
+  @override
+  Future<void> deleteThreadSection(String sectionId) async {
+    if (!supportsThreadSections) {
+      throw UnsupportedError(
+        'Thread sections are unavailable on read-only Remote.',
+      );
+    }
+    deletedThreadSectionIds.add(sectionId);
+    threadSections.removeWhere((s) => s.id == sectionId);
+    for (var i = 0; i < threads.length; i += 1) {
+      if (threads[i].section?.id == sectionId) {
+        threads[i] = threads[i].copyWith(
+          clearSection: true,
+          clearSectionEnteredAtSeconds: true,
+        );
+      }
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> moveThreadSection(ThreadSectionMoveOptions options) async {
+    if (!supportsThreadSections) {
+      throw UnsupportedError(
+        'Thread sections are unavailable on read-only Remote.',
+      );
+    }
+    movedThreadSections.add(options);
+    final sectionId = options.sectionId;
+    final targetSection = sectionId == null
+        ? null
+        : threadSections.firstWhere(
+            (s) => s.id == sectionId,
+            orElse: () => ThreadSection(id: sectionId, name: sectionId),
+          );
+    final idx = threads.indexWhere((t) => t.id == options.threadId);
+    if (idx != -1) {
+      threads[idx] = threads[idx].copyWith(
+        section: targetSection,
+        clearSection: targetSection == null,
+        sectionEnteredAtSeconds: targetSection != null ? 1700000000 : null,
+        clearSectionEnteredAtSeconds: targetSection == null,
+      );
+    }
+    _threadsController.add(
+      ThreadSectionChangedEvent(
+        threadId: options.threadId,
+        sectionId: sectionId,
+      ),
+    );
+    notifyListeners();
+  }
+
+  void emitThreadSectionChanged(String threadId, String? sectionId) {
+    _threadsController.add(
+      ThreadSectionChangedEvent(threadId: threadId, sectionId: sectionId),
+    );
   }
 
   @override

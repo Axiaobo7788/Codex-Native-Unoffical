@@ -18,3 +18,15 @@ abstract interface class ThreadGateway {
   Future<void> compactThread(String threadId);
   Future<void> deleteThread(String threadId);
 }
+
+abstract interface class ThreadSectionGateway {
+  bool get supportsThreadSections;
+
+  Future<ThreadSectionPage> listThreadSections([
+    ThreadSectionListQuery query = const ThreadSectionListQuery(),
+  ]);
+  Future<ThreadSection> createThreadSection(ThreadSectionCreateOptions options);
+  Future<ThreadSection> updateThreadSection(ThreadSectionUpdateOptions options);
+  Future<void> deleteThreadSection(String sectionId);
+  Future<void> moveThreadSection(ThreadSectionMoveOptions options);
+}

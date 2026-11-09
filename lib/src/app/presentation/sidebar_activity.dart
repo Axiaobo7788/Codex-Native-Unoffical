@@ -24,6 +24,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   final Set<String> _collapsedProjects = <String>{};
+  final Set<String> _collapsedSections = <String>{};
   var _showSearch = false;
   var _searchQuery = '';
 
@@ -167,6 +168,17 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                               ),
                         ),
                       ),
+                      if (!controller.showArchived &&
+                          controller.supportsThreadSections)
+                        CodexIconButton(
+                          key: const ValueKey('thread-section-create-button'),
+                          tooltip: 'New section',
+                          size: 26,
+                          onPressed: controller.loading || controller.mutating
+                              ? null
+                              : _createSectionDialog,
+                          icon: const Icon(Icons.bookmarks_outlined, size: 15),
+                        ),
                       CodexIconButton(
                         key: const ValueKey('thread-search-toggle'),
                         tooltip: 'Filter threads',
@@ -309,10 +321,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   Widget _threadList(ThreadListController controller) {
-    if (controller.loading && controller.threads.isEmpty) {
+    final hasPersistedSections =
+        !controller.showArchived && controller.sections.isNotEmpty;
+    if (controller.loading &&
+        controller.threads.isEmpty &&
+        !hasPersistedSections) {
       return const _SidebarLoadingState();
     }
-    if (controller.threads.isEmpty) {
+    if (controller.threads.isEmpty && !hasPersistedSections) {
       return const _SidebarEmptyState();
     }
 
@@ -321,13 +337,29 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         ? controller.threads
         : controller.threads
               .where((thread) {
+                final branch = thread.gitInfo?.branch?.toLowerCase() ?? '';
+                final goalObjective =
+                    thread.goal?.objective.toLowerCase() ?? '';
+                final sectionName = thread.section?.name.toLowerCase() ?? '';
                 return thread.displayTitle.toLowerCase().contains(query) ||
                     _projectName(thread.cwd).toLowerCase().contains(query) ||
-                    thread.cwd.toLowerCase().contains(query);
+                    thread.cwd.toLowerCase().contains(query) ||
+                    branch.contains(query) ||
+                    goalObjective.contains(query) ||
+                    sectionName.contains(query);
               })
               .toList(growable: false);
 
-    if (filteredThreads.isEmpty) {
+    final matchingEmptySections = !controller.showArchived && query.isNotEmpty
+        ? controller.sections
+              .where((section) => section.name.toLowerCase().contains(query))
+              .toList(growable: false)
+        : const <ThreadSection>[];
+
+    if (filteredThreads.isEmpty &&
+        (query.isNotEmpty
+            ? matchingEmptySections.isEmpty
+            : !hasPersistedSections)) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(ThemeTokens.space4),
@@ -351,14 +383,68 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               .toList(growable: false)
         : filteredThreads;
 
+    final allSections = <ThreadSection>[];
+    final seenSectionIds = <String>{};
+    if (!controller.showArchived) {
+      for (final section in controller.sections) {
+        if (seenSectionIds.add(section.id)) {
+          allSections.add(section);
+        }
+      }
+      for (final thread in unpinnedThreads) {
+        if (thread.section case final section?
+            when seenSectionIds.add(section.id)) {
+          allSections.add(section);
+        }
+      }
+    }
+
+    final sectionThreadsById = <String, List<ThreadSummary>>{};
+    final unsectionedThreads = <ThreadSummary>[];
+    if (!controller.showArchived) {
+      for (final thread in unpinnedThreads) {
+        final section = thread.section;
+        if (section != null) {
+          sectionThreadsById
+              .putIfAbsent(section.id, () => <ThreadSummary>[])
+              .add(thread);
+        } else {
+          unsectionedThreads.add(thread);
+        }
+      }
+    } else {
+      unsectionedThreads.addAll(unpinnedThreads);
+    }
+
     final projects = <String, List<ThreadSummary>>{};
-    for (final thread in unpinnedThreads) {
+    for (final thread in unsectionedThreads) {
       projects.putIfAbsent(thread.cwd, () => <ThreadSummary>[]).add(thread);
     }
     final rows = <Object>[];
     if (pinnedThreads.isNotEmpty) {
       rows.add(_PinnedHeading(count: pinnedThreads.length));
       rows.addAll(pinnedThreads);
+    }
+    for (final section in allSections) {
+      final sectionThreads =
+          sectionThreadsById[section.id] ?? const <ThreadSummary>[];
+      if (query.isNotEmpty &&
+          sectionThreads.isEmpty &&
+          !section.name.toLowerCase().contains(query)) {
+        continue;
+      }
+      final collapsed =
+          query.isEmpty && _collapsedSections.contains(section.id);
+      rows.add(
+        _SectionHeading(
+          section: section,
+          count: sectionThreads.length,
+          collapsed: collapsed,
+        ),
+      );
+      if (!collapsed) {
+        rows.addAll(sectionThreads);
+      }
     }
     for (final project in projects.entries) {
       final collapsed =
@@ -407,6 +493,25 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         if (row is _PinnedHeading) {
           return _PinnedHeadingRow(heading: row);
         }
+        if (row is _SectionHeading) {
+          return _SectionHeadingRow(
+            heading: row,
+            enabled: !controller.mutating && controller.supportsThreadSections,
+            onToggleCollapse: () {
+              setState(() {
+                if (!_collapsedSections.remove(row.section.id)) {
+                  _collapsedSections.add(row.section.id);
+                }
+              });
+            },
+            onRenameSection: controller.supportsThreadSections
+                ? () => _renameSectionDialog(row.section)
+                : null,
+            onDeleteSection: controller.supportsThreadSections
+                ? () => unawaited(controller.deleteSection(row.section.id))
+                : null,
+          );
+        }
         if (row is _ProjectHeading) {
           return _ProjectHeadingRow(
             heading: row,
@@ -430,6 +535,8 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           pinned: controller.isPinned(thread.id),
           archived: controller.showArchived,
           enabled: !controller.mutating,
+          supportsSections: controller.supportsThreadSections,
+          sections: allSections,
           onSelect: () => controller.selectThread(thread.id),
           onResume: () => controller.resumeThread(thread.id),
           onTogglePin: () => controller.togglePinThread(thread.id),
@@ -437,6 +544,13 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           onFork: () => controller.forkThread(
             ThreadForkOptions(threadId: thread.id, cwd: thread.cwd),
           ),
+          onMoveToSection: (sectionId) => unawaited(
+            controller.moveThreadToSection(
+              threadId: thread.id,
+              sectionId: sectionId,
+            ),
+          ),
+          onMoveToNewSection: () => _moveThreadToNewSectionDialog(thread),
           onArchiveToggle: () {
             if (controller.showArchived) {
               unawaited(controller.unarchiveThread(thread.id));
@@ -563,6 +677,127 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       await widget.controller.renameThread(thread.id, next);
     }
   }
+
+  Future<void> _createSectionDialog() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _ThreadSectionNameDialog(
+        title: 'New section',
+        confirmLabel: 'Create',
+      ),
+    );
+    if (name != null && name.trim().isNotEmpty && mounted) {
+      await widget.controller.createSection(name);
+    }
+  }
+
+  Future<void> _renameSectionDialog(ThreadSection section) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _ThreadSectionNameDialog(
+        title: 'Rename section',
+        initialName: section.name,
+        confirmLabel: 'Save',
+      ),
+    );
+    if (name != null && name.trim().isNotEmpty && mounted) {
+      await widget.controller.renameSection(section.id, name);
+    }
+  }
+
+  Future<void> _moveThreadToNewSectionDialog(ThreadSummary thread) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _ThreadSectionNameDialog(
+        title: 'Move to new section',
+        confirmLabel: 'Create & move',
+      ),
+    );
+    if (name == null || name.trim().isEmpty || !mounted) {
+      return;
+    }
+    final created = await widget.controller.createSection(name);
+    if (created != null && mounted) {
+      await widget.controller.moveThreadToSection(
+        threadId: thread.id,
+        sectionId: created.id,
+      );
+    }
+  }
+}
+
+class _ThreadSectionNameDialog extends StatefulWidget {
+  const _ThreadSectionNameDialog({
+    required this.title,
+    required this.confirmLabel,
+    this.initialName = '',
+  });
+
+  final String title;
+  final String confirmLabel;
+  final String initialName;
+
+  @override
+  State<_ThreadSectionNameDialog> createState() =>
+      _ThreadSectionNameDialogState();
+}
+
+class _ThreadSectionNameDialogState extends State<_ThreadSectionNameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    return AlertDialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 400,
+        child: TextField(
+          key: const ValueKey('thread-section-name-field'),
+          controller: _controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Section name',
+            hintText: 'e.g. Priority tasks',
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+      ),
+      actions: [
+        CodexButton(
+          variant: CodexButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+        ),
+        CodexButton(
+          key: const ValueKey('thread-section-save-button'),
+          variant: CodexButtonVariant.primary,
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          label: widget.confirmLabel,
+        ),
+      ],
+    );
+  }
 }
 
 class _RenameThreadDialog extends StatefulWidget {
@@ -665,6 +900,123 @@ class _PinnedHeadingRow extends StatelessWidget {
   }
 }
 
+final class _SectionHeading {
+  const _SectionHeading({
+    required this.section,
+    required this.count,
+    required this.collapsed,
+  });
+
+  final ThreadSection section;
+  final int count;
+  final bool collapsed;
+}
+
+class _SectionHeadingRow extends StatefulWidget {
+  const _SectionHeadingRow({
+    required this.heading,
+    required this.enabled,
+    required this.onToggleCollapse,
+    this.onRenameSection,
+    this.onDeleteSection,
+  });
+
+  final _SectionHeading heading;
+  final bool enabled;
+  final VoidCallback onToggleCollapse;
+  final VoidCallback? onRenameSection;
+  final VoidCallback? onDeleteSection;
+
+  @override
+  State<_SectionHeadingRow> createState() => _SectionHeadingRowState();
+}
+
+class _SectionHeadingRowState extends State<_SectionHeadingRow> {
+  final _menuController = CodexPopoverController();
+
+  @override
+  void dispose() {
+    _menuController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final section = widget.heading.section;
+    final leadingIcon = widget.heading.collapsed
+        ? Icons.label_outline_rounded
+        : Icons.label_rounded;
+    final canMutate =
+        widget.enabled &&
+        (widget.onRenameSection != null || widget.onDeleteSection != null);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2.0),
+      child: CodexSidebarRow(
+        containerKey: ValueKey('thread-section-heading-${section.id}'),
+        height: 32.0,
+        tooltip: section.name,
+        title: section.name,
+        leading: Icon(leadingIcon, size: 15, color: palette.textSecondary),
+        onTap: widget.onToggleCollapse,
+        trailingBuilder: (context, isHovered) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${widget.heading.count}',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              if (canMutate) ...[
+                const SizedBox(width: 2),
+                CodexPopoverAnchor(
+                  controller: _menuController,
+                  targetAnchor: Alignment.bottomRight,
+                  followerAnchor: Alignment.topRight,
+                  width: 176,
+                  popoverBuilder: (context, close) => CodexMenu<String>(
+                    items: [
+                      if (widget.onRenameSection != null)
+                        const CodexMenuItem(
+                          value: 'rename',
+                          label: 'Rename section',
+                          icon: Icon(Icons.drive_file_rename_outline_rounded),
+                        ),
+                      if (widget.onDeleteSection != null)
+                        const CodexMenuItem(
+                          value: 'delete',
+                          label: 'Delete section',
+                          icon: Icon(Icons.delete_outline_rounded),
+                        ),
+                    ],
+                    onSelected: (action) {
+                      close();
+                      switch (action) {
+                        case 'rename':
+                          widget.onRenameSection?.call();
+                        case 'delete':
+                          widget.onDeleteSection?.call();
+                      }
+                    },
+                  ),
+                  child: CodexIconButton(
+                    key: ValueKey('thread-section-menu-${section.id}'),
+                    tooltip: 'Section actions',
+                    onPressed: _menuController.toggle,
+                    size: 22,
+                    icon: const Icon(Icons.more_horiz_rounded, size: 14),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 final class _ProjectHeading {
   const _ProjectHeading({
     required this.directory,
@@ -738,11 +1090,15 @@ class _ThreadRow extends StatefulWidget {
     required this.pinned,
     required this.archived,
     required this.enabled,
+    this.supportsSections = false,
+    this.sections = const [],
     required this.onSelect,
     required this.onResume,
     required this.onTogglePin,
     required this.onRename,
     required this.onFork,
+    this.onMoveToSection,
+    this.onMoveToNewSection,
     required this.onArchiveToggle,
     required this.onDelete,
   });
@@ -752,11 +1108,15 @@ class _ThreadRow extends StatefulWidget {
   final bool pinned;
   final bool archived;
   final bool enabled;
+  final bool supportsSections;
+  final List<ThreadSection> sections;
   final VoidCallback onSelect;
   final VoidCallback onResume;
   final VoidCallback onTogglePin;
   final VoidCallback onRename;
   final VoidCallback onFork;
+  final ValueChanged<String?>? onMoveToSection;
+  final VoidCallback? onMoveToNewSection;
   final VoidCallback onArchiveToggle;
   final VoidCallback onDelete;
 
@@ -783,125 +1143,304 @@ class _ThreadRowState extends State<_ThreadRow> {
       _ => null,
     };
 
-    return Padding(
-      padding: const EdgeInsets.only(left: 14.0),
-      child: CodexSidebarRow(
-        containerKey: ValueKey('thread-row-${thread.id}'),
-        title: thread.displayTitle,
-        selected: widget.selected,
-        onTap: widget.enabled ? widget.onSelect : null,
-        padding: EdgeInsets.only(left: statusColor != null ? 8 : 10, right: 8),
-        leading: statusColor != null
-            ? Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
-              )
-            : null,
-        trailingBuilder: (context, isHovered) {
-          if (isHovered || _menuController.isOpen) {
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (thread.status == ThreadRuntimeStatus.notLoaded)
-                  CodexIconButton(
-                    tooltip: 'Resume thread',
-                    onPressed: widget.enabled ? widget.onResume : null,
-                    size: 24,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                  ),
-                CodexPopoverAnchor(
-                  controller: _menuController,
-                  targetAnchor: Alignment.bottomRight,
-                  followerAnchor: Alignment.topRight,
-                  width: 184,
-                  popoverBuilder: (context, close) => CodexMenu<String>(
-                    items: [
-                      CodexMenuItem(
-                        value: 'pin',
-                        label: widget.pinned ? 'Unpin thread' : 'Pin thread',
-                        icon: Icon(
-                          widget.pinned
-                              ? Icons.push_pin_rounded
-                              : Icons.push_pin_outlined,
-                        ),
-                      ),
-                      const CodexMenuItem(
-                        value: 'rename',
-                        label: 'Rename thread',
-                        icon: Icon(Icons.drive_file_rename_outline_rounded),
-                      ),
-                      const CodexMenuItem(
-                        value: 'fork',
-                        label: 'Fork thread',
-                        icon: Icon(Icons.call_split_rounded),
-                      ),
-                      CodexMenuItem(
-                        value: 'archive',
-                        label: widget.archived
-                            ? 'Unarchive thread'
-                            : 'Archive thread',
-                        icon: Icon(
-                          widget.archived
-                              ? Icons.unarchive_outlined
-                              : Icons.inventory_2_outlined,
-                        ),
-                      ),
-                      const CodexMenuItem(
-                        value: 'delete',
-                        label: 'Delete thread',
-                        icon: Icon(Icons.delete_outline_rounded),
-                      ),
-                    ],
-                    onSelected: (action) {
-                      close();
-                      switch (action) {
-                        case 'pin':
-                          widget.onTogglePin();
-                        case 'rename':
-                          widget.onRename();
-                        case 'fork':
-                          widget.onFork();
-                        case 'archive':
-                          widget.onArchiveToggle();
-                        case 'delete':
-                          widget.onDelete();
-                      }
-                    },
-                  ),
-                  child: CodexIconButton(
-                    key: ValueKey('thread-menu-${thread.id}'),
-                    tooltip: 'Thread actions',
-                    onPressed: widget.enabled ? _menuController.toggle : null,
-                    size: 24,
-                    icon: const Icon(Icons.more_horiz_rounded, size: 15),
-                  ),
-                ),
-              ],
-            );
-          }
+    final gitBadge = _formatGitBadge(thread.gitInfo);
+    final goalBadge = _formatGoalBadge(thread.goal);
+    final hasMetadataBadges = gitBadge != null || goalBadge != null;
+
+    final rowWidget = CodexSidebarRow(
+      containerKey: ValueKey('thread-row-${thread.id}'),
+      title: thread.displayTitle,
+      selected: widget.selected,
+      onTap: widget.enabled ? widget.onSelect : null,
+      padding: EdgeInsets.only(left: statusColor != null ? 8 : 10, right: 8),
+      leading: statusColor != null
+          ? Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            )
+          : null,
+      trailingBuilder: (context, isHovered) {
+        if (isHovered || _menuController.isOpen || widget.selected) {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (widget.pinned) ...[
-                Icon(
-                  Icons.push_pin_rounded,
-                  size: 12,
-                  color: palette.textMuted,
+              if (thread.status == ThreadRuntimeStatus.notLoaded)
+                CodexIconButton(
+                  tooltip: 'Resume thread',
+                  onPressed: widget.enabled ? widget.onResume : null,
+                  size: 24,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 16),
                 ),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                _shortTime(thread.updatedAt),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(fontSize: 11, color: palette.textMuted),
+              CodexPopoverAnchor(
+                controller: _menuController,
+                targetAnchor: Alignment.bottomRight,
+                followerAnchor: Alignment.topRight,
+                width: 212,
+                popoverBuilder: (context, close) => CodexMenu<String>(
+                  items: [
+                    CodexMenuItem(
+                      value: 'pin',
+                      label: widget.pinned ? 'Unpin thread' : 'Pin thread',
+                      icon: Icon(
+                        widget.pinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                      ),
+                    ),
+                    const CodexMenuItem(
+                      value: 'rename',
+                      label: 'Rename thread',
+                      icon: Icon(Icons.drive_file_rename_outline_rounded),
+                    ),
+                    const CodexMenuItem(
+                      value: 'fork',
+                      label: 'Fork thread',
+                      icon: Icon(Icons.call_split_rounded),
+                    ),
+                    if (widget.supportsSections && !widget.archived) ...[
+                      for (final section in widget.sections.take(8))
+                        if (section.id != thread.section?.id)
+                          CodexMenuItem(
+                            value: 'move-section:${section.id}',
+                            label: 'Move to ${section.name}',
+                            icon: const Icon(Icons.label_outline_rounded),
+                          ),
+                      if (widget.onMoveToNewSection != null)
+                        const CodexMenuItem(
+                          value: 'move-new-section',
+                          label: 'Move to new section…',
+                          icon: Icon(Icons.create_new_folder_outlined),
+                        ),
+                      if (thread.section != null)
+                        const CodexMenuItem(
+                          value: 'remove-section',
+                          label: 'Remove from section',
+                          icon: Icon(Icons.label_off_outlined),
+                        ),
+                    ],
+                    CodexMenuItem(
+                      value: 'archive',
+                      label: widget.archived
+                          ? 'Unarchive thread'
+                          : 'Archive thread',
+                      icon: Icon(
+                        widget.archived
+                            ? Icons.unarchive_outlined
+                            : Icons.inventory_2_outlined,
+                      ),
+                    ),
+                    const CodexMenuItem(
+                      value: 'delete',
+                      label: 'Delete thread',
+                      icon: Icon(Icons.delete_outline_rounded),
+                    ),
+                  ],
+                  onSelected: (action) {
+                    close();
+                    if (action.startsWith('move-section:')) {
+                      final sectionId = action.substring(
+                        'move-section:'.length,
+                      );
+                      widget.onMoveToSection?.call(sectionId);
+                      return;
+                    }
+                    switch (action) {
+                      case 'pin':
+                        widget.onTogglePin();
+                      case 'rename':
+                        widget.onRename();
+                      case 'fork':
+                        widget.onFork();
+                      case 'move-new-section':
+                        widget.onMoveToNewSection?.call();
+                      case 'remove-section':
+                        widget.onMoveToSection?.call(null);
+                      case 'archive':
+                        widget.onArchiveToggle();
+                      case 'delete':
+                        widget.onDelete();
+                    }
+                  },
+                ),
+                child: CodexIconButton(
+                  key: ValueKey('thread-menu-${thread.id}'),
+                  tooltip: 'Thread actions',
+                  onPressed: widget.enabled ? _menuController.toggle : null,
+                  size: 24,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 15),
+                ),
               ),
             ],
           );
-        },
+        }
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.pinned) ...[
+              Icon(Icons.push_pin_rounded, size: 12, color: palette.textMuted),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              _shortTime(thread.updatedAt),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(fontSize: 11, color: palette.textMuted),
+            ),
+          ],
+        );
+      },
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 14.0),
+      child: hasMetadataBadges
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                rowWidget,
+                _ThreadMetadataStrip(
+                  threadId: thread.id,
+                  gitBadge: gitBadge,
+                  goalBadge: goalBadge,
+                ),
+              ],
+            )
+          : rowWidget,
+    );
+  }
+
+  static String? _formatGitBadge(ThreadGitInfo? gitInfo) {
+    if (gitInfo == null) {
+      return null;
+    }
+    final branch = gitInfo.branch?.trim();
+    if (branch != null && branch.isNotEmpty) {
+      return _truncateSidebarBadge(branch, 28);
+    }
+    final sha = gitInfo.sha?.trim();
+    if (sha != null && sha.isNotEmpty) {
+      return _truncateSidebarBadge(
+        sha.length > 8 ? sha.substring(0, 8) : sha,
+        12,
+      );
+    }
+    final origin = gitInfo.originUrl?.trim();
+    if (origin != null && origin.isNotEmpty) {
+      return _truncateSidebarBadge(origin, 28);
+    }
+    return null;
+  }
+
+  static String? _formatGoalBadge(ThreadGoal? goal) {
+    final trimmed = goal?.objective.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    final singleLine = trimmed.replaceAll(RegExp(r'\s+'), ' ');
+    return _truncateSidebarBadge(singleLine, 36);
+  }
+
+  static String _truncateSidebarBadge(String value, int maxChars) {
+    if (value.length <= maxChars) {
+      return value;
+    }
+    var end = maxChars;
+    if (end > 0 &&
+        end < value.length &&
+        (value.codeUnitAt(end - 1) & 0xFC00) == 0xD800) {
+      end -= 1;
+    }
+    return '${value.substring(0, end)}…';
+  }
+}
+
+class _ThreadMetadataStrip extends StatelessWidget {
+  const _ThreadMetadataStrip({
+    required this.threadId,
+    required this.gitBadge,
+    required this.goalBadge,
+  });
+
+  final String threadId;
+  final String? gitBadge;
+  final String? goalBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final labelStyle = Theme.of(context).textTheme.labelSmall
+        ?.copyWith(fontSize: 10.5, color: palette.textMuted, height: 1.1);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 8, 4),
+      child: Row(
+        children: [
+          if (gitBadge != null)
+            Flexible(
+              child: Container(
+                key: ValueKey('thread-git-badge-$threadId'),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.account_tree_outlined,
+                      size: 10,
+                      color: palette.textMuted,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        gitBadge!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: labelStyle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (gitBadge != null && goalBadge != null) const SizedBox(width: 4),
+          if (goalBadge != null)
+            Flexible(
+              child: Container(
+                key: ValueKey('thread-goal-badge-$threadId'),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: palette.surfaceRaised,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.flag_outlined,
+                      size: 10,
+                      color: palette.textMuted,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        goalBadge!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: labelStyle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

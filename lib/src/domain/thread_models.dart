@@ -25,6 +25,31 @@ class ThreadGitInfo {
   final String? sha;
 }
 
+class ThreadSectionAppearance {
+  const ThreadSectionAppearance({this.color, this.icon});
+
+  final String? color;
+  final String? icon;
+}
+
+class ThreadSection {
+  const ThreadSection({required this.id, required this.name, this.appearance});
+
+  final String id;
+  final String name;
+  final ThreadSectionAppearance? appearance;
+
+  ThreadSection copyWith({
+    String? name,
+    ThreadSectionAppearance? appearance,
+    bool clearAppearance = false,
+  }) => ThreadSection(
+    id: id,
+    name: name ?? this.name,
+    appearance: clearAppearance ? null : (appearance ?? this.appearance),
+  );
+}
+
 class ThreadGoal {
   const ThreadGoal({
     required this.objective,
@@ -60,6 +85,8 @@ class ThreadSummary {
     this.projectId,
     this.gitInfo,
     this.goal,
+    this.section,
+    this.sectionEnteredAtSeconds,
   });
 
   final String id;
@@ -75,6 +102,8 @@ class ThreadSummary {
   final String? projectId;
   final ThreadGitInfo? gitInfo;
   final ThreadGoal? goal;
+  final ThreadSection? section;
+  final int? sectionEnteredAtSeconds;
 
   ThreadSummary copyWith({
     String? preview,
@@ -89,6 +118,10 @@ class ThreadSummary {
     bool clearGitInfo = false,
     ThreadGoal? goal,
     bool clearGoal = false,
+    ThreadSection? section,
+    bool clearSection = false,
+    int? sectionEnteredAtSeconds,
+    bool clearSectionEnteredAtSeconds = false,
   }) => ThreadSummary(
     id: id,
     sessionId: sessionId,
@@ -103,6 +136,10 @@ class ThreadSummary {
     projectId: projectId ?? this.projectId,
     gitInfo: clearGitInfo ? null : (gitInfo ?? this.gitInfo),
     goal: clearGoal ? null : (goal ?? this.goal),
+    section: clearSection ? null : (section ?? this.section),
+    sectionEnteredAtSeconds: clearSectionEnteredAtSeconds
+        ? null
+        : (sectionEnteredAtSeconds ?? this.sectionEnteredAtSeconds),
   );
 
   String get displayTitle {
@@ -127,6 +164,56 @@ class ThreadPage {
 
   final List<ThreadSummary> threads;
   final String? nextCursor;
+}
+
+class ThreadSectionPage {
+  const ThreadSectionPage({required this.sections, required this.nextCursor});
+
+  final List<ThreadSection> sections;
+  final String? nextCursor;
+}
+
+class ThreadSectionListQuery {
+  const ThreadSectionListQuery({this.cursor, this.limit = 50})
+    : assert(limit > 0 && limit <= maxLimit);
+
+  static const int maxLimit = 64;
+
+  final String? cursor;
+  final int limit;
+}
+
+class ThreadSectionCreateOptions {
+  const ThreadSectionCreateOptions({required this.name, this.appearance});
+
+  final String name;
+  final ThreadSectionAppearance? appearance;
+}
+
+class ThreadSectionUpdateOptions {
+  const ThreadSectionUpdateOptions({
+    required this.sectionId,
+    required this.name,
+    this.appearance,
+    this.clearAppearance = false,
+  });
+
+  final String sectionId;
+  final String name;
+  final ThreadSectionAppearance? appearance;
+  final bool clearAppearance;
+}
+
+class ThreadSectionMoveOptions {
+  const ThreadSectionMoveOptions({
+    required this.threadId,
+    required this.sectionId,
+    this.beforeThreadId,
+  });
+
+  final String threadId;
+  final String? sectionId;
+  final String? beforeThreadId;
 }
 
 class ThreadListQuery {
@@ -244,4 +331,13 @@ final class ThreadGoalUpdatedEvent extends ThreadLifecycleEvent {
 
 final class ThreadGoalClearedEvent extends ThreadLifecycleEvent {
   const ThreadGoalClearedEvent({required super.threadId});
+}
+
+final class ThreadSectionChangedEvent extends ThreadLifecycleEvent {
+  const ThreadSectionChangedEvent({
+    required super.threadId,
+    required this.sectionId,
+  });
+
+  final String? sectionId;
 }

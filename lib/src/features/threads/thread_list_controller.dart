@@ -16,7 +16,7 @@ class ThreadListController extends ChangeNotifier {
       _handleThreadEvent,
       onError: (Object error, StackTrace _) {
         if (!_disposed) {
-          _errorMessage = error.toString();
+          _errorMessage = _boundedError(error);
           _notify();
         }
       },
@@ -24,11 +24,14 @@ class ThreadListController extends ChangeNotifier {
   }
 
   static const maxPinnedThreads = 32;
+  static const maxRetainedSections = 64;
+  static const _maxErrorChars = 320;
 
   final ThreadGateway gateway;
   final int pageSize;
   final int maxRetainedThreads;
   final List<ThreadSummary> _threads = [];
+  final List<ThreadSection> _sections = [];
   final Set<String> _unmaterializedThreadIds = {};
   final Set<String> _pinnedThreadIds = {};
   StreamSubscription<ThreadLifecycleEvent>? _threadEventSubscription;
@@ -45,6 +48,7 @@ class ThreadListController extends ChangeNotifier {
   var _disposed = false;
 
   List<ThreadSummary> get threads => List.unmodifiable(_threads);
+  List<ThreadSection> get sections => List.unmodifiable(_sections);
   Set<String> get pinnedThreadIds => Set.unmodifiable(_pinnedThreadIds);
   ThreadSummary? get selectedThread => _selectedThread;
   String? get errorMessage => _errorMessage;
@@ -55,10 +59,18 @@ class ThreadListController extends ChangeNotifier {
   bool get loading => _loading;
   bool get loadingMore => _loadingMore;
   bool get mutating => _mutating;
+  bool get supportsThreadSections => _sectionGateway != null;
   bool get canLoadMore =>
       _nextCursor != null && _threads.length < maxRetainedThreads;
   bool get retentionLimitReached =>
       _nextCursor != null && _threads.length >= maxRetainedThreads;
+
+  ThreadSectionGateway? get _sectionGateway => switch (gateway) {
+    final ThreadSectionGateway sectionGateway
+        when sectionGateway.supportsThreadSections =>
+      sectionGateway,
+    _ => null,
+  };
 
   bool isPinned(String threadId) => _pinnedThreadIds.contains(threadId);
   bool isMaterialized(String threadId) =>
@@ -138,13 +150,21 @@ class ThreadListController extends ChangeNotifier {
         }
         cursor = nextPage.nextCursor;
       }
+      if (!_showArchived) {
+        await _refreshSectionsWithThreads(uniqueThreads);
+        if (_disposed) {
+          return;
+        }
+      } else {
+        _mergeThreadEmbeddedSections(uniqueThreads);
+      }
       _threads
         ..clear()
-        ..addAll(uniqueThreads);
+        ..addAll(uniqueThreads.map(_syncThreadSection));
       _nextCursor = cursor;
       _synchronizeSelection();
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
     } finally {
       _loading = false;
       _notify();
@@ -172,15 +192,17 @@ class ThreadListController extends ChangeNotifier {
         return;
       }
       final existingIds = _threads.map((thread) => thread.id).toSet();
-      _threads.addAll(
-        page.threads
-            .where((thread) => existingIds.add(thread.id))
-            .take(remaining),
-      );
+      final appended = page.threads
+          .where((thread) => existingIds.add(thread.id))
+          .take(remaining)
+          .map(_preserveTransientState)
+          .toList(growable: false);
+      _mergeThreadEmbeddedSections(appended);
+      _threads.addAll(appended.map(_syncThreadSection));
       _nextCursor = page.nextCursor;
       _synchronizeSelection();
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
     } finally {
       _loadingMore = false;
       _notify();
@@ -200,11 +222,11 @@ class ThreadListController extends ChangeNotifier {
         return null;
       }
       _unmaterializedThreadIds.add(thread.id);
-      _replaceOrPrepend(thread);
-      _selectedThread = thread;
-      return thread;
+      final retained = _replaceOrPrepend(thread);
+      _selectedThread = retained;
+      return retained;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return null;
     } finally {
       _mutating = false;
@@ -237,7 +259,7 @@ class ThreadListController extends ChangeNotifier {
       _selectedThread = retainedThread;
       return retainedThread;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return null;
     } finally {
       _mutating = false;
@@ -262,7 +284,7 @@ class ThreadListController extends ChangeNotifier {
       _selectedThread = retainedThread;
       return retainedThread;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return null;
     } finally {
       _mutating = false;
@@ -286,7 +308,7 @@ class ThreadListController extends ChangeNotifier {
       _applyNameUpdate(threadId, trimmed.isEmpty ? null : trimmed);
       return true;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return false;
     } finally {
       _mutating = false;
@@ -316,7 +338,7 @@ class ThreadListController extends ChangeNotifier {
       }
       return true;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return false;
     } finally {
       _mutating = false;
@@ -343,13 +365,14 @@ class ThreadListController extends ChangeNotifier {
           _selectedThread = _threads.isEmpty ? null : _threads.first;
         }
         _synchronizeSelection();
+        return thread;
       } else {
-        _replaceOrPrepend(thread);
-        _selectedThread = thread;
+        final retained = _replaceOrPrepend(thread);
+        _selectedThread = retained;
+        return retained;
       }
-      return thread;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return null;
     } finally {
       _mutating = false;
@@ -377,11 +400,11 @@ class ThreadListController extends ChangeNotifier {
       if (_showArchived) {
         _showArchived = false;
       }
-      _replaceOrPrepend(thread);
-      _selectedThread = thread;
-      return thread;
+      final retained = _replaceOrPrepend(thread);
+      _selectedThread = retained;
+      return retained;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return null;
     } finally {
       _mutating = false;
@@ -415,7 +438,7 @@ class ThreadListController extends ChangeNotifier {
       _revertVersion += 1;
       return retainedThread;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return null;
     } finally {
       _mutating = false;
@@ -442,7 +465,7 @@ class ThreadListController extends ChangeNotifier {
       }
       return true;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
       return false;
     } finally {
       _mutating = false;
@@ -472,7 +495,184 @@ class ThreadListController extends ChangeNotifier {
       _synchronizeSelection();
       return true;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _boundedError(error);
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<ThreadSection?> createSection(
+    String name, {
+    ThreadSectionAppearance? appearance,
+  }) async {
+    if (_mutating) {
+      return null;
+    }
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null) {
+      _errorMessage = 'Thread sections are unavailable on this runtime.';
+      _notify();
+      return null;
+    }
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      _errorMessage = 'Section name must not be empty.';
+      _notify();
+      return null;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final section = await sectionGateway.createThreadSection(
+        ThreadSectionCreateOptions(name: trimmed, appearance: appearance),
+      );
+      if (_disposed) {
+        return null;
+      }
+      _upsertSection(section);
+      return section;
+    } catch (error) {
+      _errorMessage = _boundedError(error);
+      return null;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<ThreadSection?> renameSection(
+    String sectionId,
+    String name, {
+    ThreadSectionAppearance? appearance,
+    bool clearAppearance = false,
+  }) async {
+    if (_mutating) {
+      return null;
+    }
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null) {
+      _errorMessage = 'Thread sections are unavailable on this runtime.';
+      _notify();
+      return null;
+    }
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      _errorMessage = 'Section name must not be empty.';
+      _notify();
+      return null;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final updated = await sectionGateway.updateThreadSection(
+        ThreadSectionUpdateOptions(
+          sectionId: sectionId,
+          name: trimmed,
+          appearance: appearance,
+          clearAppearance: clearAppearance,
+        ),
+      );
+      if (_disposed) {
+        return null;
+      }
+      _upsertSection(updated);
+      for (var i = 0; i < _threads.length; i++) {
+        if (_threads[i].section?.id == updated.id) {
+          _threads[i] = _threads[i].copyWith(section: updated);
+        }
+      }
+      if (_selectedThread?.section?.id == updated.id) {
+        _selectedThread = _selectedThread!.copyWith(section: updated);
+      }
+      return updated;
+    } catch (error) {
+      _errorMessage = _boundedError(error);
+      return null;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<bool> deleteSection(String sectionId) async {
+    if (_mutating) {
+      return false;
+    }
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null) {
+      _errorMessage = 'Thread sections are unavailable on this runtime.';
+      _notify();
+      return false;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      await sectionGateway.deleteThreadSection(sectionId);
+      if (_disposed) {
+        return false;
+      }
+      _sections.removeWhere((section) => section.id == sectionId);
+      for (var i = 0; i < _threads.length; i++) {
+        if (_threads[i].section?.id == sectionId) {
+          _threads[i] = _threads[i].copyWith(
+            clearSection: true,
+            clearSectionEnteredAtSeconds: true,
+          );
+        }
+      }
+      if (_selectedThread?.section?.id == sectionId) {
+        _selectedThread = _selectedThread!.copyWith(
+          clearSection: true,
+          clearSectionEnteredAtSeconds: true,
+        );
+      }
+      return true;
+    } catch (error) {
+      _errorMessage = _boundedError(error);
+      return false;
+    } finally {
+      _mutating = false;
+      _notify();
+    }
+  }
+
+  Future<bool> moveThreadToSection({
+    required String threadId,
+    required String? sectionId,
+    String? beforeThreadId,
+  }) async {
+    if (_mutating) {
+      return false;
+    }
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null) {
+      _errorMessage = 'Thread sections are unavailable on this runtime.';
+      _notify();
+      return false;
+    }
+    _mutating = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      await sectionGateway.moveThreadSection(
+        ThreadSectionMoveOptions(
+          threadId: threadId,
+          sectionId: sectionId,
+          beforeThreadId: beforeThreadId,
+        ),
+      );
+      if (_disposed) {
+        return false;
+      }
+      _applySectionChanged(threadId, sectionId);
+      return true;
+    } catch (error) {
+      _errorMessage = _boundedError(error);
       return false;
     } finally {
       _mutating = false;
@@ -512,6 +712,9 @@ class ThreadListController extends ChangeNotifier {
         _notify();
       case ThreadGoalClearedEvent(:final threadId):
         _clearGoal(threadId);
+        _notify();
+      case ThreadSectionChangedEvent(:final threadId, :final sectionId):
+        _applySectionChanged(threadId, sectionId);
         _notify();
       case ThreadArchivedEvent(:final threadId):
         if (!_showArchived) {
@@ -586,8 +789,167 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
+  void _applySectionChanged(String threadId, String? sectionId) {
+    if (sectionId == null) {
+      final index = _threads.indexWhere((thread) => thread.id == threadId);
+      if (index != -1) {
+        _threads[index] = _threads[index].copyWith(
+          clearSection: true,
+          clearSectionEnteredAtSeconds: true,
+        );
+      }
+      if (_selectedThread?.id == threadId) {
+        _selectedThread = _selectedThread!.copyWith(
+          clearSection: true,
+          clearSectionEnteredAtSeconds: true,
+        );
+      }
+      return;
+    }
+
+    final resolved = _findSectionById(sectionId);
+    if (resolved == null) {
+      if (_sectionGateway != null) {
+        unawaited(_reloadSectionsAndResolveThread(threadId, sectionId));
+      }
+      return;
+    }
+
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index != -1) {
+      _threads[index] = _threads[index].copyWith(section: resolved);
+    }
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = _selectedThread!.copyWith(section: resolved);
+    }
+  }
+
+  Future<void> _refreshSectionsWithThreads(List<ThreadSummary> threads) async {
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null) {
+      _mergeThreadEmbeddedSections(threads);
+      return;
+    }
+    try {
+      final page = await sectionGateway.listThreadSections(
+        const ThreadSectionListQuery(limit: maxRetainedSections),
+      );
+      if (_disposed) {
+        return;
+      }
+      _sections
+        ..clear()
+        ..addAll(page.sections.take(maxRetainedSections));
+    } catch (error) {
+      _errorMessage = _boundedError(error);
+    }
+    _mergeThreadEmbeddedSections(threads);
+  }
+
+  Future<void> _reloadSectionsAndResolveThread(
+    String threadId,
+    String sectionId,
+  ) async {
+    final sectionGateway = _sectionGateway;
+    if (sectionGateway == null || _disposed) {
+      return;
+    }
+    try {
+      final page = await sectionGateway.listThreadSections(
+        const ThreadSectionListQuery(limit: maxRetainedSections),
+      );
+      if (_disposed) {
+        return;
+      }
+      for (final section in page.sections) {
+        _upsertSection(section);
+      }
+      final resolved = _findSectionById(sectionId);
+      if (resolved != null) {
+        final index = _threads.indexWhere((thread) => thread.id == threadId);
+        if (index != -1) {
+          _threads[index] = _threads[index].copyWith(section: resolved);
+        }
+        if (_selectedThread?.id == threadId) {
+          _selectedThread = _selectedThread!.copyWith(section: resolved);
+        }
+      }
+      for (var i = 0; i < _threads.length; i++) {
+        _threads[i] = _syncThreadSection(_threads[i]);
+      }
+      if (_selectedThread != null) {
+        _selectedThread = _syncThreadSection(_selectedThread!);
+      }
+      _notify();
+    } catch (_) {
+      // Best-effort background resolution after thread/section/changed.
+    }
+  }
+
+  void _mergeThreadEmbeddedSections(Iterable<ThreadSummary> threads) {
+    for (final thread in threads) {
+      if (thread.section case final section?) {
+        _upsertSection(section);
+      }
+    }
+  }
+
+  void _upsertSection(ThreadSection section) {
+    final existingIndex = _sections.indexWhere(
+      (candidate) => candidate.id == section.id,
+    );
+    if (existingIndex != -1) {
+      _sections[existingIndex] = section;
+      return;
+    }
+    if (_sections.length >= maxRetainedSections) {
+      return;
+    }
+    _sections.add(section);
+  }
+
+  ThreadSection? _findSectionById(String sectionId) {
+    for (final section in _sections) {
+      if (section.id == sectionId) {
+        return section;
+      }
+    }
+    return null;
+  }
+
+  ThreadSummary _syncThreadSection(ThreadSummary thread) {
+    final currentSection = thread.section;
+    if (currentSection == null) {
+      return thread;
+    }
+    _upsertSection(currentSection);
+    final canonical = _findSectionById(currentSection.id);
+    if (canonical == null || identical(canonical, currentSection)) {
+      return thread;
+    }
+    return thread.copyWith(section: canonical);
+  }
+
+  static String _boundedError(Object error) {
+    final normalized = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) {
+      return 'Thread operation failed.';
+    }
+    if (normalized.length <= _maxErrorChars) {
+      return normalized;
+    }
+    var end = _maxErrorChars;
+    if (end > 0) {
+      final lastUnit = normalized.codeUnitAt(end - 1);
+      if (lastUnit >= 0xD800 && lastUnit <= 0xDBFF) {
+        end -= 1;
+      }
+    }
+    return '${normalized.substring(0, end)}…';
+  }
+
   ThreadSummary _replaceOrPrepend(ThreadSummary thread) {
-    thread = _preserveTransientState(thread);
+    thread = _syncThreadSection(_preserveTransientState(thread));
     _threads.removeWhere((candidate) => candidate.id == thread.id);
     _threads.insert(0, thread);
     if (_threads.length > maxRetainedThreads) {
@@ -598,7 +960,7 @@ class ThreadListController extends ChangeNotifier {
   }
 
   ThreadSummary _replaceInPlace(ThreadSummary thread) {
-    thread = _preserveTransientState(thread);
+    thread = _syncThreadSection(_preserveTransientState(thread));
     final index = _threads.indexWhere((candidate) => candidate.id == thread.id);
     if (index == -1) {
       return _replaceOrPrepend(thread);

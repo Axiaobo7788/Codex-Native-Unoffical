@@ -11,6 +11,7 @@ import '../../domain/output_models.dart';
 import '../../domain/remote_admin_models.dart';
 import '../../domain/runtime_diagnostics_gateway.dart';
 import '../../domain/runtime_diagnostics_models.dart';
+import '../../domain/thread_gateway.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_models.dart';
 import '../../domain/user_input_models.dart';
@@ -39,6 +40,7 @@ class ProcessExit {
 class ProcessTransport
     implements
         CodexTransport,
+        ThreadSectionGateway,
         EcosystemCatalogGateway,
         McpCapabilityGateway,
         RuntimeDiagnosticsGateway {
@@ -170,6 +172,9 @@ class ProcessTransport
 
   @override
   bool get supportsRuntimeDiagnostics => true;
+
+  @override
+  bool get supportsThreadSections => true;
 
   @override
   Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
@@ -306,6 +311,29 @@ class ProcessTransport
   @override
   Future<void> deleteThread(String threadId) =>
       _threadProtocol.deleteThread(threadId);
+
+  @override
+  Future<ThreadSectionPage> listThreadSections([
+    ThreadSectionListQuery query = const ThreadSectionListQuery(),
+  ]) => _threadProtocol.listThreadSections(query);
+
+  @override
+  Future<ThreadSection> createThreadSection(
+    ThreadSectionCreateOptions options,
+  ) => _threadProtocol.createThreadSection(options);
+
+  @override
+  Future<ThreadSection> updateThreadSection(
+    ThreadSectionUpdateOptions options,
+  ) => _threadProtocol.updateThreadSection(options);
+
+  @override
+  Future<void> deleteThreadSection(String sectionId) =>
+      _threadProtocol.deleteThreadSection(sectionId);
+
+  @override
+  Future<void> moveThreadSection(ThreadSectionMoveOptions options) =>
+      _threadProtocol.moveThreadSection(options);
 
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) =>
