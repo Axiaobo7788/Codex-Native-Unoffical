@@ -99,6 +99,66 @@ void main() {
     expect(() => runtime.clearThreadGoal('thread-1'), throwsUnsupportedError);
   });
 
+  test(
+    'serializes explicit section scope and validates the bounded page',
+    () async {
+      const scopedQuery = ThreadListQuery(
+        section: (id: ' section-1 '),
+        sortKey: ThreadSortKey.sectionPosition,
+        sortDirection: SortDirection.ascending,
+        cursor: 'section-page',
+        limit: 1,
+      );
+      final inSection = {
+        ..._threadJson(id: 'thread-1'),
+        'section': {'id': 'section-1', 'name': 'Work queue'},
+      };
+      responses['thread/list'] = {
+        'data': [inSection],
+        'nextCursor': 'section-next',
+      };
+      final page = await adapter.listThreads(scopedQuery);
+      expect(page.threads.single.section?.id, 'section-1');
+      expect(page.nextCursor, 'section-next');
+      expect(requests.last.params, {
+        'sectionId': 'section-1',
+        'sortKey': 'section_position',
+        'sortDirection': 'asc',
+        'cursor': 'section-page',
+        'limit': 1,
+        'archived': false,
+      });
+
+      responses['thread/list'] = {
+        'data': [_threadJson(id: 'plain')],
+      };
+      await adapter.listThreads(const ThreadListQuery(section: (id: null)));
+      expect(requests.last.params, containsPair('sectionId', null));
+      await adapter.listThreads(const ThreadListQuery());
+      expect(requests.last.params, isNot(contains('sectionId')));
+
+      await expectLater(
+        adapter.listThreads(scopedQuery),
+        throwsA(isA<ProtocolViolation>()),
+      );
+      responses['thread/list'] = {
+        'data': [inSection, inSection],
+      };
+      await expectLater(
+        adapter.listThreads(scopedQuery),
+        throwsA(isA<ProtocolViolation>()),
+      );
+      final issued = requests.length;
+      await expectLater(
+        adapter.listThreads(
+          const ThreadListQuery(sortKey: ThreadSortKey.sectionPosition),
+        ),
+        throwsArgumentError,
+      );
+      expect(requests, hasLength(issued));
+    },
+  );
+
   test('lists a bounded metadata page with an opaque cursor', () async {
     responses['thread/list'] = {
       'data': [_threadJson(id: 'thread-1')],

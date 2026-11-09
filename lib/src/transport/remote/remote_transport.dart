@@ -349,8 +349,15 @@ final class RemoteTransport implements CodexTransport, RemoteSession {
       _modelProtocol.listModels(query);
 
   @override
-  Future<ThreadPage> listThreads(ThreadListQuery query) =>
-      _threadProtocol.listThreads(query);
+  Future<ThreadPage> listThreads(ThreadListQuery query) {
+    if (query.section != null ||
+        query.sortKey == ThreadSortKey.sectionPosition) {
+      throw UnsupportedError(
+        'Scoped section queries are unavailable on read-only Remote.',
+      );
+    }
+    return _threadProtocol.listThreads(query);
+  }
 
   @override
   Future<ThreadSummary> readThread(String threadId) =>

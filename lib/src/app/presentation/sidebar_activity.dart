@@ -197,7 +197,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                             ? 'Show active threads'
                             : 'Show archived threads',
                         size: 26,
-                        onPressed: controller.loading || controller.mutating
+                        onPressed: controller.catalogBusy
                             ? null
                             : () => controller.setShowArchived(
                                 !controller.showArchived,
@@ -212,7 +212,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                       CodexIconButton(
                         tooltip: 'Refresh threads',
                         size: 26,
-                        onPressed: controller.loading || controller.mutating
+                        onPressed: controller.catalogBusy
                             ? null
                             : controller.refresh,
                         icon: const Icon(Icons.refresh_rounded, size: 15),
@@ -220,6 +220,33 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                     ],
                   ),
                 ),
+                if (controller.sectionScopeId != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                    child: Row(
+                      children: [
+                        CodexIconButton(
+                          key: const ValueKey('thread-section-scope-back'),
+                          tooltip: 'Show all threads',
+                          size: 26,
+                          onPressed: controller.catalogBusy
+                              ? null
+                              : () => controller.setSectionScope(null),
+                          icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            controller.scopedSection?.name ?? 'Section',
+                            key: const ValueKey('thread-section-scope-name'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (_showSearch)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
@@ -233,7 +260,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                         controller: _searchController,
                         focusNode: _searchFocusNode,
                         decoration: InputDecoration(
-                          hintText: 'Filter threads…',
+                          hintText: controller.sectionScopeId == null
+                              ? 'Filter threads…'
+                              : 'Filter loaded threads…',
                           prefixIcon: const Icon(
                             Icons.search_rounded,
                             size: 16,
@@ -321,15 +350,26 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   Widget _threadList(ThreadListController controller) {
+    final scoped = controller.sectionScopeId != null;
     final hasPersistedSections =
-        !controller.showArchived && controller.sections.isNotEmpty;
+        !scoped && !controller.showArchived && controller.sections.isNotEmpty;
     if (controller.loading &&
         controller.threads.isEmpty &&
         !hasPersistedSections) {
       return const _SidebarLoadingState();
     }
-    if (controller.threads.isEmpty && !hasPersistedSections) {
-      return const _SidebarEmptyState();
+    if (controller.threads.isEmpty &&
+        !hasPersistedSections &&
+        !controller.canLoadMore) {
+      return scoped
+          ? Center(
+              child: Text(
+                controller.errorMessage == null
+                    ? 'No threads in this section.'
+                    : 'Unable to load this section.',
+              ),
+            )
+          : const _SidebarEmptyState();
     }
 
     final query = _searchQuery.toLowerCase();
@@ -350,13 +390,15 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               })
               .toList(growable: false);
 
-    final matchingEmptySections = !controller.showArchived && query.isNotEmpty
+    final matchingEmptySections =
+        !scoped && !controller.showArchived && query.isNotEmpty
         ? controller.sections
               .where((section) => section.name.toLowerCase().contains(query))
               .toList(growable: false)
         : const <ThreadSection>[];
 
     if (filteredThreads.isEmpty &&
+        !(scoped && controller.canLoadMore) &&
         (query.isNotEmpty
             ? matchingEmptySections.isEmpty
             : !hasPersistedSections)) {
@@ -371,7 +413,8 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       );
     }
 
-    final showPinnedGroup = !controller.showArchived && query.isEmpty;
+    final showPinnedGroup =
+        !scoped && !controller.showArchived && query.isEmpty;
     final pinnedThreads = showPinnedGroup
         ? filteredThreads
               .where((thread) => controller.isPinned(thread.id))
@@ -421,50 +464,58 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       projects.putIfAbsent(thread.cwd, () => <ThreadSummary>[]).add(thread);
     }
     final rows = <Object>[];
-    if (pinnedThreads.isNotEmpty) {
-      rows.add(_PinnedHeading(count: pinnedThreads.length));
-      rows.addAll(pinnedThreads);
-    }
-    for (final section in allSections) {
-      final sectionThreads =
-          sectionThreadsById[section.id] ?? const <ThreadSummary>[];
-      if (query.isNotEmpty &&
-          sectionThreads.isEmpty &&
-          !section.name.toLowerCase().contains(query)) {
-        continue;
+    if (scoped) {
+      rows.addAll(filteredThreads);
+    } else {
+      if (pinnedThreads.isNotEmpty) {
+        rows.add(_PinnedHeading(count: pinnedThreads.length));
+        rows.addAll(pinnedThreads);
       }
-      final collapsed =
-          query.isEmpty && _collapsedSections.contains(section.id);
-      rows.add(
-        _SectionHeading(
-          section: section,
-          count: sectionThreads.length,
-          collapsed: collapsed,
-        ),
-      );
-      if (!collapsed) {
-        rows.addAll(sectionThreads);
+      for (final section in allSections) {
+        final sectionThreads =
+            sectionThreadsById[section.id] ?? const <ThreadSummary>[];
+        if (query.isNotEmpty &&
+            sectionThreads.isEmpty &&
+            !section.name.toLowerCase().contains(query)) {
+          continue;
+        }
+        final collapsed =
+            query.isEmpty && _collapsedSections.contains(section.id);
+        rows.add(
+          _SectionHeading(
+            section: section,
+            count: sectionThreads.length,
+            collapsed: collapsed,
+          ),
+        );
+        if (!collapsed) {
+          rows.addAll(sectionThreads);
+        }
       }
-    }
-    for (final project in projects.entries) {
-      final collapsed =
-          query.isEmpty && _collapsedProjects.contains(project.key);
-      rows.add(
-        _ProjectHeading(
-          directory: project.key,
-          count: project.value.length,
-          collapsed: collapsed,
-        ),
-      );
-      if (!collapsed) {
-        rows.addAll(project.value);
+      for (final project in projects.entries) {
+        final collapsed =
+            query.isEmpty && _collapsedProjects.contains(project.key);
+        rows.add(
+          _ProjectHeading(
+            directory: project.key,
+            count: project.value.length,
+            collapsed: collapsed,
+          ),
+        );
+        if (!collapsed) {
+          rows.addAll(project.value);
+        }
       }
     }
     final hasFooter =
-        query.isEmpty &&
+        (scoped || query.isEmpty) &&
         (controller.canLoadMore || controller.retentionLimitReached);
     return ListView.builder(
-      key: const ValueKey('thread-list'),
+      key: ValueKey(
+        scoped
+            ? 'thread-list-section-${controller.sectionScopeId}'
+            : 'thread-list',
+      ),
       padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
       itemCount: rows.length + (hasFooter ? 1 : 0),
       itemBuilder: (context, index) {
@@ -473,7 +524,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             return Padding(
               padding: const EdgeInsets.all(ThemeTokens.space3),
               child: Text(
-                'Showing the newest ${controller.maxRetainedThreads} threads.',
+                scoped
+                    ? 'Showing the first ${controller.maxRetainedThreads} threads in this section.'
+                    : 'Showing the newest ${controller.maxRetainedThreads} threads.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -483,7 +536,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             child: CodexButton(
               variant: CodexButtonVariant.ghost,
               size: CodexButtonSize.sm,
-              onPressed: controller.loadingMore ? null : controller.loadMore,
+              onPressed: controller.catalogBusy ? null : controller.loadMore,
               loading: controller.loadingMore,
               label: 'Load more',
             ),
@@ -496,7 +549,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         if (row is _SectionHeading) {
           return _SectionHeadingRow(
             heading: row,
-            enabled: !controller.mutating && controller.supportsThreadSections,
+            enabled:
+                !controller.catalogBusy && controller.supportsThreadSections,
+            onOpenSection:
+                controller.sections.any(
+                  (section) => section.id == row.section.id,
+                )
+                ? () => controller.setSectionScope(row.section.id)
+                : null,
             onToggleCollapse: () {
               setState(() {
                 if (!_collapsedSections.remove(row.section.id)) {
@@ -1092,6 +1152,7 @@ class _SectionHeadingRow extends StatefulWidget {
     required this.heading,
     required this.enabled,
     required this.onToggleCollapse,
+    required this.onOpenSection,
     this.onRenameSection,
     this.onDeleteSection,
   });
@@ -1099,6 +1160,7 @@ class _SectionHeadingRow extends StatefulWidget {
   final _SectionHeading heading;
   final bool enabled;
   final VoidCallback onToggleCollapse;
+  final VoidCallback? onOpenSection;
   final VoidCallback? onRenameSection;
   final VoidCallback? onDeleteSection;
 
@@ -1152,6 +1214,12 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
                   width: 176,
                   popoverBuilder: (context, close) => CodexMenu<String>(
                     items: [
+                      if (widget.onOpenSection != null)
+                        const CodexMenuItem(
+                          value: 'open',
+                          label: 'Browse section',
+                          icon: Icon(Icons.list_rounded),
+                        ),
                       if (widget.onRenameSection != null)
                         const CodexMenuItem(
                           value: 'rename',
@@ -1168,6 +1236,8 @@ class _SectionHeadingRowState extends State<_SectionHeadingRow> {
                     onSelected: (action) {
                       close();
                       switch (action) {
+                        case 'open':
+                          widget.onOpenSection?.call();
                         case 'rename':
                           widget.onRenameSection?.call();
                         case 'delete':

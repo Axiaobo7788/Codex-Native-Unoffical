@@ -36,22 +36,52 @@ final class ThreadProtocolAdapter {
 
   Future<ThreadPage> listThreads(ThreadListQuery query) async {
     final searchTerm = query.searchTerm?.trim();
+    final sectionId = switch (query.section?.id) {
+      final id? => _requireOpaqueArgumentId(
+        id,
+        'sectionId',
+        _maxIdentifierLength,
+      ),
+      null => null,
+    };
+    if (query.sortKey == ThreadSortKey.sectionPosition && sectionId == null) {
+      throw ArgumentError('Section-position sorting requires a section ID.');
+    }
     final response = await request('thread/list', {
       if (query.cursor != null) 'cursor': query.cursor,
       'limit': query.limit,
       'sortKey': _sortKey(query.sortKey),
       'sortDirection': _sortDirection(query.sortDirection),
       'archived': query.archived,
+      if (query.section != null) 'sectionId': sectionId,
       if (searchTerm != null && searchTerm.isNotEmpty) 'searchTerm': searchTerm,
     });
     final data = response['data'];
     if (data is! List<Object?>) {
       throw const ProtocolViolation('thread/list data must be an array.');
     }
+    if (query.section != null && data.length > query.limit) {
+      throw const ProtocolViolation(
+        'Scoped thread page exceeds the requested limit.',
+      );
+    }
     final threads = data.map(_parseThread).toList(growable: false);
+    if (query.section != null &&
+        threads.any((thread) => thread.section?.id != sectionId)) {
+      throw const ProtocolViolation(
+        'Scoped thread page contains a different section.',
+      );
+    }
     return ThreadPage(
       threads: threads,
-      nextCursor: _optionalString(response, 'nextCursor'),
+      nextCursor: query.section == null
+          ? _optionalString(response, 'nextCursor')
+          : _optionalOpaqueIdentifier(
+              response,
+              'nextCursor',
+              _maxIdentifierLength,
+              context: 'thread/list',
+            ),
     );
   }
 
@@ -855,6 +885,7 @@ final class ThreadProtocolAdapter {
     ThreadSortKey.createdAt => 'created_at',
     ThreadSortKey.updatedAt => 'updated_at',
     ThreadSortKey.recencyAt => 'recency_at',
+    ThreadSortKey.sectionPosition => 'section_position',
   };
 
   static String _sortDirection(SortDirection direction) => switch (direction) {
