@@ -327,6 +327,13 @@ void main() {
     final transport = await _connect(socket);
     transports.add(transport);
 
+    expect(
+      () => transport.listThreads(
+        const ThreadListQuery(section: (id: 'section')),
+      ),
+      throwsUnsupportedError,
+    );
+    expect(_rpcWrites(socket), isEmpty);
     final modelsFuture = transport.listModels(const ModelListQuery(limit: 10));
     final threadsFuture = transport.listThreads(
       const ThreadListQuery(limit: 12),

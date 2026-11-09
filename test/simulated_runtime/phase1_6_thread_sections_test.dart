@@ -8,6 +8,82 @@ import 'simulated_runtime_harness.dart';
 void main() {
   group('Phase 1.6 Thread Sections & Sidebar Metadata simulated runtime', () {
     testWidgets(
+      'browses the ordered section without replacing the active thread',
+      (tester) async {
+        const section = ThreadSection(id: 'review-queue', name: 'Review queue');
+        final outside = createTestThread(
+          id: 'outside',
+          preview: 'Active outside',
+        );
+        final first = createTestThread(
+          id: 'first',
+          preview: 'Ordered first',
+        ).copyWith(section: section);
+        final second = createTestThread(
+          id: 'second',
+          preview: 'Ordered second',
+        ).copyWith(section: section);
+        final harness = _OrderedSectionHarness(
+          global: [outside, second, first],
+          ordered: [first, second],
+        )..threadSections.add(section);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.text('Active outside'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(const ValueKey('thread-section-menu-review-queue')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Browse section'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('thread-section-scope-name')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('thread-row-outside')), findsNothing);
+        expect(find.text('Active outside'), findsWidgets);
+        expect(find.byKey(const ValueKey('thread-row-first')), findsOneWidget);
+        expect(find.byKey(const ValueKey('thread-row-second')), findsNothing);
+
+        await tester.tap(find.byKey(const ValueKey('thread-search-toggle')));
+        await tester.pumpAndSettle();
+        final filter = find.byKey(const ValueKey('thread-search-field'));
+        await tester.enterText(filter, 'Ordered second');
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('thread-row-first')), findsNothing);
+        await tester.tap(find.text('Load more'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('thread-row-second')), findsOneWidget);
+        await tester.enterText(filter, '');
+        await tester.pumpAndSettle();
+        final firstRow = find.byKey(const ValueKey('thread-row-first'));
+        final secondRow = find.byKey(const ValueKey('thread-row-second'));
+        expect(
+          tester.getTopLeft(firstRow).dy,
+          lessThan(tester.getTopLeft(secondRow).dy),
+        );
+        expect(harness.scopedQueries.map((query) => query.cursor), [
+          null,
+          'scoped-next',
+        ]);
+
+        await tester.tap(
+          find.byKey(const ValueKey('thread-section-scope-back')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('thread-section-scope-name')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('thread-row-outside')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
       'creates, renames, moves, and deletes thread sections and renders bounded git/goal badges',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 900);
@@ -267,4 +343,25 @@ void main() {
       },
     );
   });
+}
+
+class _OrderedSectionHarness extends SimulatedRuntimeHarness {
+  _OrderedSectionHarness({
+    required List<ThreadSummary> global,
+    required this.ordered,
+  }) : super(initialThreads: global);
+
+  final List<ThreadSummary> ordered;
+  final List<ThreadListQuery> scopedQueries = [];
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) async {
+    if (query.section == null) {
+      return super.listThreads(query);
+    }
+    scopedQueries.add(query);
+    return query.cursor == null
+        ? ThreadPage(threads: [ordered.first], nextCursor: 'scoped-next')
+        : ThreadPage(threads: [ordered.last], nextCursor: null);
+  }
 }

@@ -13,7 +13,7 @@ enum ThreadGoalStatus {
   unknown,
 }
 
-enum ThreadSortKey { createdAt, updatedAt, recencyAt }
+enum ThreadSortKey { createdAt, updatedAt, recencyAt, sectionPosition }
 
 enum SortDirection { ascending, descending }
 
@@ -226,6 +226,7 @@ class ThreadListQuery {
     this.sortDirection = SortDirection.descending,
     this.archived = false,
     this.searchTerm,
+    this.section,
   }) : assert(limit > 0 && limit <= 100);
 
   final String? cursor;
@@ -234,6 +235,10 @@ class ThreadListQuery {
   final SortDirection sortDirection;
   final bool archived;
   final String? searchTerm;
+
+  /// Omit for the global catalog. A present record with a null ID selects
+  /// unsectioned threads. A concrete ID selects one stock section.
+  final ({String? id})? section;
 }
 
 class ThreadStartOptions {

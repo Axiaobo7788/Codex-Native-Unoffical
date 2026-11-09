@@ -87,6 +87,43 @@ void main() {
         );
       });
 
+      test('pages scoped stock threads in section order', () async {
+        final section = await transport.createThreadSection(
+          const ThreadSectionCreateOptions(name: 'Ordered fixture'),
+        );
+        final first = await transport.startThread(
+          ThreadStartOptions(cwd: fixture.path),
+        );
+        final second = await transport.startThread(
+          ThreadStartOptions(cwd: fixture.path),
+        );
+        await transport.moveThreadSection(
+          ThreadSectionMoveOptions(threadId: first.id, sectionId: section.id),
+        );
+        await transport.moveThreadSection(
+          ThreadSectionMoveOptions(
+            threadId: second.id,
+            sectionId: section.id,
+            beforeThreadId: first.id,
+          ),
+        );
+        Future<ThreadPage> ordered(String? cursor) => transport.listThreads(
+          ThreadListQuery(
+            section: (id: section.id),
+            sortKey: ThreadSortKey.sectionPosition,
+            sortDirection: SortDirection.ascending,
+            limit: 1,
+            cursor: cursor,
+          ),
+        );
+        final page = await ordered(null);
+        expect(page.threads.single.id, second.id);
+        expect(page.nextCursor, isNotNull);
+        final next = await ordered(page.nextCursor);
+        expect(next.threads.single.id, first.id);
+        expect(next.nextCursor, isNull);
+      });
+
       test('round-trips a paused user goal and its notifications', () async {
         final created = await transport.startThread(
           ThreadStartOptions(cwd: fixture.path),

@@ -7,6 +7,142 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'opens one ordered section, preserves the active thread, and caps pages',
+    () async {
+      const section = ThreadSection(id: 'queue', name: 'Queue');
+      final gateway = _FakeThreadGateway()
+        ..sections.add(section)
+        ..pages.addAll([
+          ThreadPage(threads: [_thread('outside')], nextCursor: 'global-page'),
+          ThreadPage(
+            threads: [
+              _thread('b', section: section),
+              _thread('a', section: section),
+            ],
+            nextCursor: 'scoped-page',
+          ),
+          ThreadPage(
+            threads: [_thread('c', section: section)],
+            nextCursor: 'unretained-page',
+          ),
+          ThreadPage(
+            threads: [_thread('global-first')],
+            nextCursor: 'global-next',
+          ),
+          ThreadPage(threads: [_thread('global-second')], nextCursor: null),
+        ]);
+      final controller = ThreadListController(
+        gateway: gateway,
+        pageSize: 2,
+        maxRetainedThreads: 3,
+      );
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+      await controller.refresh();
+      await controller.selectThread('outside');
+      await controller.setSectionScope('queue');
+      expect(controller.selectedThread?.id, 'outside');
+      expect(controller.threads.map((thread) => thread.id), ['b', 'a']);
+      expect(gateway.queries.last.section?.id, 'queue');
+      expect(gateway.queries.last.sortKey, ThreadSortKey.sectionPosition);
+      expect(gateway.queries.last.sortDirection, SortDirection.ascending);
+
+      await controller.loadMore();
+      expect(gateway.queries.last.cursor, 'scoped-page');
+      expect(gateway.queries.last.limit, 1);
+      expect(controller.threads.map((thread) => thread.id), ['b', 'a', 'c']);
+      expect(controller.retentionLimitReached, isTrue);
+
+      await controller.setSectionScope(null);
+      expect(gateway.queries.last.section, isNull);
+      expect(gateway.queries.last.cursor, isNull);
+      expect(controller.selectedThread?.id, 'outside');
+      expect(controller.threads.map((thread) => thread.id), ['global-first']);
+      await controller.loadMore();
+      expect(controller.selectedThread?.id, 'outside');
+      expect(controller.threads.map((thread) => thread.id), [
+        'global-first',
+        'global-second',
+      ]);
+    },
+  );
+
+  test(
+    'a section event discards an in-flight page and reloads from the start',
+    () async {
+      const section = ThreadSection(id: 'queue', name: 'Queue');
+      final gateway = _DelayedSectionGateway()
+        ..sections.add(section)
+        ..pages.addAll([
+          const ThreadPage(threads: [], nextCursor: null),
+          ThreadPage(
+            threads: [_thread('old', section: section)],
+            nextCursor: 'stale',
+          ),
+          ThreadPage(
+            threads: [_thread('reordered', section: section)],
+            nextCursor: null,
+          ),
+        ]);
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+      await controller.refresh();
+      await controller.setSectionScope('queue');
+      final paging = controller.loadMore();
+      gateway.events.add(
+        const ThreadSectionChangedEvent(
+          threadId: 'reordered',
+          sectionId: 'queue',
+        ),
+      );
+      expect(controller.canLoadMore, isFalse);
+      gateway.pageReply.complete(
+        ThreadPage(
+          threads: [_thread('stale-page-row', section: section)],
+          nextCursor: 'more',
+        ),
+      );
+      await paging;
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.threads.map((thread) => thread.id), ['reordered']);
+      expect(gateway.queries.map((query) => query.cursor), [
+        null,
+        null,
+        'stale',
+        null,
+      ]);
+      expect(gateway.queries.last.section?.id, 'queue');
+    },
+  );
+
+  test('keeps only the active draft outside the scoped catalog', () async {
+    final gateway = _DraftSectionGateway()
+      ..sections.add(const ThreadSection(id: 'queue', name: 'Queue'))
+      ..pages.addAll([
+        const ThreadPage(threads: [], nextCursor: null),
+        const ThreadPage(threads: [], nextCursor: null),
+      ]);
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+    await controller.refresh();
+    await controller.setSectionScope('queue');
+
+    final first = await controller.startThread(
+      const ThreadStartOptions(cwd: '/tmp'),
+    );
+    expect(controller.isMaterialized(first!.id), isFalse);
+    final second = await controller.startThread(
+      const ThreadStartOptions(cwd: '/tmp'),
+    );
+    expect(controller.selectedThread?.id, second!.id);
+    expect(controller.isMaterialized(second.id), isFalse);
+    expect(controller.isMaterialized(first.id), isTrue);
+    expect(controller.threads, isEmpty);
+  });
+
+  test(
     'keeps goal events that arrive while a direct read is in flight',
     () async {
       final gateway = _GoalReadGateway()
@@ -433,6 +569,31 @@ void main() {
     expect(controller.sections.map((s) => s.id), isNot(contains('sec-1')));
     expect(threadById('t-1').section, isNull);
   });
+}
+
+class _DraftSectionGateway extends _FakeThreadGateway {
+  var _draft = 0;
+
+  @override
+  Future<ThreadSummary> startThread(ThreadStartOptions options) async =>
+      _thread(
+        'draft-${++_draft}',
+        cwd: options.cwd,
+        status: ThreadRuntimeStatus.notLoaded,
+      );
+}
+
+class _DelayedSectionGateway extends _FakeThreadGateway {
+  final pageReply = Completer<ThreadPage>();
+
+  @override
+  Future<ThreadPage> listThreads(ThreadListQuery query) {
+    if (query.cursor == 'stale') {
+      queries.add(query);
+      return pageReply.future;
+    }
+    return super.listThreads(query);
+  }
 }
 
 class _GoalReadGateway extends _FakeThreadGateway implements ThreadGoalGateway {
