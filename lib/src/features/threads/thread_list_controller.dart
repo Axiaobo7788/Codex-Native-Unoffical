@@ -39,6 +39,8 @@ class ThreadListController extends ChangeNotifier {
   ThreadSummary? _selectedThread;
   String? _errorMessage;
   String? _lastRevertedThreadId;
+  String? _goalOperationThreadId;
+  var _goalEventObserved = false;
   var _revertVersion = 0;
   var _showArchived = false;
   var _initialLoadStarted = false;
@@ -60,10 +62,36 @@ class ThreadListController extends ChangeNotifier {
   bool get loadingMore => _loadingMore;
   bool get mutating => _mutating;
   bool get supportsThreadSections => _sectionGateway != null;
+
+  bool canManageGoal(String threadId) =>
+      !_disposed &&
+      !_showArchived &&
+      _goalGateway != null &&
+      (_selectedThread?.id == threadId ||
+          _threads.any((row) => row.id == threadId));
+
+  ThreadGoal? goalForThread(String threadId) {
+    if (_selectedThread?.id == threadId) {
+      return _selectedThread?.goal;
+    }
+    for (final row in _threads) {
+      if (row.id == threadId) {
+        return row.goal;
+      }
+    }
+    return null;
+  }
+
   bool get canLoadMore =>
       _nextCursor != null && _threads.length < maxRetainedThreads;
   bool get retentionLimitReached =>
       _nextCursor != null && _threads.length >= maxRetainedThreads;
+
+  ThreadGoalGateway? get _goalGateway => switch (gateway) {
+    final ThreadGoalGateway goalGateway when goalGateway.supportsThreadGoals =>
+      goalGateway,
+    _ => null,
+  };
 
   ThreadSectionGateway? get _sectionGateway => switch (gateway) {
     final ThreadSectionGateway sectionGateway
@@ -503,6 +531,72 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
+  Future<({ThreadGoal? goal})?> loadGoal(String threadId) => _runGoalOperation(
+    threadId,
+    (gateway) => gateway.readThreadGoal(threadId),
+  );
+
+  Future<void> saveGoal(
+    String threadId, {
+    String? objective,
+    ThreadGoalStatus? status,
+  }) async {
+    await _runGoalOperation(
+      threadId,
+      (gateway) =>
+          gateway.setThreadGoal(threadId, objective: objective, status: status),
+    );
+  }
+
+  Future<void> clearGoal(String threadId) async {
+    await _runGoalOperation(threadId, (gateway) async {
+      if (await gateway.clearThreadGoal(threadId)) {
+        return null;
+      }
+      return gateway.readThreadGoal(threadId);
+    });
+  }
+
+  Future<({ThreadGoal? goal})?> _runGoalOperation(
+    String threadId,
+    Future<ThreadGoal?> Function(ThreadGoalGateway) request,
+  ) async {
+    final gateway = _goalGateway;
+    if (_mutating || gateway == null || !canManageGoal(threadId)) {
+      return null;
+    }
+    _mutating = true;
+    _goalOperationThreadId = threadId;
+    _goalEventObserved = false;
+    _errorMessage = null;
+    _notify();
+    try {
+      final goal = await request(gateway);
+      if (!canManageGoal(threadId)) {
+        return null;
+      }
+      if (_goalEventObserved) {
+        return (goal: goalForThread(threadId));
+      }
+      if (goal == null) {
+        _clearGoal(threadId);
+      } else {
+        _applyGoalUpdate(threadId, goal);
+      }
+      return (goal: goal);
+    } catch (error) {
+      if (!_disposed) {
+        _errorMessage = _boundedError(error);
+      }
+      return null;
+    } finally {
+      _goalOperationThreadId = null;
+      _goalEventObserved = false;
+      _mutating = false;
+      _notify();
+    }
+  }
+
   Future<ThreadSection?> createSection(
     String name, {
     ThreadSectionAppearance? appearance,
@@ -708,9 +802,11 @@ class ThreadListController extends ChangeNotifier {
         _applyStatusUpdate(threadId, status);
         _notify();
       case ThreadGoalUpdatedEvent(:final threadId, :final goal):
+        _goalEventObserved |= threadId == _goalOperationThreadId;
         _applyGoalUpdate(threadId, goal);
         _notify();
       case ThreadGoalClearedEvent(:final threadId):
+        _goalEventObserved |= threadId == _goalOperationThreadId;
         _clearGoal(threadId);
         _notify();
       case ThreadSectionChangedEvent(:final threadId, :final sectionId):

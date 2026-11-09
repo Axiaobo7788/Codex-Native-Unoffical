@@ -40,6 +40,7 @@ class ProcessExit {
 class ProcessTransport
     implements
         CodexTransport,
+        ThreadGoalGateway,
         ThreadSectionGateway,
         EcosystemCatalogGateway,
         McpCapabilityGateway,
@@ -311,6 +312,28 @@ class ProcessTransport
   @override
   Future<void> deleteThread(String threadId) =>
       _threadProtocol.deleteThread(threadId);
+
+  @override
+  bool get supportsThreadGoals => !_closing;
+
+  @override
+  Future<ThreadGoal?> readThreadGoal(String threadId) =>
+      _threadProtocol.readThreadGoal(threadId);
+
+  @override
+  Future<ThreadGoal> setThreadGoal(
+    String threadId, {
+    String? objective,
+    ThreadGoalStatus? status,
+  }) => _threadProtocol.setThreadGoal(
+    threadId,
+    objective: objective,
+    status: status,
+  );
+
+  @override
+  Future<bool> clearThreadGoal(String threadId) =>
+      _threadProtocol.clearThreadGoal(threadId);
 
   @override
   Future<ThreadSectionPage> listThreadSections([
