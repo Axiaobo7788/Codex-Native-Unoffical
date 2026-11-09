@@ -146,6 +146,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                       context: context,
                       builder: (context) => _EcosystemDialog(
                         gateway: widget.runtimeController,
+                        threadController: widget.controller,
                         userInputController: widget.userInputController,
                         cwd:
                             widget.controller.selectedThread?.cwd ??
@@ -2097,12 +2098,14 @@ class _EcosystemDialog extends StatefulWidget {
     required this.gateway,
     required this.cwd,
     this.threadId,
+    this.threadController,
     this.userInputController,
   });
 
   final EcosystemGateway gateway;
   final String cwd;
   final String? threadId;
+  final ThreadListController? threadController;
   final UserInputController? userInputController;
 
   @override
@@ -2496,6 +2499,37 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
+  Future<bool> _ensureCapturedThreadReady(
+    String serverName,
+    String capturedThreadId,
+  ) async {
+    final threadController = widget.threadController;
+    if (threadController == null) {
+      return true;
+    }
+    if (threadController.selectedThread?.id != capturedThreadId) {
+      if (mounted) {
+        setState(() {
+          _mcpErrors[serverName] = 'Selected thread changed; reopen Skills, Plugins & MCP to continue.';
+        });
+      }
+      return false;
+    }
+    final ready = await threadController.ensureSelectedThreadLoaded();
+    if (!mounted) {
+      return false;
+    }
+    if (!ready || threadController.selectedThread?.id != capturedThreadId) {
+      setState(() {
+        _mcpErrors[serverName] =
+            threadController.errorMessage ??
+            'Unable to resume selected thread $capturedThreadId.';
+      });
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _readMcpResource(McpServerStatusModel server) async {
     final gateway = _mcpGateway;
     if (gateway == null || _mcpBusyServer != null) {
@@ -2520,6 +2554,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _mcpErrors.remove(server.name);
     });
     try {
+      if (activeThreadId != null &&
+          !await _ensureCapturedThreadReady(server.name, activeThreadId)) {
+        return;
+      }
       final result = await gateway.readMcpResource(
         McpResourceReadQuery(
           server: server.name,
@@ -2573,6 +2611,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _mcpErrors.remove(server.name);
     });
     try {
+      if (!await _ensureCapturedThreadReady(server.name, normalizedThreadId)) {
+        return;
+      }
       final result = await gateway.callMcpTool(
         McpToolCallQuery(
           server: server.name,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
+import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,14 +16,44 @@ void main() {
       (tester) async {
         final harness = SimulatedRuntimeHarness(
           initialThreads: [
-            createTestThread(id: 'thread-mcp', preview: 'MCP capability test'),
+            createTestThread(
+              id: 'thread-mcp',
+              preview: 'MCP capability test',
+              status: ThreadRuntimeStatus.notLoaded,
+            ),
           ],
         );
 
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
+        // Global resource read when no thread is selected stays threadless.
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('MCP (1)'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('mcp-resource-uri-field')),
+          'file:///workspace/README.md',
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('mcp-resource-read-submit')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, isEmpty);
+        expect(harness.mcpResourceReadQueries.single.threadId, isNull);
+        expect(find.text('# Test workspace'), findsOneWidget);
+        harness.mcpResourceReadQueries.clear();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+
         await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
         await tester.pumpAndSettle();
+        expect(harness.resumedThreadIds, isEmpty);
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
@@ -82,6 +113,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
 
+        expect(harness.resumedThreadIds, ['thread-mcp']);
         expect(harness.mcpResourceReadQueries.single.server, 'filesystem-mcp');
         expect(harness.mcpResourceReadQueries.single.threadId, 'thread-mcp');
         expect(

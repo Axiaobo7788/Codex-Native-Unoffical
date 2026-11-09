@@ -398,6 +398,7 @@ class SimulatedRuntimeHarness extends RuntimeController {
 
   // Action audit trails for assertion verification
   final List<String> startedThreadCwds = [];
+  final List<String> resumedThreadIds = [];
   final List<TurnStartOptions> startedTurns = [];
   final List<ReviewStartOptions> startedReviews = [];
   final List<TurnSteerOptions> steeredTurns = [];
@@ -512,6 +513,14 @@ class SimulatedRuntimeHarness extends RuntimeController {
 
   @override
   Future<ThreadSummary> resumeThread(String threadId) async {
+    resumedThreadIds.add(threadId);
+    final index = threads.indexWhere((t) => t.id == threadId);
+    if (index != -1 && threads[index].status == ThreadRuntimeStatus.notLoaded) {
+      threads[index] = threads[index].copyWith(
+        status: ThreadRuntimeStatus.idle,
+      );
+      notifyListeners();
+    }
     return readThread(threadId);
   }
 
