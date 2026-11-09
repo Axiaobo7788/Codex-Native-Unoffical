@@ -2135,6 +2135,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   String? _mcpBusyServer;
   String? _mcpBusyThreadId;
   _McpOperationKind? _mcpBusyOperation;
+  Set<Object> _mcpExcludedElicitationIds = const <Object>{};
   var _reloadingMcp = false;
   String? _mcpNotice;
 
@@ -2182,6 +2183,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     return userInputController.pendingElicitations
         .where(
           (request) =>
+              !_mcpExcludedElicitationIds.contains(request.requestId) &&
               request.turnId == null &&
               request.threadId == busyThreadId &&
               request.serverName == busyServer,
@@ -2499,35 +2501,45 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
-  Future<bool> _ensureCapturedThreadReady(
-    String serverName,
-    String capturedThreadId,
-  ) async {
+  bool _ensureCapturedThreadReady(String serverName, String capturedThreadId) {
     final threadController = widget.threadController;
     if (threadController == null) {
       return true;
     }
-    if (threadController.selectedThread?.id != capturedThreadId) {
-      if (mounted) {
-        setState(() {
-          _mcpErrors[serverName] = 'Selected thread changed; reopen Skills, Plugins & MCP to continue.';
-        });
-      }
-      return false;
-    }
-    final ready = await threadController.ensureSelectedThreadLoaded();
-    if (!mounted) {
-      return false;
-    }
-    if (!ready || threadController.selectedThread?.id != capturedThreadId) {
+    final selected = threadController.selectedThread;
+    if (selected == null || selected.id != capturedThreadId) {
       setState(() {
-        _mcpErrors[serverName] =
-            threadController.errorMessage ??
-            'Unable to resume selected thread $capturedThreadId.';
+        _mcpErrors[serverName] = 'Selected thread changed; reopen Skills, Plugins & MCP to continue.';
+      });
+      return false;
+    }
+    if (selected.status == ThreadRuntimeStatus.notLoaded &&
+        threadController.isMaterialized(selected.id)) {
+      setState(() {
+        _mcpErrors[serverName] = 'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.';
       });
       return false;
     }
     return true;
+  }
+
+  void _activateMcpOutboundOperation(
+    String serverName,
+    String? threadId,
+    _McpOperationKind kind,
+  ) {
+    final existingIds = widget.userInputController?.pendingElicitations
+        .map((request) => request.requestId)
+        .toSet();
+    setState(() {
+      _mcpBusyServer = serverName;
+      _mcpBusyThreadId = threadId;
+      _mcpBusyOperation = kind;
+      _mcpExcludedElicitationIds = existingIds == null || existingIds.isEmpty
+          ? const <Object>{}
+          : Set<Object>.unmodifiable(existingIds);
+      _mcpErrors.remove(serverName);
+    });
   }
 
   Future<void> _readMcpResource(McpServerStatusModel server) async {
@@ -2547,17 +2559,16 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         normalizedThreadId == null || normalizedThreadId.isEmpty
         ? null
         : normalizedThreadId;
-    setState(() {
-      _mcpBusyServer = server.name;
-      _mcpBusyThreadId = activeThreadId;
-      _mcpBusyOperation = _McpOperationKind.readResource;
-      _mcpErrors.remove(server.name);
-    });
+    if (activeThreadId != null &&
+        !_ensureCapturedThreadReady(server.name, activeThreadId)) {
+      return;
+    }
+    _activateMcpOutboundOperation(
+      server.name,
+      activeThreadId,
+      _McpOperationKind.readResource,
+    );
     try {
-      if (activeThreadId != null &&
-          !await _ensureCapturedThreadReady(server.name, activeThreadId)) {
-        return;
-      }
       final result = await gateway.readMcpResource(
         McpResourceReadQuery(
           server: server.name,
@@ -2578,6 +2589,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           _mcpBusyServer = null;
           _mcpBusyThreadId = null;
           _mcpBusyOperation = null;
+          _mcpExcludedElicitationIds = const <Object>{};
         });
       }
     }
@@ -2604,16 +2616,15 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (input == null || !mounted) {
       return;
     }
-    setState(() {
-      _mcpBusyServer = server.name;
-      _mcpBusyThreadId = normalizedThreadId;
-      _mcpBusyOperation = _McpOperationKind.callTool;
-      _mcpErrors.remove(server.name);
-    });
+    if (!_ensureCapturedThreadReady(server.name, normalizedThreadId)) {
+      return;
+    }
+    _activateMcpOutboundOperation(
+      server.name,
+      normalizedThreadId,
+      _McpOperationKind.callTool,
+    );
     try {
-      if (!await _ensureCapturedThreadReady(server.name, normalizedThreadId)) {
-        return;
-      }
       final result = await gateway.callMcpTool(
         McpToolCallQuery(
           server: server.name,
@@ -2635,6 +2646,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           _mcpBusyServer = null;
           _mcpBusyThreadId = null;
           _mcpBusyOperation = null;
+          _mcpExcludedElicitationIds = const <Object>{};
         });
       }
     }
