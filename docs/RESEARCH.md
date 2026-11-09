@@ -3373,3 +3373,82 @@ Base: `f8de0e9a9057a26ee3a23f85582b4a1d737c99d4`. Codex audited the repository i
   peer audit, Gemini flagged the live Retry fallback and fixture isolation.
   The correction limits rollback retries to eligible threads, binds pre-ID
   retries to the clicked failure, and isolates XDG paths.
+
+## Convergence refresh after consolidation
+
+The peers resumed from `a64b8e798f3084ca25af6d6ead78c541344e1a92`
+after [Hosted CI 42648632704](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42648632704)
+passed. The official `agy` TUI established independent write surfaces.
+Codex owned the thread Goal adapter, controller and sidebar. Gemini owned
+the Desktop Review picker and its tests/smoke. Each audited the other
+peer's actual commits. The Review follow-up added an in-flight thread
+mutation gate, removed guessed refs, rejected overlong titles, and
+isolated fixture Git signing/hooks. The final Goal audit reported no P0,
+P1, or P2 findings.
+
+### Fresh evidence
+
+- The installed Linux-packaged Desktop ASAR is `26.1103.60933`, build
+  `25894`, SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`.
+  Static matches locate `thread/goal/get|set|clear`, `section_position`,
+  and `review/start`. The review UI assets show working-tree and
+  base-branch actions. The stock schema, separately, defines four
+  review targets. The bounded Native picker follows that public target
+  contract.
+- Regenerated installed `codex-cli 0.167.0-alpha.3.2` schemas contain
+  106 stable and 74 experimental-only ClientRequests, 10 stable and
+  one experimental-only ServerRequest, 86 ServerNotifications, and one
+  ClientNotification. Goal, Section and Review calls are stable.
+  `thread/items/read` and `thread/timeline/list` remain experimental.
+- A disposable stock profile and a separate Host-backed probe each
+  exercised explicit user paused Goal set/get/clear and received
+  updated/cleared notices. The direct integration also edited the objective
+  without changing paused status. A second stock process in the same
+  disposable profile read the saved goal and its thread after restart.
+  The packaged Linux shell listed that thread without its badge before
+  selection. Stock metadata payloads omit the goal. The follow-up adds
+  selected-only hydration, with widget coverage of the resulting badge
+  and controller coverage of rapid selection and stale replies.
+- Stock `thread/list` accepted an explicit Section ID, ascending
+  `section_position`, `limit: 1` and a second cursor. Inserting a thread
+  ahead of the first page during a later probe changed a fresh query’s
+  first row, while the existing cursor returned the earlier next row.
+  A global query did not list the same unmaterialized fixture threads.
+  Two clean profiles returned the same default Pinned section identity.
+  These findings inform the bounded queue and do not establish a general
+  cursor snapshot guarantee or public reserved-ID contract.
+- ADB found no connected Android device and no fresh APK was available.
+  [OpenAI’s mobile Remote walkthrough](https://developers.openai.com/blog/mastering-codex-remote-for-engineering)
+  describes Goals, review and approvals as mobile controls. It establishes
+  product behavior, with no evidence here for a supported Native relay
+  client. [OpenAI’s Goal guide](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
+  describes persisted, user-controlled thread objectives.
+
+### Integrated F15 verification
+
+- Default Flutter suite: 403 passed and four explicit opt-in skips.
+  Direct stock suite: 4/4 with opt-in. Dart format (174 files),
+  analyze, standalone boundary (61 roots), Rust fmt, clippy and
+  98 Rust tests passed. One concurrent Flutter invocation initially
+  failed to copy the native-assets manifest because two invocations
+  shared the same build directory. Serializing those commands passed.
+- The bounded-history benchmark retained 100 of 1,000 source turns
+  and discarded ten 3 MiB outputs. RSS deltas were 1,884,160 bytes
+  for turns and 31,559,680 bytes for heavy-output iterations.
+  The integrated Linux debug bundle and relocatable-runtime gate passed.
+- The packaged Linux app opened on XWayland, rendered the connected Codex
+  shell, started the bundled Host and stock app-server, and shut down the
+  Host. ATK emitted the existing embed warning. A synthetic X11 click
+  did not establish an interactive selected-goal walkthrough. Widget
+  evidence covers selection, goal mutation controls and confirmation.
+- Gemini's disposable unauthenticated Review probe observed RPC acceptance
+  and enter events for the additional targets. It did not complete all
+  four targets in that profile. Codex then ran each target through the
+  packaged Host, stock app-server and the configured account, against
+  separate temporary Git fixtures. All four had matching review and turn
+  identities, both review markers, terminal `completed`, and cleaned
+  threads. Assistant character counts were 691 for uncommitted, 1,016 for
+  base branch, 246 for commit and 464 for custom.
+- The new UI surfaces remain `HUMAN_REVIEW_PENDING`. Goal pause/resume
+  controls have simulated interaction coverage. The real Goal probe used
+  paused state and did not exercise model-driven automatic continuation.

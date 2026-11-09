@@ -2183,3 +2183,26 @@ lifecycle presentation the source of truth.
   `docs/history/`, and feature/evidence classification in the matrix. Prior
   ADR measurements and test counts are historical evidence. Broad visual parity
   or fully eliminated Material styling cannot be inferred from those records.
+
+---
+
+## ADR-042 — Keep Goal and Review authority in the local stock runtime
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- The Goal editor issues explicit local `thread/goal/set` and `clear`
+  requests with `origin: user`. New goals are saved paused. The user
+  can resume, pause, edit the objective, or confirm clear. Stock controls
+  continuation and server-managed states. Remote rejects all Goal calls.
+- Stock `thread/list` and `thread/read` omit goal state in the current schema.
+  Hydrate a selected thread through `thread/goal/get` with one background
+  request and one replaceable pending target. Keep replies inside the retained
+  thread set. Skip stale projection writes when live events or explicit
+  operations supersede a background result.
+- Desktop Review accepts the four stock `review/start` targets. A bounded
+  picker uses user-supplied ref and instruction fields and rechecks selected
+  identity, archive, mutation, and runtime state after it closes. Review
+  remains inline through the existing stock lifecycle and unavailable on
+  read-only Remote. This extends the initial F14 single-action scope.

@@ -12,8 +12,9 @@ and is not affiliated with or endorsed by OpenAI.
   a 704 px reading/composer column, and a compact layout for narrow windows.
 - **Organization and review:** archive, rename, pin, and group local threads into
   sections. Section counts describe loaded threads from the bounded global list.
-  The desktop review action runs **Review uncommitted changes** on an eligible
-  Git-backed thread.
+  Manage a local thread Goal from its sidebar menu. Desktop code review can
+  target uncommitted changes, a base branch, a commit or ref, or custom
+  instructions on an eligible thread.
 - **Runtime tools:** discover Skills, Plugins, installed Apps and MCP servers.
   Available actions and catalogs depend on the installed Codex runtime and its
   configuration.
