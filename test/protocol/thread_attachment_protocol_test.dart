@@ -407,6 +407,325 @@ void main() {
 
       await transport.close();
     });
+
+    test('linkPullRequest preflight-scans the thread, creates a canonical pull_request attachment when absent, and enforces 256-byte identityKey and secret-safe errors', () async {
+      final recordedCalls = <({String method, JsonObject params})>[];
+      final adapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          recordedCalls.add((method: method, params: params));
+          if (method == 'thread/attachment/list') {
+            return {'data': const <Object?>[], 'nextCursor': null};
+          }
+          if (method == 'thread/attachment/add') {
+            return {
+              'outcome': 'created',
+              'attachment': {
+                'id': 'att-created-1',
+                'attachmentType': 'pull_request',
+                'identityKey': params['identityKey'],
+                'payload': params['payload'],
+                'createdAt': 1700000100,
+              },
+            };
+          }
+          throw StateError('Unexpected method: $method');
+        },
+      );
+
+      final result = await adapter.linkPullRequest(
+        'thread-link-1',
+        url: 'https://www.github.com/OpenAI/Codex/pull/888',
+        headBranch: '  feat/link-888  ',
+      );
+
+      expect(result.outcome, ThreadPullRequestLinkOutcome.created);
+      expect(result.displayLabel, 'OpenAI/Codex#888');
+      expect(result.hiddenByDisplayCap, isFalse);
+      expect(result.pullRequest, isNotNull);
+      expect(result.pullRequest!.attachmentId, 'att-created-1');
+      expect(
+        result.pullRequest!.canonicalIdentityKey,
+        '["github.com","openai","codex",888]',
+      );
+      expect(
+        result.pullRequest!.canonicalUrl,
+        'https://github.com/OpenAI/Codex/pull/888',
+      );
+      expect(result.pullRequest!.headBranch, 'feat/link-888');
+      expect(recordedCalls, hasLength(2));
+      expect(recordedCalls[0].method, 'thread/attachment/list');
+      expect(recordedCalls[0].params, {
+        'threadId': 'thread-link-1',
+        'limit': 16,
+      });
+      expect(recordedCalls[1].method, 'thread/attachment/add');
+      expect(recordedCalls[1].params, {
+        'threadId': 'thread-link-1',
+        'attachmentType': 'pull_request',
+        'identityKey': '["github.com","openai","codex",888]',
+        'payload': {
+          'url': 'https://github.com/OpenAI/Codex/pull/888',
+          'headBranch': 'feat/link-888',
+        },
+      });
+
+      // Secret-bearing userinfo/query URLs fail locally without echoing the secret
+      // in the thrown ArgumentError string.
+      Object? caughtSecretError;
+      try {
+        await adapter.linkPullRequest(
+          'thread-link-1',
+          url: 'https://user:super_secret_token_999@github.com/openai/codex/pull/1?token=leak_me_123',
+        );
+      } on Object catch (error) {
+        caughtSecretError = error;
+      }
+      expect(caughtSecretError, isA<ArgumentError>());
+      expect(
+        caughtSecretError.toString(),
+        isNot(contains('super_secret_token_999')),
+      );
+      expect(caughtSecretError.toString(), isNot(contains('leak_me_123')));
+      expect(recordedCalls, hasLength(2));
+
+      // Canonical identity exceeding 256 UTF-8 bytes fails locally before any RPC.
+      final longSeg = 'a' * 60;
+      final over256GitLabUrl =
+          'https://gitlab.com/$longSeg/$longSeg/$longSeg/$longSeg/$longSeg/-/merge_requests/12345';
+      final parsedLong =
+          ThreadAttachmentProtocolAdapter.tryParseCanonicalPullRequestUrl(
+            over256GitLabUrl,
+          );
+      expect(parsedLong, isNotNull);
+      expect(
+        utf8.encode(parsedLong!.canonicalIdentityKey).length,
+        greaterThan(256),
+      );
+
+      await expectLater(
+        adapter.linkPullRequest('thread-link-1', url: over256GitLabUrl),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.toString(),
+            'toString',
+            allOf(
+              contains('256 UTF-8 bytes'),
+              isNot(contains(over256GitLabUrl)),
+            ),
+          ),
+        ),
+      );
+      expect(recordedCalls, hasLength(2));
+    });
+
+    test('linkPullRequest detects an already-linked legacy URL row during preflight without adding a duplicate canonical row, and returns scanIncomplete when preflight truncates', () async {
+      final recordedMethods = <String>[];
+      final legacyAdapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          recordedMethods.add(method);
+          return {
+            'data': [
+              {
+                'id': 'att-legacy-412',
+                'attachmentType': 'pull_request',
+                'identityKey': 'https://github.com/openai/codex/pull/412',
+                'payload': {
+                  'url': 'https://github.com/OpenAI/Codex/pull/412',
+                  'headBranch': 'legacy-branch',
+                },
+                'createdAt': 1700000002,
+              },
+            ],
+            'nextCursor': null,
+          };
+        },
+      );
+
+      final legacyResult = await legacyAdapter.linkPullRequest(
+        'thread-legacy-dup',
+        url: 'https://github.com/OpenAI/Codex/pull/412',
+        headBranch: 'new-branch-ignored',
+      );
+
+      expect(legacyResult.outcome, ThreadPullRequestLinkOutcome.existing);
+      expect(legacyResult.displayLabel, 'OpenAI/Codex#412');
+      expect(legacyResult.hiddenByDisplayCap, isFalse);
+      expect(legacyResult.pullRequest, isNotNull);
+      expect(legacyResult.pullRequest!.attachmentId, 'att-legacy-412');
+      expect(legacyResult.pullRequest!.headBranch, 'legacy-branch');
+      // Never issued thread/attachment/add because legacy row already links this PR.
+      expect(recordedMethods, ['thread/attachment/list']);
+
+      // When preflight hits the 100-row scan cap without confirming absence,
+      // returns scanIncomplete with null pullRequest without calling thread/attachment/add.
+      final truncatedMethods = <String>[];
+      var page = 0;
+      final truncatedAdapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          truncatedMethods.add(method);
+          page += 1;
+          final limit = params['limit'] as int;
+          return {
+            'data': [
+              for (var i = 0; i < limit; i++)
+                {
+                  'id': 'wt-$page-$i',
+                  'attachmentType': 'worktree',
+                  'identityKey': '/tmp/wt-$page-$i',
+                  'payload': const <String, Object?>{},
+                  'createdAt': page * 100 + i,
+                },
+            ],
+            'nextCursor': 'cursor-$page',
+          };
+        },
+      );
+
+      final incompleteResult = await truncatedAdapter.linkPullRequest(
+        'thread-truncated',
+        url: 'https://github.com/OpenAI/Codex/pull/900',
+      );
+      expect(
+        incompleteResult.outcome,
+        ThreadPullRequestLinkOutcome.scanIncomplete,
+      );
+      expect(incompleteResult.displayLabel, 'OpenAI/Codex#900');
+      expect(incompleteResult.pullRequest, isNull);
+      expect(
+        truncatedMethods.every((m) => m == 'thread/attachment/list'),
+        isTrue,
+      );
+
+      // Empty page with non-null nextCursor is treated as incomplete (truncated)
+      // on both readLinkedPullRequests and linkPullRequest preflight.
+      final emptyPageMethods = <String>[];
+      final emptyPageWithCursorAdapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          emptyPageMethods.add(method);
+          return {'data': const <Object?>[], 'nextCursor': 'cursor-incomplete'};
+        },
+      );
+
+      final emptyPageSnapshot = await emptyPageWithCursorAdapter
+          .readLinkedPullRequests('thread-empty-cursor');
+      expect(emptyPageSnapshot.truncated, isTrue);
+      expect(emptyPageSnapshot.pullRequests, isEmpty);
+
+      final emptyPageLinkResult = await emptyPageWithCursorAdapter
+          .linkPullRequest(
+            'thread-empty-cursor',
+            url: 'https://github.com/OpenAI/Codex/pull/901',
+          );
+      expect(
+        emptyPageLinkResult.outcome,
+        ThreadPullRequestLinkOutcome.scanIncomplete,
+      );
+      expect(emptyPageLinkResult.displayLabel, 'OpenAI/Codex#901');
+      expect(emptyPageLinkResult.pullRequest, isNull);
+      expect(
+        emptyPageMethods.every((m) => m == 'thread/attachment/list'),
+        isTrue,
+      );
+
+      // Linking a 17th distinct PR when 16 PRs are already present sets hiddenByDisplayCap=true.
+      final cappedAdapter = ThreadAttachmentProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          if (method == 'thread/attachment/list') {
+            return {
+              'data': [
+                for (var i = 1; i <= 16; i++)
+                  {
+                    'id': 'att-pr-$i',
+                    'attachmentType': 'pull_request',
+                    'identityKey': '["github.com","openai","codex",$i]',
+                    'payload': {
+                      'url': 'https://github.com/OpenAI/Codex/pull/$i',
+                    },
+                    'createdAt': 1700000000 + i,
+                  },
+              ],
+              'nextCursor': null,
+            };
+          }
+          if (method == 'thread/attachment/add') {
+            return {
+              'outcome': 'created',
+              'attachment': {
+                'id': 'att-pr-17',
+                'attachmentType': 'pull_request',
+                'identityKey': params['identityKey'],
+                'payload': params['payload'],
+                'createdAt': 1700000017,
+              },
+            };
+          }
+          throw StateError('Unexpected method: $method');
+        },
+      );
+
+      final cappedCreateResult = await cappedAdapter.linkPullRequest(
+        'thread-capped',
+        url: 'https://github.com/OpenAI/Codex/pull/17',
+      );
+      expect(cappedCreateResult.outcome, ThreadPullRequestLinkOutcome.created);
+      expect(cappedCreateResult.displayLabel, 'OpenAI/Codex#17');
+      expect(cappedCreateResult.hiddenByDisplayCap, isTrue);
+      expect(cappedCreateResult.pullRequest?.number, 17);
+    });
+
+    test('ProcessTransport latches supportsThreadAttachmentWrites=false on add -32601 while preserving readLinkedPullRequests capability', () async {
+      final fakeChild = _FakeAttachmentChildProcess(
+        onRequest: (id, method, params) {
+          if (method == 'thread/attachment/list') {
+            return {
+              'id': id,
+              'result': {'data': const <Object?>[], 'nextCursor': null},
+            };
+          }
+          if (method == 'thread/attachment/add') {
+            return {
+              'id': id,
+              'error': {'code': -32601, 'message': 'Method not found'},
+            };
+          }
+          return {'id': id, 'result': const <String, Object?>{}};
+        },
+      );
+      final transport = await ProcessTransport.start(
+        executablePath: 'fake-codex',
+        launcher: (_, _) async => fakeChild,
+      );
+
+      expect(transport.supportsThreadAttachments, isTrue);
+      expect(transport.supportsThreadAttachmentWrites, isTrue);
+
+      await expectLater(
+        transport.linkPullRequest(
+          'thread-1',
+          url: 'https://github.com/openai/codex/pull/12',
+        ),
+        throwsA(isA<JsonRpcException>().having((e) => e.code, 'code', -32601)),
+      );
+
+      // Write capability is latched false, but read capability remains true!
+      expect(transport.supportsThreadAttachmentWrites, isFalse);
+      expect(transport.supportsThreadAttachments, isTrue);
+
+      // Subsequent linkPullRequest fails locally with UnsupportedError.
+      await expectLater(
+        transport.linkPullRequest(
+          'thread-1',
+          url: 'https://github.com/openai/codex/pull/13',
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+
+      // Read path still works against the transport.
+      final snapshot = await transport.readLinkedPullRequests('thread-1');
+      expect(snapshot.pullRequests, isEmpty);
+
+      await transport.close();
+    });
   });
 }
 

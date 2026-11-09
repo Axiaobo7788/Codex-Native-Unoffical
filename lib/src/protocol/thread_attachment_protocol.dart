@@ -5,20 +5,22 @@ import 'jsonl_decoder.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
 
-/// Typed protocol adapter for stock `thread/attachment/list` and
-/// `thread/attachment/updated` notifications.
+/// Typed protocol adapter for stock `thread/attachment/list`,
+/// `thread/attachment/add`, and `thread/attachment/updated` notifications.
 ///
-/// Stock allows up to 64 KiB per attachment payload and up to 100 attachments
-/// per thread. To keep memory bounded, this adapter pages in small slices
-/// ([defaultPageSize] = 16), scans at most [maxScannedAttachments] (100) rows
-/// with a duplicate-cursor guard, and projects only sanitized canonical
-/// `pull_request` links (up to [maxRetainedPullRequests] = 16).
+/// Stock allows up to 64 KiB per attachment payload, 256 UTF-8 bytes per
+/// `identityKey`, and up to 100 attachments per thread. To keep memory bounded,
+/// this adapter pages in small slices ([defaultPageSize] = 16), scans at most
+/// [maxScannedAttachments] (100) rows with a duplicate-cursor guard, and
+/// projects only sanitized canonical `pull_request` links (up to
+/// [maxRetainedPullRequests] = 16).
 final class ThreadAttachmentProtocolAdapter {
   static const int defaultPageSize = 16;
   static const int maxPageSize = 16;
   static const int maxScannedAttachments = 100;
   static const int maxScannedPages = 16;
   static const int maxRetainedPullRequests = 16;
+  static const int maxIdentityKeyUtf8Bytes = 256;
   static const int _maxIdentifierLength = 512;
   static const int _maxIdentityKeyLength = 1024;
   static const int _maxAttachmentTypeLength = 128;
@@ -115,10 +117,11 @@ final class ThreadAttachmentProtocolAdapter {
       if (truncated) {
         break;
       }
-      if (nextCursor == null || data.isEmpty) {
+      if (nextCursor == null) {
         break;
       }
-      if (scannedCount >= maxScannedAttachments ||
+      if (data.isEmpty ||
+          scannedCount >= maxScannedAttachments ||
           scannedPages >= maxScannedPages) {
         truncated = true;
         break;
@@ -132,6 +135,208 @@ final class ThreadAttachmentProtocolAdapter {
       scannedAttachmentCount: scannedCount,
       truncated: truncated,
     );
+  }
+
+  /// Links a canonical GitHub Pull Request or GitLab Merge Request URL to
+  /// [threadId] using `thread/attachment/add` (`attachmentType: 'pull_request'`).
+  ///
+  /// Performs a bounded fresh same-thread preflight scan so an already-linked
+  /// legacy URL row does not receive a duplicate canonical backing row. If the
+  /// bounded preflight scan stops early at the 100-row / 16-page bound (or sees
+  /// an empty page with a non-null continuation cursor) before confirming
+  /// absence, returns [ThreadPullRequestLinkOutcome.scanIncomplete] with a null
+  /// [ThreadPullRequestLinkResult.pullRequest] without issuing a write.
+  Future<ThreadPullRequestLinkResult> linkPullRequest(
+    String threadId, {
+    required String url,
+    String? headBranch,
+  }) async {
+    final normalizedThreadId = _requireOpaqueArgumentId(
+      threadId,
+      'threadId',
+      _maxIdentifierLength,
+    );
+    final canonicalParts = tryParseCanonicalPullRequestUrl(url);
+    if (canonicalParts == null) {
+      throw ArgumentError(
+        'Enter a valid HTTPS GitHub Pull Request or GitLab Merge Request URL.',
+        'url',
+      );
+    }
+    final identityBytes = utf8.encode(canonicalParts.canonicalIdentityKey);
+    if (identityBytes.length > maxIdentityKeyUtf8Bytes) {
+      throw ArgumentError(
+        'Canonical pull request identity exceeds 256 UTF-8 bytes.',
+        'url',
+      );
+    }
+    final sanitizedBranch = headBranch == null || headBranch.trim().isEmpty
+        ? null
+        : _requireSanitizedHeadBranchArgument(headBranch);
+    final targetDisplayLabel =
+        '${canonicalParts.owner}/${canonicalParts.repository}#${canonicalParts.number}';
+
+    final preflight = await _preflightFindExistingPullRequest(
+      normalizedThreadId,
+      canonicalParts.canonicalIdentityKey,
+    );
+    if (preflight.existing case final existingPr?) {
+      return ThreadPullRequestLinkResult(
+        outcome: ThreadPullRequestLinkOutcome.existing,
+        displayLabel: existingPr.displayLabel,
+        pullRequest: existingPr,
+        hiddenByDisplayCap: preflight.beyondDisplayCap,
+      );
+    }
+    if (preflight.truncated) {
+      return ThreadPullRequestLinkResult(
+        outcome: ThreadPullRequestLinkOutcome.scanIncomplete,
+        displayLabel: targetDisplayLabel,
+      );
+    }
+
+    final payload = <String, Object?>{
+      'url': canonicalParts.canonicalUrl,
+      'headBranch': ?sanitizedBranch,
+    };
+    final response = await request('thread/attachment/add', {
+      'threadId': normalizedThreadId,
+      'attachmentType': 'pull_request',
+      'identityKey': canonicalParts.canonicalIdentityKey,
+      'payload': payload,
+    });
+
+    final outcome = switch (response['outcome']) {
+      'created' => ThreadPullRequestLinkOutcome.created,
+      'existing' => ThreadPullRequestLinkOutcome.existing,
+      _ => throw const ProtocolViolation(
+        'thread/attachment/add outcome must be "created" or "existing".',
+      ),
+    };
+    final rawAttachment = response['attachment'];
+    if (rawAttachment is! Map<String, Object?>) {
+      throw const ProtocolViolation(
+        'thread/attachment/add attachment must be an object.',
+      );
+    }
+    final parsed = _parseLinkedPullRequestItem(rawAttachment);
+    if (parsed == null ||
+        parsed.canonicalIdentityKey != canonicalParts.canonicalIdentityKey) {
+      throw const ProtocolViolation(
+        'thread/attachment/add returned an invalid pull_request attachment.',
+      );
+    }
+    return ThreadPullRequestLinkResult(
+      outcome: outcome,
+      displayLabel: parsed.displayLabel,
+      pullRequest: parsed,
+      hiddenByDisplayCap: preflight.beyondDisplayCap,
+    );
+  }
+
+  Future<
+    ({ThreadLinkedPullRequest? existing, bool truncated, bool beyondDisplayCap})
+  >
+  _preflightFindExistingPullRequest(
+    String normalizedThreadId,
+    String targetCanonicalIdentityKey,
+  ) async {
+    final seenCursors = <String>{};
+    final seenCanonicalKeys = <String>{};
+    String? cursor;
+    var scannedCount = 0;
+    var scannedPages = 0;
+
+    while (scannedCount < maxScannedAttachments &&
+        scannedPages < maxScannedPages) {
+      final remainingBudget = maxScannedAttachments - scannedCount;
+      final requestLimit = remainingBudget < defaultPageSize
+          ? remainingBudget
+          : defaultPageSize;
+      final response = await request('thread/attachment/list', {
+        'threadId': normalizedThreadId,
+        'limit': requestLimit,
+        'cursor': ?cursor,
+      });
+      scannedPages += 1;
+
+      final data = response['data'];
+      if (data is! List<Object?>) {
+        throw const ProtocolViolation(
+          'thread/attachment/list data must be an array.',
+        );
+      }
+      if (data.length > requestLimit) {
+        throw const ProtocolViolation(
+          'thread/attachment/list page exceeds the requested limit.',
+        );
+      }
+      final nextCursor = _optionalOpaqueIdentifier(
+        response,
+        'nextCursor',
+        _maxIdentifierLength,
+        context: 'thread/attachment/list',
+      );
+      if (nextCursor != null && !seenCursors.add(nextCursor)) {
+        throw const ProtocolViolation(
+          'Duplicate thread/attachment/list pagination cursor.',
+        );
+      }
+
+      scannedCount += data.length;
+      for (final rawItem in data) {
+        final parsed = _parseLinkedPullRequestItem(rawItem);
+        if (parsed == null) {
+          continue;
+        }
+        if (parsed.canonicalIdentityKey == targetCanonicalIdentityKey) {
+          return (
+            existing: parsed,
+            truncated: false,
+            beyondDisplayCap:
+                seenCanonicalKeys.length >= maxRetainedPullRequests,
+          );
+        }
+        seenCanonicalKeys.add(parsed.canonicalIdentityKey);
+      }
+
+      if (nextCursor == null) {
+        return (
+          existing: null,
+          truncated: false,
+          beyondDisplayCap: seenCanonicalKeys.length >= maxRetainedPullRequests,
+        );
+      }
+      if (data.isEmpty ||
+          scannedCount >= maxScannedAttachments ||
+          scannedPages >= maxScannedPages) {
+        return (
+          existing: null,
+          truncated: true,
+          beyondDisplayCap: seenCanonicalKeys.length >= maxRetainedPullRequests,
+        );
+      }
+      cursor = nextCursor;
+    }
+
+    return (
+      existing: null,
+      truncated: true,
+      beyondDisplayCap: seenCanonicalKeys.length >= maxRetainedPullRequests,
+    );
+  }
+
+  static String _requireSanitizedHeadBranchArgument(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty ||
+        trimmed.length > _maxHeadBranchLength ||
+        _controlChars.hasMatch(trimmed)) {
+      throw ArgumentError(
+        'Head branch must be a single-line branch name up to $_maxHeadBranchLength characters.',
+        'headBranch',
+      );
+    }
+    return trimmed;
   }
 
   static ThreadLinkedPullRequest? _parseLinkedPullRequestItem(Object? raw) {
@@ -161,6 +366,9 @@ final class ThreadAttachmentProtocolAdapter {
       _maxIdentityKeyLength,
       context: 'thread/attachment/list',
     );
+    if (utf8.encode(identityKey).length > maxIdentityKeyUtf8Bytes) {
+      return null;
+    }
     final createdAt = _requireInt(raw, 'createdAt');
     final payload = raw['payload'];
     if (payload is! Map<String, Object?>) {
@@ -172,6 +380,10 @@ final class ThreadAttachmentProtocolAdapter {
     }
     final canonicalUrlParts = tryParseCanonicalPullRequestUrl(rawUrl);
     if (canonicalUrlParts == null) {
+      return null;
+    }
+    if (utf8.encode(canonicalUrlParts.canonicalIdentityKey).length >
+        maxIdentityKeyUtf8Bytes) {
       return null;
     }
     if (!_matchesCanonicalIdentityKey(identityKey, canonicalUrlParts)) {

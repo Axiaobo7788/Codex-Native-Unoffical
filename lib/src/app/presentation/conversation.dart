@@ -124,13 +124,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   final _composerAttachPopoverController = CodexPopoverController();
   final _linkedPrsPopoverController = CodexPopoverController();
   final _linkedPrViewNotifier = ValueNotifier<int>(0);
+  late final TextEditingController _linkedPrUrlController;
+  late final TextEditingController _linkedPrBranchController;
+  late final FocusNode _linkedPrUrlFocusNode;
   final List<UserAttachment> _composerAttachments = <UserAttachment>[];
   StreamSubscription<ThreadAttachmentEvent>? _attachmentEventSubscription;
   ThreadLinkedPullRequestsSnapshot? _activeThreadLinkedPrs;
   String? _linkedPrLoadError;
   String? _linkedPrLaunchError;
+  String? _linkedPrMutationError;
+  String? _linkedPrMutationNotice;
   String? _queuedLinkedPrThreadId;
   var _linkedPrScanInFlight = false;
+  var _linkedPrFormOpen = false;
+  var _linkedPrMutationInFlight = false;
 
   BackendCapabilities get _activeCapabilities => widget.transportCapabilities;
 
@@ -203,6 +210,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     super.initState();
     _composerController = TextEditingController();
     _composerFocusNode = FocusNode();
+    _linkedPrUrlController = TextEditingController();
+    _linkedPrBranchController = TextEditingController();
+    _linkedPrUrlFocusNode = FocusNode();
     _searchController = TextEditingController()
       ..addListener(_handleSearchQueryChanged);
     _searchFocusNode = FocusNode();
@@ -251,12 +261,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _queuedLinkedPrThreadId = null;
       if ((_activeThreadLinkedPrs != null ||
               _linkedPrLoadError != null ||
-              _linkedPrLaunchError != null) &&
+              _linkedPrLaunchError != null ||
+              _linkedPrMutationError != null ||
+              _linkedPrMutationNotice != null) &&
           mounted) {
         setState(() {
           _activeThreadLinkedPrs = null;
           _linkedPrLoadError = null;
           _linkedPrLaunchError = null;
+          _linkedPrMutationError = null;
+          _linkedPrMutationNotice = null;
           _notifyLinkedPrViewChanged();
         });
       }
@@ -310,6 +324,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               _activeThreadLinkedPrs = null;
               _linkedPrLoadError = null;
               _linkedPrLaunchError = null;
+              _linkedPrMutationError = null;
+              _linkedPrMutationNotice = null;
+              _linkedPrFormOpen = false;
               _linkedPrsPopoverController.hide();
               _notifyLinkedPrViewChanged();
             });
@@ -336,6 +353,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               _activeThreadLinkedPrs = null;
               _linkedPrLoadError = null;
               _linkedPrLaunchError = null;
+              _linkedPrMutationError = null;
+              _linkedPrMutationNotice = null;
+              _linkedPrFormOpen = false;
               _linkedPrsPopoverController.hide();
               _notifyLinkedPrViewChanged();
             });
@@ -355,6 +375,133 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _linkedPrScanInFlight = false;
       if (mounted) {
         setState(_notifyLinkedPrViewChanged);
+      }
+    }
+  }
+
+  Future<void> _submitLinkPullRequest(String threadId) async {
+    if (_linkedPrMutationInFlight) {
+      return;
+    }
+    final gateway = _attachmentGateway;
+    if (gateway == null || !gateway.supportsThreadAttachmentWrites) {
+      return;
+    }
+    final rawUrl = _linkedPrUrlController.text.trim();
+    if (rawUrl.isEmpty) {
+      setState(() {
+        _linkedPrMutationError =
+            'Enter a GitHub Pull Request or GitLab Merge Request HTTPS URL.';
+        _linkedPrMutationNotice = null;
+        _notifyLinkedPrViewChanged();
+      });
+      return;
+    }
+    final rawBranch = _linkedPrBranchController.text.trim();
+    setState(() {
+      _linkedPrMutationInFlight = true;
+      _linkedPrMutationError = null;
+      _linkedPrMutationNotice = null;
+      _linkedPrLaunchError = null;
+      _notifyLinkedPrViewChanged();
+    });
+    try {
+      final result = await gateway.linkPullRequest(
+        threadId,
+        url: rawUrl,
+        headBranch: rawBranch.isEmpty ? null : rawBranch,
+      );
+      if (!mounted || _activeThreadId != threadId) {
+        return;
+      }
+      if (result.outcome == ThreadPullRequestLinkOutcome.scanIncomplete) {
+        setState(() {
+          _linkedPrMutationError =
+              'Could not verify existing links for ${result.displayLabel} '
+              'because the attachment scan was incomplete.';
+          _linkedPrMutationNotice = null;
+          _notifyLinkedPrViewChanged();
+        });
+        return;
+      }
+      final hiddenByCap = result.hiddenByDisplayCap;
+      _linkedPrUrlController.clear();
+      _linkedPrBranchController.clear();
+      setState(() {
+        _linkedPrFormOpen = false;
+        _linkedPrMutationError = null;
+        _linkedPrMutationNotice = switch (result.outcome) {
+          ThreadPullRequestLinkOutcome.created when hiddenByCap =>
+            'Saved ${result.displayLabel} to this thread '
+                '(outside the displayed pull requests).',
+          ThreadPullRequestLinkOutcome.created =>
+            'Linked ${result.displayLabel} to this thread.',
+          ThreadPullRequestLinkOutcome.existing when hiddenByCap =>
+            'Already linked to ${result.displayLabel} '
+                '(existing stored record preserved; outside the displayed pull requests).',
+          ThreadPullRequestLinkOutcome.existing =>
+            'Already linked to ${result.displayLabel} '
+                '(existing stored record preserved).',
+          ThreadPullRequestLinkOutcome.scanIncomplete => null,
+        };
+        _notifyLinkedPrViewChanged();
+      });
+      _requestActiveThreadLinkedPrs(threadId);
+    } on ArgumentError catch (error) {
+      if (!mounted || _activeThreadId != threadId) {
+        return;
+      }
+      setState(() {
+        _linkedPrMutationError = _boundedLinkedPrError(
+          error.message ?? 'Invalid pull request URL or branch.',
+          prefix: 'Invalid pull request link',
+        );
+        _linkedPrMutationNotice = null;
+        _notifyLinkedPrViewChanged();
+      });
+    } on Object catch (error) {
+      if (!mounted || _activeThreadId != threadId) {
+        return;
+      }
+      if (!gateway.supportsThreadAttachments) {
+        setState(() {
+          _activeThreadLinkedPrs = null;
+          _linkedPrLoadError = null;
+          _linkedPrLaunchError = null;
+          _linkedPrMutationError = null;
+          _linkedPrMutationNotice = null;
+          _linkedPrFormOpen = false;
+          _linkedPrsPopoverController.hide();
+          _notifyLinkedPrViewChanged();
+        });
+        return;
+      }
+      if (!gateway.supportsThreadAttachmentWrites) {
+        setState(() {
+          _linkedPrFormOpen = false;
+          _linkedPrMutationError =
+              'Linking pull requests is unavailable on this runtime.';
+          _linkedPrMutationNotice = null;
+          _notifyLinkedPrViewChanged();
+        });
+        return;
+      }
+      setState(() {
+        _linkedPrMutationError = _boundedLinkedPrError(
+          error,
+          prefix: 'Could not link pull request',
+        );
+        _linkedPrMutationNotice = null;
+        _notifyLinkedPrViewChanged();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _linkedPrMutationInFlight = false;
+          _notifyLinkedPrViewChanged();
+        });
+      } else {
+        _linkedPrMutationInFlight = false;
       }
     }
   }
@@ -438,6 +585,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _composerAttachPopoverController.dispose();
     _linkedPrsPopoverController.dispose();
     _linkedPrViewNotifier.dispose();
+    _linkedPrUrlFocusNode.dispose();
+    _linkedPrUrlController.dispose();
+    _linkedPrBranchController.dispose();
     _searchController
       ..removeListener(_handleSearchQueryChanged)
       ..dispose();
@@ -1484,7 +1634,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         ),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 280),
+        constraints: const BoxConstraints(maxHeight: 340),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1497,6 +1647,35 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                 ),
+                if (_attachmentGateway?.supportsThreadAttachmentWrites ??
+                    false) ...[
+                  CodexButton(
+                    key: const ValueKey('thread-linked-pr-add-toggle'),
+                    size: CodexButtonSize.sm,
+                    variant: _linkedPrFormOpen
+                        ? CodexButtonVariant.primary
+                        : CodexButtonVariant.secondary,
+                    onPressed: _linkedPrMutationInFlight
+                        ? null
+                        : () {
+                            setState(() {
+                              _linkedPrFormOpen = !_linkedPrFormOpen;
+                              _linkedPrMutationError = null;
+                              _linkedPrMutationNotice = null;
+                              _notifyLinkedPrViewChanged();
+                            });
+                            if (_linkedPrFormOpen) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted && _linkedPrFormOpen) {
+                                  _linkedPrUrlFocusNode.requestFocus();
+                                }
+                              });
+                            }
+                          },
+                    label: 'Link PR…',
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 CodexIconButton(
                   key: const ValueKey('thread-linked-pr-popover-close'),
                   tooltip: 'Close',
@@ -1507,45 +1686,71 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               ],
             ),
             const SizedBox(height: 6),
-            if (_linkedPrLoadError case final loadError?) ...[
-              Text(
-                loadError,
-                key: const ValueKey('thread-linked-pr-error'),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.danger),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: CodexButton(
-                  key: const ValueKey('thread-linked-pr-retry'),
-                  size: CodexButtonSize.sm,
-                  variant: CodexButtonVariant.secondary,
-                  onPressed: () => _requestActiveThreadLinkedPrs(threadId),
-                  label: 'Retry',
-                ),
-              ),
-            ] else if (linkedPrs == null) ...[
-              Text(
-                'Loading linked pull requests...',
-                key: const ValueKey('thread-linked-pr-loading'),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.textMuted),
-              ),
-            ] else if (linkedPrs.isEmpty) ...[
-              Text(
-                'No linked pull requests for this thread.',
-                key: const ValueKey('thread-linked-pr-empty'),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.textMuted),
-              ),
-            ] else ...[
-              Flexible(
-                child: SingleChildScrollView(
-                  key: const ValueKey('thread-linked-pr-popover-scroll'),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+            Flexible(
+              child: SingleChildScrollView(
+                key: const ValueKey('thread-linked-pr-popover-scroll'),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_linkedPrFormOpen &&
+                        (_attachmentGateway?.supportsThreadAttachmentWrites ??
+                            false)) ...[
+                      _buildLinkedPrAddForm(context, threadId),
+                      const SizedBox(height: 8),
+                    ],
+                    if (_linkedPrMutationNotice case final mutationNotice?) ...[
+                      Text(
+                        mutationNotice,
+                        key: const ValueKey('thread-linked-pr-mutation-notice'),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: palette.textSecondary),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    if (_linkedPrMutationError case final mutationError?) ...[
+                      Text(
+                        mutationError,
+                        key: const ValueKey('thread-linked-pr-mutation-error'),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: palette.danger),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    if (_linkedPrLoadError case final loadError?) ...[
+                      Text(
+                        loadError,
+                        key: const ValueKey('thread-linked-pr-error'),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.danger),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: CodexButton(
+                          key: const ValueKey('thread-linked-pr-retry'),
+                          size: CodexButtonSize.sm,
+                          variant: CodexButtonVariant.secondary,
+                          onPressed: () =>
+                              _requestActiveThreadLinkedPrs(threadId),
+                          label: 'Retry',
+                        ),
+                      ),
+                    ] else if (linkedPrs == null) ...[
+                      Text(
+                        'Loading linked pull requests...',
+                        key: const ValueKey('thread-linked-pr-loading'),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textMuted),
+                      ),
+                    ] else if (linkedPrs.isEmpty) ...[
+                      Text(
+                        'No linked pull requests for this thread.',
+                        key: const ValueKey('thread-linked-pr-empty'),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textMuted),
+                      ),
+                    ] else ...[
                       for (var i = 0; i < linkedPrs.pullRequests.length; i++)
                         _buildLinkedPrPopoverRow(
                           context,
@@ -1553,31 +1758,115 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           i,
                         ),
                     ],
-                  ),
+                    if (linkedPrs != null && linkedPrs.truncated) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Showing first ${linkedPrs.pullRequests.length} linked pull requests '
+                        '(scanned ${linkedPrs.scannedAttachmentCount} attachments; limit reached).',
+                        key: const ValueKey('thread-linked-pr-limit-notice'),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: palette.textMuted),
+                      ),
+                    ],
+                    if (_linkedPrLaunchError case final launchError?) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        launchError,
+                        key: const ValueKey('thread-linked-pr-launch-error'),
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: palette.danger),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
-            if (linkedPrs != null && linkedPrs.truncated) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Showing first ${linkedPrs.pullRequests.length} linked pull requests '
-                '(scanned ${linkedPrs.scannedAttachmentCount} attachments; limit reached).',
-                key: const ValueKey('thread-linked-pr-limit-notice'),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: palette.textMuted),
-              ),
-            ],
-            if (_linkedPrLaunchError case final launchError?) ...[
-              const SizedBox(height: 6),
-              Text(
-                launchError,
-                key: const ValueKey('thread-linked-pr-launch-error'),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: palette.danger),
-              ),
-            ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLinkedPrAddForm(BuildContext context, String threadId) {
+    final palette = ThemeTokens.of(context);
+    return Container(
+      key: const ValueKey('thread-linked-pr-add-form'),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: palette.border,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('thread-linked-pr-url-input'),
+            controller: _linkedPrUrlController,
+            focusNode: _linkedPrUrlFocusNode,
+            enabled: !_linkedPrMutationInFlight,
+            style: Theme.of(context).textTheme.bodySmall,
+            decoration: const InputDecoration(
+              labelText: 'GitHub PR or GitLab MR HTTPS URL',
+              hintText: 'https://github.com/owner/repo/pull/123',
+              isDense: true,
+            ),
+            onSubmitted: (_) => unawaited(_submitLinkPullRequest(threadId)),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            key: const ValueKey('thread-linked-pr-branch-input'),
+            controller: _linkedPrBranchController,
+            enabled: !_linkedPrMutationInFlight,
+            style: Theme.of(context).textTheme.bodySmall,
+            decoration: const InputDecoration(
+              labelText: 'Head branch (optional)',
+              hintText: 'feat/my-branch',
+              isDense: true,
+            ),
+            onSubmitted: (_) => unawaited(_submitLinkPullRequest(threadId)),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Saves a local thread reference only (does not modify Git or GitHub/GitLab).',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: palette.textMuted, fontSize: 10.5),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              CodexButton(
+                key: const ValueKey('thread-linked-pr-add-cancel'),
+                size: CodexButtonSize.sm,
+                variant: CodexButtonVariant.ghost,
+                onPressed: _linkedPrMutationInFlight
+                    ? null
+                    : () {
+                        setState(() {
+                          _linkedPrFormOpen = false;
+                          _linkedPrMutationError = null;
+                          _notifyLinkedPrViewChanged();
+                        });
+                      },
+                label: 'Cancel',
+              ),
+              const SizedBox(width: 6),
+              CodexButton(
+                key: const ValueKey('thread-linked-pr-add-submit'),
+                size: CodexButtonSize.sm,
+                variant: CodexButtonVariant.primary,
+                onPressed: _linkedPrMutationInFlight
+                    ? null
+                    : () => unawaited(_submitLinkPullRequest(threadId)),
+                label: _linkedPrMutationInFlight ? 'Linking…' : 'Link',
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -3321,6 +3610,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _activeThreadLinkedPrs = null;
     _linkedPrLoadError = null;
     _linkedPrLaunchError = null;
+    _linkedPrMutationError = null;
+    _linkedPrMutationNotice = null;
+    _linkedPrFormOpen = false;
+    _linkedPrUrlController.clear();
+    _linkedPrBranchController.clear();
     _linkedPrsPopoverController.hide();
     _pendingThreadRestore = nextThreadId != null;
     _restorePagesLoaded = 0;

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:codex_native_unofficial/src/protocol/thread_attachment_protocol.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,6 +15,8 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
   final StreamController<ThreadAttachmentEvent> _attachmentEvents =
       StreamController<ThreadAttachmentEvent>.broadcast(sync: true);
   final List<String> requestedAttachmentThreadIds = <String>[];
+  final List<({String threadId, String url, String? headBranch})>
+  linkedPrCalls = <({String threadId, String url, String? headBranch})>[];
   final Map<String, ThreadLinkedPullRequestsSnapshot> snapshotsByThreadId =
       <String, ThreadLinkedPullRequestsSnapshot>{};
   final Map<String, Completer<ThreadLinkedPullRequestsSnapshot>>
@@ -20,13 +24,19 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
       <String, Completer<ThreadLinkedPullRequestsSnapshot>>{};
   final Set<String> failingThreadIds = <String>{};
   var attachmentsSupported = true;
+  var attachmentWritesSupported = true;
   var latchUnsupportedOnRead = false;
+  var latchWriteUnsupportedOnLink = false;
   var activeInFlightReads = 0;
   var maxConcurrentReads = 0;
 
   @override
   bool get supportsThreadAttachments =>
       attachmentsSupported && !remoteModeOverride;
+
+  @override
+  bool get supportsThreadAttachmentWrites =>
+      supportsThreadAttachments && attachmentWritesSupported;
 
   @override
   Stream<ThreadAttachmentEvent> get threadAttachmentEvents =>
@@ -44,6 +54,7 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
     try {
       if (latchUnsupportedOnRead) {
         attachmentsSupported = false;
+        attachmentWritesSupported = false;
         throw UnsupportedError('Method not found');
       }
       if (pendingReadCompleters.remove(threadId) case final completer?) {
@@ -65,6 +76,105 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
     } finally {
       activeInFlightReads -= 1;
     }
+  }
+
+  @override
+  Future<ThreadPullRequestLinkResult> linkPullRequest(
+    String threadId, {
+    required String url,
+    String? headBranch,
+  }) async {
+    final canonicalParts =
+        ThreadAttachmentProtocolAdapter.tryParseCanonicalPullRequestUrl(url);
+    if (canonicalParts == null) {
+      throw ArgumentError(
+        'Enter a valid HTTPS GitHub Pull Request or GitLab Merge Request URL.',
+        'url',
+      );
+    }
+    if (utf8.encode(canonicalParts.canonicalIdentityKey).length >
+        ThreadAttachmentProtocolAdapter.maxIdentityKeyUtf8Bytes) {
+      throw ArgumentError(
+        'Canonical pull request identity exceeds 256 UTF-8 bytes.',
+        'url',
+      );
+    }
+    final sanitizedBranch = headBranch == null || headBranch.trim().isEmpty
+        ? null
+        : headBranch.trim();
+
+    if (latchWriteUnsupportedOnLink) {
+      attachmentWritesSupported = false;
+      throw UnsupportedError('Method not found');
+    }
+
+    linkedPrCalls.add((
+      threadId: threadId,
+      url: canonicalParts.canonicalUrl,
+      headBranch: sanitizedBranch,
+    ));
+
+    final targetDisplayLabel =
+        '${canonicalParts.owner}/${canonicalParts.repository}#${canonicalParts.number}';
+    final currentSnapshot =
+        snapshotsByThreadId[threadId] ??
+        ThreadLinkedPullRequestsSnapshot(
+          threadId: threadId,
+          pullRequests: const [],
+          scannedAttachmentCount: 0,
+          truncated: false,
+        );
+    for (var i = 0; i < currentSnapshot.pullRequests.length; i++) {
+      final existing = currentSnapshot.pullRequests[i];
+      if (existing.canonicalIdentityKey ==
+          canonicalParts.canonicalIdentityKey) {
+        return ThreadPullRequestLinkResult(
+          outcome: ThreadPullRequestLinkOutcome.existing,
+          displayLabel: existing.displayLabel,
+          pullRequest: existing,
+          hiddenByDisplayCap:
+              i >= ThreadAttachmentProtocolAdapter.maxRetainedPullRequests,
+        );
+      }
+    }
+    if (currentSnapshot.truncated &&
+        currentSnapshot.pullRequests.length <
+            ThreadAttachmentProtocolAdapter.maxRetainedPullRequests) {
+      return ThreadPullRequestLinkResult(
+        outcome: ThreadPullRequestLinkOutcome.scanIncomplete,
+        displayLabel: targetDisplayLabel,
+      );
+    }
+
+    final hiddenByDisplayCap =
+        currentSnapshot.pullRequests.length >=
+        ThreadAttachmentProtocolAdapter.maxRetainedPullRequests;
+    final createdPr = ThreadLinkedPullRequest(
+      attachmentId: 'att-created-${linkedPrCalls.length}',
+      canonicalIdentityKey: canonicalParts.canonicalIdentityKey,
+      canonicalHost: canonicalParts.canonicalHost,
+      owner: canonicalParts.owner,
+      repository: canonicalParts.repository,
+      number: canonicalParts.number,
+      canonicalUrl: canonicalParts.canonicalUrl,
+      createdAtSeconds: 1700001000 + linkedPrCalls.length,
+      headBranch: sanitizedBranch,
+    );
+    final updatedPrs = hiddenByDisplayCap
+        ? currentSnapshot.pullRequests
+        : [...currentSnapshot.pullRequests, createdPr];
+    snapshotsByThreadId[threadId] = ThreadLinkedPullRequestsSnapshot(
+      threadId: threadId,
+      pullRequests: updatedPrs,
+      scannedAttachmentCount: currentSnapshot.scannedAttachmentCount + 1,
+      truncated: hiddenByDisplayCap || currentSnapshot.truncated,
+    );
+    return ThreadPullRequestLinkResult(
+      outcome: ThreadPullRequestLinkOutcome.created,
+      displayLabel: createdPr.displayLabel,
+      pullRequest: createdPr,
+      hiddenByDisplayCap: hiddenByDisplayCap,
+    );
   }
 
   void emitThreadAttachmentUpdated(ThreadAttachmentUpdatedEvent event) {
@@ -463,6 +573,224 @@ void main() {
         expect(
           find.byKey(const ValueKey('thread-linked-pr-pill')),
           findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'links a PR on a cold thread without resuming, preserves existing/duplicate links truthfully, refuses unverified links when truncated, and keeps read capability when writes latch unsupported',
+      (tester) async {
+        final harness = _LinkedPrSimulatedRuntimeHarness(
+          initialThreads: [
+            createTestThread(
+              id: 'thread-cold-link',
+              preview: 'Cold linkable thread',
+              status: ThreadRuntimeStatus.notLoaded,
+            ),
+            createTestThread(
+              id: 'thread-truncated-link',
+              preview: 'Truncated attachment thread',
+              status: ThreadRuntimeStatus.notLoaded,
+            ),
+          ],
+        );
+
+        harness.snapshotsByThreadId['thread-truncated-link'] =
+            const ThreadLinkedPullRequestsSnapshot(
+              threadId: 'thread-truncated-link',
+              pullRequests: [],
+              scannedAttachmentCount: 100,
+              truncated: true,
+            );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+
+        await tester.tap(
+          find.byKey(const ValueKey('thread-row-thread-cold-link')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const ValueKey('thread-linked-pr-pill')));
+        await tester.pumpAndSettle();
+
+        // Open the Link PR form.
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-toggle')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('thread-linked-pr-add-form')),
+          findsOneWidget,
+        );
+
+        // Secret-bearing invalid URL shows sanitized error without echoing the secret.
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://user:secret_tok_777@github.com/openai/codex/pull/10?tok=secret_q_888',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+
+        final errorText = tester
+            .widget<Text>(
+              find.byKey(const ValueKey('thread-linked-pr-mutation-error')),
+            )
+            .data!;
+        expect(errorText, contains('Invalid pull request link'));
+        expect(errorText, isNot(contains('secret_tok_777')));
+        expect(errorText, isNot(contains('secret_q_888')));
+        expect(harness.linkedPrCalls, isEmpty);
+
+        // Link a valid GitHub PR URL with optional branch on the cold thread.
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://www.github.com/OpenAI/Codex/pull/701',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-branch-input')),
+          'feat/pr-701',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(harness.linkedPrCalls, hasLength(1));
+        expect(
+          harness.threads.firstWhere((t) => t.id == 'thread-cold-link').status,
+          ThreadRuntimeStatus.notLoaded,
+        );
+        expect(
+          find.text('Linked OpenAI/Codex#701 to this thread.'),
+          findsOneWidget,
+        );
+        expect(find.text('OpenAI/Codex#701'), findsWidgets);
+        expect(find.text('Branch: feat/pr-701'), findsOneWidget);
+
+        // Linking the same PR again reports existing stored record preserved without duplicating.
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-toggle')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://github.com/openai/codex/pull/701',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(
+            'Already linked to OpenAI/Codex#701 (existing stored record preserved).',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          harness.snapshotsByThreadId['thread-cold-link']!.pullRequests,
+          hasLength(1),
+        );
+
+        // When 16 PRs are already displayed on the thread, linking a 17th PR
+        // reports that it was saved and explains the 16-PR display cap.
+        harness.snapshotsByThreadId['thread-cold-link'] =
+            ThreadLinkedPullRequestsSnapshot(
+              threadId: 'thread-cold-link',
+              pullRequests: [
+                for (var i = 1; i <= 16; i++)
+                  ThreadLinkedPullRequest(
+                    attachmentId: 'att-cap-$i',
+                    canonicalIdentityKey: '["github.com","openai","codex",$i]',
+                    canonicalHost: 'github.com',
+                    owner: 'OpenAI',
+                    repository: 'Codex',
+                    number: i,
+                    canonicalUrl: 'https://github.com/OpenAI/Codex/pull/$i',
+                    createdAtSeconds: 1700000100 + i,
+                  ),
+              ],
+              scannedAttachmentCount: 16,
+              truncated: false,
+            );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-toggle')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://github.com/OpenAI/Codex/pull/717',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Saved OpenAI/Codex#717 to this thread (outside the displayed pull requests).',
+          ),
+          findsOneWidget,
+        );
+
+        // Close popover and switch to the truncated thread; linking an unverified PR
+        // reports incomplete attachment scan instead of blindly writing.
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-popover-close')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('thread-row-thread-truncated-link')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('thread-linked-pr-pill')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-toggle')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://github.com/OpenAI/Codex/pull/702',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining(
+            'Could not verify existing links for OpenAI/Codex#702 because the attachment scan was incomplete.',
+          ),
+          findsOneWidget,
+        );
+
+        // If a write returns -32601 (latches supportsThreadAttachmentWrites=false),
+        // the Link PR button hides while the read-only header pill and popover remain functional.
+        harness.latchWriteUnsupportedOnLink = true;
+        await tester.enterText(
+          find.byKey(const ValueKey('thread-linked-pr-url-input')),
+          'https://github.com/OpenAI/Codex/pull/703',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('thread-linked-pr-add-submit')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(harness.supportsThreadAttachmentWrites, isFalse);
+        expect(harness.supportsThreadAttachments, isTrue);
+        expect(
+          find.byKey(const ValueKey('thread-linked-pr-add-toggle')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('thread-linked-pr-pill')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Linking pull requests is unavailable on this runtime.'),
+          findsOneWidget,
         );
       },
     );

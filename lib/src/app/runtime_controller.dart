@@ -199,6 +199,12 @@ class RuntimeController extends ChangeNotifier
       (_transport?.supportsThreadAttachments ?? false);
 
   @override
+  bool get supportsThreadAttachmentWrites =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsThreadAttachmentWrites ?? false);
+
+  @override
   Stream<ThreadAttachmentEvent> get threadAttachmentEvents =>
       _threadAttachmentEvents.stream;
 
@@ -459,6 +465,24 @@ class RuntimeController extends ChangeNotifier
       );
     }
     return _connectedTransport().readLinkedPullRequests(threadId);
+  }
+
+  @override
+  Future<ThreadPullRequestLinkResult> linkPullRequest(
+    String threadId, {
+    required String url,
+    String? headBranch,
+  }) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Linking pull requests is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().linkPullRequest(
+      threadId,
+      url: url,
+      headBranch: headBranch,
+    );
   }
 
   @override
