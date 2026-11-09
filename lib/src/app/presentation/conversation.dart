@@ -1021,15 +1021,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             label: 'Compact context',
                             icon: Icon(Icons.compress_rounded),
                           ),
-                        if (capabilities.supportsGitDiff &&
-                            !archived &&
-                            threadController.isMaterialized(thread.id) &&
-                            controller.canStartReview)
+                        if (_canStartThreadReview(thread.id)) ...[
                           const CodexMenuItem(
                             value: 'review',
                             label: 'Review uncommitted changes',
                             icon: Icon(Icons.rate_review_outlined),
                           ),
+                          const CodexMenuItem(
+                            value: 'review-target',
+                            label: 'Code review…',
+                            icon: Icon(Icons.manage_search_rounded),
+                          ),
+                        ],
                         CodexMenuItem(
                           value: 'archive',
                           label: archived
@@ -1075,11 +1078,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               threadController.compactThread(thread.id),
                             );
                           case 'review':
-                            unawaited(
-                              controller.startReview(
-                                const UncommittedChangesReviewTarget(),
-                              ),
-                            );
+                            if (_canStartThreadReview(thread.id)) {
+                              unawaited(
+                                controller.startReview(
+                                  const UncommittedChangesReviewTarget(),
+                                ),
+                              );
+                            }
+                          case 'review-target':
+                            unawaited(_startThreadReviewDialog(thread));
                           case 'archive':
                             if (archived) {
                               unawaited(
@@ -1134,6 +1141,29 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (next != null && mounted) {
       await threadController.renameThread(thread.id, next);
     }
+  }
+
+  bool _canStartThreadReview(String threadId) =>
+      mounted &&
+      widget.controller.thread?.id == threadId &&
+      widget.threadController?.showArchived == false &&
+      widget.threadController?.mutating == false &&
+      widget.threadController?.isMaterialized(threadId) == true &&
+      widget.controller.canStartReview &&
+      _activeCapabilities.supportsGitDiff;
+
+  Future<void> _startThreadReviewDialog(ThreadSummary thread) async {
+    if (!_canStartThreadReview(thread.id)) {
+      return;
+    }
+    final target = await showDialog<ReviewTarget>(
+      context: context,
+      builder: (context) => _StartReviewDialog(thread: thread),
+    );
+    if (target == null || !_canStartThreadReview(thread.id)) {
+      return;
+    }
+    await widget.controller.startReview(target);
   }
 
   void _rememberThreadDag(String threadId, ChatConversationDag dag) {
@@ -5060,3 +5090,273 @@ Future<bool> _confirmDesktopAction(
       },
     ) ??
     false;
+
+enum _ReviewTargetKind { uncommitted, baseBranch, commit, custom }
+
+class _StartReviewDialog extends StatefulWidget {
+  const _StartReviewDialog({required this.thread});
+
+  final ThreadSummary thread;
+
+  @override
+  State<_StartReviewDialog> createState() => _StartReviewDialogState();
+}
+
+class _StartReviewDialogState extends State<_StartReviewDialog> {
+  static const _maxBranchChars = 240;
+  static const _maxCommitShaChars = 120;
+  static const _maxCommitTitleChars = 240;
+  static const _maxCustomInstructionsChars = 2000;
+
+  _ReviewTargetKind _kind = _ReviewTargetKind.uncommitted;
+  late final TextEditingController _baseBranchController;
+  late final TextEditingController _commitShaController;
+  late final TextEditingController _commitTitleController;
+  late final TextEditingController _customInstructionsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _baseBranchController = TextEditingController()..addListener(_onChanged);
+    _commitShaController = TextEditingController()..addListener(_onChanged);
+    _commitTitleController = TextEditingController()..addListener(_onChanged);
+    _customInstructionsController = TextEditingController()
+      ..addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    _baseBranchController.dispose();
+    _commitShaController.dispose();
+    _commitTitleController.dispose();
+    _customInstructionsController.dispose();
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  static bool _isValidGitRef(String raw, int maxChars) {
+    final trimmed = raw.trim();
+    return trimmed.isNotEmpty &&
+        trimmed.length <= maxChars &&
+        !trimmed.startsWith('-') &&
+        !RegExp(r'\s').hasMatch(trimmed);
+  }
+
+  ReviewTarget? _resolveTarget() {
+    switch (_kind) {
+      case _ReviewTargetKind.uncommitted:
+        return const UncommittedChangesReviewTarget();
+      case _ReviewTargetKind.baseBranch:
+        final branch = _baseBranchController.text.trim();
+        if (!_isValidGitRef(branch, _maxBranchChars)) {
+          return null;
+        }
+        return BaseBranchReviewTarget(branch);
+      case _ReviewTargetKind.commit:
+        final sha = _commitShaController.text.trim();
+        if (!_isValidGitRef(sha, _maxCommitShaChars)) {
+          return null;
+        }
+        final title = _commitTitleController.text.trim();
+        if (title.length > _maxCommitTitleChars) {
+          return null;
+        }
+        return CommitReviewTarget(
+          sha: sha,
+          title: title.isEmpty ? null : title,
+        );
+      case _ReviewTargetKind.custom:
+        final instructions = _customInstructionsController.text.trim();
+        if (instructions.isEmpty ||
+            instructions.length > _maxCustomInstructionsChars) {
+          return null;
+        }
+        return CustomReviewTarget(instructions);
+    }
+  }
+
+  void _submitIfValid() {
+    final target = _resolveTarget();
+    if (target != null) {
+      Navigator.of(context).pop(target);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final currentBranch = widget.thread.gitInfo?.branch?.trim();
+    final resolvedTarget = _resolveTarget();
+
+    return AlertDialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      title: const Text('Code review'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                currentBranch != null && currentBranch.isNotEmpty
+                    ? 'Select a review target for branch $currentBranch.'
+                    : 'Select a review target for this workspace.',
+                style: TextStyle(color: theme.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: ThemeTokens.space3),
+              Wrap(
+                spacing: ThemeTokens.space2,
+                runSpacing: ThemeTokens.space2,
+                children: [
+                  _ReviewTargetOptionChip(
+                    chipKey: const ValueKey('review-target-uncommitted'),
+                    label: 'Uncommitted changes',
+                    selected: _kind == _ReviewTargetKind.uncommitted,
+                    onTap: () =>
+                        setState(() => _kind = _ReviewTargetKind.uncommitted),
+                  ),
+                  _ReviewTargetOptionChip(
+                    chipKey: const ValueKey('review-target-baseBranch'),
+                    label: 'Base branch',
+                    selected: _kind == _ReviewTargetKind.baseBranch,
+                    onTap: () =>
+                        setState(() => _kind = _ReviewTargetKind.baseBranch),
+                  ),
+                  _ReviewTargetOptionChip(
+                    chipKey: const ValueKey('review-target-commit'),
+                    label: 'Commit',
+                    selected: _kind == _ReviewTargetKind.commit,
+                    onTap: () =>
+                        setState(() => _kind = _ReviewTargetKind.commit),
+                  ),
+                  _ReviewTargetOptionChip(
+                    chipKey: const ValueKey('review-target-custom'),
+                    label: 'Custom instructions',
+                    selected: _kind == _ReviewTargetKind.custom,
+                    onTap: () =>
+                        setState(() => _kind = _ReviewTargetKind.custom),
+                  ),
+                ],
+              ),
+              const SizedBox(height: ThemeTokens.space3),
+              switch (_kind) {
+                _ReviewTargetKind.uncommitted => Text(
+                  'Review staged, unstaged, and untracked changes in the '
+                  'current working tree.',
+                  style: TextStyle(color: theme.textSecondary, fontSize: 13),
+                ),
+                _ReviewTargetKind.baseBranch => TextField(
+                  key: const ValueKey('review-base-branch-field'),
+                  controller: _baseBranchController,
+                  autofocus: true,
+                  maxLength: _maxBranchChars,
+                  decoration: const InputDecoration(
+                    labelText: 'Base branch or ref',
+                    hintText: 'main or origin/main',
+                  ),
+                  onSubmitted: (_) => _submitIfValid(),
+                ),
+                _ReviewTargetKind.commit => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      key: const ValueKey('review-commit-sha-field'),
+                      controller: _commitShaController,
+                      autofocus: true,
+                      maxLength: _maxCommitShaChars,
+                      decoration: const InputDecoration(
+                        labelText: 'Commit SHA or ref',
+                        hintText: 'HEAD~1 or commit SHA',
+                      ),
+                      onSubmitted: (_) => _submitIfValid(),
+                    ),
+                    const SizedBox(height: ThemeTokens.space2),
+                    TextField(
+                      key: const ValueKey('review-commit-title-field'),
+                      controller: _commitTitleController,
+                      maxLength: _maxCommitTitleChars,
+                      decoration: const InputDecoration(
+                        labelText: 'Commit title (optional)',
+                        hintText: 'Optional label for timeline display',
+                      ),
+                      onSubmitted: (_) => _submitIfValid(),
+                    ),
+                  ],
+                ),
+                _ReviewTargetKind.custom => TextField(
+                  key: const ValueKey('review-custom-instructions-field'),
+                  controller: _customInstructionsController,
+                  autofocus: true,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: _maxCustomInstructionsChars,
+                  decoration: const InputDecoration(
+                    labelText: 'Review instructions',
+                    hintText:
+                        'Focus on concurrency, rollback bounds, or edge cases…',
+                  ),
+                ),
+              },
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        CodexButton(
+          key: const ValueKey('start-review-cancel-button'),
+          variant: CodexButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+        ),
+        CodexButton(
+          key: const ValueKey('start-review-submit-button'),
+          variant: CodexButtonVariant.primary,
+          onPressed: resolvedTarget == null ? null : _submitIfValid,
+          label: 'Start review',
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewTargetOptionChip extends StatelessWidget {
+  const _ReviewTargetOptionChip({
+    required this.chipKey,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Key chipKey;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return CodexButton(
+      key: chipKey,
+      size: CodexButtonSize.sm,
+      variant: selected
+          ? CodexButtonVariant.primary
+          : CodexButtonVariant.secondary,
+      selected: selected,
+      onPressed: onTap,
+      label: label,
+    );
+  }
+}
