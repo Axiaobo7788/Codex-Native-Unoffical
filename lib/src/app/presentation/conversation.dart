@@ -1036,12 +1036,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           key: ValueKey('conversation-saved-search-hit-$index'),
                           variant: CodexButtonVariant.ghost,
                           size: CodexButtonSize.sm,
-                          onPressed:
-                              history.loadingTurns ||
-                                  history.occurrenceLoading ||
-                                  history.openingOccurrence
-                              ? null
-                              : () => _openSavedOccurrence(occurrence),
+                          onPressed: history.canOpenOccurrence
+                              ? () => _openSavedOccurrence(occurrence)
+                              : null,
                           child: Align(
                             alignment: AlignmentDirectional.centerStart,
                             child: Text.rich(

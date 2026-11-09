@@ -74,7 +74,13 @@ class HistoryController extends ChangeNotifier {
       (_occurrenceGateway?.supportsHistoryOccurrences ?? false);
   bool get occurrenceUnsupported => _occurrenceUnsupported;
   bool get occurrenceLoading => _occurrenceLoading;
-  bool get openingOccurrence => _openingOccurrenceThreadId != null;
+  bool get openingOccurrence =>
+      _openingOccurrenceThreadId != null &&
+      _openingOccurrenceThreadId == _thread?.id;
+  bool get canOpenOccurrence =>
+      _openingOccurrenceThreadId == null &&
+      !_loadingTurns &&
+      !_occurrenceLoading;
   HistoryOccurrencePage? get occurrencePage => _occurrencePage;
   String? get occurrenceError => _occurrenceError;
 
@@ -186,9 +192,7 @@ class HistoryController extends ChangeNotifier {
     final query = _occurrenceRequest;
     if (thread == null ||
         query == null ||
-        _loadingTurns ||
-        _occurrenceLoading ||
-        openingOccurrence ||
+        !canOpenOccurrence ||
         !(_occurrencePage?.occurrences.contains(occurrence) ?? false)) {
       return null;
     }

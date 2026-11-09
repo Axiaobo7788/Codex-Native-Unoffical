@@ -10,6 +10,34 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'an old scope does not show opening progress in another thread',
+    () async {
+      final gateway = _OccurrenceHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('thread-1'));
+      controller.searchOccurrences('Old');
+      await Future<void>.delayed(Duration.zero);
+      gateway.pendingAnchor = Completer<HistoryTurnPage>();
+      final open = controller.openOccurrence(
+        controller.occurrencePage!.occurrences.single,
+      );
+      expect(controller.openingOccurrence, isTrue);
+
+      await controller.bindThread(_thread('thread-2'));
+      controller.searchOccurrences('New');
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.openingOccurrence, isFalse);
+      expect(controller.canOpenOccurrence, isFalse);
+      expect(controller.occurrencePage, isNotNull);
+      gateway.pendingAnchor!.complete(gateway.anchorPage);
+      expect(await open, isNull);
+      expect(controller.canOpenOccurrence, isTrue);
+      expect(controller.turns.first.id, 'turn-0');
+    },
+  );
+
+  test(
     'opens a verified occurrence without retaining the previous window',
     () async {
       final gateway = _OccurrenceHistoryGateway();
