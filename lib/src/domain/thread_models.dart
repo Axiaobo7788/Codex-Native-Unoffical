@@ -78,6 +78,8 @@ class ThreadGoal {
   final int? tokenBudget;
 }
 
+enum ThreadQueuePresence { empty, pending, unsupported, unknown }
+
 class ThreadReadReceipt {
   const ThreadReadReceipt({required this.revision, required this.unread});
 

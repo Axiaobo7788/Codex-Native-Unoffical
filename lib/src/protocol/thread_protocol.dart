@@ -150,6 +150,38 @@ final class ThreadProtocolAdapter {
     return receipt;
   }
 
+  Future<ThreadQueuePresence> readQueuePresence(String threadId) async {
+    final response = await request('thread/queue/list', {
+      'threadId': _requireOpaqueArgumentId(
+        threadId,
+        'threadId',
+        _maxIdentifierLength,
+      ),
+      'limit': 1,
+    });
+    final data = response['data'];
+    if (data is! List<Object?> || data.length > 1) {
+      throw const ProtocolViolation('Invalid queued-work probe page.');
+    }
+    if (data.isEmpty) {
+      if (response['nextCursor'] != null) {
+        throw const ProtocolViolation('Queued-work probe page is incomplete.');
+      }
+      return ThreadQueuePresence.empty;
+    }
+    final item = data.single;
+    if (item is! Map<String, Object?>) {
+      throw const ProtocolViolation('Invalid queued-work probe entry.');
+    }
+    _requiredOpaqueIdentifier(
+      item,
+      'id',
+      _maxIdentifierLength,
+      context: 'thread/queue/list',
+    );
+    return ThreadQueuePresence.pending;
+  }
+
   Future<ThreadSummary> resumeThread(String threadId) async {
     final response = await request('thread/resume', {
       'threadId': threadId,

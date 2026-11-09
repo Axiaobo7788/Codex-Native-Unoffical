@@ -46,6 +46,7 @@ class ProcessTransport
         CodexTransport,
         HistoryOccurrenceGateway,
         ThreadGoalGateway,
+        ThreadQueuePresenceGateway,
         ThreadReadReceiptGateway,
         ThreadSectionGateway,
         ThreadAttachmentGateway,
@@ -121,6 +122,7 @@ class ProcessTransport
   var _threadAttachmentsUnsupported = false;
   var _threadAttachmentWritesUnsupported = false;
   var _threadReceiptWritesUnsupported = false;
+  var _queuePresenceRequestInFlight = false;
 
   static Future<ProcessTransport> start({
     required String executablePath,
@@ -347,6 +349,29 @@ class ProcessTransport
 
   @override
   bool get supportsThreadGoals => !_closing;
+
+  @override
+  bool get supportsThreadQueuePresence => !_closing;
+
+  @override
+  Future<ThreadQueuePresence> readThreadQueuePresence(String threadId) async {
+    if (_closing || _queuePresenceRequestInFlight) {
+      return ThreadQueuePresence.unknown;
+    }
+    // Hold this slot until the stock request itself finishes, even when the
+    // UI times out or changes threads.
+    _queuePresenceRequestInFlight = true;
+    try {
+      return await _threadProtocol.readQueuePresence(threadId);
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601) {
+        return ThreadQueuePresence.unsupported;
+      }
+      rethrow;
+    } finally {
+      _queuePresenceRequestInFlight = false;
+    }
+  }
 
   @override
   bool get supportsThreadReadReceiptWrites =>
