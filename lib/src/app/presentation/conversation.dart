@@ -1063,7 +1063,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             label: 'Compact context',
                             icon: Icon(Icons.compress_rounded),
                           ),
-                        if (controller.canStartReview)
+                        if (!archived &&
+                            threadController.isMaterialized(thread.id) &&
+                            controller.canStartReview)
                           const CodexMenuItem(
                             value: 'review',
                             label: 'Review uncommitted changes',

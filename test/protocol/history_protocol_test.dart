@@ -129,6 +129,7 @@ void main() {
   });
 
   test('projects review-mode markers from summary and paged history', () async {
+    final oversizedReview = 'R' * 600;
     final reviewAdapter = HistoryProtocolAdapter(
       request: (method, [params = const {}]) async => {
         'data': [
@@ -150,7 +151,7 @@ void main() {
               'item': {
                 'id': 'review-exited',
                 'type': 'exitedReviewMode',
-                'review': 'Uncommitted changes',
+                'review': oversizedReview,
               },
             },
         ],
@@ -164,14 +165,14 @@ void main() {
     final entered = turns.turns.single.items.single;
     expect(entered.kind, HistoryItemKind.review);
     expect(entered.text, 'Review started: Uncommitted changes');
-    expect(entered.status, 'inProgress');
+    expect(entered.status, 'completed');
 
     final items = await reviewAdapter.listItems(
       const HistoryItemQuery(threadId: 'thread-1', turnId: 'review-turn-1'),
     );
     final exited = items.items.single;
     expect(exited.kind, HistoryItemKind.review);
-    expect(exited.text, 'Review completed: Uncommitted changes');
+    expect(exited.text, 'Review completed: ${'R' * 512}…');
     expect(exited.status, 'completed');
   });
 

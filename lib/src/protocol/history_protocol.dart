@@ -7,6 +7,8 @@ import 'protocol_models.dart';
 import 'thread_protocol.dart';
 
 final class HistoryProtocolAdapter {
+  static const _maxReviewDescriptionLength = 512;
+
   const HistoryProtocolAdapter({
     required this.request,
     this.maxTextCharacters = 8 * 1024,
@@ -219,9 +221,9 @@ final class HistoryProtocolAdapter {
         kind: HistoryItemKind.review,
         text: _bounded(
           '${type == 'enteredReviewMode' ? 'Review started' : 'Review completed'}: '
-          '${_requiredString(value, 'review').trim()}',
+          '${_truncate(_requiredString(value, 'review').trim(), _maxReviewDescriptionLength)}',
         ),
-        status: type == 'enteredReviewMode' ? 'inProgress' : 'completed',
+        status: 'completed',
       ),
       _ => HistoryItem(
         id: id,
@@ -380,6 +382,20 @@ final class HistoryProtocolAdapter {
   String _bounded(String value) => value.length <= maxTextCharacters
       ? value
       : '${value.substring(0, maxTextCharacters)}…';
+
+  static String _truncate(String value, int limit) {
+    if (value.length <= limit) {
+      return value;
+    }
+    var end = limit;
+    if (end > 0) {
+      final lastUnit = value.codeUnitAt(end - 1);
+      if (lastUnit >= 0xD800 && lastUnit <= 0xDBFF) {
+        end -= 1;
+      }
+    }
+    return '${value.substring(0, end)}…';
+  }
 
   static List<String> _stringList(Object? value) =>
       value is List<Object?> ? value.whereType<String>().toList() : const [];
