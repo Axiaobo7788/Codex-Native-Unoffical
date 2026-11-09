@@ -20,6 +20,8 @@ import '../domain/remote_admin_models.dart';
 import '../domain/runtime_diagnostics_gateway.dart';
 import '../domain/runtime_diagnostics_models.dart';
 import '../domain/runtime_snapshot.dart';
+import '../domain/thread_attachment_gateway.dart';
+import '../domain/thread_attachment_models.dart';
 import '../domain/thread_gateway.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_gateway.dart';
@@ -38,6 +40,8 @@ import '../transport/remote/remote_secure_storage.dart';
 
 export '../domain/runtime_diagnostics_gateway.dart';
 export '../domain/runtime_diagnostics_models.dart';
+export '../domain/thread_attachment_gateway.dart';
+export '../domain/thread_attachment_models.dart';
 export '../domain/thread_gateway.dart';
 
 typedef TransportStarter = Future<ProcessTransport> Function(
@@ -52,6 +56,7 @@ class RuntimeController extends ChangeNotifier
         ThreadGateway,
         ThreadGoalGateway,
         ThreadSectionGateway,
+        ThreadAttachmentGateway,
         TurnGateway,
         ApprovalGateway,
         ModelGateway,
@@ -120,6 +125,7 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<McpElicitationEvent>? _mcpElicitationEventSubscription;
   StreamSubscription<RuntimeDiagnosticsEvent>?
   _runtimeDiagnosticsEventSubscription;
+  StreamSubscription<ThreadAttachmentEvent>? _threadAttachmentEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
   final StreamController<TurnEvent> _turnEvents =
@@ -134,6 +140,8 @@ class RuntimeController extends ChangeNotifier
       StreamController<McpElicitationEvent>.broadcast();
   final StreamController<RuntimeDiagnosticsEvent> _runtimeDiagnosticsEvents =
       StreamController<RuntimeDiagnosticsEvent>.broadcast();
+  final StreamController<ThreadAttachmentEvent> _threadAttachmentEvents =
+      StreamController<ThreadAttachmentEvent>.broadcast();
   Future<void>? _startOperation;
   var _disposed = false;
   var _stopping = false;
@@ -183,6 +191,16 @@ class RuntimeController extends ChangeNotifier
 
   @override
   bool get supportsThreadSections => !_usesRemote;
+
+  @override
+  bool get supportsThreadAttachments =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsThreadAttachments ?? false);
+
+  @override
+  Stream<ThreadAttachmentEvent> get threadAttachmentEvents =>
+      _threadAttachmentEvents.stream;
 
   @override
   Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
@@ -429,6 +447,18 @@ class RuntimeController extends ChangeNotifier
       );
     }
     return _connectedTransport().moveThreadSection(options);
+  }
+
+  @override
+  Future<ThreadLinkedPullRequestsSnapshot> readLinkedPullRequests(
+    String threadId,
+  ) {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Thread attachments are unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().readLinkedPullRequests(threadId);
   }
 
   @override
@@ -800,6 +830,11 @@ class RuntimeController extends ChangeNotifier
             _runtimeDiagnosticsEvents.add,
             onError: _runtimeDiagnosticsEvents.addError,
           );
+      _threadAttachmentEventSubscription = transport.threadAttachmentEvents
+          .listen(
+            _threadAttachmentEvents.add,
+            onError: _threadAttachmentEvents.addError,
+          );
       final result = await transport.initialize(const InitializeRequest());
       if (_stopping || _disposed) {
         return;
@@ -973,6 +1008,7 @@ class RuntimeController extends ChangeNotifier
     await _userInputEventSubscription?.cancel();
     await _mcpElicitationEventSubscription?.cancel();
     await _runtimeDiagnosticsEventSubscription?.cancel();
+    await _threadAttachmentEventSubscription?.cancel();
     await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
     await _remoteStateSubscription?.cancel();
@@ -984,6 +1020,7 @@ class RuntimeController extends ChangeNotifier
     await _userInputEvents.close();
     await _mcpElicitationEvents.close();
     await _runtimeDiagnosticsEvents.close();
+    await _threadAttachmentEvents.close();
     if (!_disposed) {
       _setSnapshot(
         RuntimeSnapshot(
