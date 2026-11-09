@@ -103,7 +103,7 @@ void main() {
     'serializes explicit section scope and validates the bounded page',
     () async {
       const scopedQuery = ThreadListQuery(
-        section: (id: 'section-1'),
+        section: (id: ' section-1 '),
         sortKey: ThreadSortKey.sectionPosition,
         sortDirection: SortDirection.ascending,
         cursor: 'section-page',

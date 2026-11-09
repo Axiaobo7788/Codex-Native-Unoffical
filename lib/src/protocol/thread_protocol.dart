@@ -36,7 +36,14 @@ final class ThreadProtocolAdapter {
 
   Future<ThreadPage> listThreads(ThreadListQuery query) async {
     final searchTerm = query.searchTerm?.trim();
-    final sectionId = query.section?.id;
+    final sectionId = switch (query.section?.id) {
+      final id? => _requireOpaqueArgumentId(
+        id,
+        'sectionId',
+        _maxIdentifierLength,
+      ),
+      null => null,
+    };
     if (query.sortKey == ThreadSortKey.sectionPosition && sectionId == null) {
       throw ArgumentError('Section-position sorting requires a section ID.');
     }
@@ -46,14 +53,7 @@ final class ThreadProtocolAdapter {
       'sortKey': _sortKey(query.sortKey),
       'sortDirection': _sortDirection(query.sortDirection),
       'archived': query.archived,
-      if (query.section != null)
-        'sectionId': sectionId == null
-            ? null
-            : _requireOpaqueArgumentId(
-                sectionId,
-                'sectionId',
-                _maxIdentifierLength,
-              ),
+      if (query.section != null) 'sectionId': sectionId,
       if (searchTerm != null && searchTerm.isNotEmpty) 'searchTerm': searchTerm,
     });
     final data = response['data'];

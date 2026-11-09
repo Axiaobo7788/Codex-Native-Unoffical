@@ -116,6 +116,33 @@ void main() {
     },
   );
 
+  test('a read revealing a move refreshes the scoped catalog', () async {
+    const section = ThreadSection(id: 'queue', name: 'Queue');
+    final gateway = _FakeThreadGateway()
+      ..sections.add(section)
+      ..pages.addAll([
+        const ThreadPage(threads: [], nextCursor: null),
+        ThreadPage(
+          threads: [_thread('moved', section: section)],
+          nextCursor: 'old-order',
+        ),
+        const ThreadPage(threads: [], nextCursor: null),
+      ]);
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(controller.dispose);
+    addTearDown(gateway.dispose);
+    await controller.refresh();
+    await controller.setSectionScope('queue');
+
+    final moved = await controller.selectThread('moved');
+    await Future<void>.delayed(Duration.zero);
+    expect(moved?.section, isNull);
+    expect(controller.selectedThread?.id, 'moved');
+    expect(controller.threads, isEmpty);
+    expect(gateway.queries.last.section?.id, 'queue');
+    expect(gateway.queries.last.cursor, isNull);
+  });
+
   test('keeps only the active draft outside the scoped catalog', () async {
     final gateway = _DraftSectionGateway()
       ..sections.add(const ThreadSection(id: 'queue', name: 'Queue'))

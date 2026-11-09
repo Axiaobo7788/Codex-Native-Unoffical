@@ -1197,6 +1197,11 @@ class ThreadListController extends ChangeNotifier {
     final index = _threads.indexWhere((candidate) => candidate.id == thread.id);
     if (index == -1) {
       return _replaceOrPrepend(thread);
+    }
+    if (_sectionScopeId != null && thread.section?.id != _sectionScopeId) {
+      // A metadata read can observe a move before a lifecycle notification.
+      _threads.removeAt(index);
+      _invalidateSectionOrder();
     } else {
       _threads[index] = thread;
     }
