@@ -51,6 +51,8 @@ class ThreadSection {
 }
 
 class ThreadGoal {
+  static const maxObjectiveLength = 2048;
+
   const ThreadGoal({
     required this.objective,
     required this.status,

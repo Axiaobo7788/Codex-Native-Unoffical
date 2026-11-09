@@ -17,7 +17,7 @@ final class ThreadProtocolAdapter {
   static const _maxGitBranchLength = 512;
   static const _maxGitOriginLength = 1024;
   static const _maxGitShaLength = 128;
-  static const _maxGoalObjectiveLength = 2048;
+  static const _maxGoalObjectiveLength = ThreadGoal.maxObjectiveLength;
   static const _maxIdentifierLength = 512;
   static const _maxSectionNameLength = 128;
   static const _maxSectionAppearanceTokenLength = 64;
@@ -132,6 +132,75 @@ final class ThreadProtocolAdapter {
 
   Future<void> deleteThread(String threadId) async {
     await request('thread/delete', {'threadId': threadId});
+  }
+
+  Future<ThreadGoal?> readThreadGoal(String threadId) async {
+    final id = _requireOpaqueArgumentId(
+      threadId,
+      'threadId',
+      _maxIdentifierLength,
+    );
+    final response = await request('thread/goal/get', {'threadId': id});
+    if (response['goal'] == null) {
+      return null;
+    }
+    return _parseGoal(
+      _requiredObject(response, 'goal', 'thread/goal/get'),
+      threadId: id,
+    );
+  }
+
+  Future<ThreadGoal> setThreadGoal(
+    String threadId, {
+    String? objective,
+    ThreadGoalStatus? status,
+  }) async {
+    final id = _requireOpaqueArgumentId(
+      threadId,
+      'threadId',
+      _maxIdentifierLength,
+    );
+    final trimmed = objective?.trim();
+    if (trimmed != null &&
+        (trimmed.isEmpty || trimmed.length > _maxGoalObjectiveLength)) {
+      throw ArgumentError(
+        'Goal objective must contain 1–$_maxGoalObjectiveLength characters.',
+      );
+    }
+    if (trimmed == null && status == null) {
+      throw ArgumentError('A goal objective or status is required.');
+    }
+    final wireStatus = switch (status) {
+      ThreadGoalStatus.active => 'active',
+      ThreadGoalStatus.paused => 'paused',
+      null => null,
+      _ => throw ArgumentError(
+        'Only active and paused are user-selectable goal states.',
+      ),
+    };
+    final response = await request('thread/goal/set', {
+      'threadId': id,
+      'origin': 'user',
+      'objective': ?trimmed,
+      'status': ?wireStatus,
+    });
+    return _parseGoal(
+      _requiredObject(response, 'goal', 'thread/goal/set'),
+      threadId: id,
+    );
+  }
+
+  Future<bool> clearThreadGoal(String threadId) async {
+    final id = _requireOpaqueArgumentId(
+      threadId,
+      'threadId',
+      _maxIdentifierLength,
+    );
+    final response = await request('thread/goal/clear', {
+      'threadId': id,
+      'origin': 'user',
+    });
+    return _requiredBool(response, 'cleared');
   }
 
   Future<ThreadSectionPage> listThreadSections([
@@ -294,12 +363,26 @@ final class ThreadProtocolAdapter {
   }
 
   static ThreadGoalUpdatedEvent _parseGoalUpdated(JsonObject params) {
-    final threadId = _requiredString(params, 'threadId');
-    final rawGoal = _requiredObject(params, 'goal', 'thread/goal/updated');
-    final goalThreadId = _requiredString(rawGoal, 'threadId');
-    if (goalThreadId != threadId) {
+    final threadId = _requiredOpaqueIdentifier(
+      params,
+      'threadId',
+      _maxIdentifierLength,
+      context: 'thread/goal/updated',
+    );
+    return ThreadGoalUpdatedEvent(
+      threadId: threadId,
+      turnId: _boundedOptionalString(params, 'turnId', _maxIdentifierLength),
+      goal: _parseGoal(
+        _requiredObject(params, 'goal', 'thread/goal/updated'),
+        threadId: threadId,
+      ),
+    );
+  }
+
+  static ThreadGoal _parseGoal(JsonObject rawGoal, {required String threadId}) {
+    if (_requiredString(rawGoal, 'threadId') != threadId) {
       throw const ProtocolViolation(
-        'Thread goal threadId must match the notification threadId.',
+        'Thread goal threadId must match its requested or notified thread.',
       );
     }
     final rawTokenBudget = rawGoal['tokenBudget'];
@@ -309,21 +392,17 @@ final class ThreadProtocolAdapter {
         'Thread goal tokenBudget must be a non-negative integer or null.',
       );
     }
-    return ThreadGoalUpdatedEvent(
-      threadId: threadId,
-      turnId: _boundedOptionalString(params, 'turnId', _maxIdentifierLength),
-      goal: ThreadGoal(
-        objective: _truncate(
-          _requiredString(rawGoal, 'objective').trim(),
-          _maxGoalObjectiveLength,
-        ),
-        status: _goalStatus(_requiredString(rawGoal, 'status')),
-        createdAtSeconds: _nonNegativeInt(rawGoal, 'createdAt'),
-        updatedAtSeconds: _nonNegativeInt(rawGoal, 'updatedAt'),
-        tokensUsed: _nonNegativeInt(rawGoal, 'tokensUsed'),
-        timeUsedSeconds: _nonNegativeInt(rawGoal, 'timeUsedSeconds'),
-        tokenBudget: rawTokenBudget as int?,
+    return ThreadGoal(
+      objective: _truncate(
+        _requiredString(rawGoal, 'objective').trim(),
+        _maxGoalObjectiveLength,
       ),
+      status: _goalStatus(_requiredString(rawGoal, 'status')),
+      createdAtSeconds: _nonNegativeInt(rawGoal, 'createdAt'),
+      updatedAtSeconds: _nonNegativeInt(rawGoal, 'updatedAt'),
+      tokensUsed: _nonNegativeInt(rawGoal, 'tokensUsed'),
+      timeUsedSeconds: _nonNegativeInt(rawGoal, 'timeUsedSeconds'),
+      tokenBudget: rawTokenBudget as int?,
     );
   }
 

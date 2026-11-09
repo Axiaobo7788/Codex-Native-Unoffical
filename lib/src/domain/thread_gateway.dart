@@ -19,6 +19,19 @@ abstract interface class ThreadGateway {
   Future<void> deleteThread(String threadId);
 }
 
+/// User-initiated goal operations on a connected local Codex thread.
+abstract interface class ThreadGoalGateway {
+  bool get supportsThreadGoals;
+
+  Future<ThreadGoal?> readThreadGoal(String threadId);
+  Future<ThreadGoal> setThreadGoal(
+    String threadId, {
+    String? objective,
+    ThreadGoalStatus? status,
+  });
+  Future<bool> clearThreadGoal(String threadId);
+}
+
 abstract interface class ThreadSectionGateway {
   bool get supportsThreadSections;
 

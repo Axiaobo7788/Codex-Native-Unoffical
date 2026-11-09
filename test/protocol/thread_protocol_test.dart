@@ -32,6 +32,73 @@ void main() {
     await notifications.close();
   });
 
+  test('writes only explicit user goal fields and validates replies', () async {
+    final goal = {
+      'threadId': 'thread-1',
+      'objective': 'Check the fixture',
+      'status': 'paused',
+      'createdAt': 10,
+      'updatedAt': 11,
+      'tokensUsed': 0,
+      'timeUsedSeconds': 0,
+    };
+    responses['thread/goal/get'] = {'goal': null};
+    responses['thread/goal/set'] = {'goal': goal};
+    responses['thread/goal/clear'] = {'cleared': true};
+
+    expect(await adapter.readThreadGoal('thread-1'), isNull);
+    final saved = await adapter.setThreadGoal(
+      'thread-1',
+      objective: ' Check the fixture ',
+      status: ThreadGoalStatus.paused,
+    );
+    expect(saved.status, ThreadGoalStatus.paused);
+    expect(requests.last.params, {
+      'threadId': 'thread-1',
+      'origin': 'user',
+      'objective': 'Check the fixture',
+      'status': 'paused',
+    });
+    await adapter.setThreadGoal('thread-1', status: ThreadGoalStatus.active);
+    expect(requests.last.params, {
+      'threadId': 'thread-1',
+      'origin': 'user',
+      'status': 'active',
+    });
+    expect(await adapter.clearThreadGoal('thread-1'), isTrue);
+    expect(requests.last.params, {'threadId': 'thread-1', 'origin': 'user'});
+
+    responses['thread/goal/get'] = {
+      'goal': {...goal, 'threadId': 'other-thread'},
+    };
+    await expectLater(
+      adapter.readThreadGoal('thread-1'),
+      throwsA(isA<ProtocolViolation>()),
+    );
+    final callCount = requests.length;
+    await expectLater(
+      adapter.setThreadGoal('thread-1', objective: 'x' * 2049),
+      throwsArgumentError,
+    );
+    await expectLater(
+      adapter.setThreadGoal('thread-1', status: ThreadGoalStatus.complete),
+      throwsArgumentError,
+    );
+    expect(requests, hasLength(callCount));
+  });
+
+  test('read-only Remote rejects every thread-goal call', () {
+    final runtime = RuntimeController(useRemote: true);
+    addTearDown(runtime.dispose);
+    expect(runtime.supportsThreadGoals, isFalse);
+    expect(() => runtime.readThreadGoal('thread-1'), throwsUnsupportedError);
+    expect(
+      () => runtime.setThreadGoal('thread-1', status: ThreadGoalStatus.active),
+      throwsUnsupportedError,
+    );
+    expect(() => runtime.clearThreadGoal('thread-1'), throwsUnsupportedError);
+  });
+
   test('lists a bounded metadata page with an opaque cursor', () async {
     responses['thread/list'] = {
       'data': [_threadJson(id: 'thread-1')],

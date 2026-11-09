@@ -6,6 +6,34 @@ import 'package:codex_native_unofficial/src/features/threads/thread_list_control
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'keeps goal events that arrive while a direct read is in flight',
+    () async {
+      final gateway = _GoalReadGateway()
+        ..pages.add(ThreadPage(threads: [_thread('goal')], nextCursor: null));
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+      await controller.refresh();
+
+      final load = controller.loadGoal('goal');
+      const newer = ThreadGoal(
+        objective: 'Newer notification',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 2,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+      gateway.events.add(
+        const ThreadGoalUpdatedEvent(threadId: 'goal', goal: newer),
+      );
+      gateway.goalReplies['goal']!.complete(null);
+      expect((await load)?.goal, same(newer));
+      expect(controller.goalForThread('goal'), same(newer));
+    },
+  );
+
   test('paginates metadata without exceeding its retention bound', () async {
     final gateway = _FakeThreadGateway()
       ..pages.addAll([
@@ -29,6 +57,42 @@ void main() {
     expect(controller.canLoadMore, isFalse);
     expect(controller.retentionLimitReached, isTrue);
   });
+
+  test(
+    'hydrates only the latest selected goal while a read is pending',
+    () async {
+      final gateway = _GoalReadGateway()
+        ..pages.add(
+          ThreadPage(
+            threads: [_thread('first'), _thread('skipped'), _thread('last')],
+            nextCursor: null,
+          ),
+        );
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+      await controller.refresh();
+      await controller.selectThread('first');
+      await controller.selectThread('skipped');
+      await controller.selectThread('last');
+      expect(gateway.goalReplies.keys, ['first']);
+      const goal = ThreadGoal(
+        objective: 'Read only when selected',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 2,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+      gateway.goalReplies['first']!.complete(goal);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.goalReplies.keys, ['first', 'last']);
+      expect(controller.goalForThread('first'), isNull);
+      gateway.goalReplies['last']!.complete(goal);
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.selectedThread?.goal, same(goal));
+    },
+  );
 
   test('start, read, and resume update the bounded projection', () async {
     final gateway = _FakeThreadGateway()
@@ -369,6 +433,27 @@ void main() {
     expect(controller.sections.map((s) => s.id), isNot(contains('sec-1')));
     expect(threadById('t-1').section, isNull);
   });
+}
+
+class _GoalReadGateway extends _FakeThreadGateway implements ThreadGoalGateway {
+  final goalReplies = <String, Completer<ThreadGoal?>>{};
+
+  @override
+  bool get supportsThreadGoals => true;
+
+  @override
+  Future<ThreadGoal?> readThreadGoal(String threadId) =>
+      (goalReplies[threadId] = Completer<ThreadGoal?>()).future;
+
+  @override
+  Future<ThreadGoal> setThreadGoal(
+    String threadId, {
+    String? objective,
+    ThreadGoalStatus? status,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<bool> clearThreadGoal(String threadId) => throw UnimplementedError();
 }
 
 class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {

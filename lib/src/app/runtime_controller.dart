@@ -50,6 +50,7 @@ class RuntimeController extends ChangeNotifier
         ConversationBackend,
         ExecutionBackend,
         ThreadGateway,
+        ThreadGoalGateway,
         ThreadSectionGateway,
         TurnGateway,
         ApprovalGateway,
@@ -173,6 +174,12 @@ class RuntimeController extends ChangeNotifier
 
   @override
   bool get supportsRuntimeDiagnostics => !_usesRemote;
+
+  @override
+  bool get supportsThreadGoals =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsThreadGoals ?? false);
 
   @override
   bool get supportsThreadSections => !_usesRemote;
@@ -328,6 +335,38 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<void> deleteThread(String threadId) =>
       _connectedTransport().deleteThread(threadId);
+
+  ProcessTransport _threadGoalTransport() {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Thread goals are unavailable on read-only Remote.',
+      );
+    }
+    final transport = _transport;
+    if (transport == null || !supportsThreadGoals) {
+      throw StateError('The local Codex runtime is unavailable.');
+    }
+    return transport;
+  }
+
+  @override
+  Future<ThreadGoal?> readThreadGoal(String threadId) =>
+      _threadGoalTransport().readThreadGoal(threadId);
+
+  @override
+  Future<ThreadGoal> setThreadGoal(
+    String threadId, {
+    String? objective,
+    ThreadGoalStatus? status,
+  }) => _threadGoalTransport().setThreadGoal(
+    threadId,
+    objective: objective,
+    status: status,
+  );
+
+  @override
+  Future<bool> clearThreadGoal(String threadId) =>
+      _threadGoalTransport().clearThreadGoal(threadId);
 
   @override
   Future<ThreadSectionPage> listThreadSections([

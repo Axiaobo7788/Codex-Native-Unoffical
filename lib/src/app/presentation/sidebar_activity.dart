@@ -541,6 +541,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           onResume: () => controller.resumeThread(thread.id),
           onTogglePin: () => controller.togglePinThread(thread.id),
           onRename: () => _renameThreadDialog(thread),
+          onManageGoal: controller.canManageGoal(thread.id)
+              ? () => unawaited(_manageThreadGoal(thread))
+              : null,
           onFork: () => controller.forkThread(
             ThreadForkOptions(threadId: thread.id, cwd: thread.cwd),
           ),
@@ -691,6 +694,50 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     }
   }
 
+  Future<void> _manageThreadGoal(ThreadSummary thread) async {
+    final controller = widget.controller;
+    final loaded = await controller.loadGoal(thread.id);
+    if (!mounted || loaded == null || !controller.canManageGoal(thread.id)) {
+      return;
+    }
+    final change = await showDialog<_GoalDialogResult>(
+      context: context,
+      builder: (context) => _ThreadGoalDialog(goal: loaded.goal),
+    );
+    if (!mounted || change == null || !controller.canManageGoal(thread.id)) {
+      return;
+    }
+    if (change.clear) {
+      final confirmed = await _confirmDesktopAction(
+        context,
+        title: 'Clear this thread’s goal?',
+        message: 'Codex will stop using this saved objective for future turns.',
+        confirmLabel: 'Clear goal',
+      );
+      if (!confirmed || !mounted) {
+        return;
+      }
+    }
+    if (!controller.canManageGoal(thread.id) ||
+        !identical(controller.goalForThread(thread.id), loaded.goal)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The goal changed. Open it again to continue.'),
+        ),
+      );
+      return;
+    }
+    if (change.clear) {
+      await controller.clearGoal(thread.id);
+    } else {
+      await controller.saveGoal(
+        thread.id,
+        objective: change.objective,
+        status: change.status,
+      );
+    }
+  }
+
   Future<void> _renameSectionDialog(ThreadSection section) async {
     final name = await showDialog<String>(
       context: context,
@@ -723,6 +770,134 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         sectionId: created.id,
       );
     }
+  }
+}
+
+typedef _GoalDialogResult = ({
+  String? objective,
+  ThreadGoalStatus? status,
+  bool clear,
+});
+
+class _ThreadGoalDialog extends StatefulWidget {
+  const _ThreadGoalDialog({required this.goal});
+
+  final ThreadGoal? goal;
+
+  @override
+  State<_ThreadGoalDialog> createState() => _ThreadGoalDialogState();
+}
+
+class _ThreadGoalDialogState extends State<_ThreadGoalDialog> {
+  late final _objective = TextEditingController(text: widget.goal?.objective);
+
+  @override
+  void dispose() {
+    _objective.dispose();
+    super.dispose();
+  }
+
+  void _submit({
+    String? objective,
+    ThreadGoalStatus? status,
+    bool clear = false,
+  }) {
+    Navigator.of(context)
+        .pop((objective: objective, status: status, clear: clear));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final goal = widget.goal;
+    final objective = _objective.text.trim();
+    final canSave =
+        objective.isNotEmpty &&
+        objective.length <= ThreadGoal.maxObjectiveLength &&
+        objective != goal?.objective;
+    return AlertDialog(
+      backgroundColor: theme.modalSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+        side: BorderSide(
+          color: theme.hairlineBorder,
+          width: OfficialCodexTheme.hairlineBorderWidth,
+        ),
+      ),
+      scrollable: true,
+      title: Text(goal == null ? 'New goal' : 'Thread goal'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(switch (goal?.status) {
+              null =>
+                'Create a paused goal, then resume it when you are ready.',
+              ThreadGoalStatus.active =>
+                'Active. Codex may continue this goal across turns.',
+              ThreadGoalStatus.paused =>
+                'Paused. Resuming allows Codex to continue across turns.',
+              final status => 'Status: ${status.name}',
+            }),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('thread-goal-objective'),
+              controller: _objective,
+              minLines: 2,
+              maxLines: 4,
+              maxLength: ThreadGoal.maxObjectiveLength,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Objective'),
+            ),
+            if (goal != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (goal.status == ThreadGoalStatus.active)
+                    CodexButton(
+                      label: 'Pause goal',
+                      variant: CodexButtonVariant.secondary,
+                      onPressed: () => _submit(status: ThreadGoalStatus.paused),
+                    ),
+                  if (goal.status == ThreadGoalStatus.paused)
+                    CodexButton(
+                      label: 'Resume goal',
+                      variant: CodexButtonVariant.secondary,
+                      onPressed: () => _submit(status: ThreadGoalStatus.active),
+                    ),
+                  CodexButton(
+                    label: 'Clear goal…',
+                    variant: CodexButtonVariant.ghost,
+                    onPressed: () => _submit(clear: true),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        CodexButton(
+          label: 'Cancel',
+          variant: CodexButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        CodexButton(
+          label: goal == null ? 'Create paused goal' : 'Save objective',
+          variant: CodexButtonVariant.primary,
+          onPressed: canSave
+              ? () => _submit(
+                  objective: objective,
+                  status: goal == null ? ThreadGoalStatus.paused : null,
+                )
+              : null,
+        ),
+      ],
+    );
   }
 }
 
@@ -1096,6 +1271,7 @@ class _ThreadRow extends StatefulWidget {
     required this.onResume,
     required this.onTogglePin,
     required this.onRename,
+    this.onManageGoal,
     required this.onFork,
     this.onMoveToSection,
     this.onMoveToNewSection,
@@ -1114,6 +1290,7 @@ class _ThreadRow extends StatefulWidget {
   final VoidCallback onResume;
   final VoidCallback onTogglePin;
   final VoidCallback onRename;
+  final VoidCallback? onManageGoal;
   final VoidCallback onFork;
   final ValueChanged<String?>? onMoveToSection;
   final VoidCallback? onMoveToNewSection;
@@ -1251,6 +1428,12 @@ class _ThreadRowState extends State<_ThreadRow> {
                       label: 'Rename thread',
                       icon: Icon(Icons.drive_file_rename_outline_rounded),
                     ),
+                    if (widget.onManageGoal != null)
+                      const CodexMenuItem(
+                        value: 'manage-goal',
+                        label: 'Manage goal…',
+                        icon: Icon(Icons.flag_outlined),
+                      ),
                     const CodexMenuItem(
                       value: 'fork',
                       label: 'Fork thread',
@@ -1303,6 +1486,8 @@ class _ThreadRowState extends State<_ThreadRow> {
                         widget.onTogglePin();
                       case 'rename':
                         widget.onRename();
+                      case 'manage-goal':
+                        widget.onManageGoal?.call();
                       case 'fork':
                         widget.onFork();
                       case 'move-section':

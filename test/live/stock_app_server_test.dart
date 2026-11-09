@@ -87,6 +87,44 @@ void main() {
         );
       });
 
+      test('round-trips a paused user goal and its notifications', () async {
+        final created = await transport.startThread(
+          ThreadStartOptions(cwd: fixture.path),
+        );
+        expect(await transport.readThreadGoal(created.id), isNull);
+        final events = transport.threadEvents
+            .where(
+              (event) =>
+                  event.threadId == created.id &&
+                  (event is ThreadGoalUpdatedEvent ||
+                      event is ThreadGoalClearedEvent),
+            )
+            .take(3)
+            .toList()
+            .timeout(const Duration(seconds: 5));
+        final saved = await transport.setThreadGoal(
+          created.id,
+          objective: 'Verify this disposable fixture',
+          status: ThreadGoalStatus.paused,
+        );
+        expect(saved.status, ThreadGoalStatus.paused);
+        final stored = await transport.readThreadGoal(created.id);
+        expect(stored?.objective, saved.objective);
+        final edited = await transport.setThreadGoal(
+          created.id,
+          objective: 'Confirm the paused fixture',
+        );
+        expect(edited.status, ThreadGoalStatus.paused);
+        expect(edited.objective, 'Confirm the paused fixture');
+        expect(await transport.clearThreadGoal(created.id), isTrue);
+        expect(await transport.readThreadGoal(created.id), isNull);
+        expect(await events, [
+          isA<ThreadGoalUpdatedEvent>(),
+          isA<ThreadGoalUpdatedEvent>(),
+          isA<ThreadGoalClearedEvent>(),
+        ]);
+      });
+
       test('runs thread lifecycle in disposable storage', () async {
         final created = await transport.startThread(
           ThreadStartOptions(cwd: fixture.path),
