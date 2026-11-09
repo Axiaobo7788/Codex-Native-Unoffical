@@ -115,6 +115,7 @@ class ProcessTransport
   Future<void>? _closeOperation;
   var _stderrTail = '';
   var _closing = false;
+  var _threadAttachmentsUnsupported = false;
 
   static Future<ProcessTransport> start({
     required String executablePath,
@@ -368,7 +369,8 @@ class ProcessTransport
       _threadProtocol.moveThreadSection(options);
 
   @override
-  bool get supportsThreadAttachments => !_closing;
+  bool get supportsThreadAttachments =>
+      !_closing && !_threadAttachmentsUnsupported;
 
   @override
   Stream<ThreadAttachmentEvent> get threadAttachmentEvents =>
@@ -377,7 +379,21 @@ class ProcessTransport
   @override
   Future<ThreadLinkedPullRequestsSnapshot> readLinkedPullRequests(
     String threadId,
-  ) => _threadAttachmentProtocol.readLinkedPullRequests(threadId);
+  ) async {
+    if (_threadAttachmentsUnsupported) {
+      throw UnsupportedError(
+        'Thread attachments are unavailable on this runtime.',
+      );
+    }
+    try {
+      return await _threadAttachmentProtocol.readLinkedPullRequests(threadId);
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601) {
+        _threadAttachmentsUnsupported = true;
+      }
+      rethrow;
+    }
+  }
 
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) =>

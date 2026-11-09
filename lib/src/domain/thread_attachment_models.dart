@@ -25,11 +25,7 @@ class ThreadLinkedPullRequest {
   final int createdAtSeconds;
   final String? headBranch;
 
-  Uri get canonicalUri => Uri.parse(canonicalUrl);
-
   String get displayLabel => '$owner/$repository#$number';
-
-  String get shortNumberLabel => '#$number';
 }
 
 /// Bounded per-thread projection of sanitized linked Pull Requests.

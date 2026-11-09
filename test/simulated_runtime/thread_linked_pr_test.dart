@@ -20,6 +20,7 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
       <String, Completer<ThreadLinkedPullRequestsSnapshot>>{};
   final Set<String> failingThreadIds = <String>{};
   var attachmentsSupported = true;
+  var latchUnsupportedOnRead = false;
   var activeInFlightReads = 0;
   var maxConcurrentReads = 0;
 
@@ -41,11 +42,18 @@ class _LinkedPrSimulatedRuntimeHarness extends SimulatedRuntimeHarness {
       maxConcurrentReads = activeInFlightReads;
     }
     try {
+      if (latchUnsupportedOnRead) {
+        attachmentsSupported = false;
+        throw UnsupportedError('Method not found');
+      }
       if (pendingReadCompleters.remove(threadId) case final completer?) {
         return await completer.future;
       }
       if (failingThreadIds.contains(threadId)) {
-        throw StateError('Simulated attachment read failure for $threadId');
+        throw StateError(
+          'Simulated attachment read failure\nwith newline and '
+          '${'x' * 220} for $threadId',
+        );
       }
       return snapshotsByThreadId[threadId] ??
           ThreadLinkedPullRequestsSnapshot(
@@ -338,13 +346,19 @@ void main() {
         expect(harness.maxConcurrentReads, 1);
         expect(find.text('Linked PRs · Error'), findsOneWidget);
 
-        // Opening the popover shows the error and a focusable Retry button.
+        // Opening the popover shows the bounded single-line error and a focusable Retry button.
         await tester.tap(find.byKey(const ValueKey('thread-linked-pr-pill')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('thread-linked-pr-error')),
           findsOneWidget,
         );
+        final errorText = tester
+            .widget<Text>(find.byKey(const ValueKey('thread-linked-pr-error')))
+            .data!;
+        expect(errorText.length, lessThanOrEqualTo(160));
+        expect(errorText.contains('\n'), isFalse);
+        expect(errorText.endsWith('…'), isTrue);
         expect(
           find.byKey(const ValueKey('thread-linked-pr-retry')),
           findsOneWidget,
@@ -403,6 +417,53 @@ void main() {
         ]);
         expect(harness.maxConcurrentReads, 1);
         expect(find.text('OpenAI/Codex#300'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'fails closed and hides the header pill when an older runtime latches supportsThreadAttachments=false on first read',
+      (tester) async {
+        final harness = _LinkedPrSimulatedRuntimeHarness(
+          initialThreads: [
+            createTestThread(
+              id: 'thread-legacy-1',
+              preview: 'Legacy runtime thread 1',
+              status: ThreadRuntimeStatus.idle,
+            ),
+            createTestThread(
+              id: 'thread-legacy-2',
+              preview: 'Legacy runtime thread 2',
+              status: ThreadRuntimeStatus.idle,
+            ),
+          ],
+        )..latchUnsupportedOnRead = true;
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+
+        await tester.tap(
+          find.byKey(const ValueKey('thread-row-thread-legacy-1')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(harness.requestedAttachmentThreadIds, ['thread-legacy-1']);
+        expect(harness.supportsThreadAttachments, isFalse);
+        expect(
+          find.byKey(const ValueKey('thread-linked-pr-pill')),
+          findsNothing,
+        );
+        expect(find.text('Linked PRs · Error'), findsNothing);
+
+        // Switching to another thread does not scan again once latched false.
+        await tester.tap(
+          find.byKey(const ValueKey('thread-row-thread-legacy-2')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(harness.requestedAttachmentThreadIds, ['thread-legacy-1']);
+        expect(
+          find.byKey(const ValueKey('thread-linked-pr-pill')),
+          findsNothing,
+        );
       },
     );
   });

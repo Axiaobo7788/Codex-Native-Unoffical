@@ -269,6 +269,25 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     unawaited(_drainQueuedLinkedPrScan());
   }
 
+  static const int _maxLinkedPrErrorChars = 160;
+  static final RegExp _linkedPrErrorControlChars = RegExp(r'[\x00-\x1F\x7F]+');
+
+  static String _boundedLinkedPrError(Object error, {required String prefix}) {
+    final raw = error.toString();
+    final singleLine = raw
+        .replaceAll(_linkedPrErrorControlChars, ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (singleLine.isEmpty) {
+      return '$prefix.';
+    }
+    final combined = '$prefix: $singleLine';
+    if (combined.length <= _maxLinkedPrErrorChars) {
+      return combined;
+    }
+    return '${combined.substring(0, _maxLinkedPrErrorChars - 1)}…';
+  }
+
   Future<void> _drainQueuedLinkedPrScan() async {
     if (_linkedPrScanInFlight) {
       return;
@@ -291,6 +310,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               _activeThreadLinkedPrs = null;
               _linkedPrLoadError = null;
               _linkedPrLaunchError = null;
+              _linkedPrsPopoverController.hide();
               _notifyLinkedPrViewChanged();
             });
           }
@@ -311,9 +331,22 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           if (!mounted || _activeThreadId != targetThreadId) {
             continue;
           }
+          if (!gateway.supportsThreadAttachments) {
+            setState(() {
+              _activeThreadLinkedPrs = null;
+              _linkedPrLoadError = null;
+              _linkedPrLaunchError = null;
+              _linkedPrsPopoverController.hide();
+              _notifyLinkedPrViewChanged();
+            });
+            break;
+          }
           setState(() {
             _activeThreadLinkedPrs = null;
-            _linkedPrLoadError = 'Could not load linked pull requests: $error';
+            _linkedPrLoadError = _boundedLinkedPrError(
+              error,
+              prefix: 'Could not load linked pull requests',
+            );
             _notifyLinkedPrViewChanged();
           });
         }
@@ -360,7 +393,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     } on Object catch (error) {
       if (mounted) {
         setState(() {
-          _linkedPrLaunchError = 'The browser could not open the URL: $error';
+          _linkedPrLaunchError = _boundedLinkedPrError(
+            error,
+            prefix: 'The browser could not open the URL',
+          );
           _notifyLinkedPrViewChanged();
         });
       }

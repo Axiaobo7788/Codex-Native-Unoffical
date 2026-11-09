@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/thread_attachment_models.dart';
 import 'package:codex_native_unofficial/src/protocol/jsonl_decoder.dart';
 import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:codex_native_unofficial/src/protocol/thread_attachment_protocol.dart';
+import 'package:codex_native_unofficial/src/transport/process/child_process.dart';
+import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -367,5 +371,106 @@ void main() {
       await sub.cancel();
       await notifications.close();
     });
+
+    test('ProcessTransport latches supportsThreadAttachments=false on JSON-RPC -32601, rethrows first error, and throws UnsupportedError thereafter', () async {
+      final fakeChild = _FakeAttachmentChildProcess(
+        onRequest: (id, method, params) {
+          if (method == 'thread/attachment/list') {
+            return {
+              'id': id,
+              'error': {'code': -32601, 'message': 'Method not found'},
+            };
+          }
+          return {'id': id, 'result': const <String, Object?>{}};
+        },
+      );
+      final transport = await ProcessTransport.start(
+        executablePath: 'fake-codex',
+        launcher: (_, _) async => fakeChild,
+      );
+
+      expect(transport.supportsThreadAttachments, isTrue);
+
+      await expectLater(
+        transport.readLinkedPullRequests('thread-1'),
+        throwsA(isA<JsonRpcException>().having((e) => e.code, 'code', -32601)),
+      );
+      expect(transport.supportsThreadAttachments, isFalse);
+      expect(fakeChild.receivedMethods, ['thread/attachment/list']);
+
+      // Subsequent reads throw UnsupportedError without issuing another RPC.
+      await expectLater(
+        transport.readLinkedPullRequests('thread-2'),
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(fakeChild.receivedMethods, ['thread/attachment/list']);
+
+      await transport.close();
+    });
   });
+}
+
+final class _FakeAttachmentChildProcess implements ChildProcess {
+  _FakeAttachmentChildProcess({required this.onRequest});
+
+  final Map<String, Object?> Function(
+    Object id,
+    String method,
+    Map<String, Object?> params,
+  )
+  onRequest;
+  final StreamController<List<int>> _stdout = StreamController<List<int>>();
+  final StreamController<List<int>> _stderr = StreamController<List<int>>();
+  final Completer<int> _exitCode = Completer<int>();
+  final List<String> receivedMethods = <String>[];
+
+  @override
+  int get pid => 4242;
+
+  @override
+  Stream<List<int>> get stdout => _stdout.stream;
+
+  @override
+  Stream<List<int>> get stderr => _stderr.stream;
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
+
+  @override
+  Future<void> write(String value) async {
+    for (final line in value.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final decoded = jsonDecode(trimmed) as Map<String, Object?>;
+      final method = decoded['method'] as String?;
+      final id = decoded['id'];
+      if (method != null && id != null) {
+        receivedMethods.add(method);
+        final params =
+            (decoded['params'] as Map<String, Object?>?) ??
+            const <String, Object?>{};
+        final response = onRequest(id, method, params);
+        _stdout.add(utf8.encode('${jsonEncode(response)}\n'));
+      }
+    }
+  }
+
+  @override
+  Future<void> closeInput() async {
+    if (!_exitCode.isCompleted) {
+      _exitCode.complete(0);
+    }
+    await _stdout.close();
+    await _stderr.close();
+  }
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    if (!_exitCode.isCompleted) {
+      _exitCode.complete(0);
+    }
+    return true;
+  }
 }
