@@ -138,10 +138,10 @@ void main() {
         });
 
         // Direct elicitation (turnId == null) renders inside the open modal
-        // MCP server row rather than behind the modal barrier.
+        // MCP server row and is hit-testable above the modal barrier.
         expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
         expect(
-          find.byKey(const ValueKey('mcp-elicitation-card')),
+          find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
           findsOneWidget,
         );
         expect(
@@ -152,17 +152,32 @@ void main() {
           findsOneWidget,
         );
 
+        // Switching tabs mid-call keeps the active form reachable in the modal.
+        await tester.tap(find.text('Skills (1)'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('MCP (1)'));
+        await tester.pump();
+
         await tester.enterText(
-          find.byKey(const ValueKey('mcp-elicitation-field-path')),
+          find
+              .byKey(const ValueKey('mcp-elicitation-field-path'))
+              .hitTestable(),
           'README.md',
         );
         await tester.tap(
-          find.byKey(const ValueKey('mcp-elicitation-field-mode-replace')),
+          find
+              .byKey(const ValueKey('mcp-elicitation-field-mode-replace'))
+              .hitTestable(),
         );
         await tester.pump();
-        final acceptButton = find.byKey(
-          const ValueKey('mcp-elicitation-accept'),
-        );
+        final acceptButton = find
+            .byKey(const ValueKey('mcp-elicitation-accept'))
+            .hitTestable();
+        expect(acceptButton, findsOneWidget);
         await tester.ensureVisible(acceptButton);
         await tester.tap(acceptButton);
         await tester.pumpAndSettle();

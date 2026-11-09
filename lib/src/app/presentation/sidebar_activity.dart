@@ -2128,6 +2128,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   final Map<String, Object> _mcpResults = <String, Object>{};
   final Map<String, String> _mcpErrors = <String, String>{};
   String? _mcpBusyServer;
+  String? _mcpBusyThreadId;
   var _reloadingMcp = false;
   String? _mcpNotice;
 
@@ -2162,42 +2163,26 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     unawaited(_refresh());
   }
 
-  @override
-  void didUpdateWidget(covariant _EcosystemDialog oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.userInputController != widget.userInputController ||
-        oldWidget.threadId != widget.threadId) {
-      _syncModalDirectMcpElicitationScope();
+  List<McpElicitationRequest> _activeDirectMcpElicitations(
+    UserInputController? userInputController, {
+    String? serverName,
+  }) {
+    final busyServer = _mcpBusyServer;
+    final busyThreadId = _mcpBusyThreadId;
+    if (userInputController == null ||
+        busyServer == null ||
+        busyThreadId == null ||
+        (serverName != null && serverName != busyServer)) {
+      return const <McpElicitationRequest>[];
     }
-  }
-
-  @override
-  void dispose() {
-    _modalDirectMcpElicitationClaims.updateScope(this, null);
-    super.dispose();
-  }
-
-  void _syncModalDirectMcpElicitationScope() {
-    final userInputController = widget.userInputController;
-    final threadId = widget.threadId?.trim();
-    if (!mounted ||
-        _loading ||
-        _section != _EcosystemSection.mcp ||
-        userInputController == null ||
-        threadId == null ||
-        threadId.isEmpty ||
-        _mcpServers.isEmpty) {
-      _modalDirectMcpElicitationClaims.updateScope(this, null);
-      return;
-    }
-    _modalDirectMcpElicitationClaims.updateScope(
-      this,
-      _ModalDirectMcpElicitationScope(
-        controller: userInputController,
-        threadId: threadId,
-        serverNames: _mcpServers.map((server) => server.name).toSet(),
-      ),
-    );
+    return userInputController.pendingElicitations
+        .where(
+          (request) =>
+              request.turnId == null &&
+              request.threadId == busyThreadId &&
+              request.serverName == busyServer,
+        )
+        .toList(growable: false);
   }
 
   void _prunePluginCaches(
@@ -2260,7 +2245,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _loading = true;
       _error = null;
     });
-    _syncModalDirectMcpElicitationScope();
     unawaited(_refreshApps(forceRefetch: forceRefetch));
     final cwds = widget.cwd.trim().isEmpty
         ? const <String>[]
@@ -2285,7 +2269,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
         _loading = false;
       });
-      _syncModalDirectMcpElicitationScope();
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
         final expandedPlugins = nextPlugins
             .where((p) => _expandedPluginIds.contains(p.id))
@@ -2317,7 +2300,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _error = '$error';
         _loading = false;
       });
-      _syncModalDirectMcpElicitationScope();
     }
   }
 
@@ -2502,7 +2484,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pruneMcpCaches(servers, forceRefetch: true);
         _mcpNotice = 'MCP server configuration reloaded.';
       });
-      _syncModalDirectMcpElicitationScope();
     } catch (error) {
       if (mounted) {
         setState(() => _mcpNotice = 'Reload failed: $error');
@@ -2558,7 +2539,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (gateway == null || _mcpBusyServer != null) {
       return;
     }
-    if (threadId == null || threadId.trim().isEmpty) {
+    final normalizedThreadId = threadId?.trim();
+    if (normalizedThreadId == null || normalizedThreadId.isEmpty) {
       setState(() {
         _mcpErrors[server.name] =
             'Select or create a thread before calling an MCP tool.';
@@ -2574,13 +2556,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
     setState(() {
       _mcpBusyServer = server.name;
+      _mcpBusyThreadId = normalizedThreadId;
       _mcpErrors.remove(server.name);
     });
     try {
       final result = await gateway.callMcpTool(
         McpToolCallQuery(
           server: server.name,
-          threadId: threadId,
+          threadId: normalizedThreadId,
           tool: input.tool,
           arguments: input.args,
         ),
@@ -2594,7 +2577,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       }
     } finally {
       if (mounted) {
-        setState(() => _mcpBusyServer = null);
+        setState(() {
+          _mcpBusyServer = null;
+          _mcpBusyThreadId = null;
+        });
       }
     }
   }
@@ -2857,10 +2843,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                       ),
                     ],
                     selectedValue: _section,
-                    onSelected: (next) {
-                      setState(() => _section = next);
-                      _syncModalDirectMcpElicitationScope();
-                    },
+                    onSelected: (next) => setState(() => _section = next),
                   ),
                   const SizedBox(width: ThemeTokens.space2),
                   CodexIconButton(
@@ -2917,6 +2900,34 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                     text: notice,
                   ),
                 ),
+              ),
+            if (widget.userInputController case final userInputController?
+                when _loading || _section != _EcosystemSection.mcp)
+              AnimatedBuilder(
+                animation: userInputController,
+                builder: (context, _) {
+                  final directElicitations = _activeDirectMcpElicitations(
+                    userInputController,
+                  );
+                  final activeDirectElicitation =
+                      directElicitations.firstOrNull;
+                  if (activeDirectElicitation == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: _McpElicitationCard(
+                      key: ValueKey(
+                        'mcp-elicitation-${activeDirectElicitation.requestId}',
+                      ),
+                      controller: userInputController,
+                      request: activeDirectElicitation,
+                      pendingCount: directElicitations.length,
+                      errorMessage: userInputController.errorMessage,
+                      margin: EdgeInsets.zero,
+                    ),
+                  );
+                },
               ),
             Expanded(
               child: _loading
@@ -3753,7 +3764,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   ) {
     final palette = ThemeTokens.of(context);
     final gateway = _mcpGateway;
-    final dialogThreadId = widget.threadId?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3793,19 +3803,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             builder: (context) {
               final runtimeStatus = server.status.trim();
               final authStatus = server.authStatus?.trim();
-              final directElicitations =
-                  userInputController == null ||
-                      dialogThreadId == null ||
-                      dialogThreadId.isEmpty
-                  ? const <McpElicitationRequest>[]
-                  : userInputController.pendingElicitations
-                        .where(
-                          (request) =>
-                              request.turnId == null &&
-                              request.threadId == dialogThreadId &&
-                              request.serverName == server.name,
-                        )
-                        .toList(growable: false);
+              final directElicitations = _activeDirectMcpElicitations(
+                userInputController,
+                serverName: server.name,
+              );
               final activeDirectElicitation = directElicitations.firstOrNull;
               return Container(
                 key: ValueKey('mcp-row-${server.name}'),

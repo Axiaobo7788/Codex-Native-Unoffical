@@ -1,63 +1,5 @@
 part of '../codex_native_app.dart';
 
-final _modalDirectMcpElicitationClaims = _ModalDirectMcpElicitationRegistry();
-
-final class _ModalDirectMcpElicitationScope {
-  const _ModalDirectMcpElicitationScope({
-    required this.controller,
-    required this.threadId,
-    required this.serverNames,
-  });
-
-  final UserInputController controller;
-  final String threadId;
-  final Set<String> serverNames;
-
-  bool matches(UserInputController target, McpElicitationRequest request) =>
-      identical(controller, target) &&
-      request.turnId == null &&
-      request.threadId == threadId &&
-      serverNames.contains(request.serverName);
-}
-
-final class _ModalDirectMcpElicitationRegistry extends ChangeNotifier {
-  final Map<Object, _ModalDirectMcpElicitationScope> _scopes = {};
-
-  void updateScope(Object owner, _ModalDirectMcpElicitationScope? scope) {
-    if (scope == null) {
-      if (_scopes.remove(owner) != null) {
-        _notify();
-      }
-      return;
-    }
-    final previous = _scopes[owner];
-    if (previous != null &&
-        identical(previous.controller, scope.controller) &&
-        previous.threadId == scope.threadId &&
-        previous.serverNames.length == scope.serverNames.length &&
-        previous.serverNames.containsAll(scope.serverNames)) {
-      return;
-    }
-    _scopes[owner] = scope;
-    _notify();
-  }
-
-  bool isClaimed(
-    UserInputController controller,
-    McpElicitationRequest request,
-  ) => _scopes.values.any((scope) => scope.matches(controller, request));
-
-  void _notify() {
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.idle ||
-        phase == SchedulerPhase.postFrameCallbacks) {
-      notifyListeners();
-    } else {
-      scheduleMicrotask(notifyListeners);
-    }
-  }
-}
-
 class _UserInputBanner extends StatelessWidget {
   const _UserInputBanner({required this.controller});
 
@@ -67,24 +9,11 @@ class _UserInputBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        controller,
-        _modalDirectMcpElicitationClaims,
-      ]),
+      animation: controller,
       builder: (context, _) {
         final request = controller.pending.firstOrNull;
-        final unclaimedElicitations = controller.pendingElicitations
-            .where(
-              (item) =>
-                  !_modalDirectMcpElicitationClaims.isClaimed(controller, item),
-            )
-            .toList(growable: false);
-        final elicitation = unclaimedElicitations.firstOrNull;
-        final hasClaimedDirectElicitation =
-            elicitation == null && controller.pendingElicitations.isNotEmpty;
-        final error = hasClaimedDirectElicitation
-            ? null
-            : controller.errorMessage;
+        final elicitation = controller.pendingElicitations.firstOrNull;
+        final error = controller.errorMessage;
         if (request == null && elicitation == null && error == null) {
           return const SizedBox.shrink();
         }
@@ -103,7 +32,7 @@ class _UserInputBanner extends StatelessWidget {
             key: ValueKey('mcp-elicitation-${elicitation!.requestId}'),
             controller: controller,
             request: elicitation,
-            pendingCount: unclaimedElicitations.length,
+            pendingCount: controller.pendingElicitations.length,
             errorMessage: error,
           );
         }
