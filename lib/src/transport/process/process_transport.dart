@@ -116,6 +116,7 @@ class ProcessTransport
   var _stderrTail = '';
   var _closing = false;
   var _threadAttachmentsUnsupported = false;
+  var _threadAttachmentWritesUnsupported = false;
 
   static Future<ProcessTransport> start({
     required String executablePath,
@@ -373,6 +374,10 @@ class ProcessTransport
       !_closing && !_threadAttachmentsUnsupported;
 
   @override
+  bool get supportsThreadAttachmentWrites =>
+      supportsThreadAttachments && !_threadAttachmentWritesUnsupported;
+
+  @override
   Stream<ThreadAttachmentEvent> get threadAttachmentEvents =>
       _threadAttachmentProtocol.events;
 
@@ -390,6 +395,32 @@ class ProcessTransport
     } on JsonRpcException catch (error) {
       if (error.code == -32601) {
         _threadAttachmentsUnsupported = true;
+        _threadAttachmentWritesUnsupported = true;
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<ThreadPullRequestLinkResult> linkPullRequest(
+    String threadId, {
+    required String url,
+    String? headBranch,
+  }) async {
+    if (_threadAttachmentsUnsupported || _threadAttachmentWritesUnsupported) {
+      throw UnsupportedError(
+        'Linking pull requests is unavailable on this runtime.',
+      );
+    }
+    try {
+      return await _threadAttachmentProtocol.linkPullRequest(
+        threadId,
+        url: url,
+        headBranch: headBranch,
+      );
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601) {
+        _threadAttachmentWritesUnsupported = true;
       }
       rethrow;
     }

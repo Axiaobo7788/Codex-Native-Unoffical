@@ -1,7 +1,9 @@
 enum ThreadAttachmentUpdateOperation { created, deleted, unknown }
 
-/// Sanitized, canonical read-only Pull Request / Merge Request reference
-/// projected from a persisted `thread/attachment/list` `pull_request` record.
+enum ThreadPullRequestLinkOutcome { created, existing, scanIncomplete }
+
+/// Sanitized, canonical Pull Request / Merge Request reference projected from
+/// a persisted `thread/attachment/list` `pull_request` record.
 class ThreadLinkedPullRequest {
   const ThreadLinkedPullRequest({
     required this.attachmentId,
@@ -26,6 +28,18 @@ class ThreadLinkedPullRequest {
   final String? headBranch;
 
   String get displayLabel => '$owner/$repository#$number';
+}
+
+/// Result of an explicit local `thread/attachment/add` call for a canonical
+/// `pull_request` reference.
+class ThreadPullRequestLinkResult {
+  const ThreadPullRequestLinkResult({
+    required this.outcome,
+    required this.pullRequest,
+  });
+
+  final ThreadPullRequestLinkOutcome outcome;
+  final ThreadLinkedPullRequest pullRequest;
 }
 
 /// Bounded per-thread projection of sanitized linked Pull Requests.
