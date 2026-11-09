@@ -3757,3 +3757,35 @@ probe before interpreting that result as a content-search limitation.
   the bundled Host MCP smoke. The history benchmark retained 100 of 1,000
   source turns and 100 entries, discarded ten 3 MiB outputs, and measured
   RSS deltas of 2,121,728 and 32,563,200 bytes.
+
+## F20 explicit review links and occurrence search evidence
+
+- F20A `1d2bc47` records the installed stock and bundled Host results for
+  [stored conversation search](reverse/THREAD_SEARCH_OCCURRENCE_EVIDENCE.md).
+  The bounded anchor lookup reached a hit outside the newest 100 turns.
+  Legacy support, stale anchors after revert, and fork behavior have
+  independent evidence. Native still searches the loaded conversation.
+- F20B `b2dcb01` and `74293f0` add an explicit local Link action. The
+  adapter verifies the same thread through bounded pages and reports an
+  existing canonical or legacy record without another write. The store
+  enforces the 256-byte canonical key limit and create-or-get semantics.
+  The preflight and add are separate stock calls, so another process can
+  insert a legacy alias between the two.
+- The initial link form overflowed the popover by 28 pixels in a simulated
+  product test. The corrected layout scrolls the form, notices, and result
+  list within the existing popover height. The follow-up rejects an empty
+  page with a continuation cursor as incomplete and returns no stored
+  record when verification stops before a write.
+- Shared format, analyze, 431 default Flutter tests with five opt-in skips,
+  5/5 direct-stock tests, 98 Rust tests with Clippy, the 64-root pure-Dart
+  gate, Linux debug bundle and license checks, and bundled Host MCP smoke
+  passed. The memory benchmark retained 100 of 1,000 source turns and
+  exercised ten 3 MiB command outputs.
+- Packaged Linux against the bundled Host and stock Codex rejected a synthetic
+  URL with user info and a query without echoing either in the error. It
+  linked a saved cold thread, reported subsequent identical input as
+  already linked, and detected a second thread's legacy URL identity. The
+  form fit at 720×800. App, Host, and stock all shut down. A fresh stock
+  process read back exactly one expected record in each thread, which both
+  remained cold. This is agent real-use evidence. Human visual and physical
+  mobile checks remain pending.

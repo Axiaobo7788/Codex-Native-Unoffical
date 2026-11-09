@@ -18,8 +18,8 @@ and is not affiliated with or endorsed by OpenAI.
   runtimes are labeled session-only.
   Manage a local thread Goal from its sidebar menu. Desktop code review can
   target uncommitted changes, a base branch, a commit or ref, or custom
-  instructions on an eligible thread. The conversation header shows stored
-  GitHub and GitLab review links on supported local runtimes.
+  instructions on an eligible thread. The conversation header can show and
+  explicitly add GitHub and GitLab review links on supported local runtimes.
 - **Runtime tools:** discover Skills, Plugins, installed Apps and MCP servers.
   Read local MCP resources and call tools, including forms from the running
   operation. Resume a cold thread explicitly before running thread-scoped MCP

@@ -2308,3 +2308,22 @@ lifecycle presentation the source of truth.
 - A stock unknown-method error disables the capability for that process.
   Other failures stay visible and retryable. Direct Host Remote retains its
   existing contract. [Stock attachment contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#stored-thread-attachments)
+
+---
+
+## ADR-048 — Add local review references through explicit stock writes
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Link accepts the same canonical GitHub and GitLab HTTPS URL shapes as the
+  read projection and enforces stock's 256-byte UTF-8 identity limit. A fresh
+  bounded scan resolves existing canonical and legacy references. An incomplete
+  scan leaves the store untouched and returns a verification failure.
+- Only the user initiates linking. Stock owns persistence and create-or-get
+  semantics. Add writes metadata on an eligible saved thread and keeps a cold
+  thread cold. Missing write methods disable only the write capability.
+- Local link removal needs a separate identity and retry policy for canonical
+  and legacy aliases. Remote and external Git state are outside the local
+  attachment write path. [Stock attachment contract](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#stored-thread-attachments)
