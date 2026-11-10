@@ -739,7 +739,15 @@ void main() {
       findsOneWidget,
     );
     expect(field, findsNothing);
-    expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
+    expect(tester.widget<CodexButton>(next).isEnabled, isTrue);
+    final defaultOption = find.descendant(
+      of: find.byKey(const ValueKey('user-input-approach-Incremental')),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics && widget.properties.label == 'Incremental',
+      ),
+    );
+    expect(tester.widget<Semantics>(defaultOption).properties.checked, isTrue);
 
     FocusNode optionFocus(String label) => Focus.of(
       tester.element(
@@ -762,6 +770,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(incremental.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     await tester.tap(next);
@@ -782,7 +792,7 @@ void main() {
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(runtime.userInputSubmissions.single.$2.values, {
-      'approach': ['Incremental'],
+      'approach': ['Full pass'],
       'note': ['  Keep this private.  '],
     });
   });

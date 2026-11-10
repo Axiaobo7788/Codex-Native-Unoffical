@@ -549,6 +549,13 @@ class _UserInputCardState extends State<_UserInputCard> {
   @override
   void initState() {
     super.initState();
+    if (widget.desktop) {
+      for (final question in widget.request.questions) {
+        if (question.options.firstOrNull case final first?) {
+          _selectedOptions[question.id] = first.label;
+        }
+      }
+    }
     _textControllers = {
       for (final question in widget.request.questions)
         question.id: TextEditingController()..addListener(_handleAnswerChanged),
