@@ -126,8 +126,8 @@ that shortcut, verified on the packaged app. Empty Send is disabled and
 separated from the permissions control by 8 px. The ordinary focused
 composer retains its neutral border. Desktop assistant Markdown uses
 the measured body-relative heading proportions. Desktop stock choices
-preselect the first answer, and selecting Other focuses the custom field.
-Home, open Changes,
+preselect the first answer. Wide stock questions show Other in the
+action footer. Home, open Changes,
 Review, expanded activity, compact and dark variants have separate
 evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
 
@@ -138,8 +138,10 @@ evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-N
   and the typed Other answer through stock. `44100f2` isolates focus per
   question. A packaged two-step walkthrough returned both typed drafts
   after moving back and forward. The installed binary rejected both
-  sampled no-options shapes. Inline Other placement and the official
-  numbered/direct-choice transition remain machine work in A10.
+  sampled no-options shapes. `a142fd0` puts the wide custom field
+  in the footer. The Linux release retained and submitted the answer
+  after resizing through 820×420. The official numbered/direct-choice
+  transition remains machine work in A10.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `80d318d` translates the Desktop assistant heading proportions.
