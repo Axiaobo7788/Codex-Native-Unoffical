@@ -2097,18 +2097,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       );
     }
 
-    final duration = Duration(seconds: goal.timeUsedSeconds);
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    final elapsed = [
-      if (duration.inHours > 0) '${duration.inHours}h',
-      if (minutes > 0) '${minutes}m',
-      if (seconds > 0) '${seconds}s',
-    ].join(' ');
+    final budget = goal.tokenBudget;
+    final budgetText =
+        budget != null &&
+            (goal.status == ThreadGoalStatus.active ||
+                goal.status == ThreadGoalStatus.budgetLimited)
+        ? '${_formatCompactTokens(goal.tokensUsed)} / ${_formatCompactTokens(budget)}'
+        : null;
     final status = switch (goal.status) {
       ThreadGoalStatus.active => 'Pursuing goal',
       ThreadGoalStatus.paused => 'Paused goal',
-      ThreadGoalStatus.blocked => 'Goal blocked',
+      ThreadGoalStatus.blocked => 'Goal stalled',
       ThreadGoalStatus.usageLimited => 'Goal usage limited',
       ThreadGoalStatus.budgetLimited => 'Goal limited',
       ThreadGoalStatus.complete => 'Goal achieved',
@@ -2162,22 +2161,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (showElapsed && elapsed.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: ThemeTokens.space2,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 92),
-                    child: Text(
-                      elapsed,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall
-                          ?.copyWith(color: theme.textMuted),
-                    ),
-                  ),
-                ),
+              if (showElapsed)
+                _DesktopGoalUsage(goal: goal, budgetText: budgetText),
               if (canManage) ...[
                 CodexIconButton(
                   key: const ValueKey('desktop-thread-goal-clear'),

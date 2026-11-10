@@ -1,5 +1,85 @@
 part of '../codex_native_app.dart';
 
+class _DesktopGoalUsage extends StatefulWidget {
+  const _DesktopGoalUsage({required this.goal, this.budgetText});
+
+  final ThreadGoal goal;
+  final String? budgetText;
+
+  bool get tracksElapsed =>
+      budgetText == null && goal.status == ThreadGoalStatus.active;
+
+  @override
+  State<_DesktopGoalUsage> createState() => _DesktopGoalUsageState();
+}
+
+class _DesktopGoalUsageState extends State<_DesktopGoalUsage> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncClock();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopGoalUsage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tracksElapsed != oldWidget.tracksElapsed) {
+      _syncClock();
+    }
+  }
+
+  void _syncClock() {
+    _tick?.cancel();
+    _tick = widget.tracksElapsed
+        ? Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}))
+        : null;
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  String _elapsedLabel() {
+    final goal = widget.goal;
+    final sinceUpdate = widget.tracksElapsed && goal.updatedAtSeconds > 0
+        ? DateTime.now().millisecondsSinceEpoch ~/ 1000 - goal.updatedAtSeconds
+        : 0;
+    final elapsed = Duration(
+      seconds: math.max(0, goal.timeUsedSeconds + sinceUpdate),
+    );
+    if (elapsed.inSeconds == 0) return '0s';
+    final minutes = elapsed.inMinutes.remainder(60);
+    final seconds = elapsed.inSeconds.remainder(60);
+    return [
+      if (elapsed.inHours > 0) '${elapsed.inHours}h',
+      if (minutes > 0) '${minutes}m',
+      if (seconds > 0) '${seconds}s',
+    ].join(' ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space2),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 92),
+        child: Text(
+          widget.budgetText ?? _elapsedLabel(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: theme.textMuted),
+        ),
+      ),
+    );
+  }
+}
+
 class _DesktopGoalEditor extends StatefulWidget {
   const _DesktopGoalEditor({
     super.key,
