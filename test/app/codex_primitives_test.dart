@@ -82,18 +82,22 @@ void main() {
   });
 
   group('CodexComposer', () {
-    testWidgets('clamps to 704px max width with 24px radius', (tester) async {
+    testWidgets('clamps to 672px max width with 24px radius', (tester) async {
       await tester.pumpWidget(
         wrap(
           const CodexComposer(
-            child: SizedBox(height: 48, child: Text('Composer Input')),
+            child: SizedBox(
+              width: 1000,
+              height: 48,
+              child: Text('Composer Input'),
+            ),
           ),
         ),
       );
 
       final composer = find.byType(CodexComposer);
       expect(composer, findsOneWidget);
-      expect(tester.getSize(composer).width, lessThanOrEqualTo(704.0));
+      expect(tester.getSize(composer).width, 672.0);
     });
   });
 

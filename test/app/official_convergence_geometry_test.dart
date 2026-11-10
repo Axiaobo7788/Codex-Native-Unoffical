@@ -10,6 +10,7 @@ import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -39,6 +40,12 @@ void main() {
         height: 1440.0,
         dpr: 2.0,
       ),
+      (
+        name: '780x800 near split threshold',
+        width: 780.0,
+        height: 800.0,
+        dpr: 1.0,
+      ),
     ];
 
     for (final vp in viewports) {
@@ -54,24 +61,66 @@ void main() {
         await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
         await tester.pumpAndSettle();
 
-        // 1. Assert single sidebar header geometry: height 46px, no duplicate Codex Native titlebar
+        // The app toolbar spans all columns above the persistent rail and page.
         final titlebarFinder = find.byKey(const ValueKey('app_shell_titlebar'));
         expect(titlebarFinder, findsOneWidget);
         expect(find.text('Codex Native'), findsNothing);
+        final titlebarRect = tester.getRect(titlebarFinder);
         expect(
-          tester.getSize(titlebarFinder).height,
-          equals(OfficialCodexTheme.titlebarHeight),
+          titlebarRect.size,
+          Size(vp.width / vp.dpr, OfficialCodexTheme.shellToolbarHeight),
         );
-        expect(tester.getSize(titlebarFinder).height, equals(46.0));
 
-        // 2. Assert Sidebar width: exactly 260px and nested thread row indentation under project folder
-        final sidebarFinder = find.byKey(const ValueKey('app_shell_sidebar'));
-        expect(sidebarFinder, findsOneWidget);
-        expect(
-          tester.getSize(sidebarFinder).width,
-          equals(OfficialCodexTheme.sidebarWidth),
+        final rail = tester.getRect(
+          find.byKey(const ValueKey('app-shell-navigation-rail')),
         );
-        expect(tester.getSize(sidebarFinder).width, equals(260.0));
+        final pageFinder = find.byKey(const ValueKey('app-shell-page-surface'));
+        final page = tester.getRect(pageFinder);
+        expect(rail.left, titlebarRect.left);
+        expect(
+          rail.top,
+          titlebarRect.bottom + OfficialCodexTheme.shellPageTopInset,
+        );
+        expect(rail.width, OfficialCodexTheme.navigationRailWidth);
+        expect(page.top, rail.top);
+        expect(page.left, rail.right);
+        expect(page.right, titlebarRect.right);
+        final pageDecoration =
+            tester.widget<Container>(pageFinder).decoration as BoxDecoration;
+        expect(
+          pageDecoration.borderRadius,
+          BorderRadius.circular(OfficialCodexTheme.mainSurfaceRadius),
+        );
+
+        final sidebarFinder = find.byKey(const ValueKey('app_shell_sidebar'));
+        final sidebar = tester.getRect(sidebarFinder);
+        final workspace = tester.getRect(
+          find.byKey(const ValueKey('app-shell-workspace')),
+        );
+        expect(sidebar.topLeft, page.topLeft);
+        expect(sidebar.width, OfficialCodexTheme.sidebarWidth);
+        expect(workspace.left, sidebar.right);
+        expect(workspace.top, sidebar.top);
+        expect(workspace.right, page.right);
+        expect(
+          workspace.left - rail.left,
+          OfficialCodexTheme.desktopLeftPanelWidth,
+        );
+        expect(find.text('New chat'), findsOneWidget);
+        expect(find.text('Projects'), findsOneWidget);
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('codex-sidebar-header')))
+              .height,
+          OfficialCodexTheme.contextualSidebarHeaderHeight,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('codex-sidebar-header')),
+            matching: find.byKey(const ValueKey('thread-search-toggle')),
+          ),
+          findsOneWidget,
+        );
         final projectHeadingFinder = find.text('project');
         final threadRowFinder = find.byKey(
           const ValueKey('thread-row-geom-thread-1'),
@@ -83,23 +132,7 @@ void main() {
           greaterThan(tester.getTopLeft(sidebarFinder).dx + 14.0),
         );
 
-        // 3. Assert Inset workspace card: top-left corner radius 12px and 6px inset margin
-        final insetCardFinder = find.byKey(
-          const ValueKey('inset_workspace_card'),
-        );
-        expect(insetCardFinder, findsOneWidget);
-        final container = tester.widget<Container>(insetCardFinder);
-        expect(
-          container.margin,
-          equals(const EdgeInsets.fromLTRB(0.0, 6.0, 6.0, 6.0)),
-        );
-        final boxDecoration = container.decoration as BoxDecoration;
-        expect(
-          boxDecoration.borderRadius,
-          equals(BorderRadius.circular(OfficialCodexTheme.mainSurfaceRadius)),
-        );
-
-        // 3b. Assert Home (Let's build) state: header has no bottom border, detail modes hidden, composer centered with hero and uses Tier 2 elevatedSurface
+        // Home keeps a centered composer and hides thread detail modes.
         final emptyHeaderContainer = tester.widget<Container>(
           find.byKey(const ValueKey('thread_header_bar')),
         );
@@ -137,8 +170,20 @@ void main() {
           equals(OfficialCodexTheme.headerHeight),
         );
         expect(tester.getSize(threadHeaderFinder).height, equals(46.0));
+        final folder = find.descendant(
+          of: threadHeaderFinder,
+          matching: find.byIcon(Icons.folder_outlined),
+        );
+        final workspaceTitle = find.descendant(
+          of: threadHeaderFinder,
+          matching: find.text('Geometry Test Thread'),
+        );
+        expect(
+          tester.getTopLeft(folder).dx,
+          lessThan(tester.getTopLeft(workspaceTitle).dx),
+        );
 
-        // 5. Assert Conversation reading column: bounded to <= 704px
+        // The current desktop reading column is bounded to 42rem.
         final columnFinder = find.byKey(
           const ValueKey('conversation_reading_column'),
         );
@@ -147,18 +192,47 @@ void main() {
           tester.getSize(columnFinder).width,
           lessThanOrEqualTo(OfficialCodexTheme.maxContentWidth),
         );
-        expect(tester.getSize(columnFinder).width, lessThanOrEqualTo(704.0));
+        expect(tester.getSize(columnFinder).width, lessThanOrEqualTo(672.0));
 
-        // 6. Assert Floating Composer: bounded to <= 704px with 24px radius
+        // The active composer shares the reading width and groups controls right.
         final composerFinder = find.byKey(const ValueKey('floating_composer'));
         expect(composerFinder, findsOneWidget);
         expect(
           tester.getSize(composerFinder).width,
           lessThanOrEqualTo(OfficialCodexTheme.maxContentWidth),
         );
-        expect(tester.getSize(composerFinder).width, lessThanOrEqualTo(704.0));
+        final field = find.byKey(const ValueKey('conversation-composer'));
+        final attach = find.byKey(const ValueKey('composer-attach-button'));
+        final model = find.byKey(const ValueKey('composer-model-pill'));
+        final permissions = find.byKey(
+          const ValueKey('execution-settings-button'),
+        );
+        final send = find.byKey(const ValueKey('composer-send-button'));
+        expect(
+          tester.getCenter(attach).dx,
+          lessThan(tester.getCenter(field).dx),
+        );
+        expect(
+          tester.getCenter(field).dx,
+          lessThan(tester.getCenter(model).dx),
+        );
+        expect(
+          tester.getCenter(model).dx,
+          lessThan(tester.getCenter(permissions).dx),
+        );
+        expect(
+          tester.getCenter(permissions).dx,
+          lessThan(tester.getCenter(send).dx),
+        );
+        final activeSurface = tester.widget<AnimatedContainer>(
+          find.byKey(const ValueKey('composer-surface')),
+        );
+        expect(
+          (activeSurface.decoration as BoxDecoration).borderRadius,
+          BorderRadius.circular(OfficialCodexTheme.composerRadiusPill),
+        );
 
-        // 7. Verify user message bubble max width factor (75% of reading column = 528px)
+        // User bubbles remain capped at 75% of the reading column.
         final bubbleFinder = find.text('Hello Codex from geometry test suite!');
         expect(bubbleFinder, findsOneWidget);
         final bubbleSize = tester.getSize(bubbleFinder);
@@ -169,9 +243,13 @@ void main() {
                 OfficialCodexTheme.maxUserBubbleWidthFactor,
           ),
         );
-        expect(bubbleSize.width, lessThanOrEqualTo(528.0));
 
-        // 8. Verify Presentation Detail Mode selector is present and produces genuine visual differences
+        // Timeline detail stays available in a compact header action.
+        final detailsButton = find.byKey(
+          const ValueKey('timeline-details-button'),
+        );
+        await tester.tap(detailsButton);
+        await tester.pumpAndSettle();
         expect(find.text('Prose'), findsOneWidget);
         expect(find.text('Commands'), findsOneWidget);
         expect(find.text('Execution'), findsOneWidget);
@@ -188,6 +266,8 @@ void main() {
         expect(find.text('Command: cargo test'), findsOneWidget);
 
         // In Prose: both commands are filtered out, user and assistant messages remain
+        await tester.tap(detailsButton);
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Prose'));
         await tester.pumpAndSettle();
         expect(find.text('Command: flutter test'), findsNothing);
@@ -210,6 +290,69 @@ void main() {
         );
       });
     }
+
+    testWidgets(
+      'resizes the sidebar and preserves the draft across a compact window',
+      (tester) async {
+        tester.view.physicalSize = const Size(1191, 865);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final runtime = _GeometryTestRuntimeController();
+        addTearDown(runtime.closeStreams);
+        await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Geometry Test Thread'));
+        await tester.pumpAndSettle();
+
+        final composer = find.byKey(const ValueKey('conversation-composer'));
+        final workspace = find.byKey(const ValueKey('app-shell-workspace'));
+        final handle = find.byKey(const ValueKey('sidebar-resize-handle'));
+        await tester.enterText(composer, 'Draft through sidebar resize');
+
+        await tester.drag(handle, const Offset(-130, 0));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          OfficialCodexTheme.desktopLeftPanelMinWidth,
+        );
+
+        Focus.of(tester.element(handle)).requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          greaterThan(OfficialCodexTheme.desktopLeftPanelMinWidth),
+        );
+
+        await tester.drag(handle, const Offset(350, 0));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          OfficialCodexTheme.sidebarMaxWidth,
+        );
+
+        tester.view.physicalSize = const Size(760, 800);
+        await tester.pumpAndSettle();
+        expect(find.text('Draft through sidebar resize'), findsOneWidget);
+
+        tester.view.physicalSize = const Size(720, 800);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
+        expect(handle, findsNothing);
+        expect(find.text('Draft through sidebar resize'), findsOneWidget);
+
+        tester.view.physicalSize = const Size(1191, 865);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          OfficialCodexTheme.sidebarMaxWidth,
+        );
+        expect(find.text('Draft through sidebar resize'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'validates compact workspace geometry on 720x800 compact viewport (< 760px breakpoint)',

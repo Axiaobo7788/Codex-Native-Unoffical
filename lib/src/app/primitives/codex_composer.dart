@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/official_codex_theme.dart';
 
-/// Semantic floating composer container primitive conforming to official
-/// Codex desktop specifications (704px max width, 24px radius, hairline border, Tier 2 surface).
+/// Semantic floating composer surface with a bounded width and focus border.
 class CodexComposer extends StatelessWidget {
   const CodexComposer({
     super.key,
@@ -12,6 +11,7 @@ class CodexComposer extends StatelessWidget {
     this.maxWidth = OfficialCodexTheme.maxContentWidth,
     this.radius = OfficialCodexTheme.composerRadius,
     this.isFocused = false,
+    this.backgroundColor,
     this.padding = const EdgeInsets.fromLTRB(14.0, 10.0, 8.0, 8.0),
   });
 
@@ -20,6 +20,7 @@ class CodexComposer extends StatelessWidget {
   final double maxWidth;
   final double radius;
   final bool isFocused;
+  final Color? backgroundColor;
   final EdgeInsets padding;
 
   @override
@@ -35,7 +36,7 @@ class CodexComposer extends StatelessWidget {
         curve: Curves.easeOut,
         padding: padding,
         decoration: BoxDecoration(
-          color: theme.elevatedSurface,
+          color: backgroundColor ?? theme.elevatedSurface,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: isFocused ? theme.focusRing : theme.hairlineBorder,

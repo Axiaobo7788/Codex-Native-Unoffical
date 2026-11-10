@@ -20,16 +20,16 @@ abstract final class OfficialCodexTheme {
   /// Base grid layout unit (4px / 0.25rem).
   static const double baseGrid = 4.0;
 
-  /// Centered conversation reading column max width (44rem / 704px).
-  static const double maxContentWidth = 704.0;
+  /// Current conversation reading and composer column (42rem / 672px).
+  static const double maxContentWidth = 672.0;
 
   /// Compact reading column width for constrained viewports (40rem / 640px).
   static const double compactContentWidth = 640.0;
 
-  /// User message bubble max width factor within reading column (75% / ~528px).
+  /// User message bubble max width factor within the reading column.
   static const double maxUserBubbleWidthFactor = 0.75;
 
-  /// Composer max width (44rem / 704px).
+  /// Composer max width shares the reading column width.
   static const double composerMaxWidth = maxContentWidth;
 
   /// Floating composer corner radius (24px / 1.5rem).
@@ -63,12 +63,24 @@ abstract final class OfficialCodexTheme {
   /// Segmented control pill corner radius (8px).
   static const double segmentRadius = 8.0;
 
-  /// Sidebar default width on desktop viewports (260px).
-  static const double sidebarWidth = 260.0;
+  /// Current rail-with-contextual-sidebar geometry.
+  static const double navigationRailWidth = 52.0;
+  static const double desktopLeftPanelWidth = 340.0;
+  static const double sidebarWidth =
+      desktopLeftPanelWidth - navigationRailWidth;
+  static const double shellToolbarHeight = 36.0;
+  static const double shellPageTopInset = 8.0;
+  static const double contextualSidebarHeaderHeight = 52.0;
+  static const BoxShadow shellPageShadow = BoxShadow(
+    color: Color(0x0D000000),
+    offset: Offset(0, 4),
+    blurRadius: 16,
+  );
 
-  /// Sidebar resize boundaries.
-  static const double sidebarMinWidth = 240.0;
+  /// Resize bounds include the navigation rail and reserve workspace room.
+  static const double desktopLeftPanelMinWidth = 290.0;
   static const double sidebarMaxWidth = 520.0;
+  static const double desktopWorkspaceMinWidth = 240.0;
 
   /// Sidebar split breakpoint (760px).
   static const double splitBreakpoint = 760.0;
@@ -152,6 +164,8 @@ abstract final class OfficialCodexTheme {
 
   // Light Mode Surface Hierarchy
   static const Color lightShellBackground = Color(0xFFF9F9F9); // Tier 0
+  static const Color lightNavigationBackground = Color(0xFFF4F4F4);
+  static const Color lightContextualSidebarBackground = Color(0xFFFBFBFB);
   static const Color lightWorkspaceBackground = Color(0xFFFFFFFF); // Tier 1
   static const Color lightElevatedSurface = Color(0xFFF4F4F4); // Tier 2
   static const Color lightModalSurface = Color(0xFFFFFFFF); // Tier 3

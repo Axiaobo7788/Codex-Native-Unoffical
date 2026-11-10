@@ -1,6 +1,6 @@
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
-import 'package:codex_native_unofficial/src/app/primitives/codex_segment.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_menu.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
@@ -669,7 +669,9 @@ void main() {
       },
     );
 
-    testWidgets('T1.4.4: Active turn displays working state', (tester) async {
+    testWidgets('T1.4.4: Active turn can stop from the Desktop composer', (
+      tester,
+    ) async {
       final thread = createTestThread(
         id: 'stop-btn-thread',
         preview: 'Stop button thread',
@@ -687,8 +689,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
       await tester.pumpAndSettle();
 
-      // In running state, Working indicator is rendered
-      expect(find.text('Working…'), findsOneWidget);
+      final stop = find.byKey(const ValueKey('composer-stop-button'));
+      expect(stop, findsOneWidget);
+      await tester.tap(stop);
+      await tester.pumpAndSettle();
+      expect(harness.interruptedTurns.single.threadId, 'stop-btn-thread');
+      expect(stop, findsNothing);
     });
 
     testWidgets(
@@ -814,6 +820,14 @@ void main() {
         await tester.tap(find.text('Diff viewer thread'));
         await tester.pumpAndSettle();
 
+        tester.view.physicalSize = const Size(760, 800);
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byKey(const ValueKey('sidebar-resize-handle')),
+          const Offset(310, 0),
+        );
+        await tester.pumpAndSettle();
+
         final snapshot = DiffSnapshot(
           threadId: 'diff-thread',
           turnId: 'turn-1',
@@ -840,6 +854,24 @@ void main() {
 
         expect(find.textContaining('lib/main.dart'), findsWidgets);
         expect(find.textContaining('runApp(New());'), findsOneWidget);
+
+        harness.emitDiff(
+          const DiffSnapshot(
+            threadId: 'diff-thread',
+            turnId: 'turn-1',
+            additions: 0,
+            deletions: 0,
+            truncated: false,
+            files: [],
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('No file changes for this turn.'), findsOneWidget);
+        expect(changesBtn, findsOneWidget);
+        await tester.tap(changesBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('No file changes for this turn.'), findsNothing);
+        expect(changesBtn, findsNothing);
       },
     );
 
@@ -1163,7 +1195,12 @@ void main() {
           find.byKey(const ValueKey('product-mode-selector')),
           findsNothing,
         );
-        final detail = find.byType(CodexSegment<PresentationDetailMode>);
+        final detailButton = find.byKey(
+          const ValueKey('timeline-details-button'),
+        );
+        final detail = find.byType(CodexMenu<PresentationDetailMode>);
+        await tester.tap(detailButton);
+        await tester.pumpAndSettle();
         for (final (label, mode) in [
           ('Prose', PresentationDetailMode.prose),
           ('Commands', PresentationDetailMode.commands),
@@ -1172,13 +1209,17 @@ void main() {
             find.descendant(of: detail, matching: find.text(label)),
           );
           await tester.pumpAndSettle();
+          await tester.tap(detailButton);
+          await tester.pumpAndSettle();
           expect(
             tester
-                .widget<CodexSegment<PresentationDetailMode>>(detail)
+                .widget<CodexMenu<PresentationDetailMode>>(detail)
                 .selectedValue,
             mode,
           );
         }
+        await tester.tapAt(const Offset(10, 200));
+        await tester.pumpAndSettle();
 
         // 7. Delete thread via header actions menu
         await tester.tap(headerMenuBtn);
@@ -1267,7 +1308,10 @@ void main() {
 
         // 4. Active turn is now in progress and TurnStartedEvent was emitted;
         //    submitting from the composer steers the active turn via turn/steer
-        expect(find.text('Working…'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('composer-stop-button')),
+          findsOneWidget,
+        );
         expect(find.text('Steer active turn in Codex'), findsOneWidget);
         await tester.enterText(composerField, 'Also check edge cases');
         await tester.pump();

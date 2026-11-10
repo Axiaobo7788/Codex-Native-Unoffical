@@ -39,6 +39,8 @@ void main() {
   ) async {
     final harness = _TurnDetailsHarness(timed: true);
     await _open(tester, harness);
+    await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Execution'));
     await tester.pumpAndSettle();
 

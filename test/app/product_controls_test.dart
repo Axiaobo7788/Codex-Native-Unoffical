@@ -286,7 +286,7 @@ void main() {
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
 
-      await tester.tap(find.text('Defaults'));
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
       await tester.pumpAndSettle();
 
       await _chooseDropdown(
@@ -315,7 +315,7 @@ void main() {
       expect(runtime.turnOptions.last.approvalPolicy, isNull);
       expect(runtime.turnOptions.last.sandbox, isNull);
 
-      await tester.tap(find.text('Defaults'));
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
       await tester.pumpAndSettle();
       await _chooseDropdown(
         tester,
@@ -525,7 +525,8 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('Changes 2'));
+      expect(find.text('2 files shown'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('changes-view-button')));
       await tester.pumpAndSettle();
       expect(
         find.text('Large diff truncated to the bounded presentation limit.'),

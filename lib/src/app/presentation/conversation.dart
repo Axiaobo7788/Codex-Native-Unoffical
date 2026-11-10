@@ -15,9 +15,8 @@ class _ConversationPanel extends StatefulWidget {
     required this.outputGateway,
     required this.transportCapabilities,
     this.defaultWorkingDirectory = '',
-    this.sidebarCollapsed = false,
+    this.hasDesktopShell = false,
     this.isOffstage = false,
-    this.onToggleSidebar,
   });
 
   final ConversationController controller;
@@ -30,9 +29,8 @@ class _ConversationPanel extends StatefulWidget {
   final OutputGateway outputGateway;
   final BackendCapabilities transportCapabilities;
   final String defaultWorkingDirectory;
-  final bool sidebarCollapsed;
+  final bool hasDesktopShell;
   final bool isOffstage;
-  final VoidCallback? onToggleSidebar;
 
   @override
   State<_ConversationPanel> createState() => _ConversationPanelState();
@@ -120,13 +118,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _showJumpToLatest = false;
   var _showChanges = false;
   var _searchOpen = false;
-  var _checkingColdSend = false;
+  var _checkingColdResume = false;
   var _threadSelectionVersion = 0;
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
+  final _timelineDetailsPopoverController = CodexPopoverController();
   final _composerAttachPopoverController = CodexPopoverController();
   final _linkedPrsPopoverController = CodexPopoverController();
   final _linkedPrViewNotifier = ValueNotifier<int>(0);
@@ -596,8 +595,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _requestActiveThreadLinkedPrs(activeId);
       }
     }
+    if (oldWidget.hasDesktopShell && !widget.hasDesktopShell) {
+      _timelineDetailsPopoverController.hide();
+    }
     if (!oldWidget.isOffstage && widget.isOffstage) {
       _threadActionsPopoverController.hide();
+      _timelineDetailsPopoverController.hide();
       _composerAttachPopoverController.hide();
       _linkedPrsPopoverController.hide();
     } else if (oldWidget.isOffstage && !widget.isOffstage) {
@@ -635,6 +638,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..removeListener(_handleScrollPositionChanged)
       ..dispose();
     _threadActionsPopoverController.dispose();
+    _timelineDetailsPopoverController.dispose();
     _composerAttachPopoverController.dispose();
     _linkedPrsPopoverController.dispose();
     _linkedPrViewNotifier.dispose();
@@ -854,8 +858,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ],
                 );
               }
-              final timelineChild =
-                  _showChanges && widget.diffController.snapshot != null
+              final changes = widget.diffController.snapshot;
+              final timelineChild = _showChanges && changes != null
                   ? _DiffView(controller: widget.diffController)
                   : _timeline(controller);
               return Column(
@@ -877,6 +881,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   if (controller.thread != null && controller.reviewModeActive)
                     _reviewModeBanner(controller),
                   Expanded(child: timelineChild),
+                  if (widget.hasDesktopShell &&
+                      changes != null &&
+                      (_showChanges || changes.files.isNotEmpty))
+                    _desktopChangesSummary(changes),
                   _ApprovalBanner(controller: widget.approvalController),
                   _UserInputBanner(controller: widget.userInputController),
                   _composer(controller),
@@ -1376,12 +1384,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final theme = OfficialCodexTheme.of(context);
     final thread = controller.thread;
     final threadController = widget.threadController;
+    final changes = widget.diffController.snapshot;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
+    final hasProject =
+        projectCwd.isNotEmpty &&
+        _activeCapabilities.supportsWorkingDirectorySelection;
     final isHomeEmpty = thread == null;
     return Container(
       key: const ValueKey('thread_header_bar'),
       height: OfficialCodexTheme.headerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.hasDesktopShell
+            ? ThemeTokens.space6
+            : ThemeTokens.space4,
+      ),
       decoration: BoxDecoration(
         color: theme.workspaceBackground,
         border: isHomeEmpty
@@ -1400,23 +1416,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               thread != null &&
               _activeCapabilities.supportsInConversationSearch &&
               constraints.maxWidth >= 520;
+          final compactLinkedPrs =
+              widget.hasDesktopShell && constraints.maxWidth < 360;
           return Row(
             children: [
-              if (widget.sidebarCollapsed &&
-                  widget.onToggleSidebar != null) ...[
-                CodexIconButton(
-                  key: const ValueKey('sidebar-expand-button'),
-                  tooltip: 'Show sidebar (Ctrl+B)',
-                  onPressed: widget.onToggleSidebar,
-                  icon: const Icon(Icons.view_sidebar_outlined, size: 17),
-                ),
-                const SizedBox(width: ThemeTokens.space2),
-              ],
               Expanded(
                 child: thread == null
                     ? const SizedBox.shrink()
                     : Row(
                         children: [
+                          if (widget.hasDesktopShell && hasProject) ...[
+                            CodexTooltip(
+                              message: projectCwd,
+                              child: Icon(
+                                Icons.folder_outlined,
+                                size: 18,
+                                color: palette.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: ThemeTokens.space3),
+                          ],
                           Flexible(
                             child: Text(
                               thread.displayTitle,
@@ -1424,8 +1443,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13.5,
+                                    fontWeight: widget.hasDesktopShell
+                                        ? FontWeight.w500
+                                        : FontWeight.w600,
+                                    fontSize: widget.hasDesktopShell
+                                        ? 14
+                                        : 13.5,
                                     letterSpacing: -0.1,
                                   ),
                             ),
@@ -1440,12 +1463,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 _activeThreadLinkedPrs?.threadId == thread.id
                                     ? _activeThreadLinkedPrs
                                     : null,
+                                compact: compactLinkedPrs,
                               ),
                             ),
                           ],
-                          if (projectCwd.isNotEmpty &&
-                              _activeCapabilities
-                                  .supportsWorkingDirectorySelection &&
+                          if (!widget.hasDesktopShell &&
+                              hasProject &&
                               constraints.maxWidth >= 680) ...[
                             const SizedBox(width: 8),
                             Flexible(
@@ -1534,8 +1557,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ],
                       ),
               ),
-              if (widget.diffController.snapshot?.files.isNotEmpty ??
-                  false) ...[
+              if (!widget.hasDesktopShell &&
+                  changes != null &&
+                  (_showChanges || changes.files.isNotEmpty)) ...[
                 CodexButton(
                   key: const ValueKey('changes-view-button'),
                   size: CodexButtonSize.sm,
@@ -1549,11 +1573,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                   label: _showChanges
                       ? 'Conversation'
-                      : 'Changes ${widget.diffController.snapshot!.files.length}',
+                      : 'Changes ${changes.files.length}',
                 ),
                 const SizedBox(width: ThemeTokens.space2),
               ],
-              if (showSegment)
+              if (thread != null && widget.hasDesktopShell)
+                _timelineDetailsButton()
+              else if (showSegment)
                 CodexSegment<PresentationDetailMode>(
                   items: const [
                     CodexSegmentItem(
@@ -1703,13 +1729,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               threadController.compactThread(thread.id),
                             );
                           case 'review':
-                            if (_canStartThreadReview(thread.id)) {
-                              unawaited(
-                                controller.startReview(
-                                  const UncommittedChangesReviewTarget(),
-                                ),
-                              );
-                            }
+                            unawaited(
+                              _startThreadReview(
+                                thread.id,
+                                const UncommittedChangesReviewTarget(),
+                              ),
+                            );
                           case 'review-target':
                             unawaited(_startThreadReviewDialog(thread));
                           case 'archive':
@@ -1738,7 +1763,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                 ),
               ],
-              if (controller.canInterrupt) ...[
+              if (!widget.hasDesktopShell && controller.canInterrupt) ...[
                 const SizedBox(width: ThemeTokens.space2),
                 CodexButton(
                   size: CodexButtonSize.sm,
@@ -1755,11 +1780,113 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  Widget _desktopChangesSummary(DiffSnapshot snapshot) {
+    final theme = OfficialCodexTheme.of(context);
+    final count = snapshot.files.length;
+    final label = snapshot.truncated
+        ? count == 1
+              ? '1 file shown'
+              : '$count files shown'
+        : count == 1
+        ? '1 file changed'
+        : '$count files changed';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      child: Center(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(
+              OfficialCodexTheme.composerRadiusPill,
+            ),
+            border: Border.all(
+              color: theme.hairlineBorder,
+              width: OfficialCodexTheme.hairlineBorderWidth,
+            ),
+          ),
+          child: CodexButton(
+            key: const ValueKey('changes-view-button'),
+            variant: CodexButtonVariant.ghost,
+            onPressed: () => setState(() => _showChanges = !_showChanges),
+            label: _showChanges ? 'Conversation' : null,
+            tooltip: _showChanges
+                ? 'Return to conversation'
+                : '$label, +${snapshot.additions} −${snapshot.deletions}',
+            child: _showChanges
+                ? null
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        flex: 2,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: ThemeTokens.space2),
+                      Flexible(
+                        child: Text(
+                          '+${snapshot.additions}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: theme.diffAddedText),
+                        ),
+                      ),
+                      const SizedBox(width: ThemeTokens.space1),
+                      Flexible(
+                        child: Text(
+                          '-${snapshot.deletions}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: theme.diffRemovedText),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timelineDetailsButton() => CodexPopoverAnchor(
+    controller: _timelineDetailsPopoverController,
+    targetAnchor: Alignment.bottomRight,
+    followerAnchor: Alignment.topRight,
+    width: 180,
+    popoverBuilder: (context, close) => CodexMenu<PresentationDetailMode>(
+      items: const [
+        CodexMenuItem(value: PresentationDetailMode.prose, label: 'Prose'),
+        CodexMenuItem(
+          value: PresentationDetailMode.commands,
+          label: 'Commands',
+        ),
+        CodexMenuItem(
+          value: PresentationDetailMode.execution,
+          label: 'Execution',
+        ),
+      ],
+      selectedValue: _detailMode,
+      onSelected: (mode) {
+        close();
+        setState(() => _detailMode = mode);
+      },
+    ),
+    child: CodexIconButton(
+      key: const ValueKey('timeline-details-button'),
+      tooltip: 'Timeline details',
+      icon: const Icon(Icons.tune_rounded, size: 17),
+      onPressed: _timelineDetailsPopoverController.toggle,
+    ),
+  );
+
   Widget _buildLinkedPrHeaderPill(
     BuildContext context,
     String threadId,
-    ThreadLinkedPullRequestsSnapshot? linkedPrs,
-  ) {
+    ThreadLinkedPullRequestsSnapshot? linkedPrs, {
+    required bool compact,
+  }) {
     final palette = ThemeTokens.of(context);
     final hasPrs = linkedPrs != null && linkedPrs.isNotEmpty;
     final firstPr = hasPrs ? linkedPrs.pullRequests.first : null;
@@ -1786,8 +1913,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
     return CodexPopoverAnchor(
       controller: _linkedPrsPopoverController,
-      targetAnchor: Alignment.bottomLeft,
-      followerAnchor: Alignment.topLeft,
+      targetAnchor: compact ? Alignment.bottomRight : Alignment.bottomLeft,
+      followerAnchor: compact ? Alignment.topRight : Alignment.topLeft,
       width: 360,
       popoverBuilder: (context, close) => ValueListenableBuilder<int>(
         valueListenable: _linkedPrViewNotifier,
@@ -1826,34 +1953,36 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           size: 12,
           color: _linkedPrLoadError != null ? palette.danger : palette.accent,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                pillLabel,
-                key: const ValueKey('thread-linked-pr-pill-label'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: _linkedPrLoadError != null
-                      ? palette.danger
-                      : palette.textSecondary,
-                  fontSize: 11.5,
-                ),
+        child: compact
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      pillLabel,
+                      key: const ValueKey('thread-linked-pr-pill-label'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: _linkedPrLoadError != null
+                            ? palette.danger
+                            : palette.textSecondary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                  if (countSuffix != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      countSuffix,
+                      key: const ValueKey('thread-linked-pr-pill-count'),
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: palette.textMuted, fontSize: 11),
+                    ),
+                  ],
+                ],
               ),
-            ),
-            if (countSuffix != null) ...[
-              const SizedBox(width: 4),
-              Text(
-                countSuffix,
-                key: const ValueKey('thread-linked-pr-pill-count'),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: palette.textMuted, fontSize: 11),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -2205,6 +2334,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       widget.threadController?.showArchived == false &&
       widget.threadController?.mutating == false &&
       widget.threadController?.isMaterialized(threadId) == true &&
+      widget.threadController?.selectedThread?.status !=
+          ThreadRuntimeStatus.active &&
       widget.controller.canStartReview &&
       _activeCapabilities.supportsGitDiff;
 
@@ -2216,10 +2347,57 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       context: context,
       builder: (context) => _StartReviewDialog(thread: thread),
     );
-    if (target == null || !_canStartThreadReview(thread.id)) {
+    if (target == null) {
       return;
     }
-    await widget.controller.startReview(target);
+    await _startThreadReview(thread.id, target);
+  }
+
+  Future<void> _startThreadReview(String threadId, ReviewTarget target) async {
+    final threads = widget.threadController;
+    if (threads == null ||
+        _checkingColdResume ||
+        !_canStartThreadReview(threadId)) {
+      return;
+    }
+    final selectionVersion = _threadSelectionVersion;
+    if (threads.selectedThreadNeedsResume(threadId)) {
+      final admitted = await _confirmColdResume(
+        threads,
+        threadId,
+        forReview: true,
+      );
+      if (!admitted ||
+          _threadSelectionVersion != selectionVersion ||
+          !_canStartThreadReview(threadId)) {
+        return;
+      }
+      if (!await threads.ensureSelectedThreadLoaded(threadId)) {
+        _reportReviewResumeFailure(threads, threadId, selectionVersion);
+        return;
+      }
+    }
+    if (_threadSelectionVersion == selectionVersion &&
+        _canStartThreadReview(threadId)) {
+      await widget.controller.startReview(target);
+    }
+  }
+
+  void _reportReviewResumeFailure(
+    ThreadListController threads,
+    String threadId,
+    int selectionVersion,
+  ) {
+    if (mounted &&
+        _threadSelectionVersion == selectionVersion &&
+        widget.controller.thread?.id == threadId &&
+        threads.errorMessage != null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Could not resume this thread for review.'),
+        ),
+      );
+    }
   }
 
   void _rememberThreadDag(String threadId, ChatConversationDag dag) {
@@ -2900,6 +3078,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         historyController: widget.historyController,
                         outputGateway: widget.outputGateway,
                         detailMode: _detailMode,
+                        inlineActivity: widget.hasDesktopShell,
                         overrideEntryText: overrideText,
                         overrideAttachments: overrideAttachments,
                         siblingBranchInfo:
@@ -3051,6 +3230,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     child: _ConversationEntryView(
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
+                      inlineActivity: widget.hasDesktopShell,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:
@@ -3161,6 +3341,41 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final canSteer = controller.canSteer;
     final enabled =
         (thread != null || canCreateOnSend) && (!controller.busy || canSteer);
+    final inlineControls = widget.hasDesktopShell && !isHeroCentered;
+    final showStop = inlineControls && controller.canInterrupt;
+    final input = CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): () {
+          if (enabled) {
+            unawaited(_send());
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+            _insertComposerNewline,
+      },
+      child: TextField(
+        key: const ValueKey('conversation-composer'),
+        controller: _composerController,
+        focusNode: _composerFocusNode,
+        enabled: enabled,
+        minLines: isHeroCentered ? 2 : 1,
+        maxLines: 6,
+        textInputAction: TextInputAction.newline,
+        decoration: InputDecoration(
+          hintText: thread == null && !canCreateOnSend
+              ? 'Select or create a thread'
+              : canSteer
+              ? 'Steer active turn in Codex'
+              : 'Send a message to Codex',
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
+        ),
+      ),
+    );
     return Container(
       color: isHeroCentered ? Colors.transparent : palette.canvas,
       padding: isHeroCentered
@@ -3171,6 +3386,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           key: const ValueKey('floating_composer'),
           surfaceKey: const ValueKey('composer-surface'),
           isFocused: _composerFocusNode.hasFocus,
+          radius: inlineControls
+              ? OfficialCodexTheme.composerRadiusPill
+              : OfficialCodexTheme.composerRadius,
+          padding: inlineControls
+              ? const EdgeInsets.all(8)
+              : const EdgeInsets.fromLTRB(14, 10, 8, 8),
+          backgroundColor: inlineControls
+              ? OfficialCodexTheme.of(context).workspaceBackground
+              : null,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3203,39 +3427,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                 ),
               ],
-              CallbackShortcuts(
-                bindings: {
-                  const SingleActivator(LogicalKeyboardKey.enter): () {
-                    if (enabled) {
-                      unawaited(_send());
-                    }
-                  },
-                  const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-                      _insertComposerNewline,
-                },
-                child: TextField(
-                  key: const ValueKey('conversation-composer'),
-                  controller: _composerController,
-                  focusNode: _composerFocusNode,
-                  enabled: enabled,
-                  minLines: isHeroCentered ? 2 : 1,
-                  maxLines: 6,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    hintText: thread == null && !canCreateOnSend
-                        ? 'Select or create a thread'
-                        : canSteer
-                        ? 'Steer active turn in Codex'
-                        : 'Send a message to Codex',
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
-                  ),
-                ),
-              ),
+              if (!inlineControls) input,
               LayoutBuilder(
                 builder: (context, rowConstraints) {
                   final compactComposer = rowConstraints.maxWidth < 560;
@@ -3295,6 +3487,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       ),
                       const SizedBox(width: 2),
+                      if (inlineControls) Expanded(child: input),
                       if (showModelPill)
                         _ComposerModelSummaryButton(
                           controller: widget.settingsController,
@@ -3303,8 +3496,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       if (capabilities.supportsSandboxConfiguration)
                         _ExecutionSettingsButton(
                           controller: widget.settingsController,
+                          iconOnly: inlineControls,
                         ),
-                      if (projectCwd.isNotEmpty &&
+                      if (!inlineControls &&
+                          projectCwd.isNotEmpty &&
                           !isHeroCentered &&
                           !compactComposer &&
                           capabilities.supportsWorkingDirectorySelection) ...[
@@ -3360,8 +3555,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           ),
                         ),
                       ],
-                      const Spacer(),
-                      if (controller.busy)
+                      if (!inlineControls) const Spacer(),
+                      if (controller.busy && !showStop)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
@@ -3369,21 +3564,49 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             style: Theme.of(context).textTheme.labelSmall,
                           ),
                         ),
-                      CodexIconButton(
-                        key: const ValueKey('composer-send-button'),
-                        tooltip: canSteer
-                            ? 'Steer turn (Enter)'
-                            : 'Send (Enter)',
-                        size: 34.0,
-                        shape: BoxShape.circle,
-                        variant: CodexButtonVariant.primary,
-                        onPressed: enabled ? _send : null,
-                        icon: Icon(
-                          canSteer
-                              ? Icons.subdirectory_arrow_right_rounded
-                              : Icons.arrow_upward_rounded,
-                          size: 18,
-                        ),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _composerController,
+                        builder: (context, draft, _) {
+                          final showSteer =
+                              canSteer &&
+                              (draft.text.trim().isNotEmpty ||
+                                  _composerAttachments.isNotEmpty);
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!showStop || showSteer)
+                                CodexIconButton(
+                                  key: const ValueKey('composer-send-button'),
+                                  tooltip: canSteer
+                                      ? 'Steer turn (Enter)'
+                                      : 'Send (Enter)',
+                                  size: 34.0,
+                                  shape: BoxShape.circle,
+                                  variant: CodexButtonVariant.primary,
+                                  onPressed: enabled ? _send : null,
+                                  icon: Icon(
+                                    canSteer
+                                        ? Icons.subdirectory_arrow_right_rounded
+                                        : Icons.arrow_upward_rounded,
+                                    size: 18,
+                                  ),
+                                ),
+                              if (showStop)
+                                CodexIconButton(
+                                  key: const ValueKey('composer-stop-button'),
+                                  tooltip: 'Stop turn',
+                                  size: 34,
+                                  shape: BoxShape.circle,
+                                  variant: CodexButtonVariant.primary,
+                                  onPressed: controller.interrupt,
+                                  icon: const Icon(
+                                    Icons.stop_rounded,
+                                    size: 17,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   );
@@ -3412,7 +3635,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   Future<void> _send() async {
-    if (_checkingColdSend) {
+    if (_checkingColdResume) {
       return;
     }
     final text = _composerController.text;
@@ -3441,7 +3664,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           targetThreadId,
         );
         if (resumedForSend) {
-          final ready = await _confirmColdSend(
+          final ready = await _confirmColdResume(
             threadController,
             targetThreadId,
           );
@@ -3539,17 +3762,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _composerController.text == text &&
       listEquals(_composerAttachments, attachments);
 
-  Future<bool> _confirmColdSend(
+  Future<bool> _confirmColdResume(
     ThreadListController threadController,
-    String threadId,
-  ) async {
+    String threadId, {
+    bool forReview = false,
+  }) async {
     final selectionVersion = _threadSelectionVersion;
     bool stillCold() =>
         mounted &&
         _threadSelectionVersion == selectionVersion &&
         widget.controller.thread?.id == threadId &&
         threadController.selectedThreadNeedsResume(threadId);
-    _checkingColdSend = true;
+    _checkingColdResume = true;
     try {
       final presence = await threadController.selectedThreadQueuePresence(
         threadId,
@@ -3562,21 +3786,31 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         return true;
       }
       final pending = presence == ThreadQueuePresence.pending;
+      final continuation = forReview
+          ? ' Start the review again after the thread is ready.'
+          : ' Your new draft will stay in the composer.';
       final resume = await _confirmDesktopAction(
         context,
         title: pending ? 'Resume queued work?' : 'Could not check queued work',
         message: pending
-            ? 'This thread has saved prompts. Resuming will let Codex run them. Your new draft will stay in the composer.'
-            : 'Resuming may start saved prompts. Your new draft will stay in the composer.',
+            ? 'This thread has saved prompts. Resuming will let Codex run them.$continuation'
+            : 'Resuming may start saved prompts.$continuation',
         confirmLabel: pending ? 'Resume queued work' : 'Resume thread',
         confirmVariant: CodexButtonVariant.primary,
       );
       if (resume && stillCold()) {
-        await threadController.resumeThread(threadId);
+        final resumed = await threadController.resumeThread(threadId);
+        if (forReview && resumed == null) {
+          _reportReviewResumeFailure(
+            threadController,
+            threadId,
+            selectionVersion,
+          );
+        }
       }
       return false;
     } finally {
-      _checkingColdSend = false;
+      _checkingColdResume = false;
     }
   }
 
@@ -3947,6 +4181,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(previousThreadId);
     }
     _activeThreadId = nextThreadId;
+    _showChanges = false;
     _threadSelectionVersion += 1;
     _queuedLinkedPrThreadId = nextThreadId;
     _activeThreadLinkedPrs = null;
@@ -3958,6 +4193,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _linkedPrUrlController.clear();
     _linkedPrBranchController.clear();
     _linkedPrsPopoverController.hide();
+    _timelineDetailsPopoverController.hide();
     _pendingThreadRestore = nextThreadId != null;
     _restorePagesLoaded = 0;
     _restoreAlignmentPasses = 0;
@@ -4562,6 +4798,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.attachments = const [],
     this.isReasoning = false,
     this.isCommand = false,
+    this.inlineActivity = false,
     this.leadingHeader,
     this.trailingAction,
     this.onForkFromTurn,
@@ -4581,6 +4818,7 @@ class _ConversationEntryView extends StatelessWidget {
   final List<UserAttachment> attachments;
   final bool isReasoning;
   final bool isCommand;
+  final bool inlineActivity;
   final Widget? leadingHeader;
   final Widget? trailingAction;
   final VoidCallback? onForkFromTurn;
@@ -4624,7 +4862,8 @@ class _ConversationEntryView extends StatelessWidget {
 
     if (isReasoning ||
         (entry.kind == ConversationEntryKind.activity &&
-            entry.text == 'Reasoning')) {
+            (entry.text == 'Reasoning' ||
+                (inlineActivity && entry.text.startsWith('Reasoning: '))))) {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -4634,7 +4873,7 @@ class _ConversationEntryView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ?leadingHeader,
-              _ReasoningEntryView(entry: entry),
+              _ReasoningEntryView(entry: entry, inline: inlineActivity),
             ],
           ),
         ),
@@ -4643,6 +4882,7 @@ class _ConversationEntryView extends StatelessWidget {
 
     final isReview = entry.kind == ConversationEntryKind.review;
     final isActivity = entry.kind == ConversationEntryKind.activity || isReview;
+    final hasActivitySurface = isActivity && (!inlineActivity || isReview);
     final isError = entry.kind == ConversationEntryKind.error;
     final showAssistantCopy =
         entry.kind == ConversationEntryKind.assistant &&
@@ -4670,20 +4910,20 @@ class _ConversationEntryView extends StatelessWidget {
                 margin: EdgeInsets.only(
                   bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
                 ),
-                padding: isActivity || isError
+                padding: hasActivitySurface || isError
                     ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
                     : EdgeInsets.zero,
                 decoration: BoxDecoration(
                   color: isError
                       ? palette.danger.withValues(alpha: 0.08)
-                      : isActivity
+                      : hasActivitySurface
                       ? isReview
                             ? palette.accent.withValues(alpha: 0.06)
                             : palette.surfaceRaised
                       : isActiveSearchMatch
                       ? palette.accent.withValues(alpha: 0.06)
                       : Colors.transparent,
-                  border: isActivity || isError
+                  border: hasActivitySurface || isError
                       ? Border.all(
                           color: isError
                               ? palette.danger.withValues(alpha: 0.3)
@@ -4696,6 +4936,7 @@ class _ConversationEntryView extends StatelessWidget {
                     ? _ActivityContent(
                         entry: entry,
                         isCommand: isCommand,
+                        inline: !hasActivitySurface,
                         trailingAction: trailingAction,
                       )
                     : Column(
@@ -5408,14 +5649,17 @@ class _UserAttachmentChip extends StatelessWidget {
 }
 
 class _ReasoningEntryView extends StatelessWidget {
-  const _ReasoningEntryView({required this.entry});
+  const _ReasoningEntryView({required this.entry, required this.inline});
 
   final ConversationEntry entry;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final raw = entry.text.trim();
+    final raw = inline && entry.text.startsWith('Reasoning: ')
+        ? entry.text.substring('Reasoning: '.length).trim()
+        : entry.text.trim();
     final summary = raw.isEmpty || raw == 'Reasoning'
         ? (entry.completed ? 'Thought' : 'Thinking…')
         : raw;
@@ -5424,15 +5668,17 @@ class _ReasoningEntryView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.psychology_outlined,
-              size: 15,
-              color: palette.textMuted,
+          if (!inline) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.psychology_outlined,
+                size: 15,
+                color: palette.textMuted,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: SelectableText(
               summary,
@@ -5450,11 +5696,13 @@ class _ActivityContent extends StatelessWidget {
   const _ActivityContent({
     required this.entry,
     this.isCommand = false,
+    required this.inline,
     this.trailingAction,
   });
 
   final ConversationEntry entry;
   final bool isCommand;
+  final bool inline;
   final Widget? trailingAction;
 
   @override
@@ -5511,6 +5759,16 @@ class _ActivityContent extends StatelessWidget {
       isRunning: !entry.completed,
       isError: statusBadge != null,
       trailingAction: trailingAction,
+      inline: inline,
+      textWidget: inline && !effectiveCommand
+          ? Text(
+              entry.text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: palette.textSecondary),
+            )
+          : null,
     );
   }
 }
@@ -5761,9 +6019,13 @@ class _ConversationErrorState extends StatelessWidget {
 }
 
 class _ExecutionSettingsButton extends StatelessWidget {
-  const _ExecutionSettingsButton({required this.controller});
+  const _ExecutionSettingsButton({
+    required this.controller,
+    this.iconOnly = false,
+  });
 
   final ExecutionSettingsController controller;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -5775,26 +6037,40 @@ class _ExecutionSettingsButton extends StatelessWidget {
             controller.sandbox == SandboxModeOverride.dangerFullAccess;
         final label = fullAccess ? 'Full access' : 'Defaults';
         final color = fullAccess ? palette.warning : palette.textSecondary;
+        final onPressed = controller.loading
+            ? null
+            : () => showDialog<void>(
+                context: context,
+                builder: (_) =>
+                    _ExecutionSettingsDialog(controller: controller),
+              );
+        final icon = controller.loading
+            ? const SizedBox.square(
+                dimension: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                iconOnly || fullAccess
+                    ? Icons.shield_outlined
+                    : Icons.tune_rounded,
+                size: 15,
+                color: color,
+              );
+        if (iconOnly) {
+          return CodexIconButton(
+            key: const ValueKey('execution-settings-button'),
+            tooltip: 'Execution settings: $label',
+            size: 28,
+            onPressed: onPressed,
+            icon: icon,
+          );
+        }
         return CodexButton(
+          key: const ValueKey('execution-settings-button'),
           variant: CodexButtonVariant.ghost,
           size: CodexButtonSize.sm,
-          onPressed: controller.loading
-              ? null
-              : () => showDialog<void>(
-                  context: context,
-                  builder: (_) =>
-                      _ExecutionSettingsDialog(controller: controller),
-                ),
-          icon: controller.loading
-              ? const SizedBox.square(
-                  dimension: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  fullAccess ? Icons.shield_outlined : Icons.tune_rounded,
-                  size: 15,
-                  color: color,
-                ),
+          onPressed: onPressed,
+          icon: icon,
           label: label,
         );
       },

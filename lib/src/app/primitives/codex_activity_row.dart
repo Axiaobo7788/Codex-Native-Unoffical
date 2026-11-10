@@ -18,6 +18,7 @@ class CodexActivityRow extends StatelessWidget {
     this.actionLabel = 'View output',
     this.trailingAction,
     this.textWidget,
+    this.inline = false,
   });
 
   final String summary;
@@ -29,6 +30,7 @@ class CodexActivityRow extends StatelessWidget {
   final String actionLabel;
   final Widget? trailingAction;
   final Widget? textWidget;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
@@ -36,75 +38,95 @@ class CodexActivityRow extends StatelessWidget {
 
     return Container(
       height: OfficialCodexTheme.activityRowHeight,
-      margin: const EdgeInsets.symmetric(vertical: 3.0),
-      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-      decoration: BoxDecoration(
-        color: theme.elevatedSurface,
-        borderRadius: BorderRadius.circular(
-          OfficialCodexTheme.activityRowRadius,
-        ),
-        border: Border.all(
-          color: isError
-              ? theme.danger.withValues(alpha: 0.5)
-              : theme.hairlineBorder,
-          width: OfficialCodexTheme.hairlineBorderWidth,
-        ),
-      ),
-      child: Row(
-        children: [
-          if (isRunning) ...[
-            SizedBox(
-              width: 14.0,
-              height: 14.0,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.0,
-                valueColor: AlwaysStoppedAnimation<Color>(theme.accent),
+      margin: inline
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(vertical: 3.0),
+      padding: inline
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 10.0),
+      decoration: inline
+          ? null
+          : BoxDecoration(
+              color: theme.elevatedSurface,
+              borderRadius: BorderRadius.circular(
+                OfficialCodexTheme.activityRowRadius,
+              ),
+              border: Border.all(
+                color: isError
+                    ? theme.danger.withValues(alpha: 0.5)
+                    : theme.hairlineBorder,
+                width: OfficialCodexTheme.hairlineBorderWidth,
               ),
             ),
-          ] else ...[
-            IconTheme(
-              data: IconThemeData(
-                color: isError ? theme.danger : theme.textMuted,
-                size: 14.0,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            if (isRunning) ...[
+              SizedBox(
+                width: 14.0,
+                height: 14.0,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.0,
+                  valueColor: AlwaysStoppedAnimation<Color>(theme.accent),
+                ),
               ),
-              child: icon ?? const Icon(Icons.terminal_rounded),
+            ] else ...[
+              IconTheme(
+                data: IconThemeData(
+                  color: isError ? theme.danger : theme.textMuted,
+                  size: 14.0,
+                ),
+                child: icon ?? const Icon(Icons.terminal_rounded),
+              ),
+            ],
+            const SizedBox(width: 8.0),
+            Expanded(
+              child:
+                  textWidget ??
+                  Text(
+                    summary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12.5,
+                      color: isError ? theme.danger : theme.textPrimary,
+                    ),
+                  ),
             ),
-          ],
-          const SizedBox(width: 8.0),
-          Expanded(
-            child:
-                textWidget ??
-                Text(
-                  summary,
+            if (statusText != null && statusText!.isNotEmpty) ...[
+              const SizedBox(width: 8.0),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 4),
+                child: Text(
+                  statusText!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12.5,
-                    color: isError ? theme.danger : theme.textPrimary,
-                  ),
+                  style: TextStyle(fontSize: 11.5, color: theme.textMuted),
                 ),
-          ),
-          if (statusText != null && statusText!.isNotEmpty) ...[
-            const SizedBox(width: 8.0),
-            Text(
-              statusText!,
-              style: TextStyle(fontSize: 11.5, color: theme.textMuted),
-            ),
+              ),
+            ],
+            if (trailingAction != null) ...[
+              const SizedBox(width: 8.0),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                child: trailingAction!,
+              ),
+            ] else if (onViewOutput != null) ...[
+              const SizedBox(width: 8.0),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                child: CodexButton(
+                  onPressed: onViewOutput,
+                  label: actionLabel,
+                  tooltip: actionLabel,
+                  variant: CodexButtonVariant.ghost,
+                  size: CodexButtonSize.sm,
+                ),
+              ),
+            ],
           ],
-          if (trailingAction != null) ...[
-            const SizedBox(width: 8.0),
-            trailingAction!,
-          ] else if (onViewOutput != null) ...[
-            const SizedBox(width: 8.0),
-            CodexButton(
-              onPressed: onViewOutput,
-              label: actionLabel,
-              variant: CodexButtonVariant.ghost,
-              size: CodexButtonSize.sm,
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }

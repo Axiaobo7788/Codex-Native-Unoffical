@@ -101,6 +101,7 @@ class _ConnectedWorkspace extends StatefulWidget {
 
 class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   final _conversationKey = GlobalKey<_ConversationPanelState>();
+  var _desktopLeftPanelWidth = OfficialCodexTheme.desktopLeftPanelWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -138,9 +139,34 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
             ),
           );
         }
+        final maximum =
+            (constraints.maxWidth - OfficialCodexTheme.desktopWorkspaceMinWidth)
+                .clamp(
+                  OfficialCodexTheme.desktopLeftPanelMinWidth,
+                  OfficialCodexTheme.sidebarMaxWidth,
+                );
+        final leftWidth = _desktopLeftPanelWidth.clamp(
+          OfficialCodexTheme.desktopLeftPanelMinWidth,
+          maximum,
+        );
         return _DesktopSplitWorkspace(
           key: const ValueKey('desktop-split-workspace'),
           conversationKey: _conversationKey,
+          sidebarWidth: leftWidth - OfficialCodexTheme.navigationRailWidth,
+          onSidebarResize: (delta) {
+            final visibleWidth = _desktopLeftPanelWidth.clamp(
+              OfficialCodexTheme.desktopLeftPanelMinWidth,
+              maximum,
+            );
+            final width = (visibleWidth + delta).clamp(
+              OfficialCodexTheme.desktopLeftPanelMinWidth,
+              maximum,
+            );
+            if (_desktopLeftPanelWidth == width) {
+              return;
+            }
+            setState(() => _desktopLeftPanelWidth = width);
+          },
           runtimeController: widget.runtimeController,
           threadController: widget.threadController,
           conversationController: widget.conversationController,
@@ -160,6 +186,8 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   const _DesktopSplitWorkspace({
     super.key,
     required this.conversationKey,
+    required this.sidebarWidth,
+    required this.onSidebarResize,
     required this.runtimeController,
     required this.threadController,
     required this.conversationController,
@@ -172,6 +200,8 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   });
 
   final GlobalKey<_ConversationPanelState> conversationKey;
+  final double sidebarWidth;
+  final ValueChanged<double> onSidebarResize;
   final RuntimeController runtimeController;
   final ThreadListController threadController;
   final ConversationController conversationController;
@@ -187,10 +217,20 @@ class _DesktopSplitWorkspace extends StatefulWidget {
 }
 
 class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
+  final _threadPanelKey = GlobalKey<_ThreadPanelState>();
+  final _fileMenu = CodexPopoverController();
+  final _viewMenu = CodexPopoverController();
   var _sidebarCollapsed = false;
 
   void _toggleSidebar() {
     setState(() => _sidebarCollapsed = !_sidebarCollapsed);
+  }
+
+  @override
+  void dispose() {
+    _fileMenu.dispose();
+    _viewMenu.dispose();
+    super.dispose();
   }
 
   @override
@@ -205,58 +245,108 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
             _toggleSidebar,
       },
       child: ColoredBox(
-        color: theme.shellBackground,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        color: theme.isDark
+            ? theme.shellBackground
+            : OfficialCodexTheme.lightNavigationBackground,
+        child: Column(
           children: [
-            if (!_sidebarCollapsed)
-              SizedBox(
-                key: const ValueKey('app_shell_sidebar'),
-                width: _desktopSidebarWidth,
-                child: _ThreadPanel(
-                  controller: widget.threadController,
-                  settingsController: widget.settingsController,
-                  runtimeController: widget.runtimeController,
-                  userInputController: widget.userInputController,
-                  defaultWorkingDirectory: widget.defaultWorkingDirectory,
-                  onToggleSidebar: _toggleSidebar,
-                ),
-              ),
+            _applicationToolbar(),
+            const SizedBox(height: OfficialCodexTheme.shellPageTopInset),
             Expanded(
-              child: Container(
-                key: const ValueKey('inset_workspace_card'),
-                margin: EdgeInsets.fromLTRB(
-                  _sidebarCollapsed ? 6.0 : 0.0,
-                  6.0,
-                  6.0,
-                  6.0,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.workspaceBackground,
-                  borderRadius: BorderRadius.circular(
-                    OfficialCodexTheme.mainSurfaceRadius,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _navigationRail(),
+                  Expanded(
+                    child: Container(
+                      key: const ValueKey('app-shell-page-surface'),
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: theme.workspaceBackground,
+                        borderRadius: BorderRadius.circular(
+                          OfficialCodexTheme.mainSurfaceRadius,
+                        ),
+                        boxShadow: const [OfficialCodexTheme.shellPageShadow],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Offstage(
+                            offstage: _sidebarCollapsed,
+                            child: TickerMode(
+                              enabled: !_sidebarCollapsed,
+                              child: ExcludeFocus(
+                                excluding: _sidebarCollapsed,
+                                child: DecoratedBox(
+                                  position: DecorationPosition.foreground,
+                                  decoration: BoxDecoration(
+                                    border: BorderDirectional(
+                                      end: BorderSide(
+                                        color: theme.hairlineBorder,
+                                        width: OfficialCodexTheme
+                                            .hairlineBorderWidth,
+                                      ),
+                                    ),
+                                  ),
+                                  child: SizedBox(
+                                    key: const ValueKey('app_shell_sidebar'),
+                                    width: widget.sidebarWidth,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        _ThreadPanel(
+                                          key: _threadPanelKey,
+                                          controller: widget.threadController,
+                                          settingsController:
+                                              widget.settingsController,
+                                          runtimeController:
+                                              widget.runtimeController,
+                                          userInputController:
+                                              widget.userInputController,
+                                          defaultWorkingDirectory:
+                                              widget.defaultWorkingDirectory,
+                                          hasNavigationRail: true,
+                                        ),
+                                        PositionedDirectional(
+                                          top: 0,
+                                          bottom: 0,
+                                          end: 0,
+                                          width: ThemeTokens.space2,
+                                          child: _sidebarResizeHandle(),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: KeyedSubtree(
+                              key: const ValueKey('app-shell-workspace'),
+                              child: _ConversationPanel(
+                                key: widget.conversationKey,
+                                controller: widget.conversationController,
+                                threadController: widget.threadController,
+                                historyController: widget.historyController,
+                                approvalController: widget.approvalController,
+                                userInputController: widget.userInputController,
+                                settingsController: widget.settingsController,
+                                diffController: widget.diffController,
+                                outputGateway: widget.runtimeController,
+                                transportCapabilities:
+                                    widget.runtimeController.capabilities,
+                                defaultWorkingDirectory:
+                                    widget.defaultWorkingDirectory,
+                                hasDesktopShell: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  border: Border.all(
-                    color: theme.hairlineBorder,
-                    width: OfficialCodexTheme.hairlineBorderWidth,
-                  ),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: _ConversationPanel(
-                  key: widget.conversationKey,
-                  controller: widget.conversationController,
-                  threadController: widget.threadController,
-                  historyController: widget.historyController,
-                  approvalController: widget.approvalController,
-                  userInputController: widget.userInputController,
-                  settingsController: widget.settingsController,
-                  diffController: widget.diffController,
-                  outputGateway: widget.runtimeController,
-                  transportCapabilities: widget.runtimeController.capabilities,
-                  defaultWorkingDirectory: widget.defaultWorkingDirectory,
-                  sidebarCollapsed: _sidebarCollapsed,
-                  onToggleSidebar: _toggleSidebar,
-                ),
+                ],
               ),
             ),
           ],
@@ -264,6 +354,176 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
       ),
     );
   }
+
+  Widget _sidebarResizeHandle() {
+    const step = 24.0;
+    final direction = Directionality.of(context) == TextDirection.ltr ? 1 : -1;
+    void grow() => widget.onSidebarResize(step);
+    void shrink() => widget.onSidebarResize(-step);
+
+    return Semantics(
+      label: 'Sidebar width',
+      onIncrease: grow,
+      onDecrease: shrink,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): direction == 1
+              ? shrink
+              : grow,
+          const SingleActivator(LogicalKeyboardKey.arrowRight): direction == 1
+              ? grow
+              : shrink,
+        },
+        child: Focus(
+          child: Builder(
+            builder: (context) => MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                key: const ValueKey('sidebar-resize-handle'),
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onHorizontalDragUpdate: (event) =>
+                    widget.onSidebarResize(event.delta.dx * direction),
+                child: ColoredBox(
+                  color: Focus.of(context).hasPrimaryFocus
+                      ? OfficialCodexTheme.of(context).focusRing
+                      : Colors.transparent,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _applicationToolbar() {
+    final sidebarLabel = _sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar';
+    return SizedBox(
+      key: const ValueKey('app_shell_titlebar'),
+      height: OfficialCodexTheme.shellToolbarHeight,
+      child: Row(
+        children: [
+          const SizedBox(width: ThemeTokens.space2),
+          CodexIconButton(
+            key: ValueKey(
+              _sidebarCollapsed
+                  ? 'sidebar-expand-button'
+                  : 'sidebar-collapse-button',
+            ),
+            tooltip: '$sidebarLabel (Ctrl+B)',
+            size: 28,
+            onPressed: _toggleSidebar,
+            icon: const Icon(Icons.view_sidebar_outlined, size: 17),
+          ),
+          const SizedBox(width: ThemeTokens.space2),
+          _applicationMenu('File', _fileMenu, [
+            CodexMenuItem(
+              value: () {
+                if (!widget.threadController.mutating) {
+                  unawaited(_threadPanelKey.currentState?._startThread());
+                }
+              },
+              label: 'New thread',
+            ),
+            CodexMenuItem(
+              value: () {
+                if (!widget.threadController.mutating) {
+                  unawaited(_threadPanelKey.currentState?._chooseDirectory());
+                }
+              },
+              label: 'New thread location',
+            ),
+          ]),
+          _applicationMenu('View', _viewMenu, [
+            CodexMenuItem(value: _toggleSidebar, label: sidebarLabel),
+            CodexMenuItem(
+              value: () {
+                if (_sidebarCollapsed) {
+                  _toggleSidebar();
+                }
+                _threadPanelKey.currentState?._openSearch();
+              },
+              label: 'Search threads',
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _applicationMenu(
+    String label,
+    CodexPopoverController controller,
+    List<CodexMenuItem<VoidCallback>> items,
+  ) => CodexPopoverAnchor(
+    controller: controller,
+    width: 194,
+    popoverBuilder: (context, close) => CodexMenu<VoidCallback>(
+      items: items,
+      onSelected: (action) {
+        close();
+        action();
+      },
+    ),
+    child: CodexButton(
+      label: label,
+      size: CodexButtonSize.sm,
+      variant: CodexButtonVariant.ghost,
+      onPressed: controller.toggle,
+    ),
+  );
+
+  Widget _navigationRail() => Semantics(
+    label: 'App navigation',
+    container: true,
+    child: SizedBox(
+      key: const ValueKey('app-shell-navigation-rail'),
+      width: OfficialCodexTheme.navigationRailWidth,
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: ThemeTokens.space2),
+              child: Column(
+                children: [
+                  CodexIconButton(
+                    key: const ValueKey('app-shell-home-button'),
+                    tooltip: 'Codex home',
+                    selected: true,
+                    size: 36,
+                    icon: const Icon(Icons.home_rounded, size: 19),
+                    onPressed: () => widget
+                        .conversationKey
+                        .currentState
+                        ?._conversationFocusNode
+                        .requestFocus(),
+                  ),
+                  const SizedBox(height: ThemeTokens.space2),
+                  CodexIconButton(
+                    key: const ValueKey('ecosystem-button'),
+                    tooltip: 'Skills, Plugins & MCP',
+                    size: 36,
+                    icon: const Icon(Icons.extension_outlined, size: 19),
+                    onPressed: () =>
+                        _threadPanelKey.currentState?._openEcosystem(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          CodexIconButton(
+            key: const ValueKey('remote-setup-button'),
+            tooltip: 'Remote & host settings',
+            size: 36,
+            icon: const Icon(Icons.devices_outlined, size: 19),
+            onPressed: () => _threadPanelKey.currentState?._openRemoteSetup(),
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+        ],
+      ),
+    ),
+  );
 }
 
 class _CompactWorkspace extends StatefulWidget {

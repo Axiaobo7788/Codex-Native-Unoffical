@@ -2,12 +2,13 @@ part of '../codex_native_app.dart';
 
 class _ThreadPanel extends StatefulWidget {
   const _ThreadPanel({
+    super.key,
     required this.controller,
     required this.settingsController,
     required this.runtimeController,
     required this.defaultWorkingDirectory,
     this.userInputController,
-    this.onToggleSidebar,
+    this.hasNavigationRail = false,
     this.onThreadSelected,
   });
 
@@ -16,7 +17,7 @@ class _ThreadPanel extends StatefulWidget {
   final RuntimeController runtimeController;
   final String defaultWorkingDirectory;
   final UserInputController? userInputController;
-  final VoidCallback? onToggleSidebar;
+  final bool hasNavigationRail;
   final VoidCallback? onThreadSelected;
 
   @override
@@ -56,10 +57,17 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   void _toggleSearch() {
-    setState(() => _showSearch = !_showSearch);
-    if (!_showSearch) {
+    if (_showSearch) {
+      setState(() => _showSearch = false);
       _clearSearch();
       return;
+    }
+    _openSearch();
+  }
+
+  void _openSearch() {
+    if (!_showSearch) {
+      setState(() => _showSearch = true);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -78,6 +86,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
@@ -96,7 +105,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         },
       },
       child: ColoredBox(
-        color: palette.sidebar,
+        color: widget.hasNavigationRail && !theme.isDark
+            ? OfficialCodexTheme.lightContextualSidebarBackground
+            : palette.sidebar,
         child: AnimatedBuilder(
           animation: widget.controller,
           builder: (context, _) {
@@ -123,7 +134,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                       Expanded(
                         child: CodexSidebarRow(
                           key: const ValueKey('new-thread-button'),
-                          title: 'New thread',
+                          title: widget.hasNavigationRail
+                              ? 'New chat'
+                              : 'New thread',
                           leading: const Icon(Icons.edit_square, size: 16),
                           onTap: controller.mutating ? null : _startThread,
                           trailingBuilder: (context, isHovered) => isHovered
@@ -138,49 +151,48 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                               : const SizedBox.shrink(),
                         ),
                       ),
-                      const SizedBox(width: 2),
-                      CodexIconButton(
-                        key: const ValueKey('thread-directory-button'),
-                        tooltip: 'New thread location',
-                        size: 30,
-                        onPressed: controller.mutating
-                            ? null
-                            : _chooseDirectory,
-                        icon: const Icon(
-                          Icons.create_new_folder_outlined,
-                          size: 16,
+                      if (!widget.hasNavigationRail) ...[
+                        const SizedBox(width: 2),
+                        CodexIconButton(
+                          key: const ValueKey('thread-directory-button'),
+                          tooltip: 'New thread location',
+                          size: 30,
+                          onPressed: controller.mutating
+                              ? null
+                              : _chooseDirectory,
+                          icon: const Icon(
+                            Icons.create_new_folder_outlined,
+                            size: 16,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                  child: CodexSidebarRow(
-                    key: const ValueKey('ecosystem-button'),
-                    title: 'Automations & Skills',
-                    leading: const Icon(Icons.auto_fix_high_outlined, size: 16),
-                    onTap: () => showDialog<void>(
-                      context: context,
-                      builder: (context) => _EcosystemDialog(
-                        gateway: widget.runtimeController,
-                        threadController: widget.controller,
-                        userInputController: widget.userInputController,
-                        cwd:
-                            widget.controller.selectedThread?.cwd ??
-                            _workingDirectory,
-                        threadId: widget.controller.selectedThread?.id,
+                if (!widget.hasNavigationRail)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                    child: CodexSidebarRow(
+                      key: const ValueKey('ecosystem-button'),
+                      title: 'Automations & Skills',
+                      leading: const Icon(
+                        Icons.auto_fix_high_outlined,
+                        size: 16,
                       ),
+                      onTap: _openEcosystem,
                     ),
                   ),
-                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 8, 8, 2),
                   child: Row(
                     children: [
                       Expanded(
                         child: Text(
-                          controller.showArchived ? 'Archived' : 'Threads',
+                          controller.showArchived
+                              ? 'Archived'
+                              : widget.hasNavigationRail
+                              ? 'Projects'
+                              : 'Threads',
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: palette.textMuted,
@@ -201,18 +213,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                               : _createSectionDialog,
                           icon: const Icon(Icons.bookmarks_outlined, size: 15),
                         ),
-                      CodexIconButton(
-                        key: const ValueKey('thread-search-toggle'),
-                        tooltip: 'Filter threads',
-                        size: 26,
-                        onPressed: _toggleSearch,
-                        icon: Icon(
-                          _showSearch
-                              ? Icons.filter_list_off_rounded
-                              : Icons.search_rounded,
-                          size: 15,
-                        ),
-                      ),
+                      if (!widget.hasNavigationRail) _searchButton(),
                       CodexIconButton(
                         key: const ValueKey('thread-archive-toggle'),
                         tooltip: controller.showArchived
@@ -411,17 +412,21 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   Widget _brandHeader(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
     return Container(
-      key: const ValueKey('app_shell_titlebar'),
-      height: OfficialCodexTheme.titlebarHeight,
+      key: const ValueKey('codex-sidebar-header'),
+      height: widget.hasNavigationRail
+          ? OfficialCodexTheme.contextualSidebarHeaderHeight
+          : OfficialCodexTheme.titlebarHeight,
       padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
       child: Row(
         children: [
-          Icon(
-            Icons.auto_awesome_mosaic_outlined,
-            size: 17,
-            color: theme.textPrimary,
-          ),
-          const SizedBox(width: 8),
+          if (!widget.hasNavigationRail) ...[
+            Icon(
+              Icons.auto_awesome_mosaic_outlined,
+              size: 17,
+              color: theme.textPrimary,
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Text(
               'Codex',
@@ -429,24 +434,28 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: theme.textPrimary,
-                fontSize: 13.5,
+                fontSize: widget.hasNavigationRail ? 18 : 13.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.2,
               ),
             ),
           ),
-          if (widget.onToggleSidebar != null)
-            CodexIconButton(
-              key: const ValueKey('sidebar-collapse-button'),
-              tooltip: 'Hide sidebar (Ctrl+B)',
-              size: 28,
-              onPressed: widget.onToggleSidebar,
-              icon: const Icon(Icons.view_sidebar_outlined, size: 17),
-            ),
+          if (widget.hasNavigationRail) _searchButton(),
         ],
       ),
     );
   }
+
+  Widget _searchButton() => CodexIconButton(
+    key: const ValueKey('thread-search-toggle'),
+    tooltip: 'Filter threads',
+    size: 26,
+    onPressed: _toggleSearch,
+    icon: Icon(
+      _showSearch ? Icons.filter_list_off_rounded : Icons.search_rounded,
+      size: 15,
+    ),
+  );
 
   Widget _threadList(ThreadListController controller) {
     final scoped = controller.sectionScopeId != null;
@@ -820,24 +829,39 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           Expanded(
             child: _RuntimeStatusPill(controller: widget.runtimeController),
           ),
-          const SizedBox(width: ThemeTokens.space1),
-          CodexIconButton(
-            key: const ValueKey('remote-setup-button'),
-            tooltip: 'Remote & host settings',
-            size: 28,
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => _RemoteSetupDialog(
-                gateway: widget.runtimeController,
-                ecosystemGateway: widget.runtimeController,
-              ),
+          if (!widget.hasNavigationRail) ...[
+            const SizedBox(width: ThemeTokens.space1),
+            CodexIconButton(
+              key: const ValueKey('remote-setup-button'),
+              tooltip: 'Remote & host settings',
+              size: 28,
+              onPressed: _openRemoteSetup,
+              icon: const Icon(Icons.devices_outlined, size: 17),
             ),
-            icon: const Icon(Icons.devices_outlined, size: 17),
-          ),
+          ],
         ],
       ),
     );
   }
+
+  void _openEcosystem() => showDialog<void>(
+    context: context,
+    builder: (context) => _EcosystemDialog(
+      gateway: widget.runtimeController,
+      threadController: widget.controller,
+      userInputController: widget.userInputController,
+      cwd: widget.controller.selectedThread?.cwd ?? _workingDirectory,
+      threadId: widget.controller.selectedThread?.id,
+    ),
+  );
+
+  void _openRemoteSetup() => showDialog<void>(
+    context: context,
+    builder: (context) => _RemoteSetupDialog(
+      gateway: widget.runtimeController,
+      ecosystemGateway: widget.runtimeController,
+    ),
+  );
 
   Future<void> _selectThread(String threadId) async {
     final selected = await widget.controller.selectThread(threadId);
