@@ -683,6 +683,61 @@ void main() {
     },
   );
 
+  testWidgets('keeps Other drafts without transferring focus across steps', (
+    tester,
+  ) async {
+    final runtime = await _pumpSelectedApp(tester);
+    runtime.emitUserInput(
+      UserInputRequest(
+        requestId: 'other-two-steps',
+        threadId: 'controls-thread',
+        turnId: 'turn-1',
+        itemId: 'item-1',
+        isBlocking: true,
+        questions: [
+          for (final id in ['first', 'second'])
+            UserInputQuestion(
+              id: id,
+              header: id,
+              question: 'Choose an answer for $id.',
+              options: const [
+                UserInputOption(label: 'Default', description: ''),
+              ],
+              allowsOther: true,
+              isSecret: false,
+            ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Finder field(String id) => find.byKey(ValueKey('user-input-$id-text'));
+    Future<void> chooseOther(String id, String text) async {
+      await tester.tap(find.byKey(ValueKey('user-input-$id-other')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field(id)).focusNode!.hasFocus, isTrue);
+      await tester.enterText(field(id), text);
+      await tester.pump();
+    }
+
+    final next = find.byKey(const ValueKey('user-input-next'));
+    await chooseOther('first', 'First custom draft');
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(field('first'), findsNothing);
+    await chooseOther('second', 'Second custom draft');
+    await tester.tap(find.byKey(const ValueKey('user-input-previous')));
+    await tester.pumpAndSettle();
+    final first = tester.widget<TextField>(field('first'));
+    expect(first.controller!.text, 'First custom draft');
+    expect(first.focusNode!.hasFocus, isFalse);
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    final second = tester.widget<TextField>(field('second'));
+    expect(second.controller!.text, 'Second custom draft');
+    expect(second.focusNode!.hasFocus, isFalse);
+  });
+
   testWidgets('wide stock questions keep answers when stepping back', (
     tester,
   ) async {

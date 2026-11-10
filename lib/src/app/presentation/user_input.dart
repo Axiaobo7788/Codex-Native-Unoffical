@@ -544,7 +544,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   final Map<String, String?> _selectedOptions = {};
   final Set<String> _otherSelections = {};
   final _questionScroll = ScrollController();
-  final _otherAnswerFocus = FocusNode();
+  late final Map<String, FocusNode> _otherAnswerFocusNodes;
   var _questionIndex = 0;
 
   @override
@@ -561,6 +561,11 @@ class _UserInputCardState extends State<_UserInputCard> {
       for (final question in widget.request.questions)
         question.id: TextEditingController()..addListener(_handleAnswerChanged),
     };
+    _otherAnswerFocusNodes = {
+      for (final question in widget.request.questions)
+        if (question.options.isNotEmpty && question.allowsOther)
+          question.id: FocusNode(),
+    };
   }
 
   void _handleAnswerChanged() {
@@ -572,7 +577,9 @@ class _UserInputCardState extends State<_UserInputCard> {
   @override
   void dispose() {
     _questionScroll.dispose();
-    _otherAnswerFocus.dispose();
+    for (final focus in _otherAnswerFocusNodes.values) {
+      focus.dispose();
+    }
     for (final controller in _textControllers.values) {
       controller
         ..removeListener(_handleAnswerChanged)
@@ -818,7 +825,7 @@ class _UserInputCardState extends State<_UserInputCard> {
             widget.request.questions[_questionIndex].id == question.id &&
             _otherSelections.contains(question.id) &&
             !widget.controller.isSubmitting(widget.request.requestId)) {
-          _otherAnswerFocus.requestFocus();
+          _otherAnswerFocusNodes[question.id]?.requestFocus();
         }
       });
     }
@@ -831,9 +838,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   ) => TextField(
     key: ValueKey('user-input-${question.id}-text'),
     controller: controller,
-    focusNode: widget.desktop && question.options.isNotEmpty
-        ? _otherAnswerFocus
-        : null,
+    focusNode: widget.desktop ? _otherAnswerFocusNodes[question.id] : null,
     enabled: !submitting,
     obscureText: question.isSecret,
     maxLength: 4096,
