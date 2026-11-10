@@ -11,10 +11,13 @@
 > **Implementation rule:** Do not design. Translate observable official
 > structure/geometry/states into the closest clean-room Flutter equivalent.
 
-> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.32239`, `codexBuildNumber: 25471`, `codexBuildFlavor: "prod"`)  
+> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`, `app.asar` SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)  
 > **Bundled Engine**: `codex app-server` (`codex-cli 0.167.0-alpha.3.2`)  
-> **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/async/e77f816560c6.css`, 2,970 custom properties)  
-> **Evidence Grading Standards**: `PUBLIC_DOC`, `PUBLIC_SOURCE`, `LIVE_OBSERVED`, `LIVE_CALLED`, `STATIC_BUNDLE`, `STATIC_APK`, `STATIC_DEX`, `LOCAL_SCHEMA`, `INFERRED`  
+> **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/f7b86f5422b9.css`, `webview/assets/async/e77f816560c6.css`, `182735.5b42af8792.js`, `499225.36a7812ae9.js`, `961657.97fdcc5e7d.js`, `192774.5ab6c36839.js`)  
+> **Evidence Grading Standards**: `PUBLIC_DOC`, `PUBLIC_SOURCE`, `HUMAN_REVIEWED`, `LIVE_OBSERVED`, `LIVE_CALLED`, `STATIC_BUNDLE`, `STATIC_APK`, `STATIC_DEX`, `LOCAL_SCHEMA`, `INFERRED`  
+> **Live Boundary vs Signed-In Evidence (`R0`)**:
+> - **Disposable Live Launch (`LIVE_OBSERVED`)**: Launching `/opt/codex-desktop/start.sh` in an unauthenticated disposable home reaches the sign-in gate (`36px` `h-toolbar-sm` top drag strip + `340px` centered sign-in column); `[data-app-shell-frame]`, `[data-app-shell-workspace]`, and sidebar markers do not mount without ChatGPT authentication.
+> - **Signed-In Human Visual Observation (`H1`, `HUMAN_REVIEWED`)**: User-supplied current signed-in official screenshot (`1191×865 px`, logical scale/DPR unknown) establishes that the signed-in shell uses the **`rail-with-contextual-sidebar`** layout branch (`d1ji` in `182735.5b42af8792.js`): full-width application menu/window strip (`y=0..50`), independent persistent left global icon rail (`x=0..60`), rounded inset `PageSurface-g2Llyi` card starting at `x≈61`, contextual `ConversationSidebar-EDF_I4` (`x≈61..421`), and workspace (`x≈422..1190`).  
 > **Target Convergence Contract**: `OfficialCodexTheme` & `Codex*` semantic primitives (`lib/src/app/theme/`, `lib/src/app/primitives/`)
 
 ---
@@ -29,23 +32,26 @@ All values recorded here are derived from direct inspection of the official desk
 
 ## 2. Core Layout & Spacing System
 
-| Dimension Token | Official Measured Value | CSS Variable Reference | Evidence Tag | Description |
+| Dimension Token | Official Measured Value | CSS / JS Reference | Evidence Tag | Description |
 |---|---|---|---|---|
 | **Base Grid Unit** | `4px` (`0.25rem`) | `--spacing: 4px` | `STATIC_BUNDLE` | Fundamental layout scale factor (multiples of 4px: 4, 8, 12, 16, 20, 24, 28, 32) |
-| **App Shell Titlebar Height** | `46px` (Linux/Windows), `38px` (macOS) | `--app-shell-titlebar-height: var(--height-toolbar)` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Top window drag and controls region; compact toolbar is 36px |
-| **Sidebar Width (Default)** | `260px` | `--spacing-token-sidebar: clamp(240px, 275px, min(520px, calc(100vw - 320px)))` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Default open sidebar width on wide desktop viewports |
-| **Sidebar Width (Min/Max)** | `240px` min / `520px` max | `--sidebar-width-min: 240px`, `--sidebar-width-max: 520px` | `STATIC_BUNDLE` | Permitted resize boundaries |
-| **Sidebar Collapsed Width** | `0px` | `--sidebar-collapsed-width: 0px` | `STATIC_BUNDLE` | Completely hidden rail when sidebar is toggled closed |
-| **Sidebar Split Breakpoint** | `760px` | `calc(100vw - 320px)` / `@media (min-width: 760px)` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Minimum window width before sidebar collapses automatically |
-| **Sidebar Row Height** | `36px` | `--height-token-row: 36px`, `--height-token-nav-row: calc(16px * 1.5 + 6px * 2)` | `STATIC_BUNDLE` | Height of thread rows, action items, and navigation entries |
-| **Main Content Inset Radius** | `12px` | `--app-shell-main-surface-top-start-radius: var(--radius-xl-base)` | `STATIC_BUNDLE` | Top-left corner radius of inset main workspace card |
-| **Main Content Border Width** | `0.5px` (rendered `1px` on 1x displays) | `--app-shell-main-content-border-width: var(--border-width-hairline)` | `STATIC_BUNDLE` | Hairline border surrounding the inset workspace surface |
-| **Thread Content Max-Width** | `704px` (`44rem`) | `--thread-content-max-width: 44rem` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Centered reading column (wide: 768px / 48rem; compact: 640px / 40rem) |
-| **Thread Timeline Inset** | `24px` horizontal | `--thread-body-inline-padding: calc(var(--spacing) * 6)` | `STATIC_BUNDLE` | Horizontal gutters on reading canvas |
-| **Composer Max-Width** | `704px` (`44rem`) | `--composer-max-width: 44rem` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Floating bottom input container max-width |
-| **Composer Corner Radius** | `24px` (`1.5rem`), pill `28px` | `--composer-border-radius: 24px`, `--composer-radius: calc(var(--spacing) * 7)` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Rounded pill geometry of floating composer |
-| **User Message Max-Width** | `75%` of column (`~528px`) | `--user-message-max-width: 75%` | `STATIC_BUNDLE` | Maximum width of right-aligned user bubble within 704px column |
-| **User Message Corner Radius**| `18px` (`1.125rem`) | `--user-message-border-radius: 18px` | `STATIC_BUNDLE` / `LIVE_OBSERVED` | Smooth rounded corner for user messages |
+| **Application Menu Toolbar Height** | `36px` (`44px` with `8px` titlebar offset in `ApplicationMenuPageSurfaceLayout-yb71ay`; `y=0..50` in `H1`) | `ApplicationMenuTopBar-SLuX8q` (`--height-toolbar-sm: 36px`), `--app-shell-titlebar-height: calc(var(--spacing) * 2)` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Full-width top application menu bar (`sidebar toggle` + `File`, `Edit`, `View`, `Help` menubar) above rail and page surface |
+| **Global Navigation Rail Width** | `52px` (`x=0..60` in `H1`) | `nav[data-app-navigation-rail="true"]` (`w-13`: `px-2` + `36px` `size="xl"` rail buttons; `X1CL` fallback `52`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Persistent left icon rail (`Home`, `Plugins`, capability-gated destinations, bottom Settings trigger) |
+| **Total Left Panel Width (Default)** | `340px` (`52px` rail + `288px` contextual sidebar; `260px` legacy token superseded) | `qbQ6` persisted `"sidebar-width"` default `340`, `499225` `v1` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Default combined width of global rail + contextual `ConversationSidebar-EDF_I4` (`x≈421` in `H1` reflects user resize/zoom, not default) |
+| **Left Panel Width (Min/Max)** | `290px` contextual min (`240px` generic min) / `520px` max (`100vw - 240px`) | `qbQ6` (`min: 240`, `max: 520`), `499225` `v1` (`minLeftPanelWidth: 290`) | `STATIC_BUNDLE` | Permitted resize boundaries for `rail-with-contextual-sidebar` |
+| **Left Panel Collapsed Width** | `52px` (`railWidth` when `keepVisibleWhenCollapsed: true`; `0px` without rail) | `closedLeftPanelWidth = keepVisibleWhenCollapsed ? railWidth : 0` (`961657`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Global icon rail remains visible when contextual sidebar collapses |
+| **Responsive Sidebar Breakpoint** | `768px` | `@media (min-width: 768px)` (`qbQ6`, `Layout-SYw9n4[data-app-shell-responsive-sidebar=true]`) | `STATIC_BUNDLE` | Viewport breakpoint below which `ResponsiveLeftPanel-KfNlzQ` hides in responsive mode |
+| **Contextual Sidebar Header Height** | `52px` (`44px` standard `--height-toolbar`) | `PageSurfaceLayout-oqnRfB` (`--sidebar-navigation-header-height: calc(var(--spacing) * 13)`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Contextual sidebar header housing `Codex` switcher dropdown + notifications/filter/search |
+| **Sidebar Row Height** | `36px` | `--height-token-row: 36px`, `--height-token-nav-row: calc(16px * 1.5 + 6px * 2)` | `STATIC_BUNDLE` | Height of thread rows, action items (`New chat`, `Your Dot`), and navigation entries |
+| **Page Surface Inset & Radius** | `inset-inline: var(--app-shell-navigation-rail-width) 0`, radius `16px` (`--radius-xl-base`, legacy `12px`) | `PageSurface-g2Llyi` (`border-radius: var(--radius-xl-base)`, `--app-shell-page-surface-shadow`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Rounded inset page card starting at rail right edge (`x≈61` in `H1`), containing contextual sidebar + workspace |
+| **Main Content Border Width** | `0.5px` (rendered `1px` on 1x displays) | `MainContentLeftBorder-IFAvO_` (`--app-shell-main-content-border-width: var(--border-width-hairline)`) | `STATIC_BUNDLE` | Hairline divider between contextual sidebar and workspace inside `PageSurface-g2Llyi` |
+| **Workspace Header Height** | `44px` | `Toolbar-w4tLPD` (`height: var(--height-toolbar)`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Workspace header bar with project folder icon, thread title, and trailing action cluster |
+| **Thread Content Max-Width** | `672px` (`42rem`, compact `640px` / `40rem`; legacy `704px` / `44rem`) | `[--thread-content-max-width:42rem]` (`192774.5ab6c36839.js`) | `STATIC_BUNDLE` | Centered reading column inside the Codex conversation view |
+| **Thread Timeline Inset** | `24px` horizontal (`--padding-toolbar`) | `px-[var(--thread-body-inline-padding,var(--padding-toolbar))]` (`KkZX`) | `STATIC_BUNDLE` | Horizontal gutters on reading canvas |
+| **Composer Max-Width** | `672px` (`42rem`, matches `--thread-body-max-width`) | `KkZX` (`max-w-(--thread-body-max-width)`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Bottom composer container width aligned to thread column |
+| **Composer Corner Radius** | `24px` (`1.5rem`), pill `28px` | `--composer-border-radius: 24px`, `--composer-radius: calc(var(--spacing) * 7)` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Rounded geometry of bottom composer (`ComposerFooter-WlpjXt` controls cluster to right) |
+| **User Message Max-Width** | `75%` of column | `--user-message-max-width: 75%` | `STATIC_BUNDLE` | Maximum width of right-aligned user bubble within reading column |
+| **User Message Corner Radius**| `18px` (`1.125rem`) | `--user-message-border-radius: 18px` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Smooth rounded corner for user messages |
 
 ---
 
