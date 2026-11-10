@@ -118,7 +118,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _showJumpToLatest = false;
   var _showChanges = false;
   var _searchOpen = false;
-  var _checkingColdSend = false;
+  var _checkingColdResume = false;
   var _threadSelectionVersion = 0;
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
@@ -1725,13 +1725,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               threadController.compactThread(thread.id),
                             );
                           case 'review':
-                            if (_canStartThreadReview(thread.id)) {
-                              unawaited(
-                                controller.startReview(
-                                  const UncommittedChangesReviewTarget(),
-                                ),
-                              );
-                            }
+                            unawaited(
+                              _startThreadReview(
+                                thread.id,
+                                const UncommittedChangesReviewTarget(),
+                              ),
+                            );
                           case 'review-target':
                             unawaited(_startThreadReviewDialog(thread));
                           case 'archive':
@@ -2310,6 +2309,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       widget.threadController?.showArchived == false &&
       widget.threadController?.mutating == false &&
       widget.threadController?.isMaterialized(threadId) == true &&
+      widget.threadController?.selectedThread?.status !=
+          ThreadRuntimeStatus.active &&
       widget.controller.canStartReview &&
       _activeCapabilities.supportsGitDiff;
 
@@ -2321,10 +2322,57 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       context: context,
       builder: (context) => _StartReviewDialog(thread: thread),
     );
-    if (target == null || !_canStartThreadReview(thread.id)) {
+    if (target == null) {
       return;
     }
-    await widget.controller.startReview(target);
+    await _startThreadReview(thread.id, target);
+  }
+
+  Future<void> _startThreadReview(String threadId, ReviewTarget target) async {
+    final threads = widget.threadController;
+    if (threads == null ||
+        _checkingColdResume ||
+        !_canStartThreadReview(threadId)) {
+      return;
+    }
+    final selectionVersion = _threadSelectionVersion;
+    if (threads.selectedThreadNeedsResume(threadId)) {
+      final admitted = await _confirmColdResume(
+        threads,
+        threadId,
+        forReview: true,
+      );
+      if (!admitted ||
+          _threadSelectionVersion != selectionVersion ||
+          !_canStartThreadReview(threadId)) {
+        return;
+      }
+      if (!await threads.ensureSelectedThreadLoaded(threadId)) {
+        _reportReviewResumeFailure(threads, threadId, selectionVersion);
+        return;
+      }
+    }
+    if (_threadSelectionVersion == selectionVersion &&
+        _canStartThreadReview(threadId)) {
+      await widget.controller.startReview(target);
+    }
+  }
+
+  void _reportReviewResumeFailure(
+    ThreadListController threads,
+    String threadId,
+    int selectionVersion,
+  ) {
+    if (mounted &&
+        _threadSelectionVersion == selectionVersion &&
+        widget.controller.thread?.id == threadId &&
+        threads.errorMessage != null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Could not resume this thread for review.'),
+        ),
+      );
+    }
   }
 
   void _rememberThreadDag(String threadId, ChatConversationDag dag) {
@@ -3562,7 +3610,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   Future<void> _send() async {
-    if (_checkingColdSend) {
+    if (_checkingColdResume) {
       return;
     }
     final text = _composerController.text;
@@ -3591,7 +3639,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           targetThreadId,
         );
         if (resumedForSend) {
-          final ready = await _confirmColdSend(
+          final ready = await _confirmColdResume(
             threadController,
             targetThreadId,
           );
@@ -3689,17 +3737,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _composerController.text == text &&
       listEquals(_composerAttachments, attachments);
 
-  Future<bool> _confirmColdSend(
+  Future<bool> _confirmColdResume(
     ThreadListController threadController,
-    String threadId,
-  ) async {
+    String threadId, {
+    bool forReview = false,
+  }) async {
     final selectionVersion = _threadSelectionVersion;
     bool stillCold() =>
         mounted &&
         _threadSelectionVersion == selectionVersion &&
         widget.controller.thread?.id == threadId &&
         threadController.selectedThreadNeedsResume(threadId);
-    _checkingColdSend = true;
+    _checkingColdResume = true;
     try {
       final presence = await threadController.selectedThreadQueuePresence(
         threadId,
@@ -3712,21 +3761,31 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         return true;
       }
       final pending = presence == ThreadQueuePresence.pending;
+      final continuation = forReview
+          ? ' Start the review again after the thread is ready.'
+          : ' Your new draft will stay in the composer.';
       final resume = await _confirmDesktopAction(
         context,
         title: pending ? 'Resume queued work?' : 'Could not check queued work',
         message: pending
-            ? 'This thread has saved prompts. Resuming will let Codex run them. Your new draft will stay in the composer.'
-            : 'Resuming may start saved prompts. Your new draft will stay in the composer.',
+            ? 'This thread has saved prompts. Resuming will let Codex run them.$continuation'
+            : 'Resuming may start saved prompts.$continuation',
         confirmLabel: pending ? 'Resume queued work' : 'Resume thread',
         confirmVariant: CodexButtonVariant.primary,
       );
       if (resume && stillCold()) {
-        await threadController.resumeThread(threadId);
+        final resumed = await threadController.resumeThread(threadId);
+        if (forReview && resumed == null) {
+          _reportReviewResumeFailure(
+            threadController,
+            threadId,
+            selectionVersion,
+          );
+        }
       }
       return false;
     } finally {
-      _checkingColdSend = false;
+      _checkingColdResume = false;
     }
   }
 

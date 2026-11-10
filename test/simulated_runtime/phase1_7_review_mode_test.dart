@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
+import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +30,55 @@ class _ReviewModeE2EHarness extends SimulatedRuntimeHarness {
     await reviewEvents.close();
     await super.disposeHarness();
   }
+}
+
+class _ColdReviewHarness extends SimulatedRuntimeHarness {
+  _ColdReviewHarness(this.presence, {this.failResume = false})
+    : super(
+        initialThreads: [
+          createTestThread(
+            id: 'cold-review',
+            preview: 'Cold review fixture',
+            status: ThreadRuntimeStatus.notLoaded,
+          ),
+        ],
+      );
+
+  final ThreadQueuePresence presence;
+  final bool failResume;
+  final queueReads = <String>[];
+
+  @override
+  bool get supportsThreadQueuePresence => true;
+
+  @override
+  Future<ThreadQueuePresence> readThreadQueuePresence(String threadId) async {
+    queueReads.add(threadId);
+    return presence;
+  }
+
+  @override
+  Future<ThreadSummary> resumeThread(String threadId) async {
+    if (failResume) {
+      resumedThreadIds.add(threadId);
+      throw StateError('Missing fixture rollout');
+    }
+    return super.resumeThread(threadId);
+  }
+
+  @override
+  Future<ReviewHandle> startReview(ReviewStartOptions options) async {
+    if ((await readThread(options.threadId)).status ==
+        ThreadRuntimeStatus.notLoaded) {
+      throw StateError('Stock requires a loaded thread for review');
+    }
+    return super.startReview(options);
+  }
+}
+
+Future<void> _openThreadActions(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('thread-actions-menu-button')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -63,6 +113,92 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('conversation-review-mode-banner')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('cold target review loads the thread and keeps the draft', (
+    tester,
+  ) async {
+    final harness = _ColdReviewHarness(ThreadQueuePresence.empty);
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    await tester.tap(find.text('Cold review fixture'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('conversation-composer')),
+      'Unsent review draft',
+    );
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Code review…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('start-review-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(harness.queueReads, ['cold-review']);
+    expect(harness.resumedThreadIds, ['cold-review']);
+    expect(harness.startedReviews.single.threadId, 'cold-review');
+    expect(
+      harness.startedReviews.single.target,
+      isA<UncommittedChangesReviewTarget>(),
+    );
+    expect(harness.startedTurns, isEmpty);
+    expect(find.text('Unsent review draft'), findsOneWidget);
+  });
+
+  testWidgets('cold queued review separates consent to resume from review', (
+    tester,
+  ) async {
+    final harness = _ColdReviewHarness(ThreadQueuePresence.pending);
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    await tester.tap(find.text('Cold review fixture'));
+    await tester.pumpAndSettle();
+
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Review uncommitted changes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Resume queued work?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(harness.resumedThreadIds, isEmpty);
+    expect(harness.startedReviews, isEmpty);
+
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Review uncommitted changes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Resume queued work'));
+    await tester.pumpAndSettle();
+    expect(harness.resumedThreadIds, ['cold-review']);
+    expect(harness.startedReviews, isEmpty);
+    expect(harness.startedTurns, isEmpty);
+
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Review uncommitted changes'));
+    await tester.pumpAndSettle();
+    expect(harness.startedReviews.single.threadId, 'cold-review');
+  });
+
+  testWidgets('cold review reports failed resume in compact conversation', (
+    tester,
+  ) async {
+    final harness = _ColdReviewHarness(
+      ThreadQueuePresence.empty,
+      failResume: true,
+    );
+    await pumpSimulatedRuntimeApp(
+      tester,
+      harness: harness,
+      size: const Size(720, 800),
+    );
+    await tester.tap(find.text('Cold review fixture'));
+    await tester.pumpAndSettle();
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Review uncommitted changes'));
+    await tester.pumpAndSettle();
+
+    expect(harness.resumedThreadIds, ['cold-review']);
+    expect(harness.startedReviews, isEmpty);
+    expect(
+      find.text('Could not resume this thread for review.'),
       findsOneWidget,
     );
   });
