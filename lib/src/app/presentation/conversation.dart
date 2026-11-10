@@ -15,6 +15,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.outputGateway,
     required this.transportCapabilities,
     this.defaultWorkingDirectory = '',
+    this.hasDesktopShell = false,
     this.isOffstage = false,
   });
 
@@ -28,6 +29,7 @@ class _ConversationPanel extends StatefulWidget {
   final OutputGateway outputGateway;
   final BackendCapabilities transportCapabilities;
   final String defaultWorkingDirectory;
+  final bool hasDesktopShell;
   final bool isOffstage;
 
   @override
@@ -123,6 +125,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _detailMode = PresentationDetailMode.commands;
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
+  final _timelineDetailsPopoverController = CodexPopoverController();
   final _composerAttachPopoverController = CodexPopoverController();
   final _linkedPrsPopoverController = CodexPopoverController();
   final _linkedPrViewNotifier = ValueNotifier<int>(0);
@@ -592,8 +595,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _requestActiveThreadLinkedPrs(activeId);
       }
     }
+    if (oldWidget.hasDesktopShell && !widget.hasDesktopShell) {
+      _timelineDetailsPopoverController.hide();
+    }
     if (!oldWidget.isOffstage && widget.isOffstage) {
       _threadActionsPopoverController.hide();
+      _timelineDetailsPopoverController.hide();
       _composerAttachPopoverController.hide();
       _linkedPrsPopoverController.hide();
     } else if (oldWidget.isOffstage && !widget.isOffstage) {
@@ -631,6 +638,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ..removeListener(_handleScrollPositionChanged)
       ..dispose();
     _threadActionsPopoverController.dispose();
+    _timelineDetailsPopoverController.dispose();
     _composerAttachPopoverController.dispose();
     _linkedPrsPopoverController.dispose();
     _linkedPrViewNotifier.dispose();
@@ -1373,11 +1381,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final thread = controller.thread;
     final threadController = widget.threadController;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
+    final hasProject =
+        projectCwd.isNotEmpty &&
+        _activeCapabilities.supportsWorkingDirectorySelection;
     final isHomeEmpty = thread == null;
     return Container(
       key: const ValueKey('thread_header_bar'),
       height: OfficialCodexTheme.headerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space4),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.hasDesktopShell
+            ? ThemeTokens.space6
+            : ThemeTokens.space4,
+      ),
       decoration: BoxDecoration(
         color: theme.workspaceBackground,
         border: isHomeEmpty
@@ -1403,6 +1418,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ? const SizedBox.shrink()
                     : Row(
                         children: [
+                          if (widget.hasDesktopShell && hasProject) ...[
+                            CodexTooltip(
+                              message: projectCwd,
+                              child: Icon(
+                                Icons.folder_outlined,
+                                size: 18,
+                                color: palette.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: ThemeTokens.space3),
+                          ],
                           Flexible(
                             child: Text(
                               thread.displayTitle,
@@ -1410,8 +1436,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13.5,
+                                    fontWeight: widget.hasDesktopShell
+                                        ? FontWeight.w500
+                                        : FontWeight.w600,
+                                    fontSize: widget.hasDesktopShell
+                                        ? 14
+                                        : 13.5,
                                     letterSpacing: -0.1,
                                   ),
                             ),
@@ -1429,9 +1459,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               ),
                             ),
                           ],
-                          if (projectCwd.isNotEmpty &&
-                              _activeCapabilities
-                                  .supportsWorkingDirectorySelection &&
+                          if (!widget.hasDesktopShell &&
+                              hasProject &&
                               constraints.maxWidth >= 680) ...[
                             const SizedBox(width: 8),
                             Flexible(
@@ -1539,7 +1568,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 ),
                 const SizedBox(width: ThemeTokens.space2),
               ],
-              if (showSegment)
+              if (thread != null && widget.hasDesktopShell)
+                _timelineDetailsButton()
+              else if (showSegment)
                 CodexSegment<PresentationDetailMode>(
                   items: const [
                     CodexSegmentItem(
@@ -1740,6 +1771,37 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ),
     );
   }
+
+  Widget _timelineDetailsButton() => CodexPopoverAnchor(
+    controller: _timelineDetailsPopoverController,
+    targetAnchor: Alignment.bottomRight,
+    followerAnchor: Alignment.topRight,
+    width: 180,
+    popoverBuilder: (context, close) => CodexMenu<PresentationDetailMode>(
+      items: const [
+        CodexMenuItem(value: PresentationDetailMode.prose, label: 'Prose'),
+        CodexMenuItem(
+          value: PresentationDetailMode.commands,
+          label: 'Commands',
+        ),
+        CodexMenuItem(
+          value: PresentationDetailMode.execution,
+          label: 'Execution',
+        ),
+      ],
+      selectedValue: _detailMode,
+      onSelected: (mode) {
+        close();
+        setState(() => _detailMode = mode);
+      },
+    ),
+    child: CodexIconButton(
+      key: const ValueKey('timeline-details-button'),
+      tooltip: 'Timeline details',
+      icon: const Icon(Icons.tune_rounded, size: 17),
+      onPressed: _timelineDetailsPopoverController.toggle,
+    ),
+  );
 
   Widget _buildLinkedPrHeaderPill(
     BuildContext context,
@@ -3944,6 +4006,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _linkedPrUrlController.clear();
     _linkedPrBranchController.clear();
     _linkedPrsPopoverController.hide();
+    _timelineDetailsPopoverController.hide();
     _pendingThreadRestore = nextThreadId != null;
     _restorePagesLoaded = 0;
     _restoreAlignmentPasses = 0;

@@ -39,6 +39,12 @@ void main() {
         height: 1440.0,
         dpr: 2.0,
       ),
+      (
+        name: '780x800 near split threshold',
+        width: 780.0,
+        height: 800.0,
+        dpr: 1.0,
+      ),
     ];
 
     for (final vp in viewports) {
@@ -94,6 +100,15 @@ void main() {
           workspace.left - rail.left,
           OfficialCodexTheme.desktopLeftPanelWidth,
         );
+        expect(find.text('New chat'), findsOneWidget);
+        expect(find.text('Projects'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('codex-sidebar-header')),
+            matching: find.byKey(const ValueKey('thread-search-toggle')),
+          ),
+          findsOneWidget,
+        );
         final projectHeadingFinder = find.text('project');
         final threadRowFinder = find.byKey(
           const ValueKey('thread-row-geom-thread-1'),
@@ -143,6 +158,18 @@ void main() {
           equals(OfficialCodexTheme.headerHeight),
         );
         expect(tester.getSize(threadHeaderFinder).height, equals(46.0));
+        final folder = find.descendant(
+          of: threadHeaderFinder,
+          matching: find.byIcon(Icons.folder_outlined),
+        );
+        final workspaceTitle = find.descendant(
+          of: threadHeaderFinder,
+          matching: find.text('Geometry Test Thread'),
+        );
+        expect(
+          tester.getTopLeft(folder).dx,
+          lessThan(tester.getTopLeft(workspaceTitle).dx),
+        );
 
         // 5. Assert Conversation reading column: bounded to <= 704px
         final columnFinder = find.byKey(
@@ -177,7 +204,12 @@ void main() {
         );
         expect(bubbleSize.width, lessThanOrEqualTo(528.0));
 
-        // 8. Verify Presentation Detail Mode selector is present and produces genuine visual differences
+        // Timeline detail stays available in a compact header action.
+        final detailsButton = find.byKey(
+          const ValueKey('timeline-details-button'),
+        );
+        await tester.tap(detailsButton);
+        await tester.pumpAndSettle();
         expect(find.text('Prose'), findsOneWidget);
         expect(find.text('Commands'), findsOneWidget);
         expect(find.text('Execution'), findsOneWidget);
@@ -194,6 +226,8 @@ void main() {
         expect(find.text('Command: cargo test'), findsOneWidget);
 
         // In Prose: both commands are filtered out, user and assistant messages remain
+        await tester.tap(detailsButton);
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Prose'));
         await tester.pumpAndSettle();
         expect(find.text('Command: flutter test'), findsNothing);

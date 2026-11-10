@@ -304,6 +304,8 @@ void main() {
 
       await tester.tap(find.text('Review Mode Test Thread'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Prose'));
       await tester.pumpAndSettle();
 

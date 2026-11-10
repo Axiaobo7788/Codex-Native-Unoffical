@@ -57,10 +57,17 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   }
 
   void _toggleSearch() {
-    setState(() => _showSearch = !_showSearch);
-    if (!_showSearch) {
+    if (_showSearch) {
+      setState(() => _showSearch = false);
       _clearSearch();
       return;
+    }
+    _openSearch();
+  }
+
+  void _openSearch() {
+    if (!_showSearch) {
+      setState(() => _showSearch = true);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -127,7 +134,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                       Expanded(
                         child: CodexSidebarRow(
                           key: const ValueKey('new-thread-button'),
-                          title: 'New thread',
+                          title: widget.hasNavigationRail
+                              ? 'New chat'
+                              : 'New thread',
                           leading: const Icon(Icons.edit_square, size: 16),
                           onTap: controller.mutating ? null : _startThread,
                           trailingBuilder: (context, isHovered) => isHovered
@@ -142,19 +151,21 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                               : const SizedBox.shrink(),
                         ),
                       ),
-                      const SizedBox(width: 2),
-                      CodexIconButton(
-                        key: const ValueKey('thread-directory-button'),
-                        tooltip: 'New thread location',
-                        size: 30,
-                        onPressed: controller.mutating
-                            ? null
-                            : _chooseDirectory,
-                        icon: const Icon(
-                          Icons.create_new_folder_outlined,
-                          size: 16,
+                      if (!widget.hasNavigationRail) ...[
+                        const SizedBox(width: 2),
+                        CodexIconButton(
+                          key: const ValueKey('thread-directory-button'),
+                          tooltip: 'New thread location',
+                          size: 30,
+                          onPressed: controller.mutating
+                              ? null
+                              : _chooseDirectory,
+                          icon: const Icon(
+                            Icons.create_new_folder_outlined,
+                            size: 16,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -177,7 +188,11 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                     children: [
                       Expanded(
                         child: Text(
-                          controller.showArchived ? 'Archived' : 'Threads',
+                          controller.showArchived
+                              ? 'Archived'
+                              : widget.hasNavigationRail
+                              ? 'Projects'
+                              : 'Threads',
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: palette.textMuted,
@@ -198,18 +213,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                               : _createSectionDialog,
                           icon: const Icon(Icons.bookmarks_outlined, size: 15),
                         ),
-                      CodexIconButton(
-                        key: const ValueKey('thread-search-toggle'),
-                        tooltip: 'Filter threads',
-                        size: 26,
-                        onPressed: _toggleSearch,
-                        icon: Icon(
-                          _showSearch
-                              ? Icons.filter_list_off_rounded
-                              : Icons.search_rounded,
-                          size: 15,
-                        ),
-                      ),
+                      if (!widget.hasNavigationRail) _searchButton(),
                       CodexIconButton(
                         key: const ValueKey('thread-archive-toggle'),
                         tooltip: controller.showArchived
@@ -413,12 +417,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
       child: Row(
         children: [
-          Icon(
-            Icons.auto_awesome_mosaic_outlined,
-            size: 17,
-            color: theme.textPrimary,
-          ),
-          const SizedBox(width: 8),
+          if (!widget.hasNavigationRail) ...[
+            Icon(
+              Icons.auto_awesome_mosaic_outlined,
+              size: 17,
+              color: theme.textPrimary,
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Text(
               'Codex',
@@ -426,16 +432,28 @@ class _ThreadPanelState extends State<_ThreadPanel> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: theme.textPrimary,
-                fontSize: 13.5,
+                fontSize: widget.hasNavigationRail ? 18 : 13.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.2,
               ),
             ),
           ),
+          if (widget.hasNavigationRail) _searchButton(),
         ],
       ),
     );
   }
+
+  Widget _searchButton() => CodexIconButton(
+    key: const ValueKey('thread-search-toggle'),
+    tooltip: 'Filter threads',
+    size: 26,
+    onPressed: _toggleSearch,
+    icon: Icon(
+      _showSearch ? Icons.filter_list_off_rounded : Icons.search_rounded,
+      size: 15,
+    ),
+  );
 
   Widget _threadList(ThreadListController controller) {
     final scoped = controller.sectionScopeId != null;

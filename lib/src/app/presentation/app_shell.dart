@@ -293,6 +293,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                                       widget.runtimeController.capabilities,
                                   defaultWorkingDirectory:
                                       widget.defaultWorkingDirectory,
+                                  hasDesktopShell: true,
                                 ),
                               ),
                             ),
@@ -334,13 +335,17 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
             CodexMenuItem(
               value: () {
                 if (!widget.threadController.mutating) {
-                  _threadPanelKey.currentState?._startThread();
+                  unawaited(_threadPanelKey.currentState?._startThread());
                 }
               },
               label: 'New thread',
             ),
             CodexMenuItem(
-              value: () => _threadPanelKey.currentState?._chooseDirectory(),
+              value: () {
+                if (!widget.threadController.mutating) {
+                  unawaited(_threadPanelKey.currentState?._chooseDirectory());
+                }
+              },
               label: 'New thread location',
             ),
           ]),
@@ -351,7 +356,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                 if (_sidebarCollapsed) {
                   _toggleSidebar();
                 }
-                _threadPanelKey.currentState?._toggleSearch();
+                _threadPanelKey.currentState?._openSearch();
               },
               label: 'Search threads',
             ),

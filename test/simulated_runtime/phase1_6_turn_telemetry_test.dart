@@ -212,6 +212,8 @@ void main() {
         );
 
         // 5. Switch to Execution detail mode to inspect all projected activity rows
+        await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Execution'));
         await tester.pumpAndSettle();
         expect(
