@@ -4635,3 +4635,41 @@ probe before interpreting that result as a content-search limitation.
   fixed controls and scrolls its content. A second packaged walkthrough kept
   the warning, question actions and composer visible at 820×420, scrolled to
   a free-form answer and confirmed the answer reached the stock tool call.
+
+## Desktop short-window request stack
+
+- A simulated approval at 760×420 with the sidebar at its maximum reproduced
+  unreachable decisions for a long file list, including horizontal overflow
+  in the action row. `fb866dd` makes the details independently scrollable and
+  constrains the two decisions to the available width. The empty-thread
+  illustration also scrolls when requests leave it very little height. A
+  Linux bundle with stock and a disposable loopback model requested command
+  approval. After scrolling the details, Reject returned the denial through
+  stock. The fixture command was never executed.
+- A turn-scoped MCP form with nine fields exceeded the 820×420 viewport by
+  244 px before `061f0da`. The form body now shares the actual available height
+  while retaining its field cap and independent actions. The packaged app
+  accepted the consent for a disposable local echo tool, scrolled its longer
+  form and declined it. The stock tool result carried the decline.
+- When approval and question arrive concurrently, the fixed chrome of two
+  separate cards can exceed their height shares. `5769e31` puts both in one
+  bounded scroll region for a short viewport. Stable widget identities retain
+  the in-progress answer across entry to and exit from that region. Simulated
+  runtime verified rejecting one request and then submitting the preserved
+  answer at 760×420. The single-request paths were exercised separately in the
+  packaged app.
+- Previously a cold target chooser collected the review target before detecting
+  that queued work required explicit resume. `aaecb40` checks before opening
+  the chooser. When the first check finds no queue, the review entry still
+  checks again at submission so a queue that appeared while the chooser was
+  open receives the same explicit confirmation. Simulated runtime verifies
+  both the early and late queue cases and zero review dispatch on resume alone.
+  A cold unqueued thread in the packaged Linux app opened the target chooser
+  and completed a working-tree review through stock after explicit submit.
+  Strict analysis required the explicit post-await mount guard in `d816aae`.
+- A Linux bundle rendered the same saved thread with the Native dark palette
+  at 1191×865 and 720×800 after reading `prefer-dark` from an isolated desktop
+  appearance portal fixture. A GTK preference file alone left the same
+  Xvfb setup in light mode. This exercises Native's system theme selection
+  with a controlled OS setting. Signed-in official dark comparison remains
+  open.

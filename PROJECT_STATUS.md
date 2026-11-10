@@ -31,13 +31,22 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- `fb866dd`, `061f0da` and `5769e31` complete the short-window request audit.
+  Approval details and MCP fields scroll within their budgets, and a short
+  workspace with two pending cards gives them one shared scroll region. The
+  existing question answer survives arrival and resolution of an approval.
+  Linux stock walkthroughs received a rejection at 760×420 and an MCP decline
+  at 820×420. The simultaneous request path has simulated runtime coverage.
+  `aaecb40` checks cold review admission before opening the target chooser
+  and again before a cold review is dispatched.
+  [Short-window evidence](docs/RESEARCH.md#desktop-short-window-request-stack)
 - `155ea2f` translates the current official Changes side-tab contract into a
   separate wide Desktop pane. The packaged app showed the active timeline and
   a real Git diff side by side. `515d283` gives a pending question room around
   the actual header, warning and composer. A Linux stock walkthrough scrolled
-  and submitted an answer at 820×420. The active Desktop queue now includes
-  a short-window audit of approval and elicitation cards.
+  and submitted an answer at 820×420.
   [Secondary surface evidence](docs/RESEARCH.md#desktop-secondary-surface-follow-up)
+  [Hosted CI for `79bcf2e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42790089477)
 - Desktop remains in `SELF_ITERATION` while signed-in visual comparison is
   slice-scoped. `fd4ebe1` retains model and reasoning controls in a 240 px
   workspace and gives the draft its own row when the active controls need
@@ -81,6 +90,11 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- The short-window request and cold review checkpoint passed strict Dart
+  analysis, the 65-root pure-Dart boundary, 510 Flutter cases with five
+  opt-in skips, five separately enabled direct-stock cases, the bounded-history
+  benchmark, Linux bundle checks, and six bundled Host smoke paths. Rust
+  formatting, Clippy, and 100 Rust tests passed on the unchanged Rust tree.
 - The Changes side pane and short-window question checkpoint passed 505
   Flutter cases with five opt-in skips, five separately enabled direct-stock
   cases, the bounded-history benchmark, Linux bundle checks, and six bundled

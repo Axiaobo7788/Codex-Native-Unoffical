@@ -191,9 +191,10 @@ width is session-local. The current bundle registers Changes as a right-side
 task tab. Native translates this with a side pane above a 960 px workspace and
 keeps its existing timeline replacement view below that width.
 [Open Changes evidence](../RESEARCH.md#desktop-secondary-surface-follow-up)
-At narrow split widths the active steering field shares a row with execution
-controls. A queued cold thread requires a fresh review target after explicit
-resume. Both interaction choices remain open for Human feedback.
+At narrow split widths the active steering field can use its own row while
+model, execution and Stop controls remain available. A known cold queue now
+asks for explicit resume before the review target chooser. The interaction
+choices remain open for Human feedback.
 The app menu covers supported Native actions, and the rail exposes only wired
 destinations. Comparable signed-in official captures are still needed for
 empty Home, expanded activity, open review/diff, model and execution popovers,
