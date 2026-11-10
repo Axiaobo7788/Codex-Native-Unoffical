@@ -1,7 +1,7 @@
 part of '../codex_native_app.dart';
 
 class _UserInputBanner extends StatelessWidget {
-  const _UserInputBanner({required this.controller});
+  const _UserInputBanner({super.key, required this.controller});
 
   final UserInputController controller;
 
@@ -585,29 +585,6 @@ class _UserInputCardState extends State<_UserInputCard> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.question_answer_outlined,
-                  size: 18,
-                  color: palette.accent,
-                ),
-                const SizedBox(width: ThemeTokens.space2),
-                Expanded(
-                  child: Text(
-                    'Codex needs your input'
-                    '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                if (submitting)
-                  const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
-            ),
-            const SizedBox(height: ThemeTokens.space2),
             Flexible(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 320),
@@ -616,6 +593,29 @@ class _UserInputCardState extends State<_UserInputCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.question_answer_outlined,
+                            size: 18,
+                            color: palette.accent,
+                          ),
+                          const SizedBox(width: ThemeTokens.space2),
+                          Expanded(
+                            child: Text(
+                              'Codex needs your input'
+                              '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          if (submitting)
+                            const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: ThemeTokens.space2),
                       for (
                         var index = 0;
                         index < widget.request.questions.length;
@@ -644,28 +644,34 @@ class _UserInputCardState extends State<_UserInputCard> {
               ),
             ],
             const SizedBox(height: ThemeTokens.space3),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: ThemeTokens.space2,
-              runSpacing: ThemeTokens.space2,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                CodexButton(
-                  key: const ValueKey('user-input-cancel'),
-                  variant: CodexButtonVariant.ghost,
-                  size: CodexButtonSize.sm,
-                  onPressed: submitting
-                      ? null
-                      : () =>
-                            widget.controller.cancel(widget.request.requestId),
-                  label: 'Cancel request',
+                Flexible(
+                  child: CodexButton(
+                    key: const ValueKey('user-input-cancel'),
+                    variant: CodexButtonVariant.ghost,
+                    size: CodexButtonSize.sm,
+                    onPressed: submitting
+                        ? null
+                        : () => widget.controller.cancel(
+                            widget.request.requestId,
+                          ),
+                    label: 'Cancel request',
+                    tooltip: 'Cancel request',
+                  ),
                 ),
-                CodexButton(
-                  key: const ValueKey('user-input-submit'),
-                  variant: CodexButtonVariant.primary,
-                  size: CodexButtonSize.sm,
-                  loading: submitting,
-                  onPressed: submitting || !_isComplete ? null : _submit,
-                  label: 'Submit answers',
+                const SizedBox(width: ThemeTokens.space2),
+                Flexible(
+                  child: CodexButton(
+                    key: const ValueKey('user-input-submit'),
+                    variant: CodexButtonVariant.primary,
+                    size: CodexButtonSize.sm,
+                    loading: submitting,
+                    onPressed: submitting || !_isComplete ? null : _submit,
+                    label: 'Submit answers',
+                    tooltip: 'Submit answers',
+                  ),
                 ),
               ],
             ),

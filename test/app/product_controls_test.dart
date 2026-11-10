@@ -552,6 +552,90 @@ void main() {
   );
 
   testWidgets(
+    'concurrent approval and question stay reachable in a short split',
+    (tester) async {
+      tester.view.physicalSize = const Size(760, 420);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController();
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const ValueKey('sidebar-resize-handle')),
+        const Offset(310, 0),
+      );
+      await tester.pumpAndSettle();
+      runtime.emitWarning(
+        'The runtime needs confirmation before changing files.',
+      );
+      runtime.emitUserInput(
+        UserInputRequest(
+          requestId: 'simultaneous-input',
+          threadId: runtime.thread.id,
+          turnId: 'turn-1',
+          itemId: 'input-item',
+          isBlocking: true,
+          questions: [
+            UserInputQuestion(
+              id: 'answer',
+              header: 'Follow-up',
+              question: 'Enter a short reply.',
+              options: const [],
+              allowsOther: false,
+              isSecret: false,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('user-input-answer-text'));
+      await tester.ensureVisible(field);
+      await tester.enterText(field, 'Keep this answer.');
+      await tester.pumpAndSettle();
+      runtime.emitApproval(
+        ApprovalRequest(
+          requestId: 'short-approval',
+          kind: ApprovalKind.fileChange,
+          threadId: runtime.thread.id,
+          turnId: 'turn-1',
+          itemId: 'item-1',
+          summary: 'Update the disposable fixture files.',
+          detail: [for (var i = 0; i < 24; i++) 'fixture/file-$i.txt']
+              .join('\n'),
+          reason: 'Verify approval controls while a warning is present.',
+          approveSupported: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final dock = find.byKey(const ValueKey('conversation-request-scroll'));
+      expect(dock, findsOneWidget);
+      final reject = find.text('Reject');
+      await tester.ensureVisible(reject);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(reject).dy, lessThan(420));
+      await tester.tap(reject);
+      await tester.pumpAndSettle();
+      expect(runtime.approvalDecisions, [
+        (requestId: 'short-approval', decision: ApprovalDecision.reject),
+      ]);
+      expect(dock, findsNothing);
+      expect(
+        tester.widget<TextField>(field).controller!.text,
+        'Keep this answer.',
+      );
+      await tester.tap(find.byKey(const ValueKey('user-input-submit')));
+      await tester.pumpAndSettle();
+      expect(runtime.userInputSubmissions.single.$2.values, {
+        'answer': ['Keep this answer.'],
+      });
+    },
+  );
+
+  testWidgets(
     'a pending question and warning fit after resizing a Desktop window',
     (tester) async {
       tester.view.physicalSize = const Size(820, 700);
