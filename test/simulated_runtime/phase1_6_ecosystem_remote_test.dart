@@ -12,12 +12,14 @@ import 'simulated_runtime_harness.dart';
 class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
   _ConfigurableEcosystemHarness({
     this.listSkillsOverride,
+    this.setSkillEnabledOverride,
     this.listPluginsOverride,
     this.listMcpServerStatusOverride,
     this.reloadMcpServersOverride,
   });
 
   Future<List<SkillSummary>> Function(List<String> cwds)? listSkillsOverride;
+  Future<bool> Function(String path, bool enabled)? setSkillEnabledOverride;
   Future<List<PluginSummaryModel>> Function(List<String> cwds)?
   listPluginsOverride;
   Future<List<McpServerStatusModel>> Function()? listMcpServerStatusOverride;
@@ -30,6 +32,16 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
       return override(cwds);
     }
     return super.listSkills(cwds: cwds);
+  }
+
+  @override
+  Future<bool> setSkillEnabled({required String path, required bool enabled}) {
+    final override = setSkillEnabledOverride;
+    if (override != null) {
+      toggledSkills.add((path: path, enabled: enabled));
+      return override(path, enabled);
+    }
+    return super.setSkillEnabled(path: path, enabled: enabled);
   }
 
   @override
@@ -1598,6 +1610,153 @@ void main() {
           expect(harness.toggledSkills.single.enabled, isFalse);
           expect(find.text('Disabled'), findsOneWidget);
         }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'refreshing Skills does not read MCP status before reload finishes',
+      (tester) async {
+        final pendingReload = Completer<void>();
+        var statusReads = 0;
+        var reloadCalls = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listMcpServerStatusOverride: () async {
+            statusReads += 1;
+            return List<McpServerStatusModel>.unmodifiable(harness.mcpServers);
+          },
+          reloadMcpServersOverride: () {
+            reloadCalls += 1;
+            return pendingReload.future;
+          },
+        );
+        harness.mcpServers.add(
+          const McpServerStatusModel(
+            name: 'fixture-mcp',
+            status: 'connected',
+            toolCount: 1,
+            resourceCount: 1,
+          ),
+        );
+        addTearDown(() {
+          if (!pendingReload.isCompleted) {
+            pendingReload.complete();
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        final before = statusReads;
+
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey('ecosystem-section-selector')),
+            matching: find.textContaining('MCP'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Reload config'));
+        await tester.pump();
+        expect(reloadCalls, 1);
+
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey('ecosystem-section-selector')),
+            matching: find.textContaining('Skills'),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(statusReads, before);
+
+        pendingReload.complete();
+        await tester.pumpAndSettle();
+        expect(statusReads, before + 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'refreshing another section during a skill toggle cannot strand Skills',
+      (tester) async {
+        const fixture = SkillSummary(
+          name: 'fixture-skill',
+          description: 'Fixture',
+          path: '/tmp/fixture-skill/SKILL.md',
+          enabled: true,
+        );
+        final pendingRead = Completer<List<SkillSummary>>();
+        final pendingToggle = Completer<bool>();
+        var reads = 0;
+        var mutations = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listSkillsOverride: (_) {
+            reads += 1;
+            return reads == 1
+                ? Future<List<SkillSummary>>.value(
+                    List<SkillSummary>.unmodifiable(harness.skills),
+                  )
+                : pendingRead.future;
+          },
+          setSkillEnabledOverride: (_, enabled) {
+            mutations += 1;
+            if (mutations == 1) {
+              return pendingToggle.future;
+            }
+            return Future<bool>.value(enabled);
+          },
+        );
+        harness.skills
+          ..clear()
+          ..add(fixture);
+        addTearDown(() {
+          if (!pendingRead.isCompleted) {
+            pendingRead.complete(const <SkillSummary>[]);
+          }
+          if (!pendingToggle.isCompleted) {
+            pendingToggle.complete(false);
+          }
+        });
+
+        Finder tab(String label) => find.descendant(
+          of: find.byKey(const ValueKey('ecosystem-section-selector')),
+          matching: find.textContaining(label),
+        );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        final toggle = find.byKey(const ValueKey('skill-toggle-fixture-skill'));
+        await tester.tap(toggle);
+        await tester.pump();
+        expect(mutations, 1);
+
+        await tester.tap(tab('Plugins'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+
+        pendingToggle.complete(false);
+        await tester.pumpAndSettle();
+        pendingRead.complete(const [fixture]);
+        await tester.pumpAndSettle();
+
+        await tester.tap(tab('Skills'));
+        await tester.pumpAndSettle();
+        expect(find.text('Disabled'), findsOneWidget);
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(mutations, 2);
         expect(tester.takeException(), isNull);
       },
     );

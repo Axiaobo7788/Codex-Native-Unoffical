@@ -2434,13 +2434,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (_skillsRefreshInFlight case final inFlight?) {
       return inFlight;
     }
-    final future = _runRefreshSkills(cwds: cwds);
-    _skillsRefreshInFlight = future;
-    return future.whenComplete(() {
+    if (_mutatingSkillPaths.isNotEmpty) {
+      return Future<void>.value();
+    }
+    late final Future<void> future;
+    future = _runRefreshSkills(cwds: cwds).whenComplete(() {
       if (identical(_skillsRefreshInFlight, future)) {
         _skillsRefreshInFlight = null;
+        if (mounted && _skillsLoading) {
+          setState(() => _skillsLoading = false);
+        }
       }
     });
+    _skillsRefreshInFlight = future;
+    return future;
   }
 
   Future<void> _runRefreshSkills({required List<String> cwds}) async {
@@ -2477,17 +2484,26 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   Future<void> _refreshPlugins({
     required List<String> cwds,
     required bool forceRefetch,
+    bool allowDuringMutation = false,
   }) {
     if (_pluginsRefreshInFlight case final inFlight?) {
       return inFlight;
     }
-    final future = _runRefreshPlugins(cwds: cwds, forceRefetch: forceRefetch);
+    if (!allowDuringMutation && _mutatingPluginIds.isNotEmpty) {
+      return Future<void>.value();
+    }
+    late final Future<void> future;
+    future = _runRefreshPlugins(cwds: cwds, forceRefetch: forceRefetch)
+        .whenComplete(() {
+          if (identical(_pluginsRefreshInFlight, future)) {
+            _pluginsRefreshInFlight = null;
+            if (mounted && _pluginsLoading) {
+              setState(() => _pluginsLoading = false);
+            }
+          }
+        });
     _pluginsRefreshInFlight = future;
-    return future.whenComplete(() {
-      if (identical(_pluginsRefreshInFlight, future)) {
-        _pluginsRefreshInFlight = null;
-      }
-    });
+    return future;
   }
 
   Future<void> _runRefreshPlugins({
@@ -2555,13 +2571,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (_mcpRefreshInFlight case final inFlight?) {
       return inFlight;
     }
-    final future = _runRefreshMcp(forceRefetch: forceRefetch);
-    _mcpRefreshInFlight = future;
-    return future.whenComplete(() {
+    if (_reloadingMcp) {
+      return Future<void>.value();
+    }
+    late final Future<void> future;
+    future = _runRefreshMcp(forceRefetch: forceRefetch).whenComplete(() {
       if (identical(_mcpRefreshInFlight, future)) {
         _mcpRefreshInFlight = null;
+        if (mounted && _mcpLoading) {
+          setState(() => _mcpLoading = false);
+        }
       }
     });
+    _mcpRefreshInFlight = future;
+    return future;
   }
 
   Future<void> _runRefreshMcp({required bool forceRefetch}) async {
@@ -3081,7 +3104,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       unawaited(_refreshSkills(cwds: cwds));
       unawaited(_refreshMcp(forceRefetch: true));
       unawaited(_refreshApps(forceRefetch: true));
-      await _refreshPlugins(cwds: cwds, forceRefetch: true);
+      await _refreshPlugins(
+        cwds: cwds,
+        forceRefetch: true,
+        allowDuringMutation: true,
+      );
       if (!mounted) {
         return;
       }
@@ -3121,7 +3148,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       unawaited(_refreshSkills(cwds: cwds));
       unawaited(_refreshMcp(forceRefetch: true));
       unawaited(_refreshApps(forceRefetch: true));
-      await _refreshPlugins(cwds: cwds, forceRefetch: true);
+      await _refreshPlugins(
+        cwds: cwds,
+        forceRefetch: true,
+        allowDuringMutation: true,
+      );
       if (!mounted) {
         return;
       }
