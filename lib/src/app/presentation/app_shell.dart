@@ -326,7 +326,10 @@ class _DesktopSplitWorkspace extends StatefulWidget {
 class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   final _threadPanelKey = GlobalKey<_ThreadPanelState>();
   final _fileMenu = CodexPopoverController();
+  final _editMenu = CodexPopoverController();
   final _viewMenu = CodexPopoverController();
+  final _helpMenu = CodexPopoverController();
+  FocusNode? _editMenuTarget;
   var _sidebarCollapsed = false;
   var _ecosystemOpen = false;
 
@@ -350,9 +353,19 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _editMenu.addListener(() {
+      if (!_editMenu.isOpen) _editMenuTarget = null;
+    });
+  }
+
+  @override
   void dispose() {
     _fileMenu.dispose();
+    _editMenu.dispose();
     _viewMenu.dispose();
+    _helpMenu.dispose();
     super.dispose();
   }
 
@@ -603,6 +616,19 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
               ),
             ],
           ),
+          TextFieldTapRegion(
+            child: _applicationMenu(
+              'Edit',
+              _editMenu,
+              _editMenuItems,
+              onPressed: () {
+                if (!_editMenu.isOpen) {
+                  _editMenuTarget = FocusManager.instance.primaryFocus;
+                }
+                _editMenu.toggle();
+              },
+            ),
+          ),
           _applicationMenu('View', _viewMenu, () {
             final threads = widget.threadController;
             final pinned = threads.builtInPinnedSection;
@@ -630,6 +656,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                 ),
             ];
           }),
+          _applicationMenu('Help', _helpMenu, _helpMenuItems),
         ],
       ),
     );
@@ -638,8 +665,9 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   Widget _applicationMenu(
     String label,
     CodexPopoverController controller,
-    List<CodexMenuItem<VoidCallback>> Function() items,
-  ) => CodexPopoverAnchor(
+    List<CodexMenuItem<VoidCallback>> Function() items, {
+    VoidCallback? onPressed,
+  }) => CodexPopoverAnchor(
     controller: controller,
     width: 194,
     popoverBuilder: (context, close) => CodexMenu<VoidCallback>(
@@ -653,9 +681,75 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
       label: label,
       size: CodexButtonSize.sm,
       variant: CodexButtonVariant.ghost,
-      onPressed: controller.toggle,
+      onPressed: onPressed ?? controller.toggle,
     ),
   );
+
+  List<CodexMenuItem<VoidCallback>> _editMenuItems() {
+    final focus = _editMenuTarget;
+    final target = focus?.context;
+    const cause = SelectionChangedCause.toolbar;
+    const roles = <(String, Intent)>[
+      ('Undo', UndoTextIntent(cause)),
+      ('Redo', RedoTextIntent(cause)),
+      ('Cut', CopySelectionTextIntent.cut(cause)),
+      ('Copy', CopySelectionTextIntent.copy),
+      ('Paste', PasteTextIntent(cause)),
+      ('Delete', DeleteCharacterIntent(forward: true)),
+      ('Select All', SelectAllTextIntent(cause)),
+    ];
+    bool enabled(Intent intent) {
+      if (target == null) return false;
+      final action = Actions.maybeFind(target, intent: intent);
+      return action is ContextAction<Intent>
+          ? action.isEnabled(intent, target)
+          : action?.isEnabled(intent) ?? false;
+    }
+
+    return [
+      for (final (label, intent) in roles)
+        CodexMenuItem(
+          label: label,
+          disabled: !enabled(intent),
+          value: () {
+            if (target == null || !target.mounted || focus?.context != target) {
+              return;
+            }
+            focus!.requestFocus();
+            Actions.maybeInvoke(target, intent);
+          },
+        ),
+    ];
+  }
+
+  List<CodexMenuItem<VoidCallback>> _helpMenuItems() => [
+    for (final (label, url) in const [
+      ('Documentation', 'https://developers.openai.com/codex/app'),
+      ("What's New", 'https://developers.openai.com/codex/changelog'),
+      (
+        'Troubleshooting',
+        'https://developers.openai.com/codex/app/troubleshooting',
+      ),
+      ('System Status', 'https://status.openai.com'),
+    ])
+      CodexMenuItem(
+        label: label,
+        value: () => unawaited(_openHelpLink(Uri.parse(url))),
+      ),
+  ];
+
+  Future<void> _openHelpLink(Uri uri) async {
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } on Exception {
+      // Report an unavailable platform URL handler below.
+    }
+    if (mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Could not open the help page.')),
+      );
+    }
+  }
 
   Widget _navigationRail() => Semantics(
     label: 'App navigation',

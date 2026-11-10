@@ -1,6 +1,7 @@
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart' show TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,6 +87,48 @@ void main() {
     expect(tester.widget<CodexIconButton>(forward).isEnabled, isFalse);
     expect(runtime.resumedThreadIds, isEmpty);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop Edit menu targets the focused composer', (tester) async {
+    final runtime = _NavigationHarness();
+    await pumpSimulatedRuntimeApp(tester, harness: runtime);
+    await tester.tap(find.byKey(const ValueKey('thread-row-first')));
+    await tester.pumpAndSettle();
+    final composer = find.byKey(const ValueKey('conversation-composer'));
+    await tester.enterText(composer, 'Edit this draft');
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(composer);
+
+    Future<void> edit(String label) async {
+      await tester.tap(
+        find.widgetWithText(CodexButton, 'Edit'),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+    }
+
+    await edit('Select All');
+    expect(
+      field.controller!.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 15),
+    );
+    expect(field.focusNode!.hasFocus, isTrue);
+    await edit('Delete');
+    expect(field.controller!.text, isEmpty);
+    await edit('Undo');
+    expect(field.controller!.text, 'Edit this draft');
+
+    await tester.tap(find.widgetWithText(CodexButton, 'Help'));
+    await tester.pumpAndSettle();
+    expect(find.text('Documentation'), findsOneWidget);
+    expect(find.text('Troubleshooting'), findsOneWidget);
+    expect(find.text('System Status'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Documentation'), findsNothing);
+    expect(field.controller!.text, 'Edit this draft');
   });
 }
 
