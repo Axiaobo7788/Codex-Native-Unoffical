@@ -187,6 +187,41 @@ void main() {
   });
 
   group('CodexPopover and CodexMenu', () {
+    testWidgets('rebinds the anchor when its controller changes', (
+      tester,
+    ) async {
+      final first = CodexPopoverController();
+      final second = CodexPopoverController();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      Widget anchor(CodexPopoverController controller, String content) => wrap(
+        CodexPopoverAnchor(
+          controller: controller,
+          popoverBuilder: (context, close) => Text(content),
+          child: const Text('Anchor'),
+        ),
+      );
+
+      await tester.pumpWidget(anchor(first, 'First panel'));
+      first.show();
+      await tester.pumpAndSettle();
+      expect(find.text('First panel'), findsOneWidget);
+
+      second.show();
+      await tester.pumpWidget(anchor(second, 'Second panel'));
+      await tester.pumpAndSettle();
+      expect(find.text('First panel'), findsNothing);
+      expect(find.text('Second panel'), findsOneWidget);
+
+      first.hide();
+      await tester.pumpAndSettle();
+      expect(find.text('Second panel'), findsOneWidget);
+      second.hide();
+      await tester.pumpAndSettle();
+      expect(find.text('Second panel'), findsNothing);
+    });
+
     testWidgets('menu arrow keys skip disabled items and wrap focus', (
       tester,
     ) async {

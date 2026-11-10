@@ -58,31 +58,51 @@ class CodexPopoverAnchor extends StatefulWidget {
 
 class _CodexPopoverAnchorState extends State<CodexPopoverAnchor> {
   final _link = LayerLink();
-  late final CodexPopoverController _controller;
+  late CodexPopoverController _controller;
   OverlayEntry? _entry;
 
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? CodexPopoverController();
-    _controller.addListener(_handleControllerChange);
+    _bindController();
   }
 
   @override
   void didUpdateWidget(covariant CodexPopoverAnchor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      oldWidget.controller?.removeListener(_handleControllerChange);
-      _controller = widget.controller ?? CodexPopoverController();
-      _controller.addListener(_handleControllerChange);
+      _unbindController(owned: oldWidget.controller == null);
+      _bindController();
     }
   }
 
   @override
   void dispose() {
+    _unbindController(owned: widget.controller == null);
+    super.dispose();
+  }
+
+  void _bindController() {
+    final controller = widget.controller ?? CodexPopoverController();
+    _controller = controller;
+    controller.addListener(_handleControllerChange);
+    if (controller.isOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            identical(_controller, controller) &&
+            controller.isOpen) {
+          _showPopover();
+        }
+      });
+    }
+  }
+
+  void _unbindController({required bool owned}) {
     _controller.removeListener(_handleControllerChange);
     _hidePopover();
-    super.dispose();
+    if (owned) {
+      _controller.dispose();
+    }
   }
 
   void _handleControllerChange() {
@@ -165,8 +185,10 @@ class _CodexPopoverAnchorState extends State<CodexPopoverAnchor> {
   }
 
   void _hidePopover() {
-    _entry?.remove();
+    final entry = _entry;
     _entry = null;
+    entry?.remove();
+    entry?.dispose();
   }
 
   @override
