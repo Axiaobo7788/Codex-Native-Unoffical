@@ -98,6 +98,15 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(editor, findsNothing);
+    await tester.tap(find.byKey(const ValueKey('desktop-thread-goal-title')));
+    await tester.pumpAndSettle();
+    expect(editor, findsOneWidget);
+    await tester.tap(find.byTooltip('Edit goal'));
+    await tester.pumpAndSettle();
+    expect(editor, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(editor, findsNothing);
 
     final readsBeforeQuickActions = harness.goalReads;
     expect(readsBeforeQuickActions, 2);

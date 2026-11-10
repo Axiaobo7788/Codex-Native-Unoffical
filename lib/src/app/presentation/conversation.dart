@@ -2054,11 +2054,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _openGoalEditor(String threadId) {
-    if (_activeThreadId != threadId) return;
-    if (_goalEditorThreadId == threadId) {
-      _closeGoalEditor();
-      return;
-    }
+    if (_activeThreadId != threadId || _goalEditorThreadId == threadId) return;
     if (!_showChanges && !_pendingThreadRestore) {
       _captureThreadScrollBookmark(threadId);
     }
@@ -2119,6 +2115,35 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ThreadGoalStatus.complete => 'Goal achieved',
       ThreadGoalStatus.unknown => 'Thread goal',
     };
+    final openEditor = actionsEnabled ? () => _openGoalEditor(threadId) : null;
+    final title = Row(
+      children: [
+        Icon(Icons.track_changes_outlined, size: 16, color: theme.textMuted),
+        const SizedBox(width: ThemeTokens.space2),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: status,
+                  style: TextStyle(
+                    color: theme.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                TextSpan(
+                  text: '  ${goal.objective}',
+                  style: TextStyle(color: theme.textSecondary),
+                ),
+              ],
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
     const inlineInset = OfficialCodexTheme.composerTrayInlineInset;
     return Center(
       heightFactor: 1,
@@ -2135,7 +2160,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             maxWidth: OfficialCodexTheme.composerMaxWidth - 2 * inlineInset,
             minHeight: OfficialCodexTheme.navRowHeight,
           ),
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 4, 0),
+          padding: EdgeInsetsDirectional.fromSTEB(
+            openEditor == null ? 12 : 4,
+            0,
+            4,
+            0,
+          ),
           decoration: BoxDecoration(
             color: theme.modalSurface,
             border: Border.all(color: theme.hairlineBorder),
@@ -2145,33 +2175,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.track_changes_outlined,
-                size: 16,
-                color: theme.textMuted,
-              ),
-              const SizedBox(width: ThemeTokens.space2),
               Expanded(
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: status,
-                        style: TextStyle(
-                          color: theme.textPrimary,
-                          fontWeight: FontWeight.w500,
-                        ),
+                child: openEditor == null
+                    ? title
+                    : CodexButton(
+                        key: const ValueKey('desktop-thread-goal-title'),
+                        tooltip: 'Open goal editor',
+                        variant: CodexButtonVariant.ghost,
+                        size: CodexButtonSize.sm,
+                        onPressed: openEditor,
+                        child: title,
                       ),
-                      TextSpan(
-                        text: '  ${goal.objective}',
-                        style: TextStyle(color: theme.textSecondary),
-                      ),
-                    ],
-                  ),
-                  style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               ),
               if (showElapsed)
                 _DesktopGoalUsage(goal: goal, budgetText: budgetText),
@@ -2205,9 +2219,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 CodexIconButton(
                   key: const ValueKey('desktop-thread-goal-edit'),
                   tooltip: 'Edit goal',
-                  onPressed: actionsEnabled
-                      ? () => _openGoalEditor(threadId)
-                      : null,
+                  onPressed: openEditor,
                   size: 28,
                   icon: const Icon(Icons.open_in_full_rounded, size: 14),
                 ),
