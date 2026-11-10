@@ -414,39 +414,61 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
             tooltip: '$sidebarLabel (Ctrl+B)',
             size: 28,
             onPressed: _toggleSidebar,
-            icon: const Icon(Icons.view_sidebar_outlined, size: 17),
+            icon: Transform.flip(
+              flipX: true,
+              child: const Icon(Icons.view_sidebar_outlined, size: 17),
+            ),
           ),
           const SizedBox(width: ThemeTokens.space2),
-          _applicationMenu('File', _fileMenu, [
-            CodexMenuItem(
-              value: () {
-                if (!widget.threadController.mutating) {
-                  unawaited(_threadPanelKey.currentState?._startThread());
-                }
-              },
-              label: 'New thread',
-            ),
-            CodexMenuItem(
-              value: () {
-                if (!widget.threadController.mutating) {
-                  unawaited(_threadPanelKey.currentState?._chooseDirectory());
-                }
-              },
-              label: 'New thread location',
-            ),
-          ]),
-          _applicationMenu('View', _viewMenu, [
-            CodexMenuItem(value: _toggleSidebar, label: sidebarLabel),
-            CodexMenuItem(
-              value: () {
-                if (_sidebarCollapsed) {
-                  _toggleSidebar();
-                }
-                _threadPanelKey.currentState?._openSearch();
-              },
-              label: 'Search threads',
-            ),
-          ]),
+          _applicationMenu(
+            'File',
+            _fileMenu,
+            () => [
+              CodexMenuItem(
+                value: () {
+                  if (!widget.threadController.mutating) {
+                    unawaited(_threadPanelKey.currentState?._startThread());
+                  }
+                },
+                label: 'New thread',
+              ),
+              CodexMenuItem(
+                value: () {
+                  if (!widget.threadController.mutating) {
+                    unawaited(_threadPanelKey.currentState?._chooseDirectory());
+                  }
+                },
+                label: 'New thread location',
+              ),
+            ],
+          ),
+          _applicationMenu('View', _viewMenu, () {
+            final threads = widget.threadController;
+            final pinned = threads.builtInPinnedSection;
+            return [
+              CodexMenuItem(value: _toggleSidebar, label: sidebarLabel),
+              CodexMenuItem(
+                value: () {
+                  if (_sidebarCollapsed) {
+                    _toggleSidebar();
+                  }
+                  _threadPanelKey.currentState?._openSearch();
+                },
+                label: 'Search threads',
+              ),
+              if (pinned != null && !threads.showArchived)
+                CodexMenuItem(
+                  value: () {
+                    if (_sidebarCollapsed) {
+                      _toggleSidebar();
+                    }
+                    unawaited(threads.setSectionScope(pinned.id));
+                  },
+                  label: 'Browse saved pins',
+                  disabled: threads.catalogBusy,
+                ),
+            ];
+          }),
         ],
       ),
     );
@@ -455,12 +477,12 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   Widget _applicationMenu(
     String label,
     CodexPopoverController controller,
-    List<CodexMenuItem<VoidCallback>> items,
+    List<CodexMenuItem<VoidCallback>> Function() items,
   ) => CodexPopoverAnchor(
     controller: controller,
     width: 194,
     popoverBuilder: (context, close) => CodexMenu<VoidCallback>(
-      items: items,
+      items: items(),
       onSelected: (action) {
         close();
         action();

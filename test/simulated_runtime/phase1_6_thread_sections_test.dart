@@ -7,6 +7,39 @@ import 'simulated_runtime_harness.dart';
 
 void main() {
   group('Phase 1.6 Thread Sections & Sidebar Metadata simulated runtime', () {
+    testWidgets('desktop keeps saved pins reachable without an empty section', (
+      tester,
+    ) async {
+      const pinned = ThreadSection(
+        id: kBuiltInPinnedThreadSectionId,
+        name: 'Pinned',
+      );
+      final ordinary = createTestThread(id: 'ordinary', preview: 'Ordinary');
+      final saved = createTestThread(
+        id: 'saved-pin',
+        preview: 'Saved pin outside the loaded catalog',
+      ).copyWith(section: pinned);
+      final harness = _OrderedSectionHarness(
+        global: [ordinary],
+        ordered: [saved],
+      )..threadSections.add(pinned);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
+
+      expect(
+        find.byKey(const ValueKey('pinned-threads-heading')),
+        findsNothing,
+      );
+      expect(harness.scopedQueries, isEmpty);
+      await tester.tap(find.text('View'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Browse saved pins'));
+      await tester.pumpAndSettle();
+
+      expect(harness.scopedQueries.single.section?.id, pinned.id);
+      expect(find.text('Saved in stock Pinned only'), findsOneWidget);
+      expect(find.text('Saved pin outside the loaded catalog'), findsOneWidget);
+    });
+
     testWidgets(
       'browses the ordered section without replacing the active thread',
       (tester) async {

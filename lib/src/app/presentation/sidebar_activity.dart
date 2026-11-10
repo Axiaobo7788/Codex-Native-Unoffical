@@ -602,7 +602,8 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     } else {
       final showPinnedHeading =
           pinnedThreads.isNotEmpty ||
-          (builtInPinnedSection != null &&
+          (!widget.hasNavigationRail &&
+              builtInPinnedSection != null &&
               (query.isEmpty ||
                   builtInPinnedSection.name.toLowerCase().contains(query)));
       if (showPinnedHeading) {
