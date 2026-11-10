@@ -48,6 +48,13 @@ empty. Neither process loaded the thread in the cold probe.
   `thread/queue/add` and reported the exact frame limit. This is a
   Host request-limit result. The separate default forward-message
   budget is 8 MiB, rather than a per-submission preview guarantee.
+- A separate installed-stock run queued ten synthetic rows with
+  900,000 text bytes each. A nine-row list returned an 8,101,342 B
+  frame. A ten-row list ended the reader's Host connection with
+  `sanitized app-server message exceeds 8388608 bytes`. The
+  independent writer connection still read the first row and no
+  turn started. A row limit alone can therefore reach the existing
+  Host connection failure path.
 - Without experimental opt-in, all four builds reject
   `thread/queue/list` with `-32600` and the method-specific
   `requires experimentalApi capability` message. The successful cold
