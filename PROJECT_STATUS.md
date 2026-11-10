@@ -57,12 +57,13 @@ The ordinary project thread rows now retain their Git reference in the hover
 tooltip. A paired Linux release capture measures a 54 → 36 logical px thread
 pitch and shows Git context and row actions on hover. The pending question
 now uses the neutral surface visible in H1. The release app submitted a
-choice through the bundled Host and stock app-server. Next, compare the
-title/composer diagnostics against build `25894`. The command preview now
+choice through the bundled Host and stock app-server. The command preview
 groups the neutral output surface and full-output action in one card. The
 Linux release opened the 4 KiB preview and the first and last pages of the
 same live spool. A fresh wide capture shows the real Changes pane beside the
-timeline.
+timeline. The wide composer shows stock context usage in a ring with a
+detailed tooltip, freeing the title from its numeric badge. Next, compare
+the Home project control and the placement of user message actions.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

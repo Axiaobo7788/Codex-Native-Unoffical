@@ -33,7 +33,7 @@ class _TelemetryE2EHarness extends SimulatedRuntimeHarness {
 void main() {
   group('F10 Live Turn Telemetry & Plan Projection simulated runtime', () {
     testWidgets(
-      'renders token usage header pill, live turn plan banner, telemetry notice bar, and activity rows across turn lifecycle',
+      'renders composer context usage and live turn telemetry across the turn lifecycle',
       (tester) async {
         final harness = _TelemetryE2EHarness();
         await pumpSimulatedRuntimeApp(tester, harness: harness);
@@ -61,7 +61,7 @@ void main() {
                     status: TurnPlanStepStatus.completed,
                   ),
                   TurnPlanStepModel(
-                    step: 'Project header token pill',
+                    step: 'Project composer context usage',
                     status: TurnPlanStepStatus.inProgress,
                   ),
                   TurnPlanStepModel(
@@ -162,12 +162,30 @@ void main() {
 
         await tester.pumpAndSettle();
 
-        // 1. Header token-usage pill
+        final usage = find.byKey(const ValueKey('composer-context-usage'));
         expect(
-          find.byKey(const ValueKey('thread-token-usage-pill')),
+          find.descendant(
+            of: find.byKey(const ValueKey('floating_composer')),
+            matching: usage,
+          ),
           findsOneWidget,
         );
-        expect(find.text('12.8k / 128k tok (10%)'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('thread-token-usage-pill')),
+          findsNothing,
+        );
+        final ring = tester.widget<CircularProgressIndicator>(
+          find.descendant(
+            of: usage,
+            matching: find.byType(CircularProgressIndicator),
+          ),
+        );
+        expect(ring.value, 0.1);
+        final tooltip = tester.widget<Tooltip>(
+          find.ancestor(of: usage, matching: find.byType(Tooltip)),
+        );
+        expect(tooltip.message, startsWith('Context usage: 10% (12.8k / 128k'));
+        expect(tooltip.message, contains('Last turn:'));
 
         // 2. Live turn plan banner & step chips
         expect(

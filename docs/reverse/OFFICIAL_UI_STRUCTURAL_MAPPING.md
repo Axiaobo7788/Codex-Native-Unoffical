@@ -270,3 +270,12 @@ left-gutter user message action strip. The current bundle places the actions
 under the user bubble and reveals them on hover or focus. Header/composer
 placement has matching H1 evidence. The message-action comparison uses the
 bundle because H1 has no user bubble.
+
+The fourth pass moves the wide Desktop context indicator into the composer,
+before the model control. The native tooltip keeps the total, input, cached,
+output, reasoning and last-turn token counts. Two packaged Linux captures
+using stock token-usage updates show the numeric header badge before the
+change and a composer ring with its 10% tooltip after it. The percentage
+differs between the captures because the second fixture turn adds tokens.
+Narrow composer controls keep their existing width budget. The separate
+Linked PRs entry in the title area remains visible.

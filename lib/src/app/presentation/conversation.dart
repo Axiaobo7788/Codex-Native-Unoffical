@@ -1473,6 +1473,37 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     return '$count';
   }
 
+  static String _tokenUsageDetails(ThreadTokenUsageSnapshot usage) =>
+      'Thread total: ${usage.total.totalTokens} tokens '
+      '(in ${usage.total.inputTokens}, cached ${usage.total.cachedInputTokens}, '
+      'out ${usage.total.outputTokens}, reasoning ${usage.total.reasoningOutputTokens})\n'
+      'Last turn: ${usage.last.totalTokens} tokens';
+
+  Widget _composerContextUsage(ThreadTokenUsageSnapshot usage) {
+    final theme = OfficialCodexTheme.of(context);
+    final utilization = usage.contextWindowUtilization;
+    final summary = utilization == null
+        ? '${_formatCompactTokens(usage.total.totalTokens)} tokens'
+        : 'Context usage: ${(utilization * 100).round()}% '
+              '(${_formatCompactTokens(usage.total.totalTokens)} / '
+              '${_formatCompactTokens(usage.modelContextWindow!)} tokens)';
+    return CodexTooltip(
+      message: '$summary\n${_tokenUsageDetails(usage)}',
+      child: SizedBox.square(
+        key: const ValueKey('composer-context-usage'),
+        dimension: 14,
+        child: utilization == null
+            ? Icon(Icons.donut_large_rounded, size: 14, color: theme.textMuted)
+            : CircularProgressIndicator(
+                value: utilization,
+                strokeWidth: 2,
+                color: theme.textSecondary,
+                backgroundColor: theme.hairlineBorder,
+              ),
+      ),
+    );
+  }
+
   Widget _conversationHeader(ConversationController controller) {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
@@ -1607,15 +1638,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             ),
                           ],
                           if (controller.tokenUsage case final usage?
-                              when constraints.maxWidth >= 680) ...[
+                              when !widget.hasDesktopShell &&
+                                  constraints.maxWidth >= 680) ...[
                             const SizedBox(width: 8),
                             Flexible(
                               child: CodexTooltip(
-                                message:
-                                    'Thread total: ${usage.total.totalTokens} tokens '
-                                    '(in ${usage.total.inputTokens}, cached ${usage.total.cachedInputTokens}, '
-                                    'out ${usage.total.outputTokens}, reasoning ${usage.total.reasoningOutputTokens})\n'
-                                    'Last turn: ${usage.last.totalTokens} tokens',
+                                message: _tokenUsageDetails(usage),
                                 child: Container(
                                   key: const ValueKey(
                                     'thread-token-usage-pill',
@@ -3648,6 +3676,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       const SizedBox(width: 2),
                       if (inlineInput) Expanded(child: input),
                       if (!inlineInput && desktopComposer) const Spacer(),
+                      if (controller.tokenUsage case final usage?
+                          when desktopComposer && !compactComposer) ...[
+                        _composerContextUsage(usage),
+                        const SizedBox(width: ThemeTokens.space1),
+                      ],
                       _ComposerModelSummaryButton(
                         controller: widget.settingsController,
                         maxLabelWidth: maxModelLabelWidth,
