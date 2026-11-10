@@ -11,6 +11,11 @@ final class HistoryProtocolAdapter {
   static const _maxReviewDescriptionLength = 512;
   static const _maxOccurrenceSnippetLength = 2048;
   static const _maxOccurrenceTokenLength = 4096;
+  static const _maxMcpTextBlocks = 64;
+  static const _maxMcpTextBytes = 32 * 1024;
+  static final _richMcpTextStart = RegExp(
+    r'^[\s\u0085\uFEFF]*(?:\{|\[|```|~~~)',
+  );
 
   const HistoryProtocolAdapter({
     required this.request,
@@ -125,14 +130,20 @@ final class HistoryProtocolAdapter {
     );
   }
 
-  Future<HistoryItemPage> listItems(HistoryItemQuery query) async {
+  Future<HistoryItemPage> listItems(
+    HistoryItemQuery query, {
+    bool deferMcpText = false,
+  }) async {
     final response = await request('thread/items/list', {
       'threadId': query.threadId,
       'turnId': query.turnId,
       if (query.cursor != null) 'cursor': query.cursor,
       'limit': query.limit,
       'sortDirection': _sortDirection(query.sortDirection),
-      'deferOutput': const {'commandExecution': true},
+      'deferOutput': {
+        'commandExecution': true,
+        if (deferMcpText) 'mcpToolCall': true,
+      },
     });
     final data = response['data'];
     if (data is! List<Object?>) {
@@ -148,7 +159,17 @@ final class HistoryProtocolAdapter {
     required String threadId,
     required String turnId,
     required List<String> itemIds,
-  }) async {
+  }) async => (await _readItemEntries(
+    threadId,
+    turnId,
+    itemIds,
+  )).map(_parseItemEntry).toList(growable: false);
+
+  Future<List<Object?>> _readItemEntries(
+    String threadId,
+    String turnId,
+    List<String> itemIds,
+  ) async {
     if (itemIds.isEmpty || itemIds.length > 100) {
       throw RangeError('thread/items/read requires 1-100 item IDs.');
     }
@@ -161,7 +182,118 @@ final class HistoryProtocolAdapter {
     if (data is! List<Object?>) {
       throw const ProtocolViolation('thread/items/read data must be an array.');
     }
-    return data.map(_parseItemEntry).toList(growable: false);
+    return data;
+  }
+
+  Future<SavedMcpTextResult?> readSavedMcpText({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+  }) async {
+    const method = 'thread/items/read';
+    final List<Object?> entries;
+    try {
+      entries = await _readItemEntries(threadId, turnId, [itemId]);
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601 ||
+          (error.code == -32600 &&
+              (error.message == '$method requires experimentalApi capability' ||
+                  error.message.startsWith(
+                    'Invalid request: unknown variant `$method`',
+                  )))) {
+        throw UnsupportedError('Saved MCP text requires a compatible runtime.');
+      }
+      rethrow;
+    }
+    if (entries.isEmpty) {
+      return null;
+    }
+    final entry = entries.first;
+    final item = entry is JsonObject ? entry['item'] : null;
+    if (entries.length != 1 ||
+        entry is! JsonObject ||
+        entry['turnId'] != turnId ||
+        item is! JsonObject ||
+        item['id'] != itemId ||
+        item['type'] != 'mcpToolCall') {
+      throw const ProtocolViolation(
+        'Saved MCP read returned an unexpected item.',
+      );
+    }
+    final blocks = _plainMcpTextBlocks(
+      item,
+      deferred: entry['outputDeferred'] == true,
+    );
+    if (blocks == null || blocks.isEmpty) {
+      return null;
+    }
+    final buffer = StringBuffer();
+    var bytes = 0;
+    for (final block in blocks.cast<JsonObject>()) {
+      final text = block['text'] as String;
+      if (text.isEmpty) {
+        continue;
+      }
+      if (bytes > 0) {
+        if (bytes + 1 >= _maxMcpTextBytes) {
+          return SavedMcpTextResult(buffer.toString(), truncated: true);
+        }
+        buffer.write('\n');
+        bytes += 1;
+      }
+      for (final rune in text.runes) {
+        bytes += switch (rune) {
+          < 0x80 => 1,
+          < 0x800 => 2,
+          < 0x10000 => 3,
+          _ => 4,
+        };
+        if (bytes > _maxMcpTextBytes) {
+          return SavedMcpTextResult(buffer.toString(), truncated: true);
+        }
+        buffer.writeCharCode(rune);
+      }
+    }
+    return SavedMcpTextResult(buffer.toString(), truncated: false);
+  }
+
+  // Match the supported stock plain-text subset. An empty list is a deferred
+  // result marker. The history projection only keeps the eligibility boolean.
+  List<Object?>? _plainMcpTextBlocks(
+    JsonObject item, {
+    required bool deferred,
+  }) {
+    final context = item['appContext'];
+    final result = item['result'];
+    if (item['status'] != 'completed' ||
+        item['error'] != null ||
+        item['server'] == 'codex_app' ||
+        item['mcpAppResourceUri'] != null ||
+        item['mcpAppUi'] != null ||
+        (context is JsonObject && context['resourceUri'] != null) ||
+        result is! JsonObject ||
+        result['structuredContent'] != null ||
+        result['_meta'] != null) {
+      return null;
+    }
+    final blocks = result['content'];
+    if (blocks is! List<Object?> || blocks.length > _maxMcpTextBlocks) {
+      return null;
+    }
+    var hasText = false;
+    for (final block in blocks) {
+      if (block is! JsonObject ||
+          block.length != 2 ||
+          block['type'] != 'text') {
+        return null;
+      }
+      final text = block['text'];
+      if (text is! String || _richMcpTextStart.hasMatch(text)) {
+        return null;
+      }
+      hasText |= text.isNotEmpty;
+    }
+    return hasText || (deferred && blocks.isEmpty) ? blocks : null;
   }
 
   HistoryTurn _parseTurn(Object? value) {
@@ -264,6 +396,8 @@ final class HistoryProtocolAdapter {
           '${_optionalString(value, 'tool') ?? 'tool'}',
         ),
         status: _optionalString(value, 'status'),
+        canReadMcpText:
+            _plainMcpTextBlocks(value, deferred: outputDeferred) != null,
       ),
       'dynamicToolCall' => HistoryItem(
         id: id,

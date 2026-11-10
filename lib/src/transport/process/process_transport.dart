@@ -45,6 +45,7 @@ class ProcessTransport
     implements
         CodexTransport,
         HistoryOccurrenceGateway,
+        HistoryMcpTextGateway,
         ThreadGoalGateway,
         ThreadQueuePresenceGateway,
         ThreadReadReceiptGateway,
@@ -290,7 +291,21 @@ class ProcessTransport
 
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
-      _historyProtocol.listItems(query);
+      _historyProtocol.listItems(query, deferMcpText: true);
+
+  @override
+  bool get supportsSavedMcpText => !_closing;
+
+  @override
+  Future<SavedMcpTextResult?> readSavedMcpText({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+  }) => _historyProtocol.readSavedMcpText(
+    threadId: threadId,
+    turnId: turnId,
+    itemId: itemId,
+  );
 
   @override
   Future<List<HistoryItem>> readHistoryItems({

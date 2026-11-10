@@ -10,6 +10,33 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'saved MCP reads are single-flight and discard old turn results',
+    () async {
+      final gateway = _McpTextHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('thread-1'));
+      final item = gateway.item;
+      expect(controller.canReadSavedMcpText(item), isFalse);
+      expect(await controller.loadSavedMcpText(item), isNull);
+
+      await controller.loadTurnItems(item.turnId);
+      expect(controller.canReadSavedMcpText(item), isTrue);
+      final first = controller.loadSavedMcpText(item);
+      await expectLater(controller.loadSavedMcpText(item), throwsStateError);
+      expect(gateway.readCalls, 1);
+
+      controller.collapseTurnItems();
+      await controller.bindThread(_thread('thread-2'));
+      gateway.reply.complete(
+        const SavedMcpTextResult('Old turn', truncated: false),
+      );
+      expect(await first, isNull);
+      expect(controller.canReadSavedMcpText(item), isFalse);
+    },
+  );
+
+  test(
     'an old scope does not show opening progress in another thread',
     () async {
       final gateway = _OccurrenceHistoryGateway();
@@ -365,6 +392,39 @@ class _DelayedItemGateway extends _HistoryGateway {
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) {
     return calls++ == 0 ? pending.future : super.listHistoryItems(query);
+  }
+}
+
+class _McpTextHistoryGateway extends _HistoryGateway
+    implements HistoryMcpTextGateway {
+  _McpTextHistoryGateway() : super(turnCount: 1, itemsPerTurn: 1);
+
+  final reply = Completer<SavedMcpTextResult?>();
+  final item = const HistoryItem(
+    id: 'mcp',
+    turnId: 'turn-0',
+    kind: HistoryItemKind.activity,
+    text: 'MCP: fixture/tool',
+    status: 'completed',
+    canReadMcpText: true,
+  );
+
+  @override
+  bool get supportsSavedMcpText => true;
+
+  @override
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async =>
+      HistoryItemPage(items: [item], nextCursor: null);
+
+  @override
+  Future<SavedMcpTextResult?> readSavedMcpText({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+  }) {
+    expect((threadId, turnId, itemId), ('thread-1', 'turn-0', 'mcp'));
+    readCalls += 1;
+    return reply.future;
   }
 }
 

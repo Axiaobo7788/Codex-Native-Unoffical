@@ -65,6 +65,7 @@ class RuntimeController extends ChangeNotifier
         OutputGateway,
         HistoryGateway,
         HistoryOccurrenceGateway,
+        HistoryMcpTextGateway,
         RemoteAdminGateway,
         EcosystemGateway,
         EcosystemCatalogGateway,
@@ -358,6 +359,32 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
       _connectedTransport().listHistoryItems(query);
+
+  @override
+  bool get supportsSavedMcpText =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsSavedMcpText ?? false);
+
+  @override
+  Future<SavedMcpTextResult?> readSavedMcpText({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+  }) async {
+    final transport = _transport;
+    if (transport == null || !supportsSavedMcpText) {
+      throw UnsupportedError('Saved MCP text requires a local runtime.');
+    }
+    final result = await transport.readSavedMcpText(
+      threadId: threadId,
+      turnId: turnId,
+      itemId: itemId,
+    );
+    return identical(transport, _transport) && supportsSavedMcpText
+        ? result
+        : null;
+  }
 
   @override
   Future<List<HistoryItem>> readHistoryItems({

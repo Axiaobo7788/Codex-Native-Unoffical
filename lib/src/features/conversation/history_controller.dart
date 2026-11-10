@@ -34,6 +34,7 @@ class HistoryController extends ChangeNotifier {
   var _loadingOlderTurns = false;
   var _loadingItems = false;
   var _turnDetailsLoadFailed = false;
+  var _readingSavedMcpText = false;
   var _windowShifted = false;
   var _loadOlderVersion = 0;
   var _evictionVersion = 0;
@@ -554,6 +555,47 @@ class HistoryController extends ChangeNotifier {
         _loadingItems = false;
         _notify();
       }
+    }
+  }
+
+  HistoryMcpTextGateway? get _mcpTextGateway => switch (gateway) {
+    final HistoryMcpTextGateway local => local,
+    _ => null,
+  };
+
+  bool canReadSavedMcpText(HistoryItem item) =>
+      !_disposed &&
+      item.canReadMcpText &&
+      _thread?.ephemeral == false &&
+      _selectedTurnId == item.turnId &&
+      (_mcpTextGateway?.supportsSavedMcpText ?? false) &&
+      _selectedTurnItems.contains(item);
+
+  Future<SavedMcpTextResult?> loadSavedMcpText(HistoryItem item) async {
+    final local = _mcpTextGateway;
+    final thread = _thread;
+    if (local == null || thread == null || !canReadSavedMcpText(item)) {
+      return null;
+    }
+    if (_readingSavedMcpText) {
+      throw StateError('A saved MCP read is already in progress.');
+    }
+    final itemGeneration = _itemGeneration;
+    _readingSavedMcpText = true;
+    try {
+      final result = await local.readSavedMcpText(
+        threadId: thread.id,
+        turnId: item.turnId,
+        itemId: item.id,
+      );
+      return _isCurrentItemLoad(item.turnId, itemGeneration) ? result : null;
+    } catch (_) {
+      if (_isCurrentItemLoad(item.turnId, itemGeneration)) {
+        rethrow;
+      }
+      return null;
+    } finally {
+      _readingSavedMcpText = false;
     }
   }
 

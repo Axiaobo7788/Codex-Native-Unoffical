@@ -16,6 +16,7 @@ class HistoryItem {
     this.output,
     this.outputDeferred = false,
     this.isCommand = false,
+    this.canReadMcpText = false,
     this.attachments = const [],
   });
 
@@ -27,7 +28,15 @@ class HistoryItem {
   final OutputDescriptor? output;
   final bool outputDeferred;
   final bool isCommand;
+  final bool canReadMcpText;
   final List<UserAttachment> attachments;
+}
+
+class SavedMcpTextResult {
+  const SavedMcpTextResult(this.text, {required this.truncated});
+
+  final String text;
+  final bool truncated;
 }
 
 class HistoryTurn {
