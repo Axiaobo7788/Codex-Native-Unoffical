@@ -129,11 +129,160 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'compact direct cold Send failure surfaces conversation feedback, keeps draft and attachments, and clears on retry',
+    (tester) async {
+      final harness = _QueueGuardHarness()
+        ..queuePresence = ThreadQueuePresence.empty
+        ..resumeError = StateError(
+          'JSON-RPC error -32600: no rollout found for threadId cold',
+        );
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(720, 800),
+      );
+      await _select(tester, 'Cold queue');
+      await _attachFile(tester);
+      await tester.enterText(_composer, 'Draft during missing rollout');
+      await tester.tap(_send);
+      await tester.pumpAndSettle();
+
+      expect(harness.queueReads, ['cold']);
+      expect(harness.resumedThreadIds, ['cold']);
+      expect(harness.startedTurns, isEmpty);
+      expect(harness.steeredTurns, isEmpty);
+      expect(find.text('Draft during missing rollout'), findsOneWidget);
+      expect(_attachment, findsOneWidget);
+      expect(_resumeErrorBanner, findsOneWidget);
+      expect(
+        find.textContaining('no rollout found for threadId cold'),
+        findsOneWidget,
+      );
+
+      harness.resumeError = null;
+      await tester.tap(_send);
+      await tester.pumpAndSettle();
+
+      expect(harness.resumedThreadIds, ['cold', 'cold']);
+      expect(_resumeErrorBanner, findsNothing);
+      expect(harness.startedTurns.single.text, 'Draft during missing rollout');
+      expect(harness.startedTurns.single.attachments, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'compact queued-work explicit resume failure surfaces conversation feedback without dispatching a turn',
+    (tester) async {
+      final harness = _QueueGuardHarness()
+        ..queuePresence = ThreadQueuePresence.pending
+        ..resumeError = StateError(
+          'JSON-RPC error -32600: no rollout found for threadId cold',
+        );
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(720, 800),
+      );
+      await _select(tester, 'Cold queue');
+      await _attachFile(tester);
+      await tester.enterText(_composer, 'Queued draft');
+
+      await tester.tap(_send);
+      await tester.pumpAndSettle();
+      expect(find.text('Resume queued work?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(harness.resumedThreadIds, isEmpty);
+      expect(_resumeErrorBanner, findsNothing);
+      expect(find.text('Queued draft'), findsOneWidget);
+      expect(_attachment, findsOneWidget);
+
+      await tester.tap(_send);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume queued work'));
+      await tester.pumpAndSettle();
+
+      expect(harness.resumedThreadIds, ['cold']);
+      expect(harness.startedTurns, isEmpty);
+      expect(harness.steeredTurns, isEmpty);
+      expect(find.text('Queued draft'), findsOneWidget);
+      expect(_attachment, findsOneWidget);
+      expect(_resumeErrorBanner, findsOneWidget);
+      expect(
+        find.textContaining('no rollout found for threadId cold'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'collapsed-sidebar resume failure stays scoped to the current attempt and clears on dismiss or thread switch',
+    (tester) async {
+      final harness = _QueueGuardHarness()
+        ..queuePresence = ThreadQueuePresence.empty
+        ..resumeError = StateError(
+          'JSON-RPC error -32600: This chat uses provider_alpha',
+        );
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(1280, 720),
+      );
+      await _select(tester, 'Cold queue');
+      await tester.tap(find.byKey(const ValueKey('sidebar-collapse-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('app_shell_sidebar')), findsNothing);
+
+      await _attachFile(tester);
+      await tester.enterText(_composer, 'Collapsed draft');
+      await tester.tap(_send);
+      await tester.pumpAndSettle();
+
+      expect(harness.resumedThreadIds, ['cold']);
+      expect(harness.startedTurns, isEmpty);
+      expect(find.text('Collapsed draft'), findsOneWidget);
+      expect(_attachment, findsOneWidget);
+      expect(_resumeErrorBanner, findsOneWidget);
+      expect(
+        find.textContaining('This chat uses provider_alpha'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('conversation-resume-error-dismiss')),
+      );
+      await tester.pumpAndSettle();
+      expect(_resumeErrorBanner, findsNothing);
+      expect(find.text('Collapsed draft'), findsOneWidget);
+      expect(_attachment, findsOneWidget);
+
+      await tester.tap(_send);
+      await tester.pumpAndSettle();
+      expect(_resumeErrorBanner, findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('sidebar-expand-button')));
+      await tester.pumpAndSettle();
+      await _select(tester, 'Other cold thread');
+      expect(_resumeErrorBanner, findsNothing);
+
+      await _select(tester, 'Cold queue');
+      expect(_resumeErrorBanner, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 final _composer = find.byKey(const ValueKey('conversation-composer'));
 final _send = find.byKey(const ValueKey('composer-send-button'));
 final _attachment = find.byKey(const ValueKey('composer-attachment-chip-0'));
+final _resumeErrorBanner = find.byKey(
+  const ValueKey('conversation-resume-error-banner'),
+);
 
 Future<void> _select(WidgetTester tester, String title) async {
   await tester.tap(find.text(title));
@@ -176,6 +325,7 @@ class _QueueGuardHarness extends SimulatedRuntimeHarness {
   Completer<ThreadQueuePresence>? pendingRead;
   ThreadQueuePresence queuePresence = ThreadQueuePresence.pending;
   bool resumeAsActive = false;
+  Object? resumeError;
 
   @override
   bool get supportsThreadQueuePresence => true;
@@ -188,6 +338,10 @@ class _QueueGuardHarness extends SimulatedRuntimeHarness {
 
   @override
   Future<ThreadSummary> resumeThread(String threadId) async {
+    if (resumeError case final error?) {
+      resumedThreadIds.add(threadId);
+      throw error;
+    }
     final thread = await super.resumeThread(threadId);
     return resumeAsActive
         ? thread.copyWith(status: ThreadRuntimeStatus.active)

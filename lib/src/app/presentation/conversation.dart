@@ -141,6 +141,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   String? _linkedPrMutationError;
   String? _linkedPrMutationNotice;
   String? _queuedLinkedPrThreadId;
+  String? _conversationResumeError;
+  String? _conversationResumeErrorThreadId;
   var _linkedPrScanInFlight = false;
   var _linkedPrFormOpen = false;
   var _linkedPrMutationInFlight = false;
@@ -858,6 +860,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   _showChanges && widget.diffController.snapshot != null
                   ? _DiffView(controller: widget.diffController)
                   : _timeline(controller);
+              final resumeError = _activeConversationResumeError(
+                controller.thread?.id,
+              );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -879,6 +884,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   Expanded(child: timelineChild),
                   _ApprovalBanner(controller: widget.approvalController),
                   _UserInputBanner(controller: widget.userInputController),
+                  if (resumeError != null) _resumeErrorBanner(resumeError),
                   _composer(controller),
                 ],
               );
@@ -1354,6 +1360,103 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _activeConversationResumeError(String? currentThreadId) {
+    final error = _conversationResumeError;
+    final errorThreadId = _conversationResumeErrorThreadId;
+    if (error == null ||
+        errorThreadId == null ||
+        currentThreadId == null ||
+        errorThreadId != currentThreadId) {
+      return null;
+    }
+    final threadController = widget.threadController;
+    if (threadController != null &&
+        !threadController.selectedThreadNeedsResume(currentThreadId)) {
+      return null;
+    }
+    return error;
+  }
+
+  void _setConversationResumeError(String threadId, String errorMessage) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _conversationResumeErrorThreadId = threadId;
+      _conversationResumeError = errorMessage;
+    });
+  }
+
+  void _clearConversationResumeError() {
+    if (_conversationResumeError == null &&
+        _conversationResumeErrorThreadId == null) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _conversationResumeError = null;
+        _conversationResumeErrorThreadId = null;
+      });
+    } else {
+      _conversationResumeError = null;
+      _conversationResumeErrorThreadId = null;
+    }
+  }
+
+  Widget _resumeErrorBanner(String message) {
+    final palette = ThemeTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Container(
+            key: const ValueKey('conversation-resume-error-banner'),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ThemeTokens.space3,
+              vertical: ThemeTokens.space2,
+            ),
+            decoration: BoxDecoration(
+              color: palette.danger.withValues(alpha: 0.08),
+              border: Border.all(color: palette.danger.withValues(alpha: 0.28)),
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 16,
+                  color: palette.danger,
+                ),
+                const SizedBox(width: ThemeTokens.space2),
+                Expanded(
+                  child: Text(
+                    message,
+                    key: const ValueKey('conversation-resume-error-text'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textPrimary),
+                  ),
+                ),
+                const SizedBox(width: ThemeTokens.space1),
+                CodexIconButton(
+                  key: const ValueKey('conversation-resume-error-dismiss'),
+                  tooltip: 'Dismiss error',
+                  size: 24,
+                  onPressed: _clearConversationResumeError,
+                  icon: const Icon(Icons.close_rounded, size: 14),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -3440,6 +3543,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         resumedForSend = threadController.selectedThreadNeedsResume(
           targetThreadId,
         );
+        if (_conversationResumeError != null ||
+            _conversationResumeErrorThreadId != null) {
+          _clearConversationResumeError();
+        }
         if (resumedForSend) {
           final ready = await _confirmColdSend(
             threadController,
@@ -3449,10 +3556,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             return;
           }
         }
-        final ready = await threadController.ensureSelectedThreadLoaded(
-          targetThreadId,
-        );
-        if (!ready) {
+        final outcome = await threadController
+            .ensureSelectedThreadLoadedWithOutcome(targetThreadId);
+        if (!outcome.isLoaded) {
+          if (outcome.isFailed &&
+              mounted &&
+              _threadSelectionVersion == selectionVersion &&
+              widget.controller.thread?.id == targetThreadId) {
+            _setConversationResumeError(targetThreadId, outcome.errorMessage!);
+          }
           return;
         }
       }
@@ -3572,7 +3684,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         confirmVariant: CodexButtonVariant.primary,
       );
       if (resume && stillCold()) {
-        await threadController.resumeThread(threadId);
+        final outcome = await threadController.resumeThreadWithOutcome(
+          threadId,
+        );
+        if (outcome.isFailed &&
+            mounted &&
+            _threadSelectionVersion == selectionVersion &&
+            widget.controller.thread?.id == threadId) {
+          _setConversationResumeError(threadId, outcome.errorMessage!);
+        }
       }
       return false;
     } finally {
@@ -3875,6 +3995,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
       }
     }
+    if (_conversationResumeErrorThreadId case final errorThreadId?) {
+      if (_activeThreadId != errorThreadId ||
+          !threadController.selectedThreadNeedsResume(errorThreadId)) {
+        _conversationResumeError = null;
+        _conversationResumeErrorThreadId = null;
+      }
+    }
     if (!threadController.initialLoadStarted ||
         threadController.loading ||
         threadController.loadingMore ||
@@ -3954,6 +4081,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _linkedPrLaunchError = null;
     _linkedPrMutationError = null;
     _linkedPrMutationNotice = null;
+    _conversationResumeError = null;
+    _conversationResumeErrorThreadId = null;
     _linkedPrFormOpen = false;
     _linkedPrUrlController.clear();
     _linkedPrBranchController.clear();

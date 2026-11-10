@@ -5,6 +5,33 @@ import 'package:flutter/foundation.dart';
 import '../../domain/thread_gateway.dart';
 import '../../domain/thread_models.dart';
 
+enum ThreadResumeStatus { loaded, failed, skipped }
+
+@immutable
+class ThreadResumeOutcome {
+  const ThreadResumeOutcome._({
+    required this.status,
+    this.thread,
+    this.errorMessage,
+  });
+
+  const ThreadResumeOutcome.loaded(ThreadSummary thread)
+    : this._(status: ThreadResumeStatus.loaded, thread: thread);
+
+  const ThreadResumeOutcome.failed(String errorMessage)
+    : this._(status: ThreadResumeStatus.failed, errorMessage: errorMessage);
+
+  const ThreadResumeOutcome.skipped()
+    : this._(status: ThreadResumeStatus.skipped);
+
+  final ThreadResumeStatus status;
+  final ThreadSummary? thread;
+  final String? errorMessage;
+
+  bool get isLoaded => status == ThreadResumeStatus.loaded;
+  bool get isFailed => status == ThreadResumeStatus.failed;
+}
+
 class ThreadListController extends ChangeNotifier {
   ThreadListController({
     required this.gateway,
@@ -665,9 +692,12 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
-  Future<ThreadSummary?> resumeThread(String threadId) async {
-    if (_mutating) {
-      return null;
+  Future<ThreadSummary?> resumeThread(String threadId) async =>
+      (await resumeThreadWithOutcome(threadId)).thread;
+
+  Future<ThreadResumeOutcome> resumeThreadWithOutcome(String threadId) async {
+    if (_disposed || _mutating) {
+      return const ThreadResumeOutcome.skipped();
     }
     _mutating = true;
     _errorMessage = null;
@@ -675,16 +705,19 @@ class ThreadListController extends ChangeNotifier {
     try {
       final thread = await gateway.resumeThread(threadId);
       if (_disposed) {
-        return null;
+        return const ThreadResumeOutcome.skipped();
       }
       _unmaterializedThreadIds.remove(threadId);
       final retainedThread = _replaceInPlace(_retainReceipt(thread));
       _activateThread(retainedThread);
       _queueSelectedGoalHydration(threadId);
-      return retainedThread;
+      return ThreadResumeOutcome.loaded(retainedThread);
     } catch (error) {
-      _errorMessage = _boundedError(error);
-      return null;
+      final message = _boundedError(error);
+      if (!_disposed) {
+        _errorMessage = message;
+      }
+      return ThreadResumeOutcome.failed(message);
     } finally {
       _mutating = false;
       _notify();
@@ -1260,16 +1293,20 @@ class ThreadListController extends ChangeNotifier {
     }
   }
 
-  Future<bool> ensureSelectedThreadLoaded(String threadId) async {
+  Future<bool> ensureSelectedThreadLoaded(String threadId) async =>
+      (await ensureSelectedThreadLoadedWithOutcome(threadId)).isLoaded;
+
+  Future<ThreadResumeOutcome> ensureSelectedThreadLoadedWithOutcome(
+    String threadId,
+  ) async {
     final current = _selectedThread;
     if (current == null || current.id != threadId) {
-      return false;
+      return const ThreadResumeOutcome.skipped();
     }
     if (!selectedThreadNeedsResume(threadId)) {
-      return true;
+      return ThreadResumeOutcome.loaded(current);
     }
-    final resumed = await resumeThread(threadId);
-    return resumed != null;
+    return resumeThreadWithOutcome(threadId);
   }
 
   void _handleThreadEvent(ThreadLifecycleEvent event) {
