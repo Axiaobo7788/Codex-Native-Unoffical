@@ -14,6 +14,7 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
     this.listSkillsOverride,
     this.setSkillEnabledOverride,
     this.listPluginsOverride,
+    this.readPluginOverride,
     this.installPluginOverride,
     this.listMcpServerStatusOverride,
     this.reloadMcpServersOverride,
@@ -23,6 +24,12 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
   Future<bool> Function(String path, bool enabled)? setSkillEnabledOverride;
   Future<List<PluginSummaryModel>> Function(List<String> cwds)?
   listPluginsOverride;
+  Future<PluginDetailModel> Function(
+    String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  )?
+  readPluginOverride;
   Future<PluginInstallResultModel> Function(
     String pluginName,
     String? marketplacePath,
@@ -59,6 +66,23 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
       return override(cwds);
     }
     return super.listPlugins(cwds: cwds);
+  }
+
+  @override
+  Future<PluginDetailModel> readPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  }) {
+    final override = readPluginOverride;
+    if (override != null) {
+      return override(pluginName, marketplacePath, remoteMarketplaceName);
+    }
+    return super.readPlugin(
+      pluginName: pluginName,
+      marketplacePath: marketplacePath,
+      remoteMarketplaceName: remoteMarketplaceName,
+    );
   }
 
   @override
@@ -1916,6 +1940,76 @@ void main() {
         }
         expect(harness.installedPluginRequests.length, 2);
         expect(secondUninstall, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'expanded catalog detail refresh is bounded during a delayed read',
+      (tester) async {
+        final release = Completer<void>();
+        var detailReads = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          readPluginOverride:
+              (pluginName, marketplacePath, remoteMarketplaceName) async {
+                detailReads += 1;
+                if (detailReads > 1) {
+                  await release.future;
+                }
+                final match = harness.plugins.firstWhere(
+                  (p) => p.effectivePluginName == pluginName,
+                );
+                return PluginDetailModel(
+                  summary: match,
+                  description: 'Full detail manifest for ${match.name}.',
+                  marketplaceName: match.marketplaceName ?? 'local',
+                  marketplacePath: match.marketplacePath,
+                );
+              },
+        );
+        harness.plugins
+          ..clear()
+          ..add(
+            const PluginSummaryModel(
+              id: 'one@fixture',
+              name: 'One',
+              pluginName: 'one',
+              description: '',
+              enabled: false,
+              installed: false,
+              marketplaceName: 'fixture',
+              sourceType: 'remote',
+            ),
+          );
+        addTearDown(() {
+          if (!release.isCompleted) {
+            release.complete();
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('plugin-read-one@fixture')));
+        await tester.pumpAndSettle();
+        expect(detailReads, 1);
+
+        final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(detailReads, 2);
+
+        await tester.tap(refresh, warnIfMissed: false);
+        await tester.pumpAndSettle();
+        await tester.tap(refresh, warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(detailReads, 2);
+
+        release.complete();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
       },
     );
   });
