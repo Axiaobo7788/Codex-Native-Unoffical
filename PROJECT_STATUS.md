@@ -111,9 +111,12 @@ as verified during a real stock turn. Mouse Back/Forward use the same
 bounded Desktop thread history as the toolbar and keyboard. The Desktop
 strip includes backed Edit and Help menus. A Linux package selected,
 deleted and restored an unsent draft through Edit and handed the official
-documentation URI to the system handler. Home, open
+documentation URI to the system handler. The active activity summary groups
+stock exploration and counts command runs. The saved disclosure uses the
+stock elapsed milliseconds when present and still reads command details on
+open. Home, open
 Changes, Review, expanded activity, compact and dark/focused states have
-separate evidence gates. [Hosted CI for `738e9b2`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42907568863)
+separate evidence gates. [Hosted CI for `4d8b1fa`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42915018905)
 
 ## Current checkpoint
 

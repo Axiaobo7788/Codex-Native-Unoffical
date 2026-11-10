@@ -38,7 +38,7 @@ got here.
 | A4 Shared page/surface geometry | H1 puts sidebar and workspace inside one rounded surface. S2 has a 340 logical px default left panel, 52 px rail fallback and 42 rem content cap. | N1 and geometry tests show a single page with 52 + 288 px default, a resizable sidebar and 672 px reading/composer cap. | `5dc63ca`, `d836c16`, `c3ac6f0` | H1 physical positions depend on zoom and sidebar preference. Native's supported wide geometry follows the same logical roles. | PARITY_ACCEPTABLE | Preserve the dimensions for this state. Measure official logical gutters and resize persistence when a matched signed-in window is available. |
 | A5 Workspace header | H1 has folder/title, then thread menu, detail control and trailing panel toggle. `446282.FR4w` puts the side-panel action at right order 300 and delegates panel visibility to `ZU27.kO`. | The release has the three trailing roles and opens conversation search through the thread menu. The last control hides and restores the Goal editor with its draft. The draft also survives switching to stock Changes and back. | `0e19880`, `86eed8a`, `dafafba`, `dc7c3ee` | Native retains its linked-PR affordance and a single current Goal draft. It has no general task tab launcher. | PARTIAL | Verify the signed-in menu and simultaneous tab state. Map backed destinations while preserving link management and the bounded reading position. |
 | A6 Conversation reading/prose | H1 shows left reading-column prose with quiet inline events. `0040d5ae1a9f.css` uses 1.625 line-height for assistant Markdown. `225284.y5H2` and `o7K3` reveal older message actions on hover/focus. `34052` keeps the latest assistant actions persistent. | The stock Linux capture shows old answers without visible copy glyphs at rest. Hover reveals the action in its reserved space. The latest answer remains actionable. Desktop Markdown and streaming prose use the 1.625 line-height ratio. | `d836c16`, `650c721`, `a8d9e97`, `2a48724` | Prose block spacing, physical text size and attachment/multiline variants lack a matched comparison. H1 contains no user bubble. | PARTIAL | Compare supported paragraph/list spacing and existing attachment types with equivalent official content. Preserve the lazy parser and virtualization. |
-| A7 Thought/activity/read-run | H1 shows a quiet Thinking line and borderless read/run summary. In `225284.63835849b6.js`, `NKAf` distinguishes read/search/list/run, `reasoningItem.thinking` supplies the active label and `getw` supplies the completed disclosure. | The release shows quiet Thinking during a real stock stream, then Thought and final prose. The saved turn opens two commands and thought with the correct chevron. | `388147a`, `0a0f79c`, `31d2abd` | Titled reasoning and exact expanded grouping remain open. Official untimed fallback counts collapsed messages. Stock bounded summaries lack that count, so Native retains Turn details. | PARTIAL | Compare completed group boundaries and titled/resumed reasoning. Keep detailed item reads lazy. |
+| A7 Thought/activity/read-run | H1 shows quiet Thinking and borderless read/run. `225284.NKAf` groups exploration and pluralizes runs. `getw` supplies the completed disclosure and uses `100921.waM8/F9dY` for duration. | A stock live turn displayed one Read files segment and singular ran a command. The saved 570 ms turn displayed Worked for 0s and opened four commands only on disclosure. Thinking and subsequent Thought were verified in a separate stock stream. | `388147a`, `0a0f79c`, `31d2abd`, `0c8caca`, `f68889c` | The genuinely untimed fallback still lacks a collapsed count. Expanded item captions and grouping, titled reasoning and resumed states remain open. | PARTIAL | Translate supported saved captions from the lazy stock action metadata and `225284.O3Io`. Retain the untimed fallback and bounded detail page. |
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `309406.Ceox` orders the actions and retains dirty tab state on reopening. The `cI4i` rail applies a 13 px inset. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Switching panes retains an unsaved draft. Explicit Close returns to the saved objective. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4`, `dc7c3ee` | Native confirms clear and uses a full reading surface when both columns cannot fit. The active-strip repeat action, signed-in editor and terminal status variants remain open. | PARTIAL | Trace the repeat action and compare editor toolbar, budget and terminal states with the current official tab. |
 | A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. | The Linux release used numbered stock options, completed both steps and returned both answers. Widget tests cover arrows/Enter, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1` | H1 async free text and voice require separate supported evidence. Native Cancel sends the existing cancellation response. The renderer also has a Skip branch that can send empty answers or interrupt, depending on request state. | PARTIAL | Trace the supported stock Skip/Continue interaction independently. Keep cancellation semantics explicit and track H1 async input separately. |
@@ -50,6 +50,30 @@ and `MISSING` retain the next concrete correction. `EVIDENCE_BLOCKED`
 names the evidence a specific state requires. `HUMAN_REVIEW_PENDING` applies
 to remaining subjective differences after machine-actionable discrepancies
 are addressed. Golden State A remains active in `SELF_ITERATION`.
+
+## A7 live grouping and recorded saved duration
+
+`225284.NKAf` renders one exploration segment and a separate command
+segment with singular and plural variants. The Linux release grouped
+read, search and list into Read files and showed one run as singular
+while a real stock question remained pending. The existing output
+preview and Execution detail paths keep their bounded behavior.
+
+In a saved command fixture, stock's summary held equal second-resolution
+timestamps and `durationMs: 570`. Native previously showed Turn details.
+`225284.getw` delegates known elapsed time to `100921.waM8/F9dY`,
+which formats subsecond elapsed as 0s. Native now consumes the existing
+optional elapsed value and falls back to timestamps for older responses.
+The packaged app showed Worked for 0s, disclosed four commands and
+collapsed them again. Simulated coverage asserts one bounded page read
+and no detail request before the disclosure. The full 523-case Flutter
+suite and ASCII-path analyzer passed.
+
+The same real stock summary held user and assistant messages without
+a collapsed count. Its lazy item page included `read`, `search`,
+`listFiles` and `unknown` actions with bounded-display candidates
+for file name, path and query. That metadata supports a subsequent
+translation of expanded saved rows without any history preload.
 
 ## A0 navigation inputs
 
