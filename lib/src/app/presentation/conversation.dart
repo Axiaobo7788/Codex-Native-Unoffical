@@ -968,6 +968,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
         _usingChangesSidePane = showingChanges ? sidePane : null;
         _usingGoalEditorSidePane = splitGoalEditor;
+        final VoidCallback? toggleSidePanel;
+        if (goalEditor != null) {
+          toggleSidePanel = _closeGoalEditor;
+        } else if (showingChanges || (changes?.files.isNotEmpty ?? false)) {
+          toggleSidePanel = () => _toggleChanges(keepsTimeline: canSplit);
+        } else if (threadId != null &&
+            goal != null &&
+            goal.status != ThreadGoalStatus.complete &&
+            threadController?.canManageGoal(threadId) == true) {
+          toggleSidePanel = () => _openGoalEditor(threadId);
+        } else {
+          toggleSidePanel = null;
+        }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -975,7 +988,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _conversationHeader(controller),
+                  _conversationHeader(
+                    controller,
+                    sidePanelOpen: showingChanges || goalEditor != null,
+                    onToggleSidePanel: toggleSidePanel,
+                  ),
                   if (_searchOpen && controller.thread != null) ...[
                     _conversationSearchBar(),
                     _savedOccurrenceResults(),
@@ -1564,7 +1581,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
-  Widget _conversationHeader(ConversationController controller) {
+  Widget _conversationHeader(
+    ConversationController controller, {
+    bool sidePanelOpen = false,
+    VoidCallback? onToggleSidePanel,
+  }) {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
     final thread = controller.thread;
@@ -1598,6 +1619,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         builder: (context, constraints) {
           final showSegment = thread != null && constraints.maxWidth >= 380;
           final showSearchButton =
+              !widget.hasDesktopShell &&
               thread != null &&
               _activeCapabilities.supportsInConversationSearch &&
               constraints.maxWidth >= 520;
@@ -1780,9 +1802,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 ),
                 const SizedBox(width: ThemeTokens.space1),
               ],
-              if (thread != null && widget.hasDesktopShell)
-                _timelineDetailsButton()
-              else if (showSegment)
+              if (!widget.hasDesktopShell && showSegment)
                 CodexSegment<PresentationDetailMode>(
                   items: const [
                     CodexSegmentItem(
@@ -1961,6 +1981,28 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     icon: const Icon(Icons.more_horiz_rounded, size: 17),
                   ),
                 ),
+              ],
+              if (thread != null && widget.hasDesktopShell) ...[
+                const SizedBox(width: ThemeTokens.space1),
+                _timelineDetailsButton(),
+                if (onToggleSidePanel != null) ...[
+                  const SizedBox(width: ThemeTokens.space1),
+                  SizedBox(
+                    height: 16,
+                    child: VerticalDivider(
+                      color: theme.hairlineBorder,
+                      width: ThemeTokens.space2,
+                      thickness: OfficialCodexTheme.hairlineBorderWidth,
+                    ),
+                  ),
+                  CodexIconButton(
+                    key: const ValueKey('workspace-side-panel-toggle'),
+                    tooltip: 'Toggle side panel',
+                    selected: sidePanelOpen,
+                    onPressed: onToggleSidePanel,
+                    icon: const Icon(Icons.view_sidebar_outlined, size: 17),
+                  ),
+                ],
               ],
               if (!widget.hasDesktopShell && controller.canInterrupt) ...[
                 const SizedBox(width: ThemeTokens.space2),

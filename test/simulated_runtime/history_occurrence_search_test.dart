@@ -106,7 +106,9 @@ final _savedSearch = find.byKey(const ValueKey('conversation-search-saved'));
 final _firstHit = find.byKey(const ValueKey('conversation-saved-search-hit-0'));
 
 Future<void> _enterQuery(WidgetTester tester, String text) async {
-  await tester.tap(find.byKey(const ValueKey('conversation-search-toggle')));
+  await tester.tap(find.byKey(const ValueKey('thread-actions-menu-button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Find in conversation'));
   await tester.pumpAndSettle();
   await tester.enterText(
     find.byKey(const ValueKey('conversation-search-field')),

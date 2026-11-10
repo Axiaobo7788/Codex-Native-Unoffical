@@ -69,8 +69,10 @@ void main() {
         isTrue,
       );
       await tester.tap(
-        find.byKey(const ValueKey('conversation-search-toggle')),
+        find.byKey(const ValueKey('thread-actions-menu-button')),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Find in conversation'));
       await tester.pumpAndSettle();
       expect(
         tester.widget<CodexComposer>(find.byType(CodexComposer)).isFocused,
@@ -760,7 +762,22 @@ void main() {
       await tester.pump();
 
       expect(find.text('2 files shown'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('changes-view-button')));
+      final sidePanelToggle = find.byKey(
+        const ValueKey('workspace-side-panel-toggle'),
+      );
+      final threadMenu = find.byKey(
+        const ValueKey('thread-actions-menu-button'),
+      );
+      final detailMenu = find.byKey(const ValueKey('timeline-details-button'));
+      expect(
+        tester.getCenter(threadMenu).dx,
+        lessThan(tester.getCenter(detailMenu).dx),
+      );
+      expect(
+        tester.getCenter(detailMenu).dx,
+        lessThan(tester.getCenter(sidePanelToggle).dx),
+      );
+      await tester.tap(sidePanelToggle);
       await tester.pumpAndSettle();
       final changesPane = find.byKey(const ValueKey('desktop-changes-pane'));
       final timeline = find.byKey(const ValueKey('conversation-timeline'));
@@ -803,7 +820,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(changesPane, findsOneWidget);
       expect(find.text('+second'), findsOneWidget);
-      await tester.tap(find.byTooltip('Close Changes pane'));
+      await tester.tap(sidePanelToggle);
       await tester.pumpAndSettle();
       expect(changesPane, findsNothing);
       expect(timeline, findsOneWidget);

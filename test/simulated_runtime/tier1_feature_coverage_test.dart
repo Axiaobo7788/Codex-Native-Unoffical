@@ -1575,8 +1575,10 @@ void main() {
         expect(find.text('Original response v1'), findsOneWidget);
 
         await tester.tap(
-          find.byKey(const ValueKey('conversation-search-toggle')),
+          find.byKey(const ValueKey('thread-actions-menu-button')),
         );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Find in conversation'));
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byKey(const ValueKey('conversation-search-field')),
@@ -1653,12 +1655,12 @@ void main() {
         await tester.tap(find.text('Search & Mode thread'));
         await tester.pumpAndSettle();
 
-        // 1. Open in-conversation search via header toggle
-        final searchToggle = find.byKey(
-          const ValueKey('conversation-search-toggle'),
+        // 1. Open in-conversation search from the workspace menu.
+        await tester.tap(
+          find.byKey(const ValueKey('thread-actions-menu-button')),
         );
-        expect(searchToggle, findsOneWidget);
-        await tester.tap(searchToggle);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Find in conversation'));
         await tester.pumpAndSettle();
 
         expect(
