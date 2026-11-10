@@ -710,6 +710,10 @@ class ProcessTransport
       _runtimeDiagnosticsProtocol.readModelProviderCapabilities();
 
   @override
+  Future<ModelProviderInventorySnapshot> listModelProviders() =>
+      _runtimeDiagnosticsProtocol.listModelProviders();
+
+  @override
   Future<HooksDiagnosticsSnapshot> listHooks({
     List<String> cwds = const [],
     String? threadId,

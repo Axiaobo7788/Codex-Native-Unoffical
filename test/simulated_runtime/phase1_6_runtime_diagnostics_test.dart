@@ -9,7 +9,80 @@ import 'simulated_runtime_harness.dart';
 void main() {
   group('F11 Bounded Local Runtime Diagnostics simulated runtime', () {
     testWidgets(
-      'renders all 6 bounded diagnostic cards in Runtime details and refreshes on account/updated and account/rateLimits/updated',
+      'provider inventory is lazy, bounded, and separates missing from failure',
+      (tester) async {
+        final harness = SimulatedRuntimeHarness()
+          ..modelProviderInventory = ModelProviderInventorySnapshot(
+            providers: [
+              for (var i = 0; i < maxModelProviders; i++)
+                ModelProviderInventoryEntry(
+                  name: 'Synthetic provider $i',
+                  kind: ModelProviderKind.customGateway,
+                  isDefault: i == 0,
+                ),
+            ],
+            reportedCount: maxModelProviders + 1,
+          );
+        await pumpSimulatedRuntimeApp(
+          tester,
+          harness: harness,
+          size: const Size(720, 800),
+        );
+        expect(harness.providerInventoryReadCount, 0);
+
+        await tester.tap(find.text('Connected'));
+        await tester.pumpAndSettle();
+
+        expect(harness.providerInventoryReadCount, 1);
+        expect(find.text('Synthetic provider 0 · Default'), findsOneWidget);
+        expect(
+          find.text(
+            'Showing $maxModelProviders of ${maxModelProviders + 1} providers.',
+          ),
+          findsOneWidget,
+        );
+
+        final refresh = find.byKey(
+          const ValueKey('runtime-diagnostics-refresh-button'),
+        );
+        final inventory = find.byKey(
+          const ValueKey('runtime-diagnostics-providers-card'),
+        );
+        final errors = find.byKey(const ValueKey('runtime-diagnostics-error'));
+        harness.modelProviderInventory =
+            const ModelProviderInventorySnapshot.unsupported();
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(harness.providerInventoryReadCount, 2);
+        expect(inventory, findsOneWidget);
+        expect(
+          find.text('Unavailable on this runtime version.'),
+          findsOneWidget,
+        );
+        expect(errors, findsNothing);
+
+        harness.modelProviderInventoryError = StateError(
+          'https://provider-fixture.invalid/',
+        );
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(harness.providerInventoryReadCount, 3);
+        expect(inventory, findsNothing);
+        expect(
+          find.textContaining('Could not read the provider inventory.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('provider-fixture.invalid'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('runtime-diagnostics-capabilities-card')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'renders the baseline bounded diagnostic cards in Runtime details and refreshes on account/updated and account/rateLimits/updated',
       (tester) async {
         final harness = SimulatedRuntimeHarness(
           initialThreads: [
@@ -38,7 +111,7 @@ void main() {
         expect(harness.providerCapabilitiesReadCount, 1);
         expect(harness.hooksListCount, 1);
 
-        // Verify all 6 bounded cards are present with expected de-identified data.
+        // Verify the baseline bounded cards are present with expected de-identified data.
         expect(
           find.byKey(const ValueKey('runtime-diagnostics-account-card')),
           findsOneWidget,
@@ -138,7 +211,7 @@ void main() {
         expect(find.text('pro'), findsWidgets);
         expect(find.textContaining('19% used · 300m window'), findsOneWidget);
 
-        // Manual refresh button reloads all 7 diagnostic RPCs.
+        // Manual refresh reloads the baseline diagnostic RPCs.
         await tester.tap(
           find.byKey(const ValueKey('runtime-diagnostics-refresh-button')),
         );
@@ -292,6 +365,7 @@ void main() {
         expect(harness.configReadCount, 0);
         expect(harness.configRequirementsReadCount, 0);
         expect(harness.providerCapabilitiesReadCount, 0);
+        expect(harness.providerInventoryReadCount, 0);
         expect(harness.hooksListCount, 0);
       },
     );

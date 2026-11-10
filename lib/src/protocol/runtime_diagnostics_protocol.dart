@@ -15,6 +15,10 @@ final class RuntimeDiagnosticsProtocolAdapter {
   final ProtocolRequest request;
   final Stream<RuntimeDiagnosticsEvent> events;
 
+  static final _unsafeProviderLabelCharacters = RegExp(
+    r'[\x00-\x1F\x7F-\x9F\u061C\u200E\u200F\u2028-\u202E\u2066-\u2069]+',
+  );
+
   Future<AccountDiagnosticsSnapshot> readAccount({
     bool refreshToken = false,
   }) async {
@@ -471,6 +475,70 @@ final class RuntimeDiagnosticsProtocolAdapter {
         'webSearch',
         context: 'modelProvider/capabilities/read',
       ),
+    );
+  }
+
+  Future<ModelProviderInventorySnapshot> listModelProviders() async {
+    const method = 'modelProvider/list';
+    final JsonObject response;
+    try {
+      response = await request(method, const {});
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601 ||
+          (error.code == -32600 &&
+              error.message.startsWith(
+                'Invalid request: unknown variant `$method`',
+              ))) {
+        return const ModelProviderInventorySnapshot.unsupported();
+      }
+      rethrow;
+    }
+
+    final data = response['data'];
+    final defaultId = response['defaultProviderId'];
+    if (data is! List<Object?> || defaultId is! String || defaultId.isEmpty) {
+      throw const ProtocolViolation('Invalid modelProvider/list response.');
+    }
+
+    final providers = <ModelProviderInventoryEntry>[];
+    for (final provider in data.take(maxModelProviders)) {
+      if (provider is! JsonObject) {
+        throw const ProtocolViolation('Invalid modelProvider/list entry.');
+      }
+      final id = provider['id'];
+      final rawName = provider['name'];
+      if (id is! String || rawName is! String) {
+        throw const ProtocolViolation('Invalid modelProvider/list identity.');
+      }
+      final settings = provider['settings'];
+      if (settings is! JsonObject || settings['type'] is! String) {
+        throw const ProtocolViolation('Invalid modelProvider/list settings.');
+      }
+
+      // Raw endpoint, auth and cloud settings belong to the stock runtime.
+      // Keep only the kind, a display name and the exact default comparison.
+      final name = _truncateString(
+        rawName,
+        maxDiagnosticsLabelLength,
+      ).replaceAll(_unsafeProviderLabelCharacters, ' ').trim();
+      providers.add(
+        ModelProviderInventoryEntry(
+          name: name.isEmpty ? 'Unnamed provider' : name,
+          kind: switch (settings['type']) {
+            'openai' => ModelProviderKind.openai,
+            'customGateway' => ModelProviderKind.customGateway,
+            'bedrock' => ModelProviderKind.bedrock,
+            'gcp' => ModelProviderKind.gcp,
+            _ => ModelProviderKind.other,
+          },
+          isDefault: id == defaultId,
+        ),
+      );
+    }
+
+    return ModelProviderInventorySnapshot(
+      providers: providers,
+      reportedCount: data.length,
     );
   }
 
