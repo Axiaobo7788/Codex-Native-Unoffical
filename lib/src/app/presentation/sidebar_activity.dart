@@ -1015,6 +1015,7 @@ Future<void> _showThreadGoalDialog(
   ThreadListController controller,
   String threadId, {
   bool Function()? isCurrent,
+  bool editOnly = false,
 }) async {
   bool canContinue() =>
       controller.canManageGoal(threadId) && (isCurrent?.call() ?? true);
@@ -1024,10 +1025,30 @@ Future<void> _showThreadGoalDialog(
 
   final change = await showDialog<_GoalDialogResult>(
     context: context,
-    builder: (context) => _ThreadGoalDialog(goal: loaded.goal),
+    builder: (context) =>
+        _ThreadGoalDialog(goal: loaded.goal, editOnly: editOnly),
   );
   if (!context.mounted || !canContinue() || change == null) return;
 
+  await _applyThreadGoalChange(
+    context,
+    controller,
+    threadId,
+    loaded.goal,
+    change,
+    canContinue: canContinue,
+  );
+}
+
+Future<void> _applyThreadGoalChange(
+  BuildContext context,
+  ThreadListController controller,
+  String threadId,
+  ThreadGoal? expectedGoal,
+  _GoalDialogResult change, {
+  required bool Function() canContinue,
+}) async {
+  if (!canContinue() || controller.mutating) return;
   if (change.clear) {
     final confirmed = await _confirmDesktopAction(
       context,
@@ -1035,9 +1056,10 @@ Future<void> _showThreadGoalDialog(
       message: 'Codex will stop using this saved objective for future turns.',
       confirmLabel: 'Clear goal',
     );
-    if (!confirmed || !context.mounted || !canContinue()) return;
+    if (!confirmed) return;
   }
-  if (!identical(controller.goalForThread(threadId), loaded.goal)) {
+  if (!context.mounted || !canContinue() || controller.mutating) return;
+  if (!identical(controller.goalForThread(threadId), expectedGoal)) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('The goal changed. Open it again to continue.'),
@@ -1063,9 +1085,10 @@ typedef _GoalDialogResult = ({
 });
 
 class _ThreadGoalDialog extends StatefulWidget {
-  const _ThreadGoalDialog({required this.goal});
+  const _ThreadGoalDialog({required this.goal, required this.editOnly});
 
   final ThreadGoal? goal;
+  final bool editOnly;
 
   @override
   State<_ThreadGoalDialog> createState() => _ThreadGoalDialogState();
@@ -1108,7 +1131,11 @@ class _ThreadGoalDialogState extends State<_ThreadGoalDialog> {
         ),
       ),
       scrollable: true,
-      title: Text(goal == null ? 'New goal' : 'Thread goal'),
+      title: Text(
+        goal == null
+            ? 'New goal'
+            : (widget.editOnly ? 'Edit goal' : 'Thread goal'),
+      ),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -1134,7 +1161,7 @@ class _ThreadGoalDialogState extends State<_ThreadGoalDialog> {
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(labelText: 'Objective'),
             ),
-            if (goal != null) ...[
+            if (goal != null && !widget.editOnly) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,

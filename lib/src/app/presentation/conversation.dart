@@ -957,17 +957,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       goal != null)
                     _desktopGoalStrip(
                       goal,
-                      onManage: threadController.canManageGoal(threadId)
-                          ? () => unawaited(
-                              _showThreadGoalDialog(
-                                context,
-                                threadController,
-                                threadId,
-                                isCurrent: () =>
-                                    controller.thread?.id == threadId,
-                              ),
-                            )
-                          : null,
+                      threadController,
+                      threadId,
+                      isCurrent: () => controller.thread?.id == threadId,
+                      showElapsed: constraints.maxWidth >= 320,
                     ),
                   if (constrainApproval && constrainUserInput)
                     Flexible(
@@ -1965,8 +1958,36 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _scheduleThreadScrollRestore();
   }
 
-  Widget _desktopGoalStrip(ThreadGoal goal, {VoidCallback? onManage}) {
+  Widget _desktopGoalStrip(
+    ThreadGoal goal,
+    ThreadListController controller,
+    String threadId, {
+    required bool Function() isCurrent,
+    required bool showElapsed,
+  }) {
     final theme = OfficialCodexTheme.of(context);
+    final canManage = controller.canManageGoal(threadId);
+    final actionsEnabled = canManage && !controller.mutating;
+    final nextStatus = switch (goal.status) {
+      ThreadGoalStatus.active => ThreadGoalStatus.paused,
+      ThreadGoalStatus.paused ||
+      ThreadGoalStatus.blocked ||
+      ThreadGoalStatus.usageLimited => ThreadGoalStatus.active,
+      _ => null,
+    };
+    void applyChange({ThreadGoalStatus? status, bool clear = false}) {
+      unawaited(
+        _applyThreadGoalChange(
+          context,
+          controller,
+          threadId,
+          goal,
+          (objective: null, status: status, clear: clear),
+          canContinue: () => isCurrent() && controller.canManageGoal(threadId),
+        ),
+      );
+    }
+
     final duration = Duration(seconds: goal.timeUsedSeconds);
     final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
@@ -2032,7 +2053,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (elapsed.isNotEmpty)
+              if (showElapsed && elapsed.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: ThemeTokens.space2,
@@ -2048,14 +2069,51 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ),
                   ),
                 ),
-              if (onManage != null)
+              if (canManage) ...[
                 CodexIconButton(
-                  key: const ValueKey('desktop-thread-goal-manage'),
-                  tooltip: 'Manage current goal',
-                  onPressed: onManage,
+                  key: const ValueKey('desktop-thread-goal-clear'),
+                  tooltip: 'Clear goal',
+                  onPressed: actionsEnabled
+                      ? () => applyChange(clear: true)
+                      : null,
                   size: 28,
-                  icon: const Icon(Icons.more_horiz_rounded, size: 16),
+                  icon: const Icon(Icons.delete_outline, size: 16),
                 ),
+                if (nextStatus != null)
+                  CodexIconButton(
+                    key: const ValueKey('desktop-thread-goal-status'),
+                    tooltip: nextStatus == ThreadGoalStatus.active
+                        ? 'Resume goal'
+                        : 'Pause goal',
+                    onPressed: actionsEnabled
+                        ? () => applyChange(status: nextStatus)
+                        : null,
+                    size: 28,
+                    icon: Icon(
+                      nextStatus == ThreadGoalStatus.active
+                          ? Icons.play_circle_outline
+                          : Icons.pause_circle_outline,
+                      size: 16,
+                    ),
+                  ),
+                CodexIconButton(
+                  key: const ValueKey('desktop-thread-goal-edit'),
+                  tooltip: 'Edit goal',
+                  onPressed: actionsEnabled
+                      ? () => unawaited(
+                          _showThreadGoalDialog(
+                            context,
+                            controller,
+                            threadId,
+                            isCurrent: isCurrent,
+                            editOnly: true,
+                          ),
+                        )
+                      : null,
+                  size: 28,
+                  icon: const Icon(Icons.open_in_full_rounded, size: 14),
+                ),
+              ],
             ],
           ),
         ),

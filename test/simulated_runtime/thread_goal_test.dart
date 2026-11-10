@@ -67,30 +67,34 @@ void main() {
     expect(harness.goal?.objective, 'Validate the feature');
     expect(harness.goal?.status, ThreadGoalStatus.paused);
 
-    await tester.tap(find.byTooltip('Manage current goal'));
+    await tester.tap(find.byTooltip('Edit goal'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Resume goal'));
+    expect(find.text('Edit goal'), findsOneWidget);
+    expect(find.text('Validate the feature'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    final readsBeforeQuickActions = harness.goalReads;
+    await tester.tap(find.byTooltip('Resume goal'));
     await tester.pumpAndSettle();
     expect(harness.goal?.status, ThreadGoalStatus.active);
 
-    await openGoal();
-    await tester.tap(find.text('Pause goal'));
+    await tester.tap(find.byTooltip('Pause goal'));
     await tester.pumpAndSettle();
     expect(harness.goal?.status, ThreadGoalStatus.paused);
 
-    await openGoal();
-    await tester.tap(find.text('Clear goal…'));
+    await tester.tap(find.byTooltip('Clear goal'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(harness.goal, isNotNull);
 
-    await openGoal();
-    await tester.tap(find.text('Clear goal…'));
+    await tester.tap(find.byTooltip('Clear goal'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Clear goal'));
     await tester.pumpAndSettle();
     expect(harness.goal, isNull);
+    expect(harness.goalReads, readsBeforeQuickActions);
     expect(
       find.byKey(const ValueKey('desktop-thread-goal-strip')),
       findsNothing,
