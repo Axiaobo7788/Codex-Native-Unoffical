@@ -2372,7 +2372,6 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     final reachableIds = plugins.map((p) => p.id).toSet();
     _expandedPluginIds.retainAll(reachableIds);
     _readingPluginIds.retainAll(reachableIds);
-    _mutatingPluginIds.retainAll(reachableIds);
     _pluginDetails.removeWhere(
       (id, _) =>
           !reachableIds.contains(id) ||
@@ -3077,7 +3076,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     final catalog = _catalogGateway;
     if (catalog == null ||
         _pluginsLoading ||
-        _mutatingPluginIds.contains(plugin.id)) {
+        _pluginsRefreshInFlight != null ||
+        _mutatingPluginIds.isNotEmpty) {
       return;
     }
     setState(() {
@@ -3131,7 +3131,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     final catalog = _catalogGateway;
     if (catalog == null ||
         _pluginsLoading ||
-        _mutatingPluginIds.contains(plugin.id)) {
+        _pluginsRefreshInFlight != null ||
+        _mutatingPluginIds.isNotEmpty) {
       return;
     }
     setState(() {
@@ -3680,7 +3681,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                               onPressed:
                                   !_pluginsLoading &&
                                       plugin.canInstall &&
-                                      !_mutatingPluginIds.contains(plugin.id)
+                                      _mutatingPluginIds.isEmpty
                                   ? () => _installPlugin(plugin)
                                   : null,
                               label: 'Install',
@@ -3694,7 +3695,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                               onPressed:
                                   !_pluginsLoading &&
                                       plugin.canUninstall &&
-                                      !_mutatingPluginIds.contains(plugin.id)
+                                      _mutatingPluginIds.isEmpty
                                   ? () => _uninstallPlugin(plugin)
                                   : null,
                               label: 'Uninstall',

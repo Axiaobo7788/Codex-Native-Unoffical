@@ -14,6 +14,7 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
     this.listSkillsOverride,
     this.setSkillEnabledOverride,
     this.listPluginsOverride,
+    this.installPluginOverride,
     this.listMcpServerStatusOverride,
     this.reloadMcpServersOverride,
   });
@@ -22,6 +23,13 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
   Future<bool> Function(String path, bool enabled)? setSkillEnabledOverride;
   Future<List<PluginSummaryModel>> Function(List<String> cwds)?
   listPluginsOverride;
+  Future<PluginInstallResultModel> Function(
+    String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  )?
+  installPluginOverride;
   Future<List<McpServerStatusModel>> Function()? listMcpServerStatusOverride;
   Future<void> Function()? reloadMcpServersOverride;
 
@@ -51,6 +59,30 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
       return override(cwds);
     }
     return super.listPlugins(cwds: cwds);
+  }
+
+  @override
+  Future<PluginInstallResultModel> installPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  }) {
+    final override = installPluginOverride;
+    if (override != null) {
+      return override(
+        pluginName,
+        marketplacePath,
+        remoteMarketplaceName,
+        installAttemptId,
+      );
+    }
+    return super.installPlugin(
+      pluginName: pluginName,
+      marketplacePath: marketplacePath,
+      remoteMarketplaceName: remoteMarketplaceName,
+      installAttemptId: installAttemptId,
+    );
   }
 
   @override
@@ -1758,6 +1790,132 @@ void main() {
         await tester.pumpAndSettle();
         expect(mutations, 2);
         expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'second plugin write cannot reuse an earlier catalog snapshot',
+      (tester) async {
+        final firstWrite = Completer<void>();
+        final secondWrite = Completer<void>();
+        final firstReadback = Completer<void>();
+        var reads = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) async {
+            reads += 1;
+            final snapshot = List<PluginSummaryModel>.unmodifiable(
+              harness.plugins,
+            );
+            if (reads == 2) {
+              await firstReadback.future;
+            }
+            return snapshot;
+          },
+          installPluginOverride:
+              (
+                pluginName,
+                marketplacePath,
+                remoteMarketplaceName,
+                installAttemptId,
+              ) async {
+                await (pluginName == 'one' ? firstWrite : secondWrite).future;
+                harness.installedPluginRequests.add((
+                  pluginName: pluginName,
+                  marketplacePath: marketplacePath,
+                  remoteMarketplaceName: remoteMarketplaceName,
+                ));
+                for (var i = 0; i < harness.plugins.length; i++) {
+                  final current = harness.plugins[i];
+                  if (current.effectivePluginName == pluginName) {
+                    harness.plugins[i] = PluginSummaryModel(
+                      id: current.id,
+                      name: current.name,
+                      pluginName: current.pluginName,
+                      description: current.description,
+                      enabled: true,
+                      installed: true,
+                      version: current.version,
+                      marketplaceName: current.marketplaceName,
+                      marketplacePath: current.marketplacePath,
+                      sourceType: current.sourceType,
+                      authPolicy: current.authPolicy,
+                      installPolicy: current.installPolicy,
+                    );
+                  }
+                }
+                return const PluginInstallResultModel(authPolicy: 'ON_INSTALL');
+              },
+        );
+        harness.plugins
+          ..clear()
+          ..addAll([
+            const PluginSummaryModel(
+              id: 'one@fixture',
+              name: 'One',
+              pluginName: 'one',
+              description: '',
+              enabled: false,
+              installed: false,
+              marketplaceName: 'fixture',
+              sourceType: 'remote',
+            ),
+            const PluginSummaryModel(
+              id: 'two@fixture',
+              name: 'Two',
+              pluginName: 'two',
+              description: '',
+              enabled: false,
+              installed: false,
+              marketplaceName: 'fixture',
+              sourceType: 'remote',
+            ),
+          ]);
+        addTearDown(() {
+          for (final pending in [firstWrite, secondWrite, firstReadback]) {
+            if (!pending.isCompleted) {
+              pending.complete();
+            }
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Plugins (2)'));
+        await tester.pumpAndSettle();
+
+        final firstInstall = find.byKey(
+          const ValueKey('plugin-install-one@fixture'),
+        );
+        final secondInstall = find.byKey(
+          const ValueKey('plugin-install-two@fixture'),
+        );
+
+        await tester.tap(firstInstall);
+        await tester.pump();
+        await tester.tap(secondInstall, warnIfMissed: false);
+        await tester.pump();
+
+        firstWrite.complete();
+        await tester.pump();
+        expect(reads, 2);
+
+        secondWrite.complete();
+        await tester.pump();
+        firstReadback.complete();
+        await tester.pumpAndSettle();
+
+        final secondUninstall = find.byKey(
+          const ValueKey('plugin-uninstall-two@fixture'),
+        );
+        if (secondUninstall.evaluate().isEmpty &&
+            harness.installedPluginRequests.length == 1) {
+          await tester.tap(secondInstall);
+          await tester.pumpAndSettle();
+        }
+        expect(harness.installedPluginRequests.length, 2);
+        expect(secondUninstall, findsOneWidget);
       },
     );
   });
