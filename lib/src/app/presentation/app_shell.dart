@@ -40,48 +40,16 @@ class RuntimeStatusScreen extends StatelessWidget {
 
   Widget _body(BuildContext context) {
     return switch (controller.snapshot.state) {
-      RuntimeConnectionState.connected => LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < _desktopSplitMinimumWidth) {
-            final conversation = _ConversationPanel(
-              controller: conversationController,
-              threadController: threadController,
-              historyController: historyController,
-              approvalController: approvalController,
-              userInputController: userInputController,
-              settingsController: settingsController,
-              diffController: diffController,
-              outputGateway: controller,
-              transportCapabilities: controller.capabilities,
-              defaultWorkingDirectory: defaultWorkingDirectory,
-            );
-            return _CompactWorkspace(
-              key: const ValueKey('compact-workspace'),
-              threadController: threadController,
-              sidebarBuilder: (onThreadSelected) => _ThreadPanel(
-                controller: threadController,
-                settingsController: settingsController,
-                runtimeController: controller,
-                userInputController: userInputController,
-                defaultWorkingDirectory: defaultWorkingDirectory,
-                onThreadSelected: onThreadSelected,
-              ),
-              conversation: conversation,
-            );
-          }
-          return _DesktopSplitWorkspace(
-            key: const ValueKey('desktop-split-workspace'),
-            runtimeController: controller,
-            threadController: threadController,
-            conversationController: conversationController,
-            historyController: historyController,
-            approvalController: approvalController,
-            userInputController: userInputController,
-            settingsController: settingsController,
-            diffController: diffController,
-            defaultWorkingDirectory: defaultWorkingDirectory,
-          );
-        },
+      RuntimeConnectionState.connected => _ConnectedWorkspace(
+        runtimeController: controller,
+        threadController: threadController,
+        conversationController: conversationController,
+        historyController: historyController,
+        approvalController: approvalController,
+        userInputController: userInputController,
+        settingsController: settingsController,
+        diffController: diffController,
+        defaultWorkingDirectory: defaultWorkingDirectory,
       ),
       RuntimeConnectionState.remoteReadOnly => _StandaloneSurface(
         controller: controller,
@@ -104,9 +72,8 @@ class RuntimeStatusScreen extends StatelessWidget {
   }
 }
 
-class _DesktopSplitWorkspace extends StatefulWidget {
-  const _DesktopSplitWorkspace({
-    super.key,
+class _ConnectedWorkspace extends StatefulWidget {
+  const _ConnectedWorkspace({
     required this.runtimeController,
     required this.threadController,
     required this.conversationController,
@@ -118,6 +85,93 @@ class _DesktopSplitWorkspace extends StatefulWidget {
     required this.defaultWorkingDirectory,
   });
 
+  final RuntimeController runtimeController;
+  final ThreadListController threadController;
+  final ConversationController conversationController;
+  final HistoryController historyController;
+  final ApprovalController approvalController;
+  final UserInputController userInputController;
+  final ExecutionSettingsController settingsController;
+  final DiffController diffController;
+  final String defaultWorkingDirectory;
+
+  @override
+  State<_ConnectedWorkspace> createState() => _ConnectedWorkspaceState();
+}
+
+class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
+  final _conversationKey = GlobalKey<_ConversationPanelState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < _desktopSplitMinimumWidth) {
+          final hasActiveConversation =
+              widget.threadController.selectedThread != null ||
+              (_conversationKey.currentState?.hasComposerDraft ?? false);
+          return _CompactWorkspace(
+            key: const ValueKey('compact-workspace'),
+            threadController: widget.threadController,
+            initialShowSidebar: !hasActiveConversation,
+            sidebarBuilder: (onThreadSelected) => _ThreadPanel(
+              controller: widget.threadController,
+              settingsController: widget.settingsController,
+              runtimeController: widget.runtimeController,
+              userInputController: widget.userInputController,
+              defaultWorkingDirectory: widget.defaultWorkingDirectory,
+              onThreadSelected: onThreadSelected,
+            ),
+            conversationBuilder: (isOffstage) => _ConversationPanel(
+              key: _conversationKey,
+              controller: widget.conversationController,
+              threadController: widget.threadController,
+              historyController: widget.historyController,
+              approvalController: widget.approvalController,
+              userInputController: widget.userInputController,
+              settingsController: widget.settingsController,
+              diffController: widget.diffController,
+              outputGateway: widget.runtimeController,
+              transportCapabilities: widget.runtimeController.capabilities,
+              defaultWorkingDirectory: widget.defaultWorkingDirectory,
+              isOffstage: isOffstage,
+            ),
+          );
+        }
+        return _DesktopSplitWorkspace(
+          key: const ValueKey('desktop-split-workspace'),
+          conversationKey: _conversationKey,
+          runtimeController: widget.runtimeController,
+          threadController: widget.threadController,
+          conversationController: widget.conversationController,
+          historyController: widget.historyController,
+          approvalController: widget.approvalController,
+          userInputController: widget.userInputController,
+          settingsController: widget.settingsController,
+          diffController: widget.diffController,
+          defaultWorkingDirectory: widget.defaultWorkingDirectory,
+        );
+      },
+    );
+  }
+}
+
+class _DesktopSplitWorkspace extends StatefulWidget {
+  const _DesktopSplitWorkspace({
+    super.key,
+    required this.conversationKey,
+    required this.runtimeController,
+    required this.threadController,
+    required this.conversationController,
+    required this.historyController,
+    required this.approvalController,
+    required this.userInputController,
+    required this.settingsController,
+    required this.diffController,
+    required this.defaultWorkingDirectory,
+  });
+
+  final GlobalKey<_ConversationPanelState> conversationKey;
   final RuntimeController runtimeController;
   final ThreadListController threadController;
   final ConversationController conversationController;
@@ -189,6 +243,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: _ConversationPanel(
+                  key: widget.conversationKey,
                   controller: widget.conversationController,
                   threadController: widget.threadController,
                   historyController: widget.historyController,
@@ -215,26 +270,30 @@ class _CompactWorkspace extends StatefulWidget {
   const _CompactWorkspace({
     super.key,
     required this.threadController,
+    required this.initialShowSidebar,
     required this.sidebarBuilder,
-    required this.conversation,
+    required this.conversationBuilder,
   });
 
   final ThreadListController threadController;
+  final bool initialShowSidebar;
   final Widget Function(VoidCallback onThreadSelected) sidebarBuilder;
-  final Widget conversation;
+  final Widget Function(bool isOffstage) conversationBuilder;
 
   @override
   State<_CompactWorkspace> createState() => _CompactWorkspaceState();
 }
 
 class _CompactWorkspaceState extends State<_CompactWorkspace> {
-  var _showSidebar = true;
+  late bool _showSidebar;
   String? _selectedThreadId;
+  final _focusNode = FocusNode(debugLabel: 'compact-workspace');
 
   @override
   void initState() {
     super.initState();
     _selectedThreadId = widget.threadController.selectedThread?.id;
+    _showSidebar = widget.initialShowSidebar && _selectedThreadId == null;
     widget.threadController.addListener(_handleThreadSelection);
   }
 
@@ -252,7 +311,22 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
   @override
   void dispose() {
     widget.threadController.removeListener(_handleThreadSelection);
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _setShowSidebar(bool value) {
+    if (_showSidebar == value || !mounted) {
+      return;
+    }
+    setState(() => _showSidebar = value);
+    if (value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _showSidebar && !_focusNode.hasFocus) {
+          _focusNode.requestFocus();
+        }
+      });
+    }
   }
 
   @override
@@ -262,11 +336,12 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () {
           if (_showSidebar) {
-            setState(() => _showSidebar = false);
+            _setShowSidebar(false);
           }
         },
       },
       child: Focus(
+        focusNode: _focusNode,
         autofocus: true,
         child: Column(
           children: [
@@ -286,8 +361,7 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
                     tooltip: _showSidebar
                         ? 'Show conversation'
                         : 'Show threads',
-                    onPressed: () =>
-                        setState(() => _showSidebar = !_showSidebar),
+                    onPressed: () => _setShowSidebar(!_showSidebar),
                     icon: Icon(
                       _showSidebar
                           ? Icons.chat_bubble_outline_rounded
@@ -317,16 +391,30 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
               ),
             ),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                child: KeyedSubtree(
-                  key: ValueKey(_showSidebar),
-                  child: _showSidebar
-                      ? widget.sidebarBuilder(_closeSidebar)
-                      : widget.conversation,
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Offstage(
+                    offstage: !_showSidebar,
+                    child: TickerMode(
+                      enabled: _showSidebar,
+                      child: ExcludeFocus(
+                        excluding: !_showSidebar,
+                        child: widget.sidebarBuilder(_closeSidebar),
+                      ),
+                    ),
+                  ),
+                  Offstage(
+                    offstage: _showSidebar,
+                    child: TickerMode(
+                      enabled: !_showSidebar,
+                      child: ExcludeFocus(
+                        excluding: _showSidebar,
+                        child: widget.conversationBuilder(_showSidebar),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -337,9 +425,7 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
 
   void _closeSidebar() {
     _selectedThreadId = widget.threadController.selectedThread?.id;
-    if (mounted && _showSidebar) {
-      setState(() => _showSidebar = false);
-    }
+    _setShowSidebar(false);
   }
 
   void _handleThreadSelection() {
@@ -352,9 +438,7 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
       return;
     }
     _selectedThreadId = next;
-    if (mounted && _showSidebar) {
-      setState(() => _showSidebar = false);
-    }
+    _setShowSidebar(false);
   }
 }
 

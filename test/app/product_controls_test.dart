@@ -153,6 +153,135 @@ void main() {
   );
 
   testWidgets(
+    'responsive resize and compact navigation preserve active conversation, unsent draft, and attachments while explicit thread change clears prior draft',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final secondThread = ThreadSummary(
+        id: 'other-controls-thread',
+        sessionId: 'other-controls-session',
+        preview: 'Other controls thread',
+        cwd: '/workspace',
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+        status: ThreadRuntimeStatus.idle,
+        ephemeral: false,
+      );
+      final runtime = _ProductRuntimeController()
+        ..extraThreads = [secondThread];
+      addTearDown(runtime.closeStreams);
+
+      final composer = find.byKey(const ValueKey('conversation-composer'));
+      final chip = find.byKey(const ValueKey('composer-attachment-chip-0'));
+      String composerText() =>
+          tester.widget<TextField>(composer).controller!.text;
+
+      Future<void> attachMention(String path) async {
+        await tester.tap(find.byKey(const ValueKey('composer-attach-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Attach file (@mention)'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('composer-attachment-primary-field')),
+          path,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('composer-attachment-confirm-button')),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      // Cold composer draft at 1280x720 stays in conversation when resized to 720x800.
+      await tester.enterText(composer, 'Cold unsent draft');
+      tester.view.physicalSize = const Size(720, 800);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
+      expect(composer, findsOneWidget);
+      expect(composerText(), 'Cold unsent draft');
+
+      // Resize back to 1280x720, select thread, add draft text and @mention attachment.
+      tester.view.physicalSize = const Size(1280, 720);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      await tester.enterText(composer, 'F29 disposable unsent draft');
+      await attachMention('fixture.md');
+      expect(composerText(), 'F29 disposable unsent draft');
+      expect(chip, findsOneWidget);
+
+      // Resize 1280x720 -> 720x800: stays in active conversation with draft and attachment intact.
+      tester.view.physicalSize = const Size(720, 800);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
+      expect(find.byTooltip('Show threads'), findsOneWidget);
+      expect(composer, findsOneWidget);
+      expect(composerText(), 'F29 disposable unsent draft');
+      expect(chip, findsOneWidget);
+
+      // Toggle compact Threads -> reselect same thread: draft and attachment remain intact.
+      await tester.tap(find.byTooltip('Show threads'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show conversation'), findsOneWidget);
+      expect(composer, findsNothing);
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(composer, findsOneWidget);
+      expect(composerText(), 'F29 disposable unsent draft');
+      expect(chip, findsOneWidget);
+
+      // Open compact Threads and resize 720x800 -> 1280x720: draft and attachment remain intact.
+      await tester.tap(find.byTooltip('Show threads'));
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(1280, 720);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('desktop-split-workspace')),
+        findsOneWidget,
+      );
+      expect(composer, findsOneWidget);
+      expect(composerText(), 'F29 disposable unsent draft');
+      expect(chip, findsOneWidget);
+
+      // Explicit switch to a different thread on wide retains text and clears prior thread's attachment.
+      await tester.tap(find.text('Other controls thread'));
+      await tester.pumpAndSettle();
+      expect(composerText(), 'F29 disposable unsent draft');
+      expect(chip, findsNothing);
+
+      // In compact layout, failed read on another thread keeps Threads open and preserves current draft/attachment;
+      // successful selection of a different thread clears both text and attachments.
+      tester.view.physicalSize = const Size(720, 800);
+      await tester.pumpAndSettle();
+      await tester.enterText(composer, 'Compact thread-specific draft');
+      await attachMention('compact.md');
+      expect(composerText(), 'Compact thread-specific draft');
+      expect(chip, findsOneWidget);
+      await tester.tap(find.byTooltip('Show threads'));
+      await tester.pumpAndSettle();
+      runtime.failNextReadThread = true;
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show conversation'), findsOneWidget);
+      await tester.tap(find.byTooltip('Show conversation'));
+      await tester.pumpAndSettle();
+      expect(composerText(), 'Compact thread-specific draft');
+      expect(chip, findsOneWidget);
+      await tester.tap(find.byTooltip('Show threads'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(composerText(), isEmpty);
+      expect(chip, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'dangerous execution overrides require affirmative confirmation',
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
@@ -630,6 +759,7 @@ class _ProductRuntimeController extends RuntimeController {
   final List<(Object, UserInputAnswers)> userInputSubmissions = [];
   final List<Object> userInputCancellations = [];
   var failNextReadThread = false;
+  List<ThreadSummary> extraThreads = const [];
   final ThreadSummary thread = ThreadSummary(
     id: 'controls-thread',
     sessionId: 'controls-session',
@@ -665,7 +795,7 @@ class _ProductRuntimeController extends RuntimeController {
 
   @override
   Future<ThreadPage> listThreads(ThreadListQuery query) async =>
-      ThreadPage(threads: [thread], nextCursor: null);
+      ThreadPage(threads: [thread, ...extraThreads], nextCursor: null);
 
   @override
   Future<ThreadSummary> readThread(String threadId) async {
@@ -673,11 +803,17 @@ class _ProductRuntimeController extends RuntimeController {
       failNextReadThread = false;
       throw StateError('Simulated thread read failure');
     }
+    for (final candidate in [thread, ...extraThreads]) {
+      if (candidate.id == threadId) {
+        return candidate;
+      }
+    }
     return thread;
   }
 
   @override
-  Future<ThreadSummary> resumeThread(String threadId) async => thread;
+  Future<ThreadSummary> resumeThread(String threadId) async =>
+      readThread(threadId);
 
   @override
   Future<ThreadSummary> startThread(ThreadStartOptions options) async {

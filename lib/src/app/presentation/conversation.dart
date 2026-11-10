@@ -4,6 +4,7 @@ enum PresentationDetailMode { prose, commands, execution }
 
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
+    super.key,
     required this.controller,
     this.threadController,
     required this.historyController,
@@ -15,6 +16,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.transportCapabilities,
     this.defaultWorkingDirectory = '',
     this.sidebarCollapsed = false,
+    this.isOffstage = false,
     this.onToggleSidebar,
   });
 
@@ -29,6 +31,7 @@ class _ConversationPanel extends StatefulWidget {
   final BackendCapabilities transportCapabilities;
   final String defaultWorkingDirectory;
   final bool sidebarCollapsed;
+  final bool isOffstage;
   final VoidCallback? onToggleSidebar;
 
   @override
@@ -234,12 +237,27 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _bindAttachmentEvents();
     if (_activeThreadId case final activeId?) {
       _requestActiveThreadLinkedPrs(activeId);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _conversationFocusNode.requestFocus();
-        }
-      });
+      if (!widget.isOffstage) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !widget.isOffstage) {
+            _conversationFocusNode.requestFocus();
+          }
+        });
+      }
     }
+  }
+
+  bool get hasComposerDraft =>
+      _composerController.text.isNotEmpty || _composerAttachments.isNotEmpty;
+
+  bool get _hasReadyScrollPosition {
+    if (!_scrollController.hasClients) {
+      return false;
+    }
+    final position = _scrollController.position;
+    return position.hasPixels &&
+        position.hasViewportDimension &&
+        position.hasContentDimensions;
   }
 
   void _bindAttachmentEvents() {
@@ -576,6 +594,33 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _bindAttachmentEvents();
       if (_activeThreadId case final activeId?) {
         _requestActiveThreadLinkedPrs(activeId);
+      }
+    }
+    if (!oldWidget.isOffstage && widget.isOffstage) {
+      _threadActionsPopoverController.hide();
+      _composerAttachPopoverController.hide();
+      _linkedPrsPopoverController.hide();
+    } else if (oldWidget.isOffstage && !widget.isOffstage) {
+      if (_pendingThreadRestore && _activeThreadId != null) {
+        _scheduleThreadScrollRestore();
+      } else {
+        _runAfterFrame(_handleScrollPositionChanged);
+      }
+      if (_activeThreadId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || widget.isOffstage) {
+            return;
+          }
+          if (widget.controller.thread != null &&
+              widget.controller.entries.isEmpty &&
+              widget.historyController.timelineItems.isEmpty &&
+              !widget.historyController.loadingTurns &&
+              !widget.controller.busy) {
+            _composerFocusNode.requestFocus();
+          } else if (!_conversationFocusNode.hasFocus) {
+            _conversationFocusNode.requestFocus();
+          }
+        });
       }
     }
   }
@@ -3426,7 +3471,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (widget.historyController.canReturnToNewest) {
       unawaited(widget.historyController.refresh());
     }
-    if (_scrollController.hasClients) {
+    if (_hasReadyScrollPosition) {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     }
     final pendingBranch = _pendingBranchEdit;
@@ -3715,7 +3760,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     String itemKey,
     double targetTopDy,
   ) {
-    if (!_scrollController.hasClients) {
+    if (!_hasReadyScrollPosition) {
       return (mounted: false, jumped: false);
     }
     final box = _mountedItemBoxes[itemKey];
@@ -3762,7 +3807,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (alignment.mounted) {
       return (settled: !alignment.jumped, jumped: alignment.jumped);
     }
-    if (!_scrollController.hasClients) {
+    if (!_hasReadyScrollPosition) {
       return (settled: false, jumped: false);
     }
     final targetReverseIndex = _currentTimelineItemKeys.indexOf(itemKey);
@@ -3787,7 +3832,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _captureThreadScrollBookmark(String threadId) {
-    if (!_scrollController.hasClients ||
+    if (!_hasReadyScrollPosition ||
         _pendingStreamAnchor != null ||
         SchedulerBinding.instance.schedulerPhase ==
             SchedulerPhase.persistentCallbacks) {
@@ -3848,7 +3893,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _handleScrollPositionChanged() {
-    if (!_scrollController.hasClients) {
+    if (!_hasReadyScrollPosition) {
       return;
     }
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -3897,8 +3942,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (nextThreadId == _activeThreadId) {
       return;
     }
-    if (!_pendingThreadRestore && _activeThreadId != null) {
-      _captureThreadScrollBookmark(_activeThreadId!);
+    final previousThreadId = _activeThreadId;
+    if (!_pendingThreadRestore && previousThreadId != null) {
+      _captureThreadScrollBookmark(previousThreadId);
     }
     _activeThreadId = nextThreadId;
     _threadSelectionVersion += 1;
@@ -3921,6 +3967,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
+    if (widget.isOffstage &&
+        previousThreadId != null &&
+        _composerController.text.isNotEmpty) {
+      _composerController.clear();
+    }
     if (_composerAttachments.isNotEmpty) {
       _composerAttachments.clear();
     }
@@ -3948,7 +3999,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _threadScrollBookmarks.remove(threadId);
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) {
+        if (!mounted || !_hasReadyScrollPosition) {
           return;
         }
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -4014,7 +4065,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     required int pass,
   }) {
     _runAfterFrame(() {
-      if (!_scrollController.hasClients || _pendingThreadRestore) {
+      if (!_hasReadyScrollPosition || _pendingThreadRestore) {
         _pendingStreamAnchor = null;
         return;
       }
@@ -4045,6 +4096,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _threadScrollBookmarks.remove(thread.id);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted &&
+              !widget.isOffstage &&
               widget.controller.thread?.id == thread.id &&
               !widget.controller.busy) {
             _composerFocusNode.requestFocus();
@@ -4053,7 +4105,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
       return;
     }
-    if (!_scrollController.hasClients ||
+    if (!_hasReadyScrollPosition ||
         widget.historyController.canReturnToNewest) {
       return;
     }
@@ -4068,7 +4120,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) {
+      if (!mounted || !_hasReadyScrollPosition) {
         return;
       }
       final target = _scrollController.position.maxScrollExtent;
@@ -4101,12 +4153,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       if (widget.historyController.loadingTurns) {
         return;
       }
-      if (!_scrollController.hasClients) {
-        if (widget.historyController.timelineItems.isEmpty &&
+      if (!_hasReadyScrollPosition) {
+        if (!_scrollController.hasClients &&
+            widget.historyController.timelineItems.isEmpty &&
             widget.controller.entries.isEmpty) {
           _threadScrollBookmarks.remove(threadId);
           _pendingThreadRestore = false;
-          if (!widget.controller.busy) {
+          if (!widget.isOffstage && !widget.controller.busy) {
             _composerFocusNode.requestFocus();
           }
         }
@@ -4219,7 +4272,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       unawaited(widget.historyController.refresh());
       return;
     }
-    if (!_scrollController.hasClients) {
+    if (!_hasReadyScrollPosition) {
       return;
     }
     final target = _scrollController.position.maxScrollExtent;
