@@ -20,16 +20,16 @@ abstract final class OfficialCodexTheme {
   /// Base grid layout unit (4px / 0.25rem).
   static const double baseGrid = 4.0;
 
-  /// Centered conversation reading column max width (44rem / 704px).
-  static const double maxContentWidth = 704.0;
+  /// Current conversation reading and composer column (42rem / 672px).
+  static const double maxContentWidth = 672.0;
 
   /// Compact reading column width for constrained viewports (40rem / 640px).
   static const double compactContentWidth = 640.0;
 
-  /// User message bubble max width factor within reading column (75% / ~528px).
+  /// User message bubble max width factor within the reading column.
   static const double maxUserBubbleWidthFactor = 0.75;
 
-  /// Composer max width (44rem / 704px).
+  /// Composer max width shares the reading column width.
   static const double composerMaxWidth = maxContentWidth;
 
   /// Floating composer corner radius (24px / 1.5rem).

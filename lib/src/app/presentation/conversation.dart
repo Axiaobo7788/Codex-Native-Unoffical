@@ -1760,7 +1760,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                 ),
               ],
-              if (controller.canInterrupt) ...[
+              if (!widget.hasDesktopShell && controller.canInterrupt) ...[
                 const SizedBox(width: ThemeTokens.space2),
                 CodexButton(
                   size: CodexButtonSize.sm,
@@ -3268,6 +3268,41 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final canSteer = controller.canSteer;
     final enabled =
         (thread != null || canCreateOnSend) && (!controller.busy || canSteer);
+    final inlineControls = widget.hasDesktopShell && !isHeroCentered;
+    final showStop = inlineControls && controller.canInterrupt;
+    final input = CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): () {
+          if (enabled) {
+            unawaited(_send());
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+            _insertComposerNewline,
+      },
+      child: TextField(
+        key: const ValueKey('conversation-composer'),
+        controller: _composerController,
+        focusNode: _composerFocusNode,
+        enabled: enabled,
+        minLines: isHeroCentered ? 2 : 1,
+        maxLines: 6,
+        textInputAction: TextInputAction.newline,
+        decoration: InputDecoration(
+          hintText: thread == null && !canCreateOnSend
+              ? 'Select or create a thread'
+              : canSteer
+              ? 'Steer active turn in Codex'
+              : 'Send a message to Codex',
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
+        ),
+      ),
+    );
     return Container(
       color: isHeroCentered ? Colors.transparent : palette.canvas,
       padding: isHeroCentered
@@ -3278,6 +3313,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           key: const ValueKey('floating_composer'),
           surfaceKey: const ValueKey('composer-surface'),
           isFocused: _composerFocusNode.hasFocus,
+          radius: inlineControls
+              ? OfficialCodexTheme.composerRadiusPill
+              : OfficialCodexTheme.composerRadius,
+          padding: inlineControls
+              ? const EdgeInsets.all(8)
+              : const EdgeInsets.fromLTRB(14, 10, 8, 8),
+          backgroundColor: inlineControls
+              ? OfficialCodexTheme.of(context).workspaceBackground
+              : null,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3310,39 +3354,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                 ),
               ],
-              CallbackShortcuts(
-                bindings: {
-                  const SingleActivator(LogicalKeyboardKey.enter): () {
-                    if (enabled) {
-                      unawaited(_send());
-                    }
-                  },
-                  const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-                      _insertComposerNewline,
-                },
-                child: TextField(
-                  key: const ValueKey('conversation-composer'),
-                  controller: _composerController,
-                  focusNode: _composerFocusNode,
-                  enabled: enabled,
-                  minLines: isHeroCentered ? 2 : 1,
-                  maxLines: 6,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    hintText: thread == null && !canCreateOnSend
-                        ? 'Select or create a thread'
-                        : canSteer
-                        ? 'Steer active turn in Codex'
-                        : 'Send a message to Codex',
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
-                  ),
-                ),
-              ),
+              if (!inlineControls) input,
               LayoutBuilder(
                 builder: (context, rowConstraints) {
                   final compactComposer = rowConstraints.maxWidth < 560;
@@ -3402,6 +3414,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       ),
                       const SizedBox(width: 2),
+                      if (inlineControls) Expanded(child: input),
                       if (showModelPill)
                         _ComposerModelSummaryButton(
                           controller: widget.settingsController,
@@ -3410,8 +3423,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       if (capabilities.supportsSandboxConfiguration)
                         _ExecutionSettingsButton(
                           controller: widget.settingsController,
+                          iconOnly: inlineControls,
                         ),
-                      if (projectCwd.isNotEmpty &&
+                      if (!inlineControls &&
+                          projectCwd.isNotEmpty &&
                           !isHeroCentered &&
                           !compactComposer &&
                           capabilities.supportsWorkingDirectorySelection) ...[
@@ -3467,8 +3482,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           ),
                         ),
                       ],
-                      const Spacer(),
-                      if (controller.busy)
+                      if (!inlineControls) const Spacer(),
+                      if (controller.busy && !showStop)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
@@ -3476,21 +3491,49 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             style: Theme.of(context).textTheme.labelSmall,
                           ),
                         ),
-                      CodexIconButton(
-                        key: const ValueKey('composer-send-button'),
-                        tooltip: canSteer
-                            ? 'Steer turn (Enter)'
-                            : 'Send (Enter)',
-                        size: 34.0,
-                        shape: BoxShape.circle,
-                        variant: CodexButtonVariant.primary,
-                        onPressed: enabled ? _send : null,
-                        icon: Icon(
-                          canSteer
-                              ? Icons.subdirectory_arrow_right_rounded
-                              : Icons.arrow_upward_rounded,
-                          size: 18,
-                        ),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _composerController,
+                        builder: (context, draft, _) {
+                          final showSteer =
+                              canSteer &&
+                              (draft.text.trim().isNotEmpty ||
+                                  _composerAttachments.isNotEmpty);
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!showStop || showSteer)
+                                CodexIconButton(
+                                  key: const ValueKey('composer-send-button'),
+                                  tooltip: canSteer
+                                      ? 'Steer turn (Enter)'
+                                      : 'Send (Enter)',
+                                  size: 34.0,
+                                  shape: BoxShape.circle,
+                                  variant: CodexButtonVariant.primary,
+                                  onPressed: enabled ? _send : null,
+                                  icon: Icon(
+                                    canSteer
+                                        ? Icons.subdirectory_arrow_right_rounded
+                                        : Icons.arrow_upward_rounded,
+                                    size: 18,
+                                  ),
+                                ),
+                              if (showStop)
+                                CodexIconButton(
+                                  key: const ValueKey('composer-stop-button'),
+                                  tooltip: 'Stop turn',
+                                  size: 34,
+                                  shape: BoxShape.circle,
+                                  variant: CodexButtonVariant.primary,
+                                  onPressed: controller.interrupt,
+                                  icon: const Icon(
+                                    Icons.stop_rounded,
+                                    size: 17,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   );
@@ -5891,9 +5934,13 @@ class _ConversationErrorState extends StatelessWidget {
 }
 
 class _ExecutionSettingsButton extends StatelessWidget {
-  const _ExecutionSettingsButton({required this.controller});
+  const _ExecutionSettingsButton({
+    required this.controller,
+    this.iconOnly = false,
+  });
 
   final ExecutionSettingsController controller;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -5905,26 +5952,40 @@ class _ExecutionSettingsButton extends StatelessWidget {
             controller.sandbox == SandboxModeOverride.dangerFullAccess;
         final label = fullAccess ? 'Full access' : 'Defaults';
         final color = fullAccess ? palette.warning : palette.textSecondary;
+        final onPressed = controller.loading
+            ? null
+            : () => showDialog<void>(
+                context: context,
+                builder: (_) =>
+                    _ExecutionSettingsDialog(controller: controller),
+              );
+        final icon = controller.loading
+            ? const SizedBox.square(
+                dimension: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                iconOnly || fullAccess
+                    ? Icons.shield_outlined
+                    : Icons.tune_rounded,
+                size: 15,
+                color: color,
+              );
+        if (iconOnly) {
+          return CodexIconButton(
+            key: const ValueKey('execution-settings-button'),
+            tooltip: 'Execution settings: $label',
+            size: 28,
+            onPressed: onPressed,
+            icon: icon,
+          );
+        }
         return CodexButton(
+          key: const ValueKey('execution-settings-button'),
           variant: CodexButtonVariant.ghost,
           size: CodexButtonSize.sm,
-          onPressed: controller.loading
-              ? null
-              : () => showDialog<void>(
-                  context: context,
-                  builder: (_) =>
-                      _ExecutionSettingsDialog(controller: controller),
-                ),
-          icon: controller.loading
-              ? const SizedBox.square(
-                  dimension: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  fullAccess ? Icons.shield_outlined : Icons.tune_rounded,
-                  size: 15,
-                  color: color,
-                ),
+          onPressed: onPressed,
+          icon: icon,
           label: label,
         );
       },

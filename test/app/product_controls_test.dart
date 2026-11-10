@@ -286,7 +286,7 @@ void main() {
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
 
-      await tester.tap(find.text('Defaults'));
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
       await tester.pumpAndSettle();
 
       await _chooseDropdown(
@@ -315,7 +315,7 @@ void main() {
       expect(runtime.turnOptions.last.approvalPolicy, isNull);
       expect(runtime.turnOptions.last.sandbox, isNull);
 
-      await tester.tap(find.text('Defaults'));
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
       await tester.pumpAndSettle();
       await _chooseDropdown(
         tester,

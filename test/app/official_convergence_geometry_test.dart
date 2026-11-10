@@ -182,7 +182,7 @@ void main() {
           lessThan(tester.getTopLeft(workspaceTitle).dx),
         );
 
-        // 5. Assert Conversation reading column: bounded to <= 704px
+        // The current desktop reading column is bounded to 42rem.
         final columnFinder = find.byKey(
           const ValueKey('conversation_reading_column'),
         );
@@ -191,18 +191,47 @@ void main() {
           tester.getSize(columnFinder).width,
           lessThanOrEqualTo(OfficialCodexTheme.maxContentWidth),
         );
-        expect(tester.getSize(columnFinder).width, lessThanOrEqualTo(704.0));
+        expect(tester.getSize(columnFinder).width, lessThanOrEqualTo(672.0));
 
-        // 6. Assert Floating Composer: bounded to <= 704px with 24px radius
+        // The active composer shares the reading width and groups controls right.
         final composerFinder = find.byKey(const ValueKey('floating_composer'));
         expect(composerFinder, findsOneWidget);
         expect(
           tester.getSize(composerFinder).width,
           lessThanOrEqualTo(OfficialCodexTheme.maxContentWidth),
         );
-        expect(tester.getSize(composerFinder).width, lessThanOrEqualTo(704.0));
+        final field = find.byKey(const ValueKey('conversation-composer'));
+        final attach = find.byKey(const ValueKey('composer-attach-button'));
+        final model = find.byKey(const ValueKey('composer-model-pill'));
+        final permissions = find.byKey(
+          const ValueKey('execution-settings-button'),
+        );
+        final send = find.byKey(const ValueKey('composer-send-button'));
+        expect(
+          tester.getCenter(attach).dx,
+          lessThan(tester.getCenter(field).dx),
+        );
+        expect(
+          tester.getCenter(field).dx,
+          lessThan(tester.getCenter(model).dx),
+        );
+        expect(
+          tester.getCenter(model).dx,
+          lessThan(tester.getCenter(permissions).dx),
+        );
+        expect(
+          tester.getCenter(permissions).dx,
+          lessThan(tester.getCenter(send).dx),
+        );
+        final activeSurface = tester.widget<AnimatedContainer>(
+          find.byKey(const ValueKey('composer-surface')),
+        );
+        expect(
+          (activeSurface.decoration as BoxDecoration).borderRadius,
+          BorderRadius.circular(OfficialCodexTheme.composerRadiusPill),
+        );
 
-        // 7. Verify user message bubble max width factor (75% of reading column = 528px)
+        // User bubbles remain capped at 75% of the reading column.
         final bubbleFinder = find.text('Hello Codex from geometry test suite!');
         expect(bubbleFinder, findsOneWidget);
         final bubbleSize = tester.getSize(bubbleFinder);
@@ -213,7 +242,6 @@ void main() {
                 OfficialCodexTheme.maxUserBubbleWidthFactor,
           ),
         );
-        expect(bubbleSize.width, lessThanOrEqualTo(528.0));
 
         // Timeline detail stays available in a compact header action.
         final detailsButton = find.byKey(
