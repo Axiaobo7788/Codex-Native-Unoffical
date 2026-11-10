@@ -83,6 +83,49 @@ void main() {
     );
   });
 
+  test('peer close owns a request whose write fails later', () async {
+    final delayedInput = StreamController<JsonObject>();
+    final write = Completer<void>();
+    final delayedPeer = JsonRpcPeer(
+      input: delayedInput.stream,
+      writer: (_) => write.future,
+    );
+    addTearDown(delayedInput.close);
+    addTearDown(delayedPeer.close);
+    final response = expectLater(
+      delayedPeer.request('thread/items/read'),
+      throwsA(isA<TransportClosedException>()),
+    );
+    await delayedPeer.close();
+    write.completeError(StateError('Delayed write failure'));
+    await response;
+    await pumpEventQueue();
+  });
+
+  test('delivers an RPC error before its write finishes flushing', () async {
+    final delayedInput = StreamController<JsonObject>();
+    final write = Completer<void>();
+    final delayedPeer = JsonRpcPeer(
+      input: delayedInput.stream,
+      writer: (_) => write.future,
+    );
+    addTearDown(delayedInput.close);
+    addTearDown(delayedPeer.close);
+    final response = expectLater(
+      delayedPeer.request('thread/items/read'),
+      throwsA(isA<JsonRpcException>()),
+    );
+    delayedInput.add({
+      'id': 1,
+      'error': {'code': -32601, 'message': 'Method not found'},
+    });
+    try {
+      await response.timeout(const Duration(seconds: 1));
+    } finally {
+      write.complete();
+    }
+  });
+
   test('writes JSON-RPC errors for unsupported server requests', () async {
     await peer.respondError('server-request-1', -32000, 'Rejected');
 

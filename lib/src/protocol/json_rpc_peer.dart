@@ -37,24 +37,22 @@ final class JsonRpcPeer {
   Stream<CodexServerRequest> get serverRequests => _serverRequests.stream;
   Stream<ProtocolViolation> get protocolErrors => _protocolErrors.stream;
 
-  Future<JsonObject> request(
-    String method, [
-    JsonObject params = const {},
-  ]) async {
+  Future<JsonObject> request(String method, [JsonObject params = const {}]) {
     if (_isClosed) {
-      throw const TransportClosedException();
+      return Future.error(const TransportClosedException());
     }
 
     final id = _nextRequestId++;
     final completer = Completer<JsonObject>();
     _pending[id] = completer;
 
-    try {
-      await _write({'id': id, 'method': method, 'params': params});
-    } catch (error, stackTrace) {
-      _pending.remove(id);
-      completer.completeError(error, stackTrace);
-    }
+    // A reply or peer close can settle the request before the write flushes.
+    unawaited(
+      _write({'id': id, 'method': method, 'params': params})
+          .catchError((Object error, StackTrace stackTrace) {
+            _pending.remove(id)?.completeError(error, stackTrace);
+          }),
+    );
     return completer.future;
   }
 
