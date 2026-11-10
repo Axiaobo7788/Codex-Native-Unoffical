@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
+import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
@@ -253,6 +254,49 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'returning from Changes restores the same bounded history position',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _MultiThreadLongHistoryRuntimeController();
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Long thread A'));
+      await tester.pumpAndSettle();
+
+      runtime.showChanges();
+      await tester.pumpAndSettle();
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+      for (var step = 0; step < 5; step += 1) {
+        await tester.drag(timeline, const Offset(0, 2400));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Load older turns'));
+      await tester.pumpAndSettle();
+      await tester.drag(timeline, const Offset(0, 750));
+      await tester.pumpAndSettle();
+
+      final target = find.byKey(const ValueKey('history-a-item-24'));
+      expect(target, findsOneWidget);
+      final topBefore = tester.getTopLeft(target).dy;
+      final olderPageCalls = runtime.olderTurnPageCalls;
+      final changes = find.byKey(const ValueKey('changes-view-button'));
+      await tester.tap(changes);
+      await tester.pumpAndSettle();
+      expect(find.text('+fixture change'), findsOneWidget);
+      await tester.tap(changes);
+      await tester.pumpAndSettle();
+
+      expect(target, findsOneWidget);
+      expect(tester.getTopLeft(target).dy, closeTo(topBefore, 1.5));
+      expect(runtime.olderTurnPageCalls, olderPageCalls);
     },
   );
 
@@ -690,6 +734,27 @@ class _MultiThreadLongHistoryRuntimeController extends RuntimeController {
       StreamController<TurnEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvals =
       StreamController<ApprovalEvent>.broadcast(sync: true);
+
+  void showChanges() => _turns.add(
+    TurnDiffUpdatedEvent(
+      snapshot: DiffSnapshot(
+        threadId: threadA.id,
+        turnId: 'a-turn-0',
+        files: const [
+          DiffFile(
+            path: 'fixture.txt',
+            additions: 1,
+            deletions: 0,
+            lines: ['+fixture change'],
+            truncated: false,
+          ),
+        ],
+        additions: 1,
+        deletions: 0,
+        truncated: false,
+      ),
+    ),
+  );
 
   final ThreadSummary threadA = ThreadSummary(
     id: 'thread-a',
