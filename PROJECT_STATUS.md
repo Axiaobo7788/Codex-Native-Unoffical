@@ -93,9 +93,14 @@ and lists and retained the bounded timeline behavior. The wide project
 list now uses trailing running/unread indicators and quiet idle rows.
 The real stock Thinking state now gives way to Thought and final prose.
 Goal is inset 13 logical px from the composer. The Plugins rail glyph
-and selection use the backed ecosystem route. Home, open Changes, Review,
-expanded activity, compact and dark/focused states have separate evidence
-gates. [Hosted CI for `3ca2f8a`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42898842754)
+and selection use the backed ecosystem route. Desktop Back and Forward
+revisit a bounded list of stock threads, and older assistant copy actions
+appear on interaction. The Linux release opened the selected patch directly
+from a two-file Changes preview during a real stock turn. Opening the pane
+removes the closed chip. The Goal title opens the same editor as its expand
+control. Projects reveals its current actions on interaction. Home, open
+Changes, Review, expanded activity, compact and dark/focused states have
+separate evidence gates. [Hosted CI for `ca51e7b`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42902044133)
 
 ## Current checkpoint
 
