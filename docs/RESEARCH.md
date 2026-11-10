@@ -4546,3 +4546,34 @@ probe before interpreting that result as a content-search limitation.
   Linux bundle closure and license checks passed on the reused
   exact product build. The two packaged research walkthroughs
   and simulated failure probes were verified separately.
+
+## Desktop structural reconvergence
+
+- R0 refreshed the installed build `25894` ASAR and CSS. The static renderer
+  contains legacy, rail-only and rail-with-contextual-sidebar branches. A
+  current signed-in user screenshot confirms the contextual branch in that
+  session. An isolated official launch reached sign-in. The screenshot's DPR,
+  zoom and sidebar preference are unknown. The project stores anonymous
+  measurements and component paths. [Structural map](reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md)
+- R1–R4 translated the wide shell, sidebar and header hierarchy, inline
+  activity, bottom change disclosure and active composer. Native fixture
+  screenshots compare the former and current shells and exercise a real Git
+  change through the bundled Host and stock process. The Responses model
+  was a local fixture. The timeline, bounded diff and lazy output continue
+  through their existing controllers.
+- R5 reproduced a cold saved-thread `review/start` failure in the packaged
+  client. Both entry points now apply the existing queue admission before
+  implicitly loading an eligible cold thread. Pending or inconclusive queue
+  reads require explicit resume and a fresh Review action. The packaged cold
+  working-tree review completed through stock after the fix.
+- R6 reproduced and fixed a narrow activity row overflow at a 760 px split
+  with the sidebar fully expanded. Packaged resize exercises retained the
+  selected conversation and draft through compact mode. Native uses its
+  existing compact navigation until the official signed-in compact state is
+  observed. Signed-in open secondary surfaces and dark mode are separate
+  evidence gates.
+- The official `agy` peer review found two P1 issues. The diff viewer could
+  lose its return action after an empty update, and a tight split with multiple
+  linked PRs could overflow the header. `73f48f3` retains the return action,
+  bounds the change summary and keeps linked PRs reachable via an icon and a
+  bounded popover. Both paths passed simulated runtime regression coverage.

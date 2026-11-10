@@ -18,7 +18,7 @@
 > **R0 Live vs Signed-In Screenshot Boundary & Remaining Gates**:
 > - **Disposable Live Launch (`LIVE_OBSERVED`)**: Unauthenticated launch of `/opt/codex-desktop/start.sh` at `1280×800` and `1090×760` (`DPR 1.0`) reaches only the ChatGPT sign-in screen (`36px` `h-toolbar-sm` drag strip + `340px` sign-in card; `[data-app-shell-frame]`, `[data-app-shell-workspace]`, and sidebar markers absent).
 > - **Signed-In Human Screenshot (`H1`, `1191×865 px`, `HUMAN_REVIEWED`)**: Confirms the signed-in `rail-with-contextual-sidebar` layout: full-width application menu/window strip (`y=0..50`), persistent left global icon rail (`x=0..60`), rounded inset `PageSurface-g2Llyi` card (`x≈61..1190`), contextual Codex sidebar (`x≈61..421`), and workspace (`x≈422..1190`).
-> - **Remaining Screenshot Gates (`HUMAN_REVIEW_REQUIRED`)**: `H1` has unknown logical DPR/zoom and a user-adjusted left-panel width (`x≈421` vs static default `340px` in `qbQ6`). Same-state authenticated official screenshots at known DPR (`1.0`/`2.0`) for Empty Home, Active Turn, Expanded Activity/Commands, Review/Diff, Collapsed Contextual Sidebar, and Compact (`<768px`) remain human-gated.
+> - **Remaining Screenshot Gates (`HUMAN_REVIEW_REQUIRED`)**: `H1` has unknown logical DPR, zoom and saved sidebar width. The x≈421 physical coordinate does not establish a departure from the 340 logical px default in `qbQ6`. Comparable authenticated captures of empty, expanded activity, review/diff, collapsed, compact and dark states remain open.
 
 ---
 
@@ -41,18 +41,18 @@ The automated geometry verification suite (`test/app/official_convergence_geomet
 |---|---|---|---|---|
 | **App Shell Frame** | `1920.0 × 1080.0` | `Size(1920.0, 1080.0)` | `0.0 px` | Exact match to window frame |
 | **Application Menu Toolbar** | `1920.0 × 36.0` (`--height-toolbar-sm`; `+8px` titlebar offset in Electron) | `Size(1920.0, 36.0)` | `0.0 px` | Full-width top toolbar above rail and page surface |
-| **Persistent Navigation Rail** | `52.0 × 1044.0` (`w-13` / `X1CL` fallback `52`) | `Size(52.0, 1044.0)` | `0.0 px` | Left global icon rail (`Home`, `Plugins`, bottom settings); persists when sidebar collapses |
+| **Persistent Navigation Rail** | `52.0` width (`w-13` / `X1CL` fallback `52`) | `Size(52.0, 1036.0)` | `0.0 px` width | Starts below the toolbar and page inset; persists when sidebar collapses |
 | **Rounded Page Surface** | `1868.0 × 1036.0` (`inset-inline-start: 52px`, `+8px` top offset, radius `12px` `--radius-xl-base: .75rem`) | `Size(1868.0, 1036.0)` | `0.0 px` | Rounded card housing contextual sidebar (`52px` header) + workspace |
 | **Expanded Contextual Sidebar** | `288.0 × 1036.0` (`340.0` total left panel minus `52.0` rail) | `Size(288.0, 1036.0)` | `0.0 px` | Default `340px` total left panel (`qbQ6`); right hairline border |
 | **Collapsed Contextual Sidebar**| `0.0 × 1036.0` (`52.0` rail remains visible) | `Offstage` / `0.0 px` (`rail.width == 52.0`) | `0.0 px` | Contextual sidebar hidden; `closedLeftPanelWidth == 52.0` |
 | **Workspace Surface** | `1580.0 × 1036.0` (`1868.0` when sidebar collapsed) | `Size(1580.0, 1036.0)` | `±2.0 px` | `1920 - 340 = 1580px` |
 | **Thread Header Bar** | `1580.0 × 46.0` (`--height-toolbar: 46px` on `Toolbar-w4tLPD`) | `Size(1580.0, 46.0)` | `0.0 px` | Workspace header height (`46px` `--height-toolbar`) |
-| **Conversation Column** | `672.0` (`42rem` in `192774`; legacy `704.0` / `44rem`) | `width <= 704.0`, centered | `0.0 px` | Centered reading column |
-| **User Message Bubble** | `width <= 75%` of column | `width <= 528.0`, right-aligned | `0.0 px` | User prompt bubble clamped to 75% column width |
-| **Floating Composer** | Matches reading column width | `width <= 704.0`, centered | `0.0 px` | Composer width matches conversation column |
+| **Conversation Column** | `672.0` (`42rem` in `192774`; legacy `704.0` / `44rem`) | `width <= 672.0`, centered | `0.0 px` | Centered reading column |
+| **User Message Bubble** | `width <= 75%` of column | `width <= 504.0`, right-aligned | `0.0 px` | User prompt bubble clamped to 75% column width |
+| **Floating Composer** | Matches reading column width | `width <= 672.0`, centered | `0.0 px` | Composer width matches conversation column |
 | **Composer Bottom Inset**| `24.0 px` from bottom | `Offset(dx, 1080 - height - 24)` | `±2.0 px` | Floating clearance from bottom edge |
 
-### 2.2 Viewport 2: Standard Laptop (`1440×900`, DPR `1.0`)
+### 2.2 Historical pre-R0 laptop baseline (`1440×900`, DPR `1.0`)
 
 | Structural Node | Official Target Dimension | Native Expected Box Constraint | Tolerated Delta | Asserted Property |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@ The automated geometry verification suite (`test/app/official_convergence_geomet
 | **User Message Bubble** | `width <= 528.0` (75%) | `width <= 528.0`, right-aligned | `0.0 px` | Clamped to 528px |
 | **Floating Composer** | `704.0 × height` | `width == 704.0`, centered | `0.0 px` | Matches column width |
 
-### 2.3 Viewport 3: HiDPI / Retina Desktop (`2560×1440`, DPR `1.25` & `2.0`)
+### 2.3 Historical pre-R0 HiDPI baseline (`2560×1440`, DPR `1.25` and `2.0`)
 
 | Structural Node | Logical Target Dimension | Physical Pixels (DPR 2.0) | Asserted Logical Property |
 |---|---|---|---|
@@ -77,7 +77,7 @@ The automated geometry verification suite (`test/app/official_convergence_geomet
 
 ---
 
-## 3. Quantitative Divergence Table (`Official vs Native vs delta`)
+## 3. Historical pre-R0 divergence table
 
 This table records every concrete discrepancy between the measured official desktop values and the legacy Native implementation (`HEAD`), providing the exact target delta for convergence.
 
@@ -99,7 +99,11 @@ This table records every concrete discrepancy between the measured official desk
 
 ---
 
-## 4. Multi-Viewport Automated Assertion Guide
+## 4. Historical pre-R0 assertion example
+
+Current checks use the canonical tokens and cover the rail, shared page, 672 px
+column, resize bounds, keyboard resize and compact draft continuity.
+See [`official_convergence_geometry_test.dart`](../../test/app/official_convergence_geometry_test.dart).
 
 The automated geometry test suite (`test/app/official_convergence_geometry_test.dart`) executes tests conforming to the following structure:
 

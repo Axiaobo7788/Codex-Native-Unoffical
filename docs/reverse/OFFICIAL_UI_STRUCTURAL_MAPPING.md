@@ -10,6 +10,8 @@ renderer `26.1103.60933` build `25894` and ASAR SHA-256
 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`.
 These are the locally examined build identifiers. The screenshot itself has
 no build or DPR metadata usable to infer logical layout units.
+The ASAR contains the shipped JavaScript and CSS. Its `webview` archive index
+contains no `.map` entries.
 
 - **H1, Human visual observation** — one 1191×865 signed-in, light, active
   conversation capture from the user on 2026-11-10. The full-width application
@@ -128,7 +130,7 @@ Resume. This reproduces the [cold RPC contract](THREAD_PROVIDER_RESUME_PRESENTAT
 in the packaged UI. Keep the failure separate from the structural comparison.
 Any correction must preserve the existing queue admission rule before resume.
 
-## Translation table
+## R0 translation table
 
 Status describes the stated evidence and Native structure. Rows with only
 static or public evidence still require the named live verification before
@@ -162,3 +164,36 @@ The [official review guide](https://learn.chatgpt.com/docs/code-review?surface=a
 supports workflow claims. H1 and current bundle evidence establish R1's
 shell hierarchy. Empty, expanded activity, open review and narrow signed-in
 layouts still need direct comparable captures for their respective slices.
+
+## Native implementation checkpoint
+
+| Slice | Change | Evidence |
+| --- | --- | --- |
+| R1 | `8ce73dd` and `5dc63ca` add app-wide File/View actions, the persistent navigation rail, a shared rounded page, and a collapsible contextual sidebar. GTK owns the platform window frame. | Packaged Linux comparison against the previous Native shell at 1191×865 and 720×800. The rail and its ecosystem action stay reachable with the sidebar collapsed. |
+| R2 | `fe31e9e` moves search and New chat into the Codex sidebar, groups projects below, and places the folder and selected title opposite trailing actions. Detail mode moves to an anchored menu. | Packaged selected-thread comparison and geometry tests, including 780×800. An initial 0.8 px header overflow led to the detail menu placement. |
+| R3 | `3e388fe` makes routine activity inline, aligns saved-work disclosure with the reading column and moves the bounded change summary above the composer. | Packaged turn through the bundled Host and stock app-server with a loopback model fixture. The app displayed real command activity, a disposable Git file change, and the opened per-file diff. |
+| R4 | `d836c16` uses the current 672 px reading and composer cap. The active desktop composer puts attachment and input on the left and model, execution and send/stop on the right. | Geometry, keyboard and action tests plus packaged wide, running and compact draft states. Clicking Stop in the packaged app produced the stock interrupted state. |
+| R5 | `466cda5` applies the existing cold queue admission to both Review entries. If saved work may run, the explicit confirmation resumes the thread and leaves Review for a separate action. | The pre-fix cold attempt returned `-32600`. The fixed Linux bundle opened and completed a working-tree review from a fresh stock process without a manual sidebar resume. Three simulated cases cover queue safety, resume failure and draft retention. |
+| R6 | `c3ac6f0` adds drag, keyboard and accessibility actions for a 290–520 logical px total left area, while reserving 240 px for the workspace. Narrow activity labels are bounded. | A 760 px split test with the sidebar at maximum first exposed a 40 px overflow. The corrected geometry passes. Linux 1191→760→720→1191 retained the selected thread, draft and resized width. |
+| Peer follow-up | `73f48f3` keeps the return action visible when an open diff becomes empty, and shows an icon-only review link trigger in a tight split. | The peer identified both issues from the actual diff. Simulated runtime tests cover empty diff exit and an in-viewport popover with multiple links at the 240 px workspace minimum. |
+
+The independent `agy` peer evidence is `fdc181a` and `65380cd`. The reference
+comparison uses H1's visible hierarchy alongside the current bundle's layout
+roles. The Native 1191×865 captures have DPR 1. H1's unknown scale precludes a
+pixel overlay claim. The local evidence directory includes
+`r1-shell-comparison.png`, `r3-live-comparison.png`, `r4-composer-states.png`,
+`r5-fixture/shell-r5-real/`, and `r6-resize-states.png`. These Native captures
+contain disposable fixture data. H1 itself is excluded from the repository.
+
+The official bundle has a responsive branch below 768 px. Native retains its
+existing 760 px transition and one live conversation state. Native sidebar
+width is session-local. The open diff still occupies the timeline pane.
+At narrow split widths the active steering field shares a row with execution
+controls. A queued cold thread requires a fresh review target after explicit
+resume. Both interaction choices remain open for Human feedback.
+The app menu covers supported Native actions, and the rail exposes only wired
+destinations. Comparable signed-in official captures are still needed for
+empty Home, expanded activity, open review/diff, model and execution popovers,
+questions and approvals, compact navigation, and dark mode. The user has
+supplied a wide official reference. Human evaluation of the new Native window
+remains open.

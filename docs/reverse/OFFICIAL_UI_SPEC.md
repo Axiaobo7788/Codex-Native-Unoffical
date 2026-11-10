@@ -37,7 +37,7 @@ All values recorded here are derived from direct inspection of the official desk
 | **Base Grid Unit** | `4px` (`0.25rem`) | `--spacing: 4px` | `STATIC_BUNDLE` | Fundamental layout scale factor (multiples of 4px: 4, 8, 12, 16, 20, 24, 28, 32) |
 | **Application Menu Toolbar Height** | `36px` (`44px` with `8px` titlebar offset in `ApplicationMenuPageSurfaceLayout-yb71ay`; `y=0..50` in `H1`) | `ApplicationMenuTopBar-SLuX8q` (`--height-toolbar-sm: 36px`), `--app-shell-titlebar-height: calc(var(--spacing) * 2)` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Full-width top application menu bar (`sidebar toggle` + `File`, `Edit`, `View`, `Help` menubar) above rail and page surface |
 | **Global Navigation Rail Width** | `52px` (`x=0..60` in `H1`) | `nav[data-app-navigation-rail="true"]` (`w-13`: `px-2` + `36px` `size="xl"` rail buttons; `X1CL` fallback `52`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Persistent left icon rail (`Home`, `Plugins`, capability-gated destinations, bottom Settings trigger) |
-| **Total Left Panel Width (Default)** | `340px` (`52px` rail + `288px` contextual sidebar; `260px` legacy token superseded) | `qbQ6` persisted `"sidebar-width"` default `340`, `499225` `v1` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Default combined width of global rail + contextual `ConversationSidebar-EDF_I4` (`x≈421` in `H1` reflects user resize/zoom, not default) |
+| **Total Left Panel Width (Default)** | `340px` (`52px` rail + `288px` contextual sidebar; `260px` legacy token superseded) | `qbQ6` persisted `"sidebar-width"` default `340`, `499225` `v1` | `STATIC_BUNDLE` | H1 shows the two regions and their divider. Physical x≈421 does not identify the logical width, zoom or saved preference. |
 | **Left Panel Width (Min/Max)** | `290px` contextual min (`240px` generic min) / `520px` max (`100vw - 240px`) | `qbQ6` (`min: 240`, `max: 520`), `499225` `v1` (`minLeftPanelWidth: 290`) | `STATIC_BUNDLE` | Permitted resize boundaries for `rail-with-contextual-sidebar` |
 | **Left Panel Collapsed Width** | `52px` (`railWidth` when `keepVisibleWhenCollapsed: true`; `0px` without rail) | `closedLeftPanelWidth = keepVisibleWhenCollapsed ? railWidth : 0` (`961657`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Global icon rail remains visible when contextual sidebar collapses |
 | **Responsive Sidebar Breakpoint** | `768px` | `@media (min-width: 768px)` (`qbQ6`, `Layout-SYw9n4[data-app-shell-responsive-sidebar=true]`) | `STATIC_BUNDLE` | Viewport breakpoint below which `ResponsiveLeftPanel-KfNlzQ` hides in responsive mode |
@@ -119,6 +119,10 @@ Every interactive UI primitive must deterministically resolve its appearance acr
 
 ### 5.2 The 29 Measured UI Surfaces
 
+This component inventory predates the R0 structure refresh. Use section 2 and
+the [structural map](OFFICIAL_UI_STRUCTURAL_MAPPING.md) for the current shell,
+reading width and composer arrangement.
+
 | # | Surface Name | Geometry / Padding / Radius | Colors & Elevation | Typography & Icons | Interactive States Handled | Evidence Grade |
 |---|---|---|---|---|---|---|
 | 1 | **App Shell** | Full window, inset main panel margin `6px` top/bottom/right | Tier 0 background (`#171717` / `#F9F9F9`), hairline border `0.5px` | N/A | `idle` | `STATIC_BUNDLE` |
@@ -153,7 +157,7 @@ Every interactive UI primitive must deterministically resolve its appearance acr
 
 ---
 
-## 6. Official vs Current Native Divergence Matrix
+## 6. Historical pre-R0 Native divergence matrix
 
 The following table records the precise divergence between the measured official specifications and the legacy hardcoded heuristic values present in `Codex-Native-Unoffical` at baseline (`HEAD`).
 

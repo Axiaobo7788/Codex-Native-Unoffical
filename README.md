@@ -8,8 +8,9 @@ and is not affiliated with or endorsed by OpenAI.
 
 - **Desktop:** create and resume threads, browse bounded history, stream or steer
   turns, approve tool requests, choose models and execution settings, and inspect
-  bounded diffs and command output. The desktop layout has a 260 px sidebar,
-  a 704 px reading/composer column, and a compact layout for narrow windows.
+  bounded diffs and command output. The desktop layout has a navigation rail,
+  a resizable Codex sidebar, and a reading and composer column capped at 672
+  logical pixels. Narrow windows use a compact Threads and Conversation layout.
   The active conversation keeps its draft and attachments through resizing
   and same-thread navigation in the compact Threads pane.
   Find filters loaded messages. On supported local threads, the experimental

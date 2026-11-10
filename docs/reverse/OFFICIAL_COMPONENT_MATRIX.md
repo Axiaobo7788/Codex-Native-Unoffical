@@ -24,9 +24,9 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 | **`CodexButton`** | `lib/src/app/primitives/codex_button.dart` | `FilledButton`, `OutlinedButton`, `TextButton` | Radix button / Tailwind action pill | Radius: `10px`, Height: `32px` / `36px`, Border: `0.5px` hairline | Zero ink ripple; 80 ms subtle background tint transition; supports `primary`, `secondary`, `danger`, `ghost` variants. |
 | **`CodexIconButton`** | `lib/src/app/primitives/codex_button.dart` | `IconButton` | Radix icon action button | Radius: `8px` / `10px`, Size: `32px` / `34px` / `36px` | Quiet square icon container; hover highlight with zero elevation change; accessible tooltip binding. |
 | **`CodexSidebarRow`** | `lib/src/app/primitives/codex_sidebar_row.dart` | `ListTile`, `ListTileTheme` | `--height-token-row: 36px` nav row | Height: `36px`, Radius: `10px`, Padding: `0 10px` | Single-line title with trailing relative time or status dot; persistent neutral selection tint; keyboard navigable. |
-| **`CodexComposer`** | `lib/src/app/primitives/codex_composer.dart` | `Card`, Material `TextField` box | Floating composer container | Max-width: `704px`, Radius: `24px`, Gutters: `12px/10px` | Auto-growing multiline input; bottom action rail; focus ring on keyboard tab; flush-right 34px circular Send/Stop button. |
-| **`CodexMessageBubble`** | `lib/src/app/primitives/codex_message_bubble.dart`| Material `Card`, `Container` | User message pill (`--user-message-*`) | Max-width: `75%` (~528px), Radius: `18px`, Tint: `alpha 8%` | Right-aligned prompt bubble; top attachment chips row; auto-collapse over 12 lines / 680 characters with "Show full message". |
-| **`CodexActivityRow`** | `lib/src/app/primitives/codex_activity_row.dart` | Material `Card`, `ExpansionTile` | Terminal / Tool invocation card | Radius: `8px`, Height: `34px`, Border: `0.5px` | Terminal glyph, command string in monospace, status indicator, trailing "View output" action trigger. |
+| **`CodexComposer`** | `lib/src/app/primitives/codex_composer.dart` | `Card`, Material `TextField` box | Floating composer container | Width up to `672px`, active desktop radius `28px` | Auto-growing input, attachment on the left, active controls on the right. Empty and compact Native layouts keep their separate controls row. |
+| **`CodexMessageBubble`** | `lib/src/app/primitives/codex_message_bubble.dart`| Material `Card`, `Container` | User message pill (`--user-message-*`) | Width up to `75%` (`504px` at cap), radius `18px` | Right-aligned prompt bubble with bounded preview and explicit expansion. |
+| **`CodexActivityRow`** | `lib/src/app/primitives/codex_activity_row.dart` | Material `Card`, `ExpansionTile` | Inline command and tool activity | Height `34px` | Neutral inline variant on Desktop. The bordered variant remains available for review and compact activity. Output remains on demand. |
 | **`CodexPopover`** | `lib/src/app/primitives/codex_popover.dart` | Material `Dialog`, `PopupMenuButton` | Radix Popover primitive | Radius: `16px` / `20px`, Elevation Tier 2 | Anchored overlay positioning; dismisses on outside tap or `Escape`; smoothly transitions without full-screen route blockage. |
 | **`CodexMenu`** | `lib/src/app/primitives/codex_menu.dart` | Material `MenuAnchor`, `PopupMenuEntry` | Radix DropdownMenu | Item height: `32px`, Radius: `8px`, Container radius: `16px` | Keyboard arrow up/down selection, hotkey shortcut indicator, divider rules, submenus. |
 | **`CodexTooltip`** | `lib/src/app/primitives/codex_tooltip.dart` | Material `Tooltip` | Radix Tooltip | Radius: `16px` pill, Offset: `6px`, Padding: `4px 10px` | Fast 150 ms fade-in; suppresses hit-testing collisions with timeline items; high-contrast dark surface. |
@@ -80,7 +80,7 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 
 - **Role**: Bounded floating composer at the bottom of the conversation column.
 - **Geometry**:
-  - Max width: `704px` (`44rem`), centered.
+  - Max width is `672px` (`42rem`), centered. See the [current arrangement](OFFICIAL_UI_STRUCTURAL_MAPPING.md).
   - Corner radius: `24px` (`1.5rem`) (or `28px` pill).
   - Background: Elevated surface Tier 2 (`#2F2F2F` dark / `#F4F4F4` light).
   - Border: `1px` subtle hairline (`rgba(255,255,255,0.08)` / `rgba(0,0,0,0.08)`).
@@ -104,7 +104,7 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 
 - **Role**: Render user prompt entries with clear visual boundaries.
 - **Alignment**: Flush right in the reading column.
-- **Max Width**: Clamped to `75%` of column width (`~528px` on `704px` column).
+- Width is capped at `75%` of the column (`504px` at `672px`).
 - **Corner Radius**: `18px` (`--user-message-border-radius`).
 - **Background**: Soft translucent tint `light-dark(var(--alpha-05), var(--alpha-08))` (`#2F2F2F` in dark mode).
 - **Attachments Row**: Rendered above the message text if files/images are attached:

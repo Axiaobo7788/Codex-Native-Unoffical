@@ -189,11 +189,14 @@ because they are the next machine-actionable feature. First refresh the current
 official Codex Desktop structure and translate the primary UI hierarchy into
 Flutter. This override ends only after the shell/sidebar/workspace/timeline/
 composer structural milestone is revalidated and recorded in PROJECT_STATUS.md.
+The [structural map](OFFICIAL_UI_STRUCTURAL_MAPPING.md) separates the translated
+Native checkpoint from the still-open signed-in reference and Human gates.
 
 ### 3.6 Active queue after consolidation
 
 | State | Slice | Value, evidence and implementation boundary |
 |---|---|---|
+| `HUMAN_REVIEW_PENDING` | Desktop primary structural translation | Current build and signed-in active capture ground the rail, contextual sidebar, header, inline activity and bottom composer. Native keeps one conversation through resize. Comparable signed-in compact, empty, dark, expanded activity and open secondary surfaces remain open. [Evidence and known differences](OFFICIAL_UI_STRUCTURAL_MAPPING.md) |
 | `HUMAN_REVIEW_PENDING` | F15 local Goal and Review target presentation | Both use the public stock schema. Objective copy, focus, dialog flow, and interaction feel need separate Human feedback. |
 | `HUMAN_REVIEW_PENDING` | F16 scoped Section browsing | Native browses one bounded section at a time in stock order. Direct stock and Host calls verified pagination. Subjective browse and filter interactions still need Human feedback. |
 | `HUMAN_REVIEW_PENDING` | F17 saved and session Pin interactions | The reserved stock section is protected. The sidebar and conversation header share action labels and membership guards. Human review remains open for hierarchy and readability. |
