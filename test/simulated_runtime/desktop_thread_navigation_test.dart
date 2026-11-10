@@ -1,5 +1,6 @@
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,6 +63,22 @@ void main() {
     await tester.pumpAndSettle();
     expectThread('second');
 
+    Future<void> pressMouseButton(int buttons) async {
+      final gesture = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+        buttons: buttons,
+      );
+      await gesture.down(tester.getCenter(header));
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    await pressMouseButton(kBackMouseButton);
+    expectThread('first');
+    await pressMouseButton(kBackMouseButton);
+    expectThread('first');
+    await pressMouseButton(kForwardMouseButton);
+    expectThread('second');
     await tester.tap(back);
     await tester.pumpAndSettle();
     await select('third');

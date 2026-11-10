@@ -232,7 +232,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
           OfficialCodexTheme.desktopLeftPanelMinWidth,
           maximum,
         );
-        return _DesktopSplitWorkspace(
+        final workspace = _DesktopSplitWorkspace(
           key: const ValueKey('desktop-split-workspace'),
           conversationKey: _conversationKey,
           onBack: _pendingThreadVisit == null && _threadVisitIndex > 0
@@ -267,6 +267,18 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
           settingsController: widget.settingsController,
           diffController: widget.diffController,
           defaultWorkingDirectory: widget.defaultWorkingDirectory,
+        );
+        return Listener(
+          onPointerDown: (event) {
+            if (event.kind != PointerDeviceKind.mouse) return;
+            switch (event.buttons) {
+              case kBackMouseButton:
+                workspace.onBack?.call();
+              case kForwardMouseButton:
+                workspace.onForward?.call();
+            }
+          },
+          child: workspace,
         );
       },
     );
