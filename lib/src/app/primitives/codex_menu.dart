@@ -43,34 +43,43 @@ class CodexMenu<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      padding: padding,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (header != null) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10.0,
-                vertical: 6.0,
-              ),
-              child: header!,
-            ),
-            const Divider(
-              height: 1.0,
-              thickness: OfficialCodexTheme.hairlineBorderWidth,
-            ),
-            const SizedBox(height: 4.0),
-          ],
-          for (final item in items)
-            _CodexMenuItemWidget<T>(
-              item: item,
-              isSelected: item.value == selectedValue,
-              onTap: item.disabled ? null : () => onSelected(item.value),
-            ),
-        ],
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+      },
+      child: FocusScope(
+        autofocus: true,
+        child: Container(
+          width: width,
+          padding: padding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (header != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10.0,
+                    vertical: 6.0,
+                  ),
+                  child: header!,
+                ),
+                const Divider(
+                  height: 1.0,
+                  thickness: OfficialCodexTheme.hairlineBorderWidth,
+                ),
+                const SizedBox(height: 4.0),
+              ],
+              for (final item in items)
+                _CodexMenuItemWidget<T>(
+                  item: item,
+                  isSelected: item.value == selectedValue,
+                  onTap: item.disabled ? null : () => onSelected(item.value),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
