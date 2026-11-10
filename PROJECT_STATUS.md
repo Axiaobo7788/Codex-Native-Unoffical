@@ -122,16 +122,20 @@ question steps through Continue and Submit. The saved Markdown list text
 is inset two body em, verified on a paired stock capture. The active
 Desktop composer uses one Stop/Steer slot. Double Escape interrupts a
 stock turn while keeping its unsent draft. An arriving approval disarms
-that shortcut, verified on the packaged app. Home, open Changes, Review,
-expanded activity, compact and dark/focused states have separate evidence
-gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
+that shortcut, verified on the packaged app. Empty Send is disabled and
+separated from the permissions control by 8 px. The ordinary focused
+composer retains its neutral border. Home, open Changes, Review, expanded
+activity, compact and dark variants have separate evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
 
 ## Current checkpoint
 
 - `e64d1e6` translates the active Desktop primary action and turn-scoped
   Escape confirmation. The Linux release verified stock Steer, keyboard
-  and pointer interruption, and approval priority. The next composer
-  corrections are the idle empty Send state and verified toolbar spacing.
+  and pointer interruption, and approval priority. `fe17af8` and `43e4d35`
+  translate the idle Send state, primary action gap and focus outline.
+  A paired Linux release capture verified the same border with and
+  without editor focus. The matched signed-in density and multiline
+  footer remain open.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `3505385`, `39bd7ea` and `67b85ca` translate the Goal repeat toggle,

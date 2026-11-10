@@ -42,7 +42,7 @@ got here.
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `309406.Ceox.tn` routes title and expand through the same visible-tab toggle and retains dirty state while the tab is parked. The `cI4i` rail applies a 13 px inset. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Switching panes retains an unsaved draft. Explicit Close or a second click on the visible Goal strip closes the tab and returns to the saved objective. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4`, `dc7c3ee`, `3505385` | Native confirms clear and uses a full reading surface when both columns cannot fit. The signed-in editor toolbar and terminal status variants remain open. | PARTIAL | Compare editor toolbar, budget and terminal states with the current official tab. |
 | A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. `42793.vMUJ.E` labels an intermediate stock step Continue. | The Linux release used numbered stock options, clicked Continue and Submit and returned both answers. Widget tests cover arrows/Enter, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1`, `39bd7ea` | The ordinary official stock call site wires Escape to interruption. Native Cancel request uses the existing request cancellation response. H1 async free text and voice require separate supported evidence. | PARTIAL | Compare the ordinary stock focused and free-text states. Track H1 async input and the interruption delta separately. |
-| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.LUWz` defines the permission control. `104066.dig0 → 209288.vdOM` maps the end-aligned model list and effort slider. `309406.tYeY.Zp → rG` resolves one primary action. | The Linux release opens separate anchored model and Sandbox controls and respects stock model/effort inheritance. The single running action changes from Stop to Steer when a draft appears. Mouse Stop and double-Escape stopped real stock turns, and a real approval disarmed the keyboard confirmation. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1`, `6c9bc6c`, `e64d1e6` | Idle empty Send still looks active. Native uses its existing 34 px action diameter and focus border. Recommended model bundles, locked tiers, queue/voice variants and matched signed-in focused geometry remain separate. | PARTIAL | Translate the verified idle disabled state and right-control separation. Resolve the current focus border and density from the Electron branch before changing the surrounding surface. |
+| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.LUWz` defines the permission control. `104066.dig0 → 209288.vdOM` maps the end-aligned model list and effort slider. `309406.tYeY.Zp → rG` resolves one primary action. `16389.Ips7.C` gives it an 8 px leading gap and the ordinary Electron surface retains its elevation border on focus. | The release opens stock model and Sandbox controls and respects inheritance. A single action changes between disabled Send, Send, Stop and Steer. Keyboard and pointer stop exercised real stock turns. The release kept a stable outline while the editor accepted typing. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1`, `6c9bc6c`, `e64d1e6`, `fe17af8`, `43e4d35` | Native uses its existing 34 px diameter and 45% disabled opacity. The official ordinary and dictation-enabled branches have different action sizes. Account model bundles, locked tiers and queue/voice variants remain separate. | PARTIAL | Measure the default and dictation-enabled button diameter and multiline footer in the appropriate signed-in branch. Preserve bounded draft and stock inheritance. |
 
 `MATCH` requires current same-state evidence. `PARITY_ACCEPTABLE` records
 an evidenced equivalent with a bounded known delta. `PARTIAL`, `DIVERGED`
@@ -182,6 +182,27 @@ retention. The 526 default Flutter cases, five opt-in stock cases,
 format, ASCII-path analysis, Linux bundle closure and the bounded-history
 benchmark passed. Signed-in official focus and density still need a
 matched capture.
+
+## A11 idle action and focused surface
+
+`16389.Ips7.C` adds the primary action after the other footer controls
+with an 8 px leading margin. `182735.enVv` mutes a disabled action.
+Native now disables Send without text or attachments, treating whitespace
+as empty. The Linux package showed the disabled action and accepted a
+nonempty draft in the same slot. The widget assertion measures 8 px
+from the permission control. The initial test run exposed tests that
+tapped in the same frame as editing. Their input steps now allow the
+widget to paint its enabled state before clicking. All 526 cases passed.
+
+The agy peer traced the default Electron composer surface in
+`f0eddefa0de7.css` to its base elevation border. The focus-dependent
+document-composer background and assistant-mode outline are separate
+branches. Native retains its neutral outline while the editor is focused.
+High-contrast rendering preserves the Native focus cue. A widget test
+moves focus to conversation search and back without changing the ordinary
+composer border. At 1191×865, the top outline region was identical before
+and after pointer focus and text entry. Linux build, format, ASCII-path
+analysis, 526 Flutter cases, Rust format, Clippy and 100 Rust tests passed.
 
 ## A11 stock model and reasoning
 
