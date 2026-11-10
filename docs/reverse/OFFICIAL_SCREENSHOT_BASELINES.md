@@ -42,11 +42,11 @@ The automated geometry verification suite (`test/app/official_convergence_geomet
 | **App Shell Frame** | `1920.0 × 1080.0` | `Size(1920.0, 1080.0)` | `0.0 px` | Exact match to window frame |
 | **Application Menu Toolbar** | `1920.0 × 36.0` (`--height-toolbar-sm`; `+8px` titlebar offset in Electron) | `Size(1920.0, 36.0)` | `0.0 px` | Full-width top toolbar above rail and page surface |
 | **Persistent Navigation Rail** | `52.0 × 1044.0` (`w-13` / `X1CL` fallback `52`) | `Size(52.0, 1044.0)` | `0.0 px` | Left global icon rail (`Home`, `Plugins`, bottom settings); persists when sidebar collapses |
-| **Rounded Page Surface** | `1868.0 × 1044.0` (`inset-inline-start: 52px`) | `Size(1868.0, 1044.0)` | `0.0 px` | Rounded card housing contextual sidebar + workspace |
-| **Expanded Contextual Sidebar** | `288.0 × 1044.0` (`340.0` total left panel minus `52.0` rail) | `Size(288.0, 1044.0)` | `0.0 px` | Default `340px` total left panel (`qbQ6`); right hairline border |
-| **Collapsed Contextual Sidebar**| `0.0 × 1044.0` (`52.0` rail remains visible) | `Offstage` / `0.0 px` (`rail.width == 52.0`) | `0.0 px` | Contextual sidebar hidden; `closedLeftPanelWidth == 52.0` |
-| **Workspace Surface** | `1580.0 × 1044.0` (`1868.0` when sidebar collapsed) | `Size(1580.0, 1044.0)` | `±2.0 px` | `1920 - 340 = 1580px` |
-| **Thread Header Bar** | `1580.0 × 44.0` (`--height-toolbar`, Native `46.0` pending R3) | `Size(1580.0, 46.0)` | `±2.0 px` | Workspace header height |
+| **Rounded Page Surface** | `1868.0 × 1036.0` (`inset-inline-start: 52px`, `+8px` top offset, radius `12px` `--radius-xl-base: .75rem`) | `Size(1868.0, 1036.0)` | `0.0 px` | Rounded card housing contextual sidebar (`52px` header) + workspace |
+| **Expanded Contextual Sidebar** | `288.0 × 1036.0` (`340.0` total left panel minus `52.0` rail) | `Size(288.0, 1036.0)` | `0.0 px` | Default `340px` total left panel (`qbQ6`); right hairline border |
+| **Collapsed Contextual Sidebar**| `0.0 × 1036.0` (`52.0` rail remains visible) | `Offstage` / `0.0 px` (`rail.width == 52.0`) | `0.0 px` | Contextual sidebar hidden; `closedLeftPanelWidth == 52.0` |
+| **Workspace Surface** | `1580.0 × 1036.0` (`1868.0` when sidebar collapsed) | `Size(1580.0, 1036.0)` | `±2.0 px` | `1920 - 340 = 1580px` |
+| **Thread Header Bar** | `1580.0 × 46.0` (`--height-toolbar: 46px` on `Toolbar-w4tLPD`) | `Size(1580.0, 46.0)` | `0.0 px` | Workspace header height (`46px` `--height-toolbar`) |
 | **Conversation Column** | `672.0` (`42rem` in `192774`; legacy `704.0` / `44rem`) | `width <= 704.0`, centered | `0.0 px` | Centered reading column |
 | **User Message Bubble** | `width <= 75%` of column | `width <= 528.0`, right-aligned | `0.0 px` | User prompt bubble clamped to 75% column width |
 | **Floating Composer** | Matches reading column width | `width <= 704.0`, centered | `0.0 px` | Composer width matches conversation column |
