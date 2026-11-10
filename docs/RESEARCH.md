@@ -4150,3 +4150,81 @@ probe before interpreting that result as a content-search limitation.
   process trees shut down. The bundled Host also passed the same
   four-binary provider probe and the custom-default case. Human visual
   review and physical Android remain separate gates.
+
+## F27 scoped Host command output and account identity evidence
+
+- A structured result from a disposable MCP tool contained an ordinary
+  nested `aggregatedOutput` string. The F26 Host replaced it with null
+  and injected a spool descriptor. The new Rust opaque-payload test and
+  the real bundled-Host MCP smoke both failed on the old Host.
+- F27A (`5e4f42c`) scopes the direct string field to stock v2 ThreadItem
+  containers. A bounded path stack follows the JSON parser depth and
+  handles escaped keys and either member order. The generated installed
+  and public-alpha schemas had ten matching response and notification
+  paths, each with a commandExecution item. Nested MCP result and
+  argument objects, including command-looking strings or tags, pass
+  unchanged. Existing spool decoding, rollback, deduplication and
+  Remote capture limits retain their tests.
+- The branch passed 17 targeted Host transformer cases, 100 total
+  Rust tests, Dart format and analyze, the 65-root pure-Dart gate,
+  475 Flutter cases with five opt-in skips, 5/5 direct stock cases,
+  the bounded-history benchmark and Linux package checks.
+- The bundled Host's MCP smoke passed installed stock, public stable,
+  Desktop-train preview and higher public alpha. A packaged Linux
+  walkthrough resumed a disposable saved thread and called its
+  synthetic MCP tool in Skills, Plugins & MCP. The structured value
+  survived at 1280×720 and 720×800. No matching command spool was
+  created for the MCP value. The app, Host and stock shut down.
+- Packaged command-output fixtures on installed stock and higher
+  alpha displayed the expected 29-byte marker. Installed stock
+  spooled when the details loaded. The alpha had no matching spool
+  before Fetch and exactly one afterward. Both process trees shut down.
+- The synthetic child-process Host benchmark verified descriptor
+  identity, deduplication and first/last byte ranges at 3, 30 and
+  300 MiB on both baseline and fixed binaries. At 300 MiB, sampled
+  Host RSS growth was 626,688 B baseline and 1,110,016 B fixed.
+  Sampled Dart RSS growth was 4,096 B baseline and 53,248 B fixed.
+  Those values describe the sampled runs.
+- A separate real installed-stock probe used one saved fixture turn
+  through the bundled Host. Full `thread/turns/list`, bounded
+  `thread/items/list`, `thread/items/read`, legacy
+  `thread/read(includeTurns: true)` and `thread/resume` with a one-turn
+  full initial page all projected the same 29-byte command spool
+  reference. The deprecated full read ran only on that one-turn fixture.
+- F27B's initial peer evidence used incorrect positive wire fields and
+  source descriptions. The official `agy` audit challenged those against
+  the generated alpha schema, pinned source and independent disposable
+  runtime probes. The corrected peer tree `8fc4459` was published as
+  `8473a40`. The owner retained the original and follow-up commits in
+  the isolated branch. Gemini cleared F27A at `5e4f42c` without P0, P1
+  or P2 findings.
+- In independent probes through the F26 bundled Host, installed, stable
+  and Desktop-train stock returned `-32600` for the notice method.
+  Higher public alpha returned a matching synthetic pair in a selected
+  workspace. The two experimental capability settings produced the same
+  observed routing field, which remains experimental in the schema.
+- Direct higher-alpha loopback probes confirmed that an invalid notice
+  shape returns null and missing routing can fail `account/read` while
+  the notice RPC succeeds. Replacing only the fixture's saved user and
+  synthetic bearer while the notice GET was held produced an original
+  notice and a matching stale cached account snapshot. A later notice
+  returned null. Separate public logout against a disposable fixture
+  suppressed the in-flight result. Those probes establish why the
+  experimental routing pair cannot authorize notice presentation.
+  [Account identity evidence](reverse/ACCOUNT_NOTICE_IDENTITY_EVIDENCE.md)
+- Shared code/evidence commit 8473a40 passed Dart format and analyze,
+  475 Flutter cases with five opt-in skips, 5/5 direct-stock cases,
+  100 Rust tests with Clippy, and the 65-root pure-Dart gate. The
+  history benchmark retained 100 of 1,000 turns and exercised ten
+  3 MiB outputs. The Linux bundle, license check, and bundled Host
+  MCP, Turn and Review smoke passed. Turn interruption and both Review
+  lifecycle markers were observed.
+- The integrated package showed the preserved structured MCP result in
+  its original dialog at 720×800 with no matching command spool.
+  Installed stock and higher alpha showed the 29-byte saved command
+  output, and the alpha spooled it only after Fetch. All three app,
+  Host and stock process trees shut down.
+- The shared bundled Host passed 3, 30 and 300 MiB streaming cases
+  with repeated spool identity and bounded range reads. At 300 MiB,
+  the sampled Host RSS increase was 806,912 B and Dart was 102,400 B.
+  Human visual review and physical Android remain separate.

@@ -2417,3 +2417,22 @@ lifecycle presentation the source of truth.
   composer clears only the submitted draft and retains newer edits.
   The Direct Host Remote projection stays on its existing boundary.
   [Stock protocol registration](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/common.rs)
+
+---
+
+## ADR-053 — Scope streaming output spooling to stock command fields
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Rewrite direct `aggregatedOutput` strings at known stock v2 ThreadItem
+  response and notification paths. Use bounded JSON container tracking and
+  match the field independently of member order.
+- Pass opaque results and arguments through with their original field
+  values, including nested strings with the same name. Stock schema changes
+  that add command item wrappers require a path and regression audit.
+- Retain incremental decoding, spool limits and identity, candidate rollback,
+  and Remote byte accounting. A large opaque response still follows the
+  existing Remote size limit.
+  [F27 evidence](RESEARCH.md#f27-scoped-host-command-output-and-account-identity-evidence)

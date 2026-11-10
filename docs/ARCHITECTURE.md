@@ -43,11 +43,12 @@ Initial implementations:
 
 The Host consumes only its reserved `host/*` request namespace. Every ordinary
 Codex request, notification, server request, and response remains on the stock
-app-server protocol. Large `aggregatedOutput` values are decoded incrementally
-to private capped files and replaced with typed descriptors before the ordinary
-JSON reaches Dart. A streaming SHA-256 plus logical byte length identifies exact
-repeats only inside the current Host session; clients continue to receive one
-opaque random reference and never a digest or path. Newly stored output remains
+app-server protocol. The Host decodes direct command `aggregatedOutput` strings
+at known stock v2 thread item paths into private capped files. It replaces those
+strings with typed descriptors before JSON reaches Dart. Opaque MCP results and
+arguments pass through with their original field values. A streaming SHA-256
+plus logical byte length identifies exact repeats inside the current Host
+session. Clients receive one opaque random reference. Newly stored output remains
 owned by its sanitized JSON candidate until that candidate is delivered. A
 pre-delivery parse/capture/observer failure removes its data, metadata, index,
 and accounted bytes; after a complete local delivery, a later Remote observer
