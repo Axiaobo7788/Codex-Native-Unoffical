@@ -877,8 +877,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         final shortViewport = constraints.maxHeight < 560;
         final constrainApproval =
             shortViewport && widget.approvalController.pending.isNotEmpty;
-        final constrainQuestion =
-            shortViewport && widget.userInputController.pending.isNotEmpty;
+        final constrainUserInput =
+            shortViewport &&
+            (widget.userInputController.pending.isNotEmpty ||
+                widget.userInputController.pendingElicitations.isNotEmpty);
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.
         final canSplit = widget.hasDesktopShell && constraints.maxWidth > 960;
@@ -926,7 +928,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ),
                   ),
                   Flexible(
-                    flex: constrainQuestion ? 5 : 0,
+                    flex: constrainUserInput ? 5 : 0,
                     child: _UserInputBanner(
                       controller: widget.userInputController,
                     ),
