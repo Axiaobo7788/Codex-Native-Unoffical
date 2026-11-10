@@ -406,7 +406,16 @@ void main() {
           'thread-plain',
         ]);
         expect(find.text('OpenAI/Codex#500'), findsNothing);
-        expect(find.text('Linked PRs'), findsOneWidget);
+        expect(find.text('Linked PRs'), findsNothing);
+        final emptyTrigger = find.byTooltip(
+          'Inspect linked pull requests for this thread',
+        );
+        final details = find.byKey(const ValueKey('timeline-details-button'));
+        expect(emptyTrigger, findsOneWidget);
+        expect(
+          tester.getRect(emptyTrigger).right,
+          lessThan(tester.getRect(details).left),
+        );
 
         await tester.tap(find.byKey(const ValueKey('thread-linked-pr-pill')));
         await tester.pumpAndSettle();

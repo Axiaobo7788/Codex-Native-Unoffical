@@ -277,8 +277,8 @@ output, reasoning and last-turn token counts. Two packaged Linux captures
 using stock token-usage updates show the numeric header badge before the
 change and a composer ring with its 10% tooltip after it. The percentage
 differs between the captures because the second fixture turn adds tokens.
-Narrow composer controls keep their existing width budget. The separate
-Linked PRs entry in the title area remains visible.
+Narrow composer controls keep their existing width budget. This pass left
+the separate Linked PRs entry in the title area for the subsequent comparison.
 
 The fifth pass uses `ZlsN/tH` and its `tW` trigger to move the project chooser
 into the Home heading. Native uses one selected-directory phrase and retains
@@ -305,3 +305,11 @@ app, hovering a saved stock user message revealed the right-aligned row.
 Edit opened the existing truncate confirmation and dismissing it left the
 conversation intact. H1 contains no user bubble, so this comparison uses
 the static component and the paired Native releases.
+
+The seventh pass moves Desktop linked pull requests to the trailing action
+group, leaving the folder and title together. An empty or pending scan uses
+a quiet icon and retains the existing popover. Populated, truncated and
+error states keep their labels when there is room. The packaged app opened
+its empty state from the new position. Simulated integration also covers
+populated links, overflow reporting, retry, and the tight split. H1 shows the
+title and action groups but does not establish the official linked-PR states.

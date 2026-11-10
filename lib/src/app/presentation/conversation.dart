@@ -1541,8 +1541,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               thread != null &&
               _activeCapabilities.supportsInConversationSearch &&
               constraints.maxWidth >= 520;
+          final supportsLinkedPrs =
+              _attachmentGateway?.supportsThreadAttachments ?? false;
+          final linkedPrs = _activeThreadLinkedPrs?.threadId == thread?.id
+              ? _activeThreadLinkedPrs
+              : null;
           final compactLinkedPrs =
-              widget.hasDesktopShell && constraints.maxWidth < 360;
+              constraints.maxWidth < 360 ||
+              (linkedPrs?.isNotEmpty != true &&
+                  linkedPrs?.truncated != true &&
+                  _linkedPrLoadError == null);
           return Row(
             children: [
               Expanded(
@@ -1578,17 +1586,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                   ),
                             ),
                           ),
-                          if (_attachmentGateway?.supportsThreadAttachments ??
-                              false) ...[
+                          if (!widget.hasDesktopShell && supportsLinkedPrs) ...[
                             const SizedBox(width: 8),
                             Flexible(
                               child: _buildLinkedPrHeaderPill(
                                 context,
                                 thread.id,
-                                _activeThreadLinkedPrs?.threadId == thread.id
-                                    ? _activeThreadLinkedPrs
-                                    : null,
-                                compact: compactLinkedPrs,
+                                linkedPrs,
+                                compact: false,
                               ),
                             ),
                           ],
@@ -1698,6 +1703,22 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       : 'Changes ${changes.files.length}',
                 ),
                 const SizedBox(width: ThemeTokens.space2),
+              ],
+              if (thread != null &&
+                  widget.hasDesktopShell &&
+                  supportsLinkedPrs) ...[
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: math.min(168.0, constraints.maxWidth * 0.34),
+                  ),
+                  child: _buildLinkedPrHeaderPill(
+                    context,
+                    thread.id,
+                    linkedPrs,
+                    compact: compactLinkedPrs,
+                  ),
+                ),
+                const SizedBox(width: ThemeTokens.space1),
               ],
               if (thread != null && widget.hasDesktopShell)
                 _timelineDetailsButton()
@@ -2059,8 +2080,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
     return CodexPopoverAnchor(
       controller: _linkedPrsPopoverController,
-      targetAnchor: compact ? Alignment.bottomRight : Alignment.bottomLeft,
-      followerAnchor: compact ? Alignment.topRight : Alignment.topLeft,
+      targetAnchor: widget.hasDesktopShell
+          ? Alignment.bottomRight
+          : Alignment.bottomLeft,
+      followerAnchor: widget.hasDesktopShell
+          ? Alignment.topRight
+          : Alignment.topLeft,
       width: 360,
       popoverBuilder: (context, close) => ValueListenableBuilder<int>(
         valueListenable: _linkedPrViewNotifier,
@@ -2076,7 +2101,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       child: CodexButton(
         key: const ValueKey('thread-linked-pr-pill'),
         size: CodexButtonSize.sm,
-        variant: CodexButtonVariant.secondary,
+        variant: compact
+            ? CodexButtonVariant.ghost
+            : CodexButtonVariant.secondary,
         tooltip: tooltipMessage,
         onPressed: () {
           if (_linkedPrLaunchError != null) {
@@ -2097,7 +2124,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         icon: Icon(
           Icons.call_merge_rounded,
           size: 12,
-          color: _linkedPrLoadError != null ? palette.danger : palette.accent,
+          color: _linkedPrLoadError != null
+              ? palette.danger
+              : compact
+              ? palette.textSecondary
+              : palette.accent,
         ),
         child: compact
             ? null
