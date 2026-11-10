@@ -4083,3 +4083,70 @@ probe before interpreting that result as a content-search limitation.
   viewer, and both alpha detail pages collapsed. All three test app,
   Host and stock process trees shut down. Human visual review and
   physical Android remain separate.
+
+
+## F26 local provider inventory and MCP result integrity
+
+- F26A (`c95df74`) reads `modelProvider/list` only when opening or
+  refreshing local Runtime details. The retained snapshot keeps at most
+  32 display names, provider kinds and an exact default marker. It caps
+  labels without splitting surrogate pairs and removes control and bidi
+  formatting characters. Raw endpoints, environment names, cloud
+  settings and provider IDs are not retained by the projection. Raw
+  JSON still crosses the local Host and is decoded before projection.
+- An exact unknown-method reply displays normal version unavailability.
+  Other RPC and malformed response errors stay failures with fixed
+  provider section copy. The adjacent Provider capabilities card is
+  independent. There are no provider mutations or Remote RPC additions.
+- A disposable pure-Dart probe through the real bundled Host exercised
+  installed `0.167.0-alpha.3.2`, public stable `0.167.0`, Desktop-train
+  `0.167.0-alpha.4.1`, and public `0.169.0-alpha.7`. The first two
+  returned unsupported. Both previews returned OpenAI as default and
+  a synthetic custom gateway. An extra Desktop-train fixture verified
+  that a configured custom default was marked instead of OpenAI.
+- The branch package showed the legacy unavailable state and the
+  Desktop-train provider list with a custom gateway and default marker.
+  Refresh and the 720×800 viewport preserved those rows. The first
+  rapid synthetic click in the preview case did not open the dialog.
+  A focused pointer press opened it. The app, Host, and stock process
+  trees shut down. The fixture had no account and rate-limit diagnostics
+  separately reported that account authentication was required.
+- A separate direct MCP tool probe observed a payload-integrity gap.
+  A disposable fixture returned a synthetic string under
+  `structuredContent.nested.aggregatedOutput`. Dart through direct
+  stock preserved the string. Through the bundled Host with the same
+  stock, the string became null and the object gained
+  `_codexNativeOutput`. The result reproduced on installed stock and
+  public alpha `0.169.0-alpha.7`. The Host test
+  `handles_multiple_messages_nested_keys_and_non_string_values` also
+  covers name-based interception at a nested path. An independent Host
+  correction must preserve actual command-output spooling and keep
+  unrelated structured result fields intact.
+- F26B published the reviewed final evidence from Gemini's `0ccd0f9`
+  as `317dfb1`. The headless four-binary probe measured separate
+  1 MiB live and 64 KiB persisted internal result caps and six of
+  sixteen selectively deferred fixtures on the higher alpha. The
+  wire envelope and arguments can add bytes beyond the internal
+  result cap. Legacy, structured, media and error cases retain inline
+  paths. The Remote size effects are source extrapolations. The
+  installed Desktop evidence is static and records the actual ASAR
+  offsets with zero deferral or item-read method strings.
+  [MCP result evidence](reverse/MCP_RESULT_DISCLOSURE_EVIDENCE.md)
+- Official `agy` TUI review of F26A found no P0, P1 or P2 issues at
+  `c95df74`. The B audit corrected source, evidence labels, scope and
+  archive provenance. Two amended private B drafts were preserved
+  in local audit refs. The accepted corrections were follow-up
+  commits, and shared `main` history used ordinary integration.
+- Shared code/evidence commit 317dfb1 passed Dart format and analyze,
+  475 Flutter cases with five opt-in skips, 5/5 direct stock cases,
+  98 Rust tests with Clippy, and the 65-root pure-Dart gate. The
+  history benchmark retained 100 of 1,000 turns and exercised ten
+  3 MiB command outputs. The Linux bundle and license checks, Host
+  MCP smoke, and loopback-backed Turn and uncommitted Review smoke
+  passed, including interruption and both Review lifecycle markers.
+- The integrated package repeated the installed version fallback and
+  the Desktop-train inventory and refresh walkthrough. The provider
+  list and default marker fit at 720×800. Both test app, Host and stock
+  process trees shut down. The bundled Host also passed the same
+  four-binary provider probe and the custom-default case. Human visual
+  review and physical Android remain separate gates.
