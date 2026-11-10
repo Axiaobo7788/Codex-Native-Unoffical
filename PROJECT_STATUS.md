@@ -119,11 +119,20 @@ captions in Commands. The Linux package opened real output and switched
 to raw Execution. Clicking the visible Goal strip again closes the editor
 and discards its local draft. The Linux release submitted both stock
 question steps through Continue and Submit. The saved Markdown list text
-is inset two body em, verified on a paired stock capture. Home, open
-Changes, Review, expanded activity, compact and dark/focused states have
-separate evidence gates. [Hosted CI for `4d8b1fa`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42915018905)
+is inset two body em, verified on a paired stock capture. The active
+Desktop composer uses one Stop/Steer slot. Double Escape interrupts a
+stock turn while keeping its unsent draft. An arriving approval disarms
+that shortcut, verified on the packaged app. Home, open Changes, Review,
+expanded activity, compact and dark/focused states have separate evidence
+gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
 
 ## Current checkpoint
+
+- `e64d1e6` translates the active Desktop primary action and turn-scoped
+  Escape confirmation. The Linux release verified stock Steer, keyboard
+  and pointer interruption, and approval priority. The next composer
+  corrections are the idle empty Send state and verified toolbar spacing.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `3505385`, `39bd7ea` and `67b85ca` translate the Goal repeat toggle,
   stock question step label and desktop Markdown list inset. A Linux

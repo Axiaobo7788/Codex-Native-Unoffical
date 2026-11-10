@@ -42,7 +42,7 @@ got here.
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `309406.Ceox.tn` routes title and expand through the same visible-tab toggle and retains dirty state while the tab is parked. The `cI4i` rail applies a 13 px inset. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Switching panes retains an unsaved draft. Explicit Close or a second click on the visible Goal strip closes the tab and returns to the saved objective. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4`, `dc7c3ee`, `3505385` | Native confirms clear and uses a full reading surface when both columns cannot fit. The signed-in editor toolbar and terminal status variants remain open. | PARTIAL | Compare editor toolbar, budget and terminal states with the current official tab. |
 | A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. `42793.vMUJ.E` labels an intermediate stock step Continue. | The Linux release used numbered stock options, clicked Continue and Submit and returned both answers. Widget tests cover arrows/Enter, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1`, `39bd7ea` | The ordinary official stock call site wires Escape to interruption. Native Cancel request uses the existing request cancellation response. H1 async free text and voice require separate supported evidence. | PARTIAL | Compare the ordinary stock focused and free-text states. Track H1 async input and the interruption delta separately. |
-| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.LUWz` defines the permission control. `104066.dig0 → 209288.vdOM` maps the end-aligned model list and effort slider. | The Linux release opens separate anchored model and Sandbox controls. Real stock requests verified an inherited model, a selected model with higher effort, and session inheritance after clearing the override. The advanced permissions remain reachable. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1`, `6c9bc6c` | The stock picker exposes advertised model and effort values. Recommended model bundles, locked/account tiers, permission profiles, voice and focused/running toolbar geometry require separate evidence. | PARTIAL | Compare the active focused/running toolbar with the current official hierarchy. Preserve the stock inheritance distinction and track account-dependent picker variants separately. |
+| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.LUWz` defines the permission control. `104066.dig0 → 209288.vdOM` maps the end-aligned model list and effort slider. `309406.tYeY.Zp → rG` resolves one primary action. | The Linux release opens separate anchored model and Sandbox controls and respects stock model/effort inheritance. The single running action changes from Stop to Steer when a draft appears. Mouse Stop and double-Escape stopped real stock turns, and a real approval disarmed the keyboard confirmation. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1`, `6c9bc6c`, `e64d1e6` | Idle empty Send still looks active. Native uses its existing 34 px action diameter and focus border. Recommended model bundles, locked tiers, queue/voice variants and matched signed-in focused geometry remain separate. | PARTIAL | Translate the verified idle disabled state and right-control separation. Resolve the current focus border and density from the Electron branch before changing the surrounding surface. |
 
 `MATCH` requires current same-state evidence. `PARITY_ACCEPTABLE` records
 an evidenced equivalent with a bounded known delta. `PARTIAL`, `DIVERGED`
@@ -151,6 +151,37 @@ thread can hold one parked, length-bounded draft. Thread changes, a
 changed source objective, completion or removal invalidate it. The
 521-case Flutter suite and ASCII-path analysis passed. The official
 signed-in tab strip still needs a matched capture.
+
+## A11 active primary action and stop confirmation
+
+The installed `309406.tYeY.pR/Zp` chooses Stop for an interruptible local
+turn without a draft, and a follow-up action for a draft. `309406.rG`
+renders a single `182735.enVv` slot. Local Steer and Send share the upward
+arrow. Official Queue, dictation and realtime voice are separate variants.
+`309406.tL` arms the stop key for two seconds and scopes it to the turn.
+The agy peer independently traced the single-slot path and reviewed
+the Native diff and release captures.
+
+At 1191×865, the Linux release used one position for Stop, Steer and
+the Esc confirmation. A distinct disposable follow-up reached the
+loopback through stock after clicking Steer. Double Escape interrupted
+the active stock turn with its next unsent draft intact. Pointer Stop
+interrupted a second stock turn. An initial run captured a stale frame
+and the reused marker could match prior conversation history. A settled
+rerun used a fresh message marker and explicitly focused the field.
+
+The peer found that a newly arriving request could leave the confirmation
+armed. Native now clears it immediately on a pending approval, question
+or elicitation, when the active target changes and when the panel goes
+offstage. A release fixture opened the approval after the Esc hint was
+visible. The hint reverted to Stop, two Escape presses left the approval
+pending, and Reject reached stock. Both package runs exited the app,
+bundled Host and stock process. A simulated runtime regression covers
+stable placement, the 2-second timeout, approval precedence and draft
+retention. The 526 default Flutter cases, five opt-in stock cases,
+format, ASCII-path analysis, Linux bundle closure and the bounded-history
+benchmark passed. Signed-in official focus and density still need a
+matched capture.
 
 ## A11 stock model and reasoning
 
