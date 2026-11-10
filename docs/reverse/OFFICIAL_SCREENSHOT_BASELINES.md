@@ -1,5 +1,17 @@
 # Official Screenshot Baselines & Multi-Viewport Geometry Specification
 
+> **STRUCTURAL REVALIDATION REQUIRED (2026-11-10):** A current Human
+> side-by-side comparison found that the Native shell can satisfy several token
+> and geometry checks while still differing materially from the current official
+> Codex Desktop information hierarchy/composition. Treat structural portions of
+> this document as historical evidence until revalidated against the current
+> official window. Current live screenshots/DevTools/computed styles and refreshed
+> ASAR/component hierarchy supersede stale assumptions. An old passing geometry
+> test is not proof of current official parity.
+>
+> **Implementation rule:** Do not design. Translate observable official
+> structure/geometry/states into the closest clean-room Flutter equivalent.
+
 > **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.32239`)  
 > **Target Verification**: Automated Multi-Viewport Geometry Test Suite (`test/app/official_convergence_geometry_test.dart`)  
 > **Evidence Grading**: `STATIC_BUNDLE`, `LIVE_OBSERVED`, `LOCAL_SCHEMA`

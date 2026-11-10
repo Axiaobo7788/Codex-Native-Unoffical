@@ -255,6 +255,23 @@ Codex should not override measured visual evidence with abstract style
 preference. Gemini should not override architecture/memory/protocol invariants
 for visual convenience.
 
+### UI reconstruction protocol
+
+For official-fidelity work, neither peer invents a new visual direction.
+
+- Gemini preferentially gathers and refreshes current official visual/structural
+  evidence through the official app, DevTools, screenshots, ASAR/CSS/component
+  inspection, and measured states.
+- Codex preferentially translates that evidence into Flutter while preserving
+  bounded state, virtualization, focus/semantics, controller boundaries, and
+  regression coverage.
+- This remains peer collaboration, not a manager/worker hierarchy. Either agent
+  may challenge the other's claim with stronger evidence.
+- The loop is: official evidence -> explicit mapping -> Flutter translation ->
+  run Native -> screenshot/overlay comparison -> correct measured divergence.
+- Model preference is not a valid reason to change an official-observed layout
+  when a direct clean-room translation is feasible.
+
 ## 9. Systems collaboration
 
 Codex is the preferred first owner for protocol/Rust/transport/state-hardening

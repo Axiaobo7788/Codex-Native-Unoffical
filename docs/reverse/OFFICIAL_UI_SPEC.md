@@ -1,5 +1,16 @@
 # Official Desktop UI Specification & Measured Tokens
 
+> **STRUCTURAL REVALIDATION REQUIRED (2026-11-10):** A current Human
+> side-by-side comparison found that the Native shell can satisfy several token
+> and geometry checks while still differing materially from the current official
+> Codex Desktop information hierarchy/composition. Treat structural portions of
+> this document as historical evidence until revalidated against the current
+> official window. Current live screenshots/DevTools/computed styles and refreshed
+> ASAR/component hierarchy supersede stale assumptions.
+>
+> **Implementation rule:** Do not design. Translate observable official
+> structure/geometry/states into the closest clean-room Flutter equivalent.
+
 > **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.32239`, `codexBuildNumber: 25471`, `codexBuildFlavor: "prod"`)  
 > **Bundled Engine**: `codex app-server` (`codex-cli 0.167.0-alpha.3.2`)  
 > **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/async/e77f816560c6.css`, 2,970 custom properties)  

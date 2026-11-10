@@ -1,9 +1,33 @@
 # Project Status
 
 **Program mode: `SELF_ITERATION`**
-**Current phase: Official Client Convergence.**
+**Current phase: Desktop UI Structural Reconvergence (priority override within Official Client Convergence).**
 
 Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md) for the living queue, [Architecture](docs/ARCHITECTURE.md) for system boundaries, and [Decisions](docs/DECISIONS.md) for ADRs. Historical checkpoints are in the [pre-consolidation archive](docs/history/PROJECT_STATUS_through_F14.md) and [F15–F23 record](docs/history/CONVERGENCE_F15_F23.md).
+
+## Active priority override
+
+- Human side-by-side comparison of the current Native window with the current
+  official Codex Desktop rejected the prior structural-fidelity assumption:
+  correct individual tokens do not compensate for a divergent shell/component
+  hierarchy.
+- **UI reconstruction is now the highest-priority machine-actionable program.**
+  Existing functional READY items remain valid backlog entries but are
+  DEFERRED_BY_UI_PRIORITY until the core official Desktop shell is structurally
+  reconverged.
+- The implementation contract is **Do not design. Translate.** Refresh the
+  current official hierarchy first, then map it one-to-one into Flutter using
+  existing domain/controller behavior wherever possible.
+- Previous UI reverse documents remain useful token/component evidence, but
+  structural claims must be revalidated against the current official window.
+  Older geometry tests are regression evidence, not proof of current parity.
+- Codex and Gemini remain equal peers through the official agy TUI. Gemini
+  preferentially refreshes live/ASAR/visual evidence; Codex preferentially
+  performs clean-room Flutter translation and protects architecture/state
+  invariants. Both review the actual result.
+- Resume F33+ feature-long-tail priority only after shell, sidebar hierarchy,
+  workspace header, timeline/activity structure, composer, and responsive
+  composition have current official evidence and translated Native structure.
 
 ## Current checkpoint
 

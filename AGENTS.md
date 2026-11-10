@@ -265,6 +265,47 @@ Do not use wording such as "this report closes the current coordinated slice" as
 an implicit reason to end the active program. A report may close a slice while
 the same agent turn immediately proceeds to the next authorized slice.
 
+### Official UI translation rule
+
+When current official Codex Desktop evidence exists for a user-visible surface,
+the implementation task is **translation, not redesign**.
+
+**Do not design. Translate.**
+
+- Reconstruct observable hierarchy, geometry, component states, interaction
+  behavior, density, spacing, and placement from current official evidence, then
+  implement the closest clean-room Flutter equivalent.
+- Prefer the thinnest language/platform translation. Do not add a model-authored
+  design layer between official evidence and Flutter.
+- Current live official behavior, screenshots, DevTools/computed styles, and
+  revalidated ASAR/component evidence outrank older reverse documents, current
+  Native composition, and model aesthetic preference.
+- Existing reverse documents are evidence, not immutable truth. If Human visual
+  comparison or current live inspection contradicts an older structural claim,
+  mark it stale/revalidation-required and refresh it before implementation.
+- Preserve existing domain/controllers/protocol behavior unless translation
+  exposes a real correctness defect. Prefer presentation recomposition over
+  rewriting working business logic.
+- Do not copy proprietary source code, private assets, prompts, credentials, or
+  internal services. Clean-room reimplementation of observable structure,
+  measurements, states, and behavior remains required.
+- When the current shell is structurally divergent, structural reconvergence
+  outranks new presentation-bearing feature expansion. Functional backlog items
+  may remain technically READY while being deferred by active UI priority.
+- Passing an old geometry test does not establish current official parity.
+  Verify the current official and Native screen at the same state/viewport.
+
+For reconstruction, work in this order unless evidence proves otherwise:
+
+1. app/window shell and global navigation hierarchy;
+2. Codex product/sidebar hierarchy;
+3. workspace/thread header;
+4. conversation timeline and activity presentation;
+5. composer and controls;
+6. menus, popovers, dialogs and secondary surfaces;
+7. compact/responsive behavior;
+8. screenshot/overlay comparison and Human acceptance.
+
 ### Evidence labels and completion claims
 
 Keep these evidence classes distinct:

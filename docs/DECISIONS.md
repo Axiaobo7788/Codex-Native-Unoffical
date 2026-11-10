@@ -2517,3 +2517,52 @@ lifecycle presentation the source of truth.
   installed-inventory scope, and plugin mutation ownership continue
   to follow their existing contracts.
   [F31 evidence](RESEARCH.md#f31-partial-plugin-catalogs-and-saved-thread-provider-scope)
+
+---
+
+## ADR-041 — Current Official UI Evidence Is a Translation Contract
+
+**Date:** 2026-11-10  
+**Status:** Accepted
+
+### Context
+
+The Native client accumulated substantial Codex functionality and many measured
+official tokens, yet a current Human side-by-side comparison showed that the
+Desktop shell/information hierarchy still did not read as the same official
+Codex product. Passing token/geometry checks against an older assumed structure
+therefore overstated structural UI convergence. Continuing feature-long-tail
+work on a divergent presentation would increase later rework.
+
+### Decision
+
+1. Current observable official Codex Desktop structure, geometry, component
+   states and interaction are the clean-room presentation contract.
+2. When direct official evidence exists, implementation is translation rather
+   than model-authored redesign: **Do not design. Translate.**
+3. Current live/DevTools/refreshed ASAR evidence supersedes stale reverse
+   documents. Older reverse specifications must be marked/revalidated rather
+   than defended when contradicted by current evidence.
+4. Desktop UI Structural Reconvergence temporarily outranks presentation-bearing
+   F33+ feature expansion. Existing READY capability work remains in the living
+   backlog as DEFERRED_BY_UI_PRIORITY.
+5. Preserve working domain/protocol/controller behavior and bounded-memory
+   invariants; prefer presentation recomposition over business-logic rewrites.
+6. Codex and Gemini remain equal peers through the official agy TUI. Gemini
+   preferentially refreshes current official visual/structural evidence and
+   Codex preferentially translates it into Flutter, with evidence-based peer
+   review.
+7. Resume feature-long-tail priority after current shell, sidebar/workspace
+   hierarchy, timeline/activity composition, composer and responsive structure
+   have refreshed evidence and translated Native implementations suitable for
+   same-state screenshot/Human comparison.
+
+### Consequences
+
+- Existing UI reverse/token work is retained but is no longer automatically
+  authoritative for structure.
+- Old passing Native geometry tests remain regression tests; they do not by
+  themselves prove current official parity.
+- New UI work becomes more mechanical: evidence -> mapping -> Flutter
+  translation -> screenshot comparison, reducing speculative visual design.
+- Clean-room and licensing restrictions remain unchanged.

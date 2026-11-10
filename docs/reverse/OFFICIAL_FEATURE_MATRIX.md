@@ -180,6 +180,16 @@ in the current `READY` queue.
 | **Physical Android Device TLS/Keystore & Camera QR Walkthrough** | No physical Android handset attached to this Linux session. | Blocks final physical-device sign-off for Phase 4, but does not block Desktop/Host or machine-testable functional slices. |
 | **Physical Intel macOS & Developer ID Notarization Gate** | Requires Apple Developer ID credentials and physical Intel hardware. | Hosted CI already verifies universal `arm64 + x86_64` binaries (`42129434391`); signing remains a release-only gate. |
 
+### UI priority override
+
+The capability classifications below remain valid, but the current program
+priority is **Desktop UI Structural Reconvergence**. Functional rows marked
+READY are temporarily DEFERRED_BY_UI_PRIORITY; do not auto-select them merely
+because they are the next machine-actionable feature. First refresh the current
+official Codex Desktop structure and translate the primary UI hierarchy into
+Flutter. This override ends only after the shell/sidebar/workspace/timeline/
+composer structural milestone is revalidated and recorded in PROJECT_STATUS.md.
+
 ### 3.6 Active queue after consolidation
 
 | State | Slice | Value, evidence and implementation boundary |
