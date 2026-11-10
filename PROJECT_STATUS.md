@@ -31,12 +31,20 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- `155ea2f` translates the current official Changes side-tab contract into a
+  separate wide Desktop pane. The packaged app showed the active timeline and
+  a real Git diff side by side. `515d283` gives a pending question room around
+  the actual header, warning and composer. A Linux stock walkthrough scrolled
+  and submitted an answer at 820×420. The active Desktop queue now includes
+  a short-window audit of approval and elicitation cards.
+  [Secondary surface evidence](docs/RESEARCH.md#desktop-secondary-surface-follow-up)
 - Desktop remains in `SELF_ITERATION` while signed-in visual comparison is
   slice-scoped. `fd4ebe1` retains model and reasoning controls in a 240 px
   workspace and gives the draft its own row when the active controls need
   room. `8b6c617` enables arrow-key navigation in Desktop menus. `0023e11`
   restores the bounded history position after returning from Changes.
   [Interaction evidence](docs/RESEARCH.md#desktop-interaction-follow-up)
+  [Hosted CI for `6ed96f9`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42787565631)
 - The Desktop structural checkpoint translates the current wide Codex shell,
   contextual sidebar, workspace header, inline activity, change disclosure,
   and active composer. R0 ties the changes to installed renderer build
@@ -73,6 +81,11 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- The Changes side pane and short-window question checkpoint passed 505
+  Flutter cases with five opt-in skips, five separately enabled direct-stock
+  cases, the bounded-history benchmark, Linux bundle checks, and six bundled
+  Host smoke paths. The unchanged Rust tree and CI gates already passed on
+  `6ed96f9`. [Secondary surface evidence](docs/RESEARCH.md#desktop-secondary-surface-follow-up)
 - The Desktop interaction follow-up passed 504 Flutter cases with five opt-in
   skips, five separately enabled direct-stock cases, Dart format and analysis,
   the 65-root pure-Dart gate, the history benchmark, Linux bundle checks, and

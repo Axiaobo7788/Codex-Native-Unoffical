@@ -4607,3 +4607,31 @@ probe before interpreting that result as a content-search limitation.
   height. Those are static shell contracts. The measured values alone do not
   establish the diff tab registration or the state used by the signed-in
   Codex window.
+
+## Desktop secondary surface follow-up
+
+- Further inspection found the exact registration in build `25894`.
+  `176566.bc2de94faa.js` module `T8jz` exports the review side-panel open and
+  toggle actions. It registers the `DIFF` tab under `thread.sidePanel.diffTab`
+  and defaults the target to `right`. Related modules occur in
+  `244287.bc1007d00d.js` and `32819.1aa51e75d6.js`. This ties Changes to the
+  task side pane in static evidence. It does not determine the active user's
+  layout at the narrow boundary.
+- `155ea2f` uses the measured right-pane sizing roles above a 960 px workspace
+  and keeps Native's replacement view below that threshold. Both paths use
+  the same selected-file and virtualized diff projection. A disposable
+  Linux walkthrough opened the side pane on an actual Git change from
+  `three` to `four` through bundled Host and stock. A first fixture kept the
+  saved thread's read-only sandbox and the write was rejected. Re-seeding
+  with workspace-write allowed the controlled patch. The peer raised a
+  possible reading-position loss on width transition. `bcd3245` verifies
+  the visible item and vertical alignment after scrolling inside the wide
+  split, going narrow and returning wide, with no extra history page fetch.
+- The first short-question correction reproduced a 196 px overflow in the
+  820×420 simulated case. A normal-entry stock walkthrough with the
+  experimental `default_mode_request_user_input` enabled only in its
+  disposable profile still showed 19 px of overflow when a model warning
+  was present. `515d283` lets the card take the actual space available after
+  fixed controls and scrolls its content. A second packaged walkthrough kept
+  the warning, question actions and composer visible at 820×420, scrolled to
+  a free-form answer and confirmed the answer reached the stock tool call.

@@ -187,7 +187,10 @@ contain disposable fixture data. H1 itself is excluded from the repository.
 
 The official bundle has a responsive branch below 768 px. Native retains its
 existing 760 px transition and one live conversation state. Native sidebar
-width is session-local. The open diff still occupies the timeline pane.
+width is session-local. The current bundle registers Changes as a right-side
+task tab. Native translates this with a side pane above a 960 px workspace and
+keeps its existing timeline replacement view below that width.
+[Open Changes evidence](../RESEARCH.md#desktop-secondary-surface-follow-up)
 At narrow split widths the active steering field shares a row with execution
 controls. A queued cold thread requires a fresh review target after explicit
 resume. Both interaction choices remain open for Human feedback.
