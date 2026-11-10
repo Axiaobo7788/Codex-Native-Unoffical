@@ -793,6 +793,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               if (widget.threadController != null) widget.threadController!,
               widget.diffController,
               widget.historyController,
+              widget.approvalController,
               widget.userInputController,
             ]),
             builder: (context, _) {
@@ -873,9 +874,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final changes = widget.diffController.snapshot;
     return LayoutBuilder(
       builder: (context, constraints) {
+        final shortViewport = constraints.maxHeight < 560;
+        final constrainApproval =
+            shortViewport && widget.approvalController.pending.isNotEmpty;
         final constrainQuestion =
-            constraints.maxHeight < 560 &&
-            widget.userInputController.pending.isNotEmpty;
+            shortViewport && widget.userInputController.pending.isNotEmpty;
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.
         final canSplit = widget.hasDesktopShell && constraints.maxWidth > 960;
@@ -916,7 +919,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       changes != null &&
                       (_showChanges || changes.files.isNotEmpty))
                     _desktopChangesSummary(changes, canSplit: canSplit),
-                  _ApprovalBanner(controller: widget.approvalController),
+                  Flexible(
+                    flex: constrainApproval ? 5 : 0,
+                    child: _ApprovalBanner(
+                      controller: widget.approvalController,
+                    ),
+                  ),
                   Flexible(
                     flex: constrainQuestion ? 5 : 0,
                     child: _UserInputBanner(
@@ -5998,7 +6006,7 @@ class _ThreadEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(ThemeTokens.space8),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -493,6 +493,65 @@ void main() {
   });
 
   testWidgets(
+    'long approval details leave decisions visible in a short split',
+    (tester) async {
+      tester.view.physicalSize = const Size(760, 420);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController();
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const ValueKey('sidebar-resize-handle')),
+        const Offset(310, 0),
+      );
+      await tester.pumpAndSettle();
+      runtime.emitWarning(
+        'The runtime needs confirmation before changing files.',
+      );
+      runtime.emitApproval(
+        ApprovalRequest(
+          requestId: 'short-approval',
+          kind: ApprovalKind.fileChange,
+          threadId: runtime.thread.id,
+          turnId: 'turn-1',
+          itemId: 'item-1',
+          summary: 'Update the disposable fixture files.',
+          detail: [for (var i = 0; i < 24; i++) 'fixture/file-$i.txt']
+              .join('\n'),
+          reason: 'Verify approval controls while a warning is present.',
+          approveSupported: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final reject = find.text('Reject');
+      expect(tester.getBottomLeft(reject).dy, lessThan(420));
+      expect(tester.getBottomLeft(find.text('Approve once')).dy, lessThan(420));
+      final details = find.byKey(const ValueKey('approval-details-scroll'));
+      await tester.drag(details, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      final detailPosition = tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: details, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      expect(detailPosition.pixels, greaterThan(0));
+      await tester.tap(reject);
+      await tester.pumpAndSettle();
+      expect(runtime.approvalDecisions, [
+        (requestId: 'short-approval', decision: ApprovalDecision.reject),
+      ]);
+    },
+  );
+
+  testWidgets(
     'a pending question and warning fit after resizing a Desktop window',
     (tester) async {
       tester.view.physicalSize = const Size(820, 700);

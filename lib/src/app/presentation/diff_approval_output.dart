@@ -296,6 +296,7 @@ class _ApprovalBanner extends StatelessWidget {
 
         final deciding = controller.isDeciding(request.requestId);
         return Center(
+          heightFactor: 1,
           child: Container(
             constraints: const BoxConstraints(
               maxWidth: OfficialCodexTheme.maxContentWidth,
@@ -312,6 +313,7 @@ class _ApprovalBanner extends StatelessWidget {
               ),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -331,42 +333,63 @@ class _ApprovalBanner extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: ThemeTokens.space2),
-                SelectableText(request.summary),
-                if (request.detail case final detail?) ...[
-                  const SizedBox(height: ThemeTokens.space1),
-                  SelectableText(
-                    detail,
-                    style: Theme.of(context).textTheme.bodySmall,
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: SingleChildScrollView(
+                      key: const ValueKey('approval-details-scroll'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SelectableText(request.summary),
+                          if (request.detail case final detail?) ...[
+                            const SizedBox(height: ThemeTokens.space1),
+                            SelectableText(
+                              detail,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                          if (request.reason case final reason?) ...[
+                            const SizedBox(height: ThemeTokens.space1),
+                            SelectableText(
+                              'Reason: $reason',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ],
-                if (request.reason case final reason?) ...[
-                  const SizedBox(height: ThemeTokens.space1),
-                  SelectableText(
-                    'Reason: $reason',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                ),
                 const SizedBox(height: ThemeTokens.space2),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    CodexButton(
-                      variant: CodexButtonVariant.ghost,
-                      size: CodexButtonSize.sm,
-                      onPressed: deciding
-                          ? null
-                          : () => controller.reject(request.requestId),
-                      label: 'Reject',
-                    ),
-                    if (request.approveSupported) ...[
-                      const SizedBox(width: ThemeTokens.space2),
-                      CodexButton(
-                        variant: CodexButtonVariant.primary,
+                    Flexible(
+                      flex: 2,
+                      child: CodexButton(
+                        variant: CodexButtonVariant.ghost,
                         size: CodexButtonSize.sm,
                         onPressed: deciding
                             ? null
-                            : () => controller.approve(request.requestId),
-                        label: 'Approve once',
+                            : () => controller.reject(request.requestId),
+                        label: 'Reject',
+                        tooltip: 'Reject',
+                      ),
+                    ),
+                    if (request.approveSupported) ...[
+                      const SizedBox(width: ThemeTokens.space2),
+                      Flexible(
+                        flex: 3,
+                        child: CodexButton(
+                          variant: CodexButtonVariant.primary,
+                          size: CodexButtonSize.sm,
+                          onPressed: deciding
+                              ? null
+                              : () => controller.approve(request.requestId),
+                          label: 'Approve once',
+                          tooltip: 'Approve once',
+                        ),
                       ),
                     ],
                   ],
