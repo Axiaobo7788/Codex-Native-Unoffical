@@ -669,7 +669,7 @@ void main() {
       },
     );
 
-    testWidgets('T1.4.4: Active turn can stop from the Desktop composer', (
+    testWidgets('T1.4.4: Narrow Desktop composer can select, steer, and stop', (
       tester,
     ) async {
       final thread = createTestThread(
@@ -691,6 +691,31 @@ void main() {
 
       final stop = find.byKey(const ValueKey('composer-stop-button'));
       expect(stop, findsOneWidget);
+
+      await tester.enterText(composerField, 'Keep the input readable.');
+      tester.view.physicalSize = const Size(760, 800);
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const ValueKey('sidebar-resize-handle')),
+        const Offset(310, 0),
+      );
+      await tester.pumpAndSettle();
+
+      final model = find.byKey(const ValueKey('composer-model-pill'));
+      expect(model, findsOneWidget);
+      expect(tester.getSize(composerField).width, greaterThanOrEqualTo(180));
+      expect(tester.widget<TextField>(composerField).focusNode!.hasFocus, true);
+      expect(find.text('Keep the input readable.'), findsOneWidget);
+
+      await tester.tap(model);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('execution-Model')), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pumpAndSettle();
+      expect(harness.steeredTurns.single.text, 'Keep the input readable.');
       await tester.tap(stop);
       await tester.pumpAndSettle();
       expect(harness.interruptedTurns.single.threadId, 'stop-btn-thread');
