@@ -60,7 +60,18 @@ class AssistantMarkdown extends StatelessWidget {
 
     final presentation = parseAssistantContentPresentation(source);
     final palette = ThemeTokens.of(context);
-    final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
+    final baseStyleSheet = MarkdownStyleSheet.fromTheme(theme);
+    final fontSize = bodyStyle?.fontSize;
+    final lineHeight = proseLineHeight;
+    // Desktop lists inset their text by one line height plus 1.5 spaces,
+    // where one Markdown space is one quarter of the body font size.
+    final listIndent = lineHeight == null || fontSize == null
+        ? 20.0
+        : (MediaQuery.textScalerOf(context).scale(fontSize) *
+                      (lineHeight + 1.5 / 4) -
+                  (baseStyleSheet.listBulletPadding?.horizontal ?? 0))
+              .clamp(0.0, double.infinity);
+    final styleSheet = baseStyleSheet.copyWith(
       a: bodyStyle?.copyWith(
         color: theme.colorScheme.primary,
         decoration: TextDecoration.underline,
@@ -80,7 +91,7 @@ class AssistantMarkdown extends StatelessWidget {
       h5: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       h6: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       blockSpacing: 10,
-      listIndent: 20,
+      listIndent: listIndent,
       listBullet: bodyStyle?.copyWith(color: palette.textSecondary),
       tableBorder: TableBorder.all(color: palette.border),
       tableCellsPadding: const EdgeInsets.all(ThemeTokens.space2),

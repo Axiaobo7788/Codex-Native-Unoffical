@@ -99,6 +99,30 @@ Raw <em>inline</em> HTML.
     expect(find.byKey(const ValueKey('assistant-markdown')), findsNothing);
   });
 
+  testWidgets('aligns desktop list text with its measured prose inset', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const AssistantMarkdown(
+          data: 'Introductory paragraph.\n\n- First list item',
+          completed: true,
+          proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+        ),
+      ),
+    );
+    final paragraph = find.text('Introductory paragraph.', findRichText: true);
+    final item = find.text('First list item', findRichText: true);
+    final bodySize = Theme.of(tester.element(paragraph))
+        .textTheme
+        .bodyMedium!
+        .fontSize!;
+    expect(
+      tester.getTopLeft(item).dx - tester.getTopLeft(paragraph).dx,
+      closeTo(bodySize * 2, 0.01),
+    );
+  });
+
   testWidgets('caps the source passed to the Markdown parser', (tester) async {
     final oversized =
         'prefix-${List.filled(AssistantMarkdown.maxSourceCharacters + 32, 'x').join()}';
