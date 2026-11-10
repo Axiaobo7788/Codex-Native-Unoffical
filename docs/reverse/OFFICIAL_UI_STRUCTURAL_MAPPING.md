@@ -197,8 +197,9 @@ model, execution and Stop controls remain available. A known cold queue now
 asks for explicit resume before the review target chooser. The interaction
 choices remain open for Human feedback.
 The app menu covers supported Native actions, and the rail exposes only wired
-destinations. Saved commands in Desktop Commands and Execution open one bounded
-inline output preview, with the complete stored output still reachable through
+destinations. Completed live and saved commands in Desktop Commands and
+Execution share one bounded inline output preview, with the complete stored
+output still reachable through
 the paged dialog. [Inline output evidence](../RESEARCH.md#desktop-inline-command-output)
 Comparable signed-in official captures are still needed for
 empty Home, expanded activity, open review/diff, model and execution popovers,

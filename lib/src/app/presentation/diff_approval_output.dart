@@ -416,12 +416,9 @@ class _HistoryEntryView extends StatelessWidget {
     super.key,
     required this.item,
     required this.historyController,
-    required this.outputGateway,
     this.detailMode = PresentationDetailMode.commands,
     this.inlineActivity = false,
-    this.commandPreview,
-    this.onToggleCommandPreview,
-    this.commandPreviewReading = false,
+    this.commandOutput,
     this.onForkFromTurn,
     this.onRevertFromTurn,
     this.onEditFromTurn,
@@ -438,12 +435,9 @@ class _HistoryEntryView extends StatelessWidget {
 
   final HistoryItem item;
   final HistoryController historyController;
-  final OutputGateway outputGateway;
   final PresentationDetailMode detailMode;
   final bool inlineActivity;
-  final OutputViewerController? commandPreview;
-  final VoidCallback? onToggleCommandPreview;
-  final bool commandPreviewReading;
+  final _CommandOutputPresentation? commandOutput;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
   final VoidCallback? onEditFromTurn;
@@ -502,17 +496,7 @@ class _HistoryEntryView extends StatelessWidget {
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
       inlineActivity: inlineActivity,
-      activityDetail: switch (commandPreview) {
-        final viewer? => _InlineCommandOutput(
-          viewer: viewer,
-          openFullOutput: _commandOutputDialogAction(
-            context,
-            outputGateway,
-            viewer.descriptor,
-          ),
-        ),
-        null => null,
-      },
+      activityDetail: commandOutput?.detail,
       leadingHeader: showDetails
           ? _TurnWorkDivider(
               actionKey: ValueKey('turn-work-${item.turnId}'),
@@ -534,29 +518,13 @@ class _HistoryEntryView extends StatelessWidget {
             )
           : null,
       trailingAction: item.isCommand
-          ? _commandOutputAction(context)
+          ? commandOutput?.action ?? _commandOutputFallback(context)
           : _savedMcpTextAction(context),
     );
   }
 
-  Widget? _commandOutputAction(BuildContext context) {
+  Widget? _commandOutputFallback(BuildContext context) {
     final output = item.output;
-    if (output != null && output.available && output.reference != null) {
-      if (onToggleCommandPreview case final toggle?) {
-        final expanded = commandPreview != null;
-        final label = expanded ? 'Hide output preview' : 'Show output preview';
-        return Semantics(
-          expanded: expanded,
-          child: CodexIconButton(
-            size: 28,
-            onPressed: commandPreviewReading && !expanded ? null : toggle,
-            icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-            tooltip: label,
-          ),
-        );
-      }
-      return _commandOutputDialogAction(context, outputGateway, output);
-    }
     if (output != null && !output.available) {
       return Text(
         'Output unavailable',

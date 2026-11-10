@@ -35,6 +35,13 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- Desktop Commands and Execution share one bounded inline output preview
+  across completed live commands and opened saved-turn details. Switching
+  to another visible command replaces the preview. A pending read still
+  occupies the single read slot after its row disappears. The Linux release
+  package previewed 4,096 bytes of an active command and opened the first
+  and last pages of the same 179,835-byte Host spool.
+  [Unified output evidence](docs/RESEARCH.md#completed-commands-in-the-active-conversation)
 - Completed commands in the active conversation can open their paged output
   as soon as the bundled Host provides a valid spool reference. The Linux
   package opened the first and last windows of 179,835 stored bytes before the
@@ -106,6 +113,10 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- Unified command output passed strict Dart analysis, the pure-Dart
+  boundary, 514 Flutter cases with five opt-in skips, all five enabled
+  direct-stock cases, the bounded-history benchmark, and Linux release
+  bundle and license checks.
 - Active command output passed strict Dart analysis, the 65-root pure-Dart
   boundary, 513 Flutter cases with five opt-in skips, all five direct-stock
   cases when enabled separately, the bounded-history benchmark, and the Linux

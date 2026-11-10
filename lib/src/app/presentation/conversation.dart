@@ -2,6 +2,14 @@ part of '../codex_native_app.dart';
 
 enum PresentationDetailMode { prose, commands, execution }
 
+typedef _CommandOutputPreviewKey = ({
+  String turnId,
+  String itemId,
+  String reference,
+  bool saved,
+});
+typedef _CommandOutputPresentation = ({Widget action, Widget? detail});
+
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
     super.key,
@@ -127,7 +135,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
-  ({String turnId, String itemId, OutputViewerController viewer})?
+  ({_CommandOutputPreviewKey key, OutputViewerController viewer})?
   _commandOutputPreview;
   var _commandPreviewReading = false;
   String? _customProjectDirectory;
@@ -2863,6 +2871,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final rawLiveEntries = showLiveEntries
         ? controller.entries
         : const <ConversationEntry>[];
+    final latestActivity = _detailMode == PresentationDetailMode.commands
+        ? _latestLiveActivity(rawLiveEntries)
+        : null;
     final liveEntries = switch (_detailMode) {
       PresentationDetailMode.prose =>
         rawLiveEntries
@@ -2883,11 +2894,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   e.kind == ConversationEntryKind.review ||
                   e.kind == ConversationEntryKind.error ||
                   !e.completed ||
-                  e ==
-                      rawLiveEntries.lastWhere(
-                        (item) => item.kind == ConversationEntryKind.activity,
-                        orElse: () => e,
-                      ),
+                  identical(e, latestActivity),
             )
             .toList(growable: false),
       PresentationDetailMode.execution => rawLiveEntries,
@@ -3200,14 +3207,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         key: ValueKey(itemKey),
                         item: item,
                         historyController: widget.historyController,
-                        outputGateway: widget.outputGateway,
                         detailMode: _detailMode,
                         inlineActivity: widget.hasDesktopShell,
-                        commandPreview: _commandPreviewFor(item),
-                        onToggleCommandPreview: _canPreviewCommand(item)
-                            ? () => unawaited(_toggleCommandOutputPreview(item))
+                        commandOutput: item.isCommand
+                            ? _commandOutputFor(
+                                context,
+                                itemId: item.id,
+                                turnId: item.turnId,
+                                output: item.output,
+                                saved: true,
+                              )
                             : null,
-                        commandPreviewReading: _commandPreviewReading,
                         overrideEntryText: overrideText,
                         overrideAttachments: overrideAttachments,
                         siblingBranchInfo:
@@ -3350,6 +3360,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       entry.status != 'retrying' &&
                       activeThread != null &&
                       _canRollBackTurn(activeThread.id);
+                  final commandOutput = _commandOutputFor(
+                    context,
+                    itemId: entry.id,
+                    turnId: liveTurnId,
+                    output: entry.completed ? entry.commandOutput : null,
+                    saved: false,
+                  );
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -3360,16 +3377,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
                       inlineActivity: widget.hasDesktopShell,
-                      trailingAction: switch (effectiveEntry.commandOutput) {
-                        final output?
-                            when output.available && output.reference != null =>
-                          _commandOutputDialogAction(
-                            context,
-                            widget.outputGateway,
-                            output,
-                          ),
-                        _ => null,
-                      },
+                      trailingAction: commandOutput?.action,
+                      activityDetail: commandOutput?.detail,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:
@@ -4327,49 +4336,85 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _detailMode = mode;
       if (mode == PresentationDetailMode.prose) {
         _clearCommandOutputPreview();
+      } else {
+        _reconcileLiveOutputPreview();
       }
     });
   }
 
-  bool _canPreviewCommand(HistoryItem item) =>
-      widget.hasDesktopShell &&
-      _detailMode != PresentationDetailMode.prose &&
-      item.isCommand &&
-      item.turnId == widget.historyController.selectedTurnId &&
-      item.output?.available == true &&
-      item.output?.reference != null;
-
-  OutputViewerController? _commandPreviewFor(HistoryItem item) {
-    final preview = _commandOutputPreview;
-    if (preview != null &&
-        preview.turnId == item.turnId &&
-        preview.itemId == item.id &&
-        preview.viewer.descriptor.reference == item.output?.reference) {
-      return preview.viewer;
+  _CommandOutputPresentation? _commandOutputFor(
+    BuildContext context, {
+    required String itemId,
+    required String turnId,
+    required OutputDescriptor? output,
+    required bool saved,
+  }) {
+    final reference = output?.reference;
+    if (output == null || !output.available || reference == null) {
+      return null;
     }
-    return null;
+    final fullOutput = _commandOutputDialogAction(
+      context,
+      widget.outputGateway,
+      output,
+    );
+    if (!widget.hasDesktopShell ||
+        _detailMode == PresentationDetailMode.prose ||
+        turnId.isEmpty ||
+        (saved && turnId != widget.historyController.selectedTurnId)) {
+      return (action: fullOutput, detail: null);
+    }
+    final key = (
+      itemId: itemId,
+      turnId: turnId,
+      reference: reference,
+      saved: saved,
+    );
+    final preview = _commandOutputPreview;
+    final viewer = preview?.key == key ? preview?.viewer : null;
+    final expanded = viewer != null;
+    return (
+      action: Semantics(
+        expanded: expanded,
+        child: CodexIconButton(
+          size: 28,
+          onPressed: _commandPreviewReading && !expanded
+              ? null
+              : () => unawaited(_toggleCommandOutputPreview(key, output)),
+          icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+          tooltip: expanded ? 'Hide output preview' : 'Show output preview',
+        ),
+      ),
+      detail: viewer == null
+          ? null
+          : _InlineCommandOutput(viewer: viewer, openFullOutput: fullOutput),
+    );
   }
 
-  Future<void> _toggleCommandOutputPreview(HistoryItem item) async {
-    if (_commandPreviewFor(item) != null) {
+  Future<void> _toggleCommandOutputPreview(
+    _CommandOutputPreviewKey key,
+    OutputDescriptor output,
+  ) async {
+    if (_commandOutputPreview?.key == key) {
       setState(_clearCommandOutputPreview);
       return;
     }
-    if (_commandPreviewReading || !_canPreviewCommand(item)) {
+    if (_commandPreviewReading ||
+        !widget.hasDesktopShell ||
+        _detailMode == PresentationDetailMode.prose ||
+        !(key.saved
+            ? widget.historyController.selectedTurnId == key.turnId
+            : _keepsLiveOutputPreview(key))) {
       return;
     }
     final viewer = OutputViewerController(
       gateway: widget.outputGateway,
-      descriptor: item.output!,
+      descriptor: output,
       pageBytes: 4 * 1024,
     );
     setState(() {
       _clearCommandOutputPreview();
-      _commandOutputPreview = (
-        turnId: item.turnId,
-        itemId: item.id,
-        viewer: viewer,
-      );
+      _commandOutputPreview = (key: key, viewer: viewer);
       _commandPreviewReading = true;
     });
     try {
@@ -4384,6 +4429,38 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   void _clearCommandOutputPreview() {
     _commandOutputPreview?.viewer.dispose();
     _commandOutputPreview = null;
+  }
+
+  ConversationEntry? _latestLiveActivity(List<ConversationEntry> entries) =>
+      entries.reversed
+          .where((entry) => entry.kind == ConversationEntryKind.activity)
+          .firstOrNull;
+
+  void _reconcileLiveOutputPreview() {
+    final key = _commandOutputPreview?.key;
+    if (key != null && !key.saved && !_keepsLiveOutputPreview(key)) {
+      _clearCommandOutputPreview();
+    }
+  }
+
+  bool _keepsLiveOutputPreview(_CommandOutputPreviewKey key) {
+    if (widget.historyController.canReturnToNewest) {
+      return false;
+    }
+    final entries = widget.controller.entries;
+    final latest = _detailMode == PresentationDetailMode.commands
+        ? _latestLiveActivity(entries)
+        : null;
+    return entries.any(
+      (entry) =>
+          entry.id == key.itemId &&
+          entry.turnId == key.turnId &&
+          entry.completed &&
+          entry.commandOutput?.reference == key.reference &&
+          entry.commandOutput?.available == true &&
+          (_detailMode == PresentationDetailMode.execution ||
+              identical(entry, latest)),
+    );
   }
 
   void _syncActiveThreadSelection() {
@@ -4438,11 +4515,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   void _handleHistoryChanged() {
     _syncActiveThreadSelection();
-    if (_commandOutputPreview case final preview?) {
-      if (widget.historyController.selectedTurnId != preview.turnId) {
-        _clearCommandOutputPreview();
-      }
+    if (_commandOutputPreview?.key case final key?
+        when key.saved &&
+            widget.historyController.selectedTurnId != key.turnId) {
+      _clearCommandOutputPreview();
     }
+    _reconcileLiveOutputPreview();
     if (_wasWindowShifted &&
         !widget.historyController.canReturnToNewest &&
         !widget.historyController.loadingTurns) {
@@ -4544,6 +4622,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   void _handleConversationChanged() {
     final previousThreadId = _activeThreadId;
     _syncActiveThreadSelection();
+    _reconcileLiveOutputPreview();
     if (previousThreadId != _activeThreadId) {
       final thread = widget.controller.thread;
       if (thread != null &&

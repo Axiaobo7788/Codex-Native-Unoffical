@@ -4734,3 +4734,11 @@ probe before interpreting that result as a content-search limitation.
   dismissed and the fixture then finished the turn. Unit and widget tests
   cover the adapter boundary and zero output or saved-item reads before the
   user opens the viewer.
+- The Desktop release bundle now uses the same collapsed disclosure for
+  completed live commands and opened saved-turn details. Both sources
+  share one 4 KiB preview and one in-flight preview read. Commands mode
+  releases the live preview when a newer activity hides its row. A late
+  response cannot reopen that preview, and compact windows keep direct
+  paged access. The Linux release bundle showed the 4,096-byte preview and
+  opened byte 114,299 and byte zero of the same 179,835-byte spool while
+  the fixture still held the assistant turn open.

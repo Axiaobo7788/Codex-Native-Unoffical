@@ -170,7 +170,82 @@ void main() {
     expect(runtime.tailLengths, [4096, 4096, 4096, 64 * 1024]);
   });
 
-  testWidgets('opens completed live command output without reading history', (
+  testWidgets(
+    'previews completed live command output without reading history',
+    (tester) async {
+      tester.view.physicalSize = const Size(1191, 865);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _OutputRuntimeController();
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Output thread'));
+      await tester.pumpAndSettle();
+      runtime.emitTurnEvent(
+        const TurnStartedEvent(
+          threadId: 'output-thread',
+          turnId: 'active-turn',
+        ),
+      );
+      runtime.emitTurnEvent(
+        const ActivityEvent(
+          threadId: 'output-thread',
+          turnId: 'active-turn',
+          itemId: 'active-command',
+          summary: 'Command: fixture still running',
+          status: 'inProgress',
+          completed: false,
+        ),
+      );
+      await tester.pump();
+      final view = find.text('View stored output (truncated)');
+      final show = find.byTooltip('Show output preview');
+      expect(view, findsNothing);
+      expect(show, findsNothing);
+
+      runtime.emitTurnEvent(
+        const ActivityEvent(
+          threadId: 'output-thread',
+          turnId: 'active-turn',
+          itemId: 'active-command',
+          summary: 'Command: fixture still running',
+          status: 'completed',
+          completed: true,
+          commandOutput: _OutputRuntimeController.descriptor,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(view, findsNothing);
+      expect(show, findsOneWidget);
+      expect(runtime.tailLengths, isEmpty);
+      await tester.tap(show);
+      await tester.pumpAndSettle();
+      expect(find.text('Last 4096 stored bytes'), findsOneWidget);
+      expect(runtime.tailLengths, [4096]);
+      await tester.tap(view);
+      await tester.pumpAndSettle();
+      expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
+      expect(runtime.tailLengths, [4096, 64 * 1024]);
+      expect(runtime.itemListCalls, 0);
+      expect(runtime.itemReadCalls, 0);
+
+      await tester.tap(find.byTooltip('Close').hitTestable());
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(600, 780);
+      await tester.pumpAndSettle();
+      expect(show, findsNothing);
+      expect(find.text('Last 4096 stored bytes'), findsNothing);
+      await tester.tap(view.hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text('Command output'), findsOneWidget);
+      expect(runtime.tailLengths, [4096, 64 * 1024, 64 * 1024]);
+    },
+  );
+
+  testWidgets('live eviction releases the shared saved-command preview slot', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1191, 865);
@@ -184,6 +259,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Output thread'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Turn details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fetch output safely'));
+    await tester.pumpAndSettle();
     runtime.emitTurnEvent(
       const TurnStartedEvent(threadId: 'output-thread', turnId: 'active-turn'),
     );
@@ -192,35 +271,57 @@ void main() {
         threadId: 'output-thread',
         turnId: 'active-turn',
         itemId: 'active-command',
-        summary: 'Command: fixture still running',
-        status: 'inProgress',
-        completed: false,
-      ),
-    );
-    await tester.pump();
-    final view = find.text('View stored output (truncated)');
-    expect(view, findsNothing);
-
-    runtime.emitTurnEvent(
-      const ActivityEvent(
-        threadId: 'output-thread',
-        turnId: 'active-turn',
-        itemId: 'active-command',
-        summary: 'Command: fixture still running',
+        summary: 'Command: live fixture',
         status: 'completed',
         completed: true,
         commandOutput: _OutputRuntimeController.descriptor,
       ),
     );
     await tester.pumpAndSettle();
-    expect(view, findsOneWidget);
-    expect(runtime.tailLengths, isEmpty);
-    await tester.tap(view);
+
+    final show = find.byTooltip('Show output preview');
+    final hide = find.byTooltip('Hide output preview');
+    final preview = find.byKey(const ValueKey('command-output-preview-scroll'));
+    expect(show, findsNWidgets(2));
+    final liveToggle = find.descendant(
+      of: find.byKey(const ValueKey('measured-live-active-command')),
+      matching: show,
+    );
+    final savedToggle = find.descendant(
+      of: find.byKey(const ValueKey('measured-history-output-command')),
+      matching: show,
+    );
+    final pending = Completer<void>();
+    runtime.tailDelay = pending.future;
+    await tester.tap(liveToggle);
     await tester.pumpAndSettle();
-    expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
-    expect(runtime.tailLengths, [64 * 1024]);
-    expect(runtime.itemListCalls, 0);
-    expect(runtime.itemReadCalls, 0);
+    expect(hide, findsOneWidget);
+    await tester.tap(savedToggle);
+    await tester.pumpAndSettle();
+    expect(runtime.tailLengths, [4096]);
+
+    runtime.emitTurnEvent(
+      const ActivityEvent(
+        threadId: 'output-thread',
+        turnId: 'active-turn',
+        itemId: 'newer-command',
+        summary: 'Command: newer fixture',
+        status: 'completed',
+        completed: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(hide, findsNothing);
+    expect(find.text('Loading output preview…'), findsNothing);
+    pending.complete();
+    runtime.tailDelay = null;
+    await tester.pumpAndSettle();
+    expect(preview, findsNothing);
+
+    await tester.tap(savedToggle);
+    await tester.pumpAndSettle();
+    expect(preview, findsOneWidget);
+    expect(runtime.tailLengths, [4096, 4096]);
   });
 }
 
