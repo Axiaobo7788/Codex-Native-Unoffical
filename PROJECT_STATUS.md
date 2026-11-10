@@ -83,8 +83,15 @@ Changes summary. The Golden-State matrix records the remaining machine work.
 The workspace header now ends with thread menu, detail options and the
 supported side-panel toggle. Release search and Goal opening use the new
 routes. The active Goal label now ticks locally without new stock reads.
-Home, open Changes, Review, expanded activity,
-compact and dark/focused states have separate evidence gates. [Hosted CI for `70a12da`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42829481686)
+Desktop stock questions use distinct steps. The Linux release delivered both
+answers in a two-question request. The confirmed Full access shield uses its
+own warning glyph. The execution dialog and dropdown stay usable at 820×420
+and 1191×865. The wide sidebar omits the empty Pinned group and the saved
+stock scope stays reachable from View. Desktop assistant prose uses the
+measured 1.625 line-height ratio. The release rendered saved stock paragraphs
+and lists and retained the bounded timeline behavior. Home, open Changes,
+Review, expanded activity, compact and dark/focused states have separate
+evidence gates. [Hosted CI for `b6d031a`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42895183024)
 
 ## Current checkpoint
 
