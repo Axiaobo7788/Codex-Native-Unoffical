@@ -11,6 +11,7 @@ class CodexComposer extends StatelessWidget {
     this.maxWidth = OfficialCodexTheme.maxContentWidth,
     this.radius = OfficialCodexTheme.composerRadius,
     this.isFocused = false,
+    this.showFocusBorder = true,
     this.backgroundColor,
     this.padding = const EdgeInsets.fromLTRB(14.0, 10.0, 8.0, 8.0),
   });
@@ -20,6 +21,7 @@ class CodexComposer extends StatelessWidget {
   final double maxWidth;
   final double radius;
   final bool isFocused;
+  final bool showFocusBorder;
   final Color? backgroundColor;
   final EdgeInsets padding;
 
@@ -27,6 +29,8 @@ class CodexComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
     final isDark = theme.isDark;
+    final paintFocusBorder =
+        isFocused && (showFocusBorder || MediaQuery.highContrastOf(context));
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
@@ -39,8 +43,8 @@ class CodexComposer extends StatelessWidget {
           color: backgroundColor ?? theme.elevatedSurface,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
-            color: isFocused ? theme.focusRing : theme.hairlineBorder,
-            width: isFocused ? 1.5 : 1.0,
+            color: paintFocusBorder ? theme.focusRing : theme.hairlineBorder,
+            width: paintFocusBorder ? 1.5 : 1.0,
           ),
           boxShadow: [
             BoxShadow(

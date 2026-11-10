@@ -4124,6 +4124,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           key: const ValueKey('floating_composer'),
           surfaceKey: const ValueKey('composer-surface'),
           isFocused: _composerFocusNode.hasFocus,
+          showFocusBorder: !desktopComposer,
           radius: desktopComposer
               ? OfficialCodexTheme.composerRadiusPill
               : OfficialCodexTheme.composerRadius,

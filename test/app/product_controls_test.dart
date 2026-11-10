@@ -63,8 +63,13 @@ void main() {
         palette.selected,
       );
       final composer = find.byKey(const ValueKey('composer-surface'));
+      BoxBorder? composerBorder() =>
+          (tester.widget<AnimatedContainer>(composer).decoration
+                  as BoxDecoration)
+              .border;
       expect(composer, findsOneWidget);
       expect(tester.getSize(composer).width, lessThanOrEqualTo(760));
+      final focusedBorder = composerBorder();
       expect(
         tester.widget<CodexComposer>(find.byType(CodexComposer)).isFocused,
         isTrue,
@@ -79,6 +84,7 @@ void main() {
         tester.widget<CodexComposer>(find.byType(CodexComposer)).isFocused,
         isFalse,
       );
+      expect(composerBorder(), focusedBorder);
       await tester.tap(find.byKey(const ValueKey('conversation-composer')));
       await tester.pump();
       expect(
