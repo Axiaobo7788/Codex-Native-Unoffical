@@ -1,0 +1,89 @@
+# Thread provider-block and cold-resume presentation evidence
+
+Measured 2026-11-10 from shared Native `8c6478342e7c094dbb118ee0b437a626507be82c`, the bundled Rust Host (`build/linux/x64/debug/bundle/codex-native-host`, SHA-256 `1de94c6ad8ff026e5e7a8318547409700f7b2ffd5c51add3faa64096957547f9`), installed Desktop ASAR `26.1103.60933` build `25894` (SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`), public stock source `c875667eb837663697d5ffa32d375043434e73b4`, and four stock `codex app-server` builds (`0.167.0-alpha.3.2`, `0.167.0`, `0.167.0-alpha.4.1`, and `0.169.0-alpha.7`).
+
+- Evidence classes: `LOCAL_SCHEMA`, `PUBLIC_SOURCE`, `STATIC_BUNDLE`, `LIVE_CALLED`, `MACHINE_VERIFIED`, `AGENT_REAL_USE_VERIFIED`.
+- Support classification: `PUBLIC_SUPPORTED` (`thread/read`, `thread/resume`, `thread/turns/list`, `thread/queue/list`, `thread/goal/get`, `thread/attachment/list`, `thread/name/set`, `thread/fork`, `thread/revert`, `thread/compact/start`, `review/start`, `turn/start`, and `v2/ModelProviderError`).
+
+## 1. Stock provider-block error contract and cold thread behavior (`LOCAL_SCHEMA`, `PUBLIC_SOURCE`, `LIVE_CALLED`)
+
+- **Structured `ModelProviderError` payload (`LOCAL_SCHEMA`, `PUBLIC_SOURCE`)**:
+  - In generated `v2/ModelProviderError.json` and [`codex-rs/app-server-protocol/src/protocol/v2/model_provider_error.rs`](https://github.com/openai/codex/blob/c875667eb837663697d5ffa32d375043434e73b4/codex-rs/app-server-protocol/src/protocol/v2/model_provider_error.rs#L10-L66), recoverable model-provider failures serialize inside JSON-RPC `error.data` (`code: -32600`) as a `type`-tagged union:
+    1. `{"type": "modelProviderMismatch", "modelProvider": "<threadProvider>", "currentModelProvider": "<activeProvider>"}`
+    2. `{"type": "modelProviderNotConfigured", "modelProvider": "<threadProvider>"}`
+    3. `{"type": "modelProviderPolicyConflict", "modelProvider": "<threadProvider>", "requiredModelProvider": "<requiredProvider>"}`
+  - [`config_load_error`](https://github.com/openai/codex/blob/c875667eb837663697d5ffa32d375043434e73b4/codex-rs/app-server/src/request_processors/config_errors.rs#L16-L29) downcasts `std::io::Error` sources to `ModelProviderError`, sets `error.message` to `Display::fmt` (`model_provider_error.rs` lines 50–64), and attaches `serde_json::to_value(provider_error)` as `error.data`.
+- **Cold `load_for_resume` vs active-thread `check_thread_model_provider` (`PUBLIC_SOURCE`, `LIVE_CALLED`)**:
+  - In `0.167.0-alpha.3.2`, `0.167.0`, and `0.167.0-alpha.4.1`, cold `thread/resume` rejects any thread whose saved `model_provider` differs from the app-server process's default `model_provider_id` with `-32600` and `data.type = "modelProviderMismatch"`, and rejects a removed provider with `data.type = "modelProviderNotConfigured"`.
+  - In `0.169.0-alpha.7` and `c875667` ([`ConfigManager::load_for_resume`](https://github.com/openai/codex/blob/c875667eb837663697d5ffa32d375043434e73b4/codex-rs/app-server/src/config_manager.rs#L522-L594), invoked by [`thread_processor.rs`](https://github.com/openai/codex/blob/c875667eb837663697d5ffa32d375043434e73b4/codex-rs/app-server/src/request_processors/thread_processor.rs#L4320-L4349)), a saved thread retains its recorded provider across cold `thread/resume` when that provider is still configured and allowed by managed requirements (`status: {"type": "idle"}`), while still returning `modelProviderNotConfigured` when removed from `config.toml` and `modelProviderPolicyConflict` when blocked by `layers.required_model_provider()`.
+  - Once a thread is loaded, [`ConfigManager::check_thread_model_provider`](https://github.com/openai/codex/blob/c875667eb837663697d5ffa32d375043434e73b4/codex-rs/app-server/src/config_manager.rs#L349-L419) re-validates managed policy requirements on subsequent `turn/start`, `turn/steer`, `review/start`, `thread/compact/start`, `thread/fork`, `thread/queue/*`, and `thread/goal/*` calls, emitting `modelProviderPolicyConflict` if managed requirements changed mid-session.
+- **Cold read-only and preflight RPC behavior across all 4 stock builds (`LIVE_CALLED`)**:
+  - Driving a materialized `provider_alpha` thread (`1` completed turn and `1` queued prompt via `thread/queue/add`) through the bundled `codex-native-host` across all four stock binaries under both **Mismatch** (`model_provider = "openai"`, `[model_providers.provider_alpha]` configured) and **NotConfigured** (`[model_providers.provider_alpha]` removed) produced identical cold RPC behavior outside `thread/resume`:
+
+| Cold RPC on `provider_alpha` thread (`status: notLoaded`) | `0.167.0-alpha.3.2` | `0.167.0` | `0.167.0-alpha.4.1` | `0.169.0-alpha.7` |
+|---|---|---|---|---|
+| `thread/read(includeTurns: false \| true)` | `OK` (`provider_alpha`, `notLoaded`) | `OK` (`provider_alpha`, `notLoaded`) | `OK` (`provider_alpha`, `notLoaded`) | `OK` (`provider_alpha`, `notLoaded`) |
+| `thread/turns/list(limit: 10)` | `OK` (`1` turn) | `OK` (`1` turn) | `OK` (`1` turn) | `OK` (`1` turn) |
+| `thread/goal/get` & `thread/attachment/list` | `OK` | `OK` | `OK` | `OK` |
+| `thread/queue/list(limit: 1)` (empty / 1 pending item) | `OK` (`0` / `1` item) | `OK` (`0` / `1` item) | `OK` (`0` / `1` item) | `OK` (`0` / `1` item) |
+| `thread/name/set` | `OK` | `OK` | `OK` | `OK` |
+| `thread/fork` | `OK` (forks under `openai`, `idle`) | `OK` (forks under `openai`, `idle`) | `OK` (forks under `openai`, `idle`) | `OK` (forks under `openai`, `idle`) |
+| Cold `thread/revert`, `thread/compact/start`, `review/start`, `turn/start` | `-32600` (`thread not found: <id>`) | `-32600` (`thread not found: <id>`) | `-32600` (`thread not found: <id>`) | `-32600` (`thread not found: <id>`) |
+| Cold `thread/resume` (**Mismatch**: `provider_alpha` configured) | `-32600` (`modelProviderMismatch`) | `-32600` (`modelProviderMismatch`) | `-32600` (`modelProviderMismatch`) | `OK` (`provider_alpha`, `idle`) |
+| Cold `thread/resume` (**NotConfigured**: `provider_alpha` removed) | `-32600` (`modelProviderNotConfigured`) | `-32600` (`modelProviderNotConfigured`) | `-32600` (`modelProviderNotConfigured`) | `-32600` (`modelProviderNotConfigured`) |
+
+## 2. Installed Desktop ASAR provider-block and read-only recovery architecture (`STATIC_BUNDLE`)
+
+In installed Desktop `26.1103.60933` build `25894` (`/opt/codex-desktop/resources/app.asar`):
+
+- **Error extraction and read-only fallback hydration (`webview/assets/async/182735.5b42af8792.js`)**:
+  - `aC` / `aT` at byte `1140320` (also `.vite/build/early-bootstrap-815-e030c49be4b9c405.js` at byte `1213251`) parses JSON-RPC error `data` into the three `ModelProviderError` shapes (`modelProviderMismatch`, `modelProviderNotConfigured`, `modelProviderPolicyConflict`).
+  - In `resumeConversation` at byte `1333537`, when `thread/resume` throws and `let t = aT(n)` is non-null:
+    1. If the conversation is not yet hydrated (`!K`), Desktop catches the error and hydrates read-only history: for `historyMode === "paginated"` it runs `np(...)` (paginated turn/timeline hydration), and otherwise calls `readThread(I, { includeTurns: !0 })` and merges the returned turns into conversation state.
+    2. At byte `1334553`, it sets `e.threadRuntimeStatus = { type: "notLoaded" }`, `e.providerBlock = t`, and (if `e.resumeState === "resuming"`) `e.resumeState = "needs_resume"`, returning `{ status: "not-ready", reason: "model-provider" }`.
+  - In `#V` at byte `1297360`, non-explicit resume triggers (`"open" !== t`) short-circuit immediately with `{ status: "not-ready", reason: "model-provider" }` while `providerBlock != null`, whereas an explicit `"open"` attempt re-runs `thread/resume` and clears `providerBlock = null` on success (byte `1328652`).
+  - In `sendRequest(e, t, n)` at byte `1466500`, if any non-`thread/resume` request with `t.threadId` fails with `aT(n) != null`, Desktop also sets `e.providerBlock = r` and `e.resumeState = "needs_resume"`.
+- **Pre-resume mismatch detection, composer replacement, and settings CTA (`webview/assets/async/884779.bf167971f9.js`, `596785.beac9065c9.js`)**:
+  - In hook `osEl` (`884779.bf167971f9.js` at byte `299028`, mirrored in `220821.b4a9b80850.js` at byte `27333`), Desktop reads:
+    - `ex = ev?.error ?? null` (stored `providerBlock` from `p.ZK`),
+    - `ey = (0, l._U)(p.jR, e)` (the thread's `modelProvider`),
+    - `ew = "resumed" !== ef && null != ey && null != eb && ey !== (eb.model_provider ?? "openai")` (pre-resume mismatch against `config/read`),
+    - `isReadyForInteraction = null == e || void 0 !== ev && null == ex && !ew` (byte `309143`).
+  - In the conversation shell (`884779.bf167971f9.js` at bytes `237319`–`238350` and `252758`, and `596785.beac9065c9.js` at bytes `75542`–`76430`):
+    - `isReadOnly = !canInteract || hasReadOnlyAccess || isWriterConflict || !isReadyForInteraction`,
+    - `composerSubmitDisabled = Boolean(composerSubmitDisabled) || !isReadyForInteraction`,
+    - `showComposer = canInteract && !hasReadOnlyAccess && !isWriterConflict && null == providerBlock`,
+    - `footerContent = a3(w, H)` renders `<aD.N block={providerBlock} conversationId={w} />` in place of the composer whenever `providerBlock != null`.
+  - Alert component `I` (`884779.bf167971f9.js` at bytes `295567`–`299020`) resolves provider display names from `config/read`'s `model_providers[id].name` (falling back to `"OpenAI"` for `"openai"` or the raw identifier), renders one of four localized `role="alert"` banners (`threadProviderBlock.mismatch`, `threadProviderBlock.unavailable`, `threadProviderBlock.policy.settings`, or `threadProviderBlock.policy.provider`), and provides a primary CTA (`"Open provider settings"`) navigating to `/settings/gateways?hostId=...` or `/settings/agent?hostId=...`.
+
+## 3. Native (`8c64783`) cold selection, draft continuity, and resume-failure presentation (`LIVE_CALLED`, `MACHINE_VERIFIED`, `AGENT_REAL_USE_VERIFIED`)
+
+- **Transport & protocol preservation vs controller stringification**:
+  - Both local `JsonRpcPeer` ([`lib/src/protocol/json_rpc_peer.dart`](../../lib/src/protocol/json_rpc_peer.dart#L108-L118)) and Remote `RemoteCoordinator::receive` / `RemoteTransport._completeError` ([`native_host/src/remote_bridge.rs`](../../native_host/src/remote_bridge.rs#L116-L119), [`lib/src/transport/remote/remote_transport.dart`](../../lib/src/transport/remote/remote_transport.dart#L689-L708)) preserve `error['data']` on `JsonRpcException(code, message, data)` (`LIVE_CALLED` across all four stock binaries via `ProcessTransport.startHost`).
+  - However, `ThreadProtocolAdapter._parseThread` ([`lib/src/protocol/thread_protocol.dart`](../../lib/src/protocol/thread_protocol.dart#L580-L608)) does not retain `value['modelProvider']` on `ThreadSummary`, and `ThreadListController.resumeThread` ([`lib/src/features/threads/thread_list_controller.dart`](../../lib/src/features/threads/thread_list_controller.dart#L668-L692)) catches any `JsonRpcException` and formats it via `_boundedError(error)` into the plain string `_errorMessage` (`"JSON-RPC error -32600: This chat uses ..."`), discarding `error.data`.
+- **Cold selection (`selectThread`) succeeds in read-only hydration without calling `thread/resume`**:
+  - Selecting a saved thread in Native calls `ThreadListController.selectThread(threadId)` -> `gateway.readThread(threadId)` (`thread/read(includeTurns: false)`), followed by `_handleThreadSelection` binding `ConversationController`, `DiffController`, and `HistoryController` (`thread/turns/list`), plus `_queueSelectedGoalHydration` (`thread/goal/get`) and `_requestActiveThreadLinkedPrs` (`thread/attachment/list`).
+  - Because none of those read-only RPCs check `model_provider` on any of the four stock builds, a cold thread whose provider is mismatched or removed from `config.toml` hydrates its saved turns cleanly into the Native conversation timeline while remaining `ThreadRuntimeStatus.notLoaded`.
+- **Draft & attachment continuity across selection and failed cold resume (`MACHINE_VERIFIED`)**:
+  - **Selection continuity**: In [`_ConversationPanelState._syncActiveThreadSelection`](../../lib/src/app/presentation/conversation.dart#L3970-L3977), switching `previousThreadId -> nextThreadId` always clears `_composerAttachments`, and clears `_composerController` text only when `widget.isOffstage` is `true` (i.e., when selecting a different thread from the compact `< 760 px` Threads pane while Conversation is offstage; in wide split layout `>= 760 px`, `isOffstage` is `false` so unsent text carries across thread selection).
+  - **Failed cold Send (`_send`) and queued-work preflight (`_confirmColdSend`)**:
+    1. When the active thread has `status == ThreadRuntimeStatus.notLoaded`, the composer stays enabled (`enabled = true`).
+    2. On Send ([`conversation.dart`](../../lib/src/app/presentation/conversation.dart#L3414-L3581)), `_confirmColdSend` calls `selectedThreadQueuePresence(targetThreadId)` (`thread/queue/list(limit: 1)`), which succeeds even on cold provider-blocked threads across all four stock binaries.
+    3. If `presence == ThreadQueuePresence.pending` (or `unknown`), Native shows the `"Resume queued work?"` (or `"Could not check queued work"`) dialog (`Your new draft will stay in the composer.`). Confirming calls `await threadController.resumeThread(threadId)` and returns `false` before `submit()`.
+    4. If `presence == ThreadQueuePresence.empty` (or `unsupported`), `_send` calls `await threadController.ensureSelectedThreadLoaded(targetThreadId)` -> `resumeThread(targetThreadId)`.
+    5. When `resumeThread` fails (`-32600`), `ensureSelectedThreadLoaded` returns `false` and `_send` returns at line 3456 before `widget.controller.submit(...)`, `_composerController.clear()`, or `_composerAttachments.clear()`. Zero turns are started (`startedTurns` is empty), and both the composer text and attachment chips remain intact and hit-testable.
+- **Generic sidebar-only error visibility gap on collapsed-sidebar and compact layouts (`MACHINE_VERIFIED`, `AGENT_REAL_USE_VERIFIED`)**:
+  - `ThreadListController.errorMessage` is rendered only inside `_ThreadPanel` (`_InlineNotice(message: error)` in [`lib/src/app/presentation/sidebar_activity.dart`](../../lib/src/app/presentation/sidebar_activity.dart#L392-L395)), and is **not** observed or rendered anywhere in `_ConversationPanel`.
+  - Consequently, whenever a cold `resumeThread` (or a cold thread action routed through `ThreadListController` such as `Compact context`, `Revert`, or `Edit`) fails while the user is interacting with `_ConversationPanel`:
+    - **Wide layout (`1280×720`) with sidebar open**: the error banner is visible and hit-testable in the left sidebar (`wideOpen=1`).
+    - **Wide layout (`1280×720`) with sidebar collapsed (`_sidebarCollapsed == true`)**: `_ThreadPanel` is unmounted (`wideCollapsed=0`), so pressing Send preserves the draft and attachments but shows **no visible error** until the user expands the sidebar.
+    - **Compact layout (`720×800`, `< 760 px`) with Conversation active**: `_ThreadPanel` is mounted inside an `Offstage(offstage: true)` branch (`compactOnstage=0`, `compactOffstage=1`), so pressing Send (both with `ThreadQueuePresence.empty` and after confirming `"Resume queued work"` with `ThreadQueuePresence.pending`) or invoking `Compact context` (`compactActionOnstage=0`, `compactActionOffstage=1`) shows **no visible error** in the active conversation pane; the error becomes visible (`compactThreadsDrawerError=1`) only after tapping `compact-workspace-toggle` to switch to the Threads pane.
+  - **Normal-entry real packaged Linux reproduction (`AGENT_REAL_USE_VERIFIED`)**:
+    - Exercising the unmodified Linux bundle (`build/linux/x64/debug/bundle/codex_native_unofficial`) with the bundled `codex-native-host` and installed `0.167.0-alpha.3.2` at `720×800` on a disposable saved thread (selecting the cold thread from ordinary Threads, temporarily moving its rollout file aside so cold `thread/resume` fails with stock `-32600 no rollout found`, and clicking Send) confirmed the exact same end-to-end runtime behavior: the draft remained in the composer, zero error feedback appeared on the active Conversation view, and switching to Threads via `compact-workspace-toggle` revealed the stock `JSON-RPC error -32600: no rollout found ...` banner in the sidebar (before restoring the fixture and shutting down app, Host, and stock cleanly).
+
+## 4. Candidate boundary and prerequisites for a future bounded slice
+
+1. **Generic conversation-visible thread/resume error feedback (independent of provider discovery)**:
+   - Because any cold `resumeThread` failure (e.g., missing rollout, `modelProviderNotConfigured` after editing `config.toml`, or `modelProviderMismatch` when a cross-provider thread is reached via saved search or section views) or `ThreadListController` action failure from the conversation header menu currently writes only to `ThreadListController.errorMessage`, surfacing or mirroring that bounded notice in `_ConversationPanel` when the sidebar is collapsed or offstage (`< 760 px`) is a self-contained presentation fix that requires no new RPCs.
+2. **Structured provider-block read-only banner (coupled to provider/error modeling)**:
+   - Matching Desktop's `threadProviderBlock.*` read-only recovery card and composer gating would additionally require parsing `ThreadSummary.modelProvider` and `JsonRpcException.data` (`ModelProviderError` variants `modelProviderMismatch`, `modelProviderNotConfigured`, `modelProviderPolicyConflict`) in `thread_protocol.dart` / `thread_models.dart`, and remains downstream of any decision on cross-provider thread discovery (`F31B`).
