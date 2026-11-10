@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_composer.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_menu.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
@@ -318,6 +319,8 @@ void main() {
       expect(runtime.turnOptions.last.approvalPolicy, isNull);
       expect(runtime.turnOptions.last.sandbox, isNull);
 
+      tester.view.physicalSize = const Size(820, 420);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
       await tester.pumpAndSettle();
       await _chooseDropdown(
@@ -1120,8 +1123,21 @@ Future<void> _chooseDropdown(
   required String key,
   required String option,
 }) async {
-  await tester.tap(find.byKey(ValueKey(key)));
+  final field = find.byKey(ValueKey(key));
+  await tester.ensureVisible(field);
   await tester.pumpAndSettle();
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  final menu = find.byType(CodexMenu<String>);
+  expect(tester.getRect(menu).left, closeTo(tester.getRect(field).left, 1));
+  expect(tester.getRect(menu).right, closeTo(tester.getRect(field).right, 1));
+  expect(tester.getRect(menu).top, greaterThanOrEqualTo(0));
+  expect(
+    tester.getRect(menu).bottom,
+    lessThanOrEqualTo(
+      tester.view.physicalSize.height / tester.view.devicePixelRatio,
+    ),
+  );
   await tester.tap(find.text(option).last);
   await tester.pumpAndSettle();
 }

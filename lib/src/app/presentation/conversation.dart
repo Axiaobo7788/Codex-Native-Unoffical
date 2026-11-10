@@ -6909,6 +6909,41 @@ class _ExecutionDropdown extends StatefulWidget {
 
 class _ExecutionDropdownState extends State<_ExecutionDropdown> {
   final _popoverController = CodexPopoverController();
+  final _triggerKey = GlobalKey();
+  var _opensAbove = false;
+  var _menuMaxHeight = 240.0;
+
+  @override
+  void dispose() {
+    _popoverController.dispose();
+    super.dispose();
+  }
+
+  void _toggleMenu() {
+    if (_popoverController.isOpen) {
+      _popoverController.hide();
+      return;
+    }
+    final trigger = _triggerKey.currentContext?.findRenderObject();
+    if (trigger is! RenderBox || !trigger.hasSize) return;
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final top = trigger.localToGlobal(Offset.zero).dy;
+    final above = math.max(0.0, top - 12);
+    final below = math.max(
+      0.0,
+      viewportHeight - top - trigger.size.height - 12,
+    );
+    final desired = math.min(240.0, widget.items.length * 32.0 + 12);
+    setState(() {
+      _opensAbove = below < desired && above > below;
+      _menuMaxHeight = math.min(desired, _opensAbove ? above : below);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _menuMaxHeight > 0) {
+        _popoverController.show();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6933,58 +6968,79 @@ class _ExecutionDropdownState extends State<_ExecutionDropdown> {
           ),
         ),
         const SizedBox(height: 6.0),
-        CodexPopoverAnchor(
-          controller: _popoverController,
-          popoverBuilder: (context, close) => CodexMenu<String>(
-            items: [
-              for (final item in widget.items)
-                CodexMenuItem<String>(value: item.value, label: item.label),
-            ],
-            selectedValue: widget.value,
-            onSelected: (val) {
-              widget.onChanged(val);
-              close();
-            },
-          ),
-          child: GestureDetector(
-            key: ValueKey('execution-${widget.label}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: _popoverController.toggle,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
-                height: 38.0,
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                decoration: BoxDecoration(
-                  color: theme.elevatedSurface,
-                  borderRadius: BorderRadius.circular(
-                    OfficialCodexTheme.buttonRadius,
-                  ),
-                  border: Border.all(
-                    color: theme.hairlineBorder,
-                    width: OfficialCodexTheme.hairlineBorderWidth,
-                  ),
+        LayoutBuilder(
+          builder: (context, constraints) => CodexPopoverAnchor(
+            controller: _popoverController,
+            width: constraints.maxWidth,
+            targetAnchor: _opensAbove
+                ? Alignment.topLeft
+                : Alignment.bottomLeft,
+            followerAnchor: _opensAbove
+                ? Alignment.bottomLeft
+                : Alignment.topLeft,
+            offset: Offset(0, _opensAbove ? -6 : 6),
+            popoverBuilder: (context, close) => ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: _menuMaxHeight),
+              child: SingleChildScrollView(
+                child: CodexMenu<String>(
+                  items: [
+                    for (final item in widget.items)
+                      CodexMenuItem<String>(
+                        value: item.value,
+                        label: item.label,
+                      ),
+                  ],
+                  selectedValue: widget.value,
+                  onSelected: (val) {
+                    widget.onChanged(val);
+                    close();
+                  },
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        currentItem.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13.0,
-                          color: theme.textPrimary,
-                        ),
+              ),
+            ),
+            child: KeyedSubtree(
+              key: _triggerKey,
+              child: GestureDetector(
+                key: ValueKey('execution-${widget.label}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleMenu,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    height: 38.0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    decoration: BoxDecoration(
+                      color: theme.elevatedSurface,
+                      borderRadius: BorderRadius.circular(
+                        OfficialCodexTheme.buttonRadius,
+                      ),
+                      border: Border.all(
+                        color: theme.hairlineBorder,
+                        width: OfficialCodexTheme.hairlineBorderWidth,
                       ),
                     ),
-                    const SizedBox(width: 8.0),
-                    Icon(
-                      Icons.unfold_more_rounded,
-                      size: 16.0,
-                      color: theme.textMuted,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            currentItem.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13.0,
+                              color: theme.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Icon(
+                          Icons.unfold_more_rounded,
+                          size: 16.0,
+                          color: theme.textMuted,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -7027,116 +7083,132 @@ class _ExecutionSettingsDialog extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Execution settings',
-                    style: TextStyle(
-                      fontSize: 16.0,
-                      fontWeight: FontWeight.w600,
-                      color: theme.textPrimary,
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Execution settings',
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              fontWeight: FontWeight.w600,
+                              color: theme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 8.0),
+                          Text(
+                            'Overrides apply only when explicitly selected. Defaults '
+                            'continue to come from Codex configuration.',
+                            style: TextStyle(
+                              fontSize: 12.0,
+                              color: theme.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: ThemeTokens.space4),
+                          _ExecutionDropdown(
+                            label: 'Model',
+                            value: controller.selectedModelId ?? _inherit,
+                            items: [
+                              const _ExecutionDropdownItem(
+                                value: _inherit,
+                                label: 'Codex default',
+                              ),
+                              for (final model in controller.models)
+                                _ExecutionDropdownItem(
+                                  value: model.id,
+                                  label: model.displayName,
+                                ),
+                            ],
+                            onChanged: (value) => controller.selectModel(
+                              value == _inherit ? null : value,
+                            ),
+                          ),
+                          const SizedBox(height: ThemeTokens.space3),
+                          _ExecutionDropdown(
+                            label: 'Reasoning effort',
+                            value:
+                                controller.selectedReasoningEffort ?? _inherit,
+                            items: [
+                              const _ExecutionDropdownItem(
+                                value: _inherit,
+                                label: 'Model default',
+                              ),
+                              for (final effort
+                                  in controller.availableReasoningEfforts)
+                                _ExecutionDropdownItem(
+                                  value: effort.value,
+                                  label: effort.value,
+                                ),
+                            ],
+                            onChanged: (value) =>
+                                controller.selectReasoningEffort(
+                                  value == _inherit ? null : value,
+                                ),
+                          ),
+                          const SizedBox(height: ThemeTokens.space3),
+                          _ExecutionDropdown(
+                            label: 'Approval mode',
+                            value: _approvalValue(controller.approvalPolicy),
+                            items: const [
+                              _ExecutionDropdownItem(
+                                value: _inherit,
+                                label: 'Codex default',
+                              ),
+                              _ExecutionDropdownItem(
+                                value: 'untrusted',
+                                label: 'Ask for untrusted commands',
+                              ),
+                              _ExecutionDropdownItem(
+                                value: 'on-request',
+                                label: 'Ask when Codex requests',
+                              ),
+                              _ExecutionDropdownItem(
+                                value: 'never',
+                                label: 'Never ask',
+                              ),
+                            ],
+                            onChanged: (value) => _setApproval(context, value),
+                          ),
+                          const SizedBox(height: ThemeTokens.space3),
+                          _ExecutionDropdown(
+                            label: 'Sandbox',
+                            value: _sandboxValue(controller.sandbox),
+                            items: const [
+                              _ExecutionDropdownItem(
+                                value: _inherit,
+                                label: 'Codex default',
+                              ),
+                              _ExecutionDropdownItem(
+                                value: 'read-only',
+                                label: 'Read only',
+                              ),
+                              _ExecutionDropdownItem(
+                                value: 'workspace-write',
+                                label: 'Workspace write',
+                              ),
+                              _ExecutionDropdownItem(
+                                value: 'danger-full-access',
+                                label: 'Danger: full access',
+                              ),
+                            ],
+                            onChanged: (value) => _setSandbox(context, value),
+                          ),
+                          if (controller.errorMessage case final error?) ...[
+                            const SizedBox(height: ThemeTokens.space3),
+                            SelectableText(
+                              error,
+                              style: TextStyle(
+                                fontSize: 12.0,
+                                color: theme.danger,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8.0),
-                  Text(
-                    'Overrides apply only when explicitly selected. Defaults '
-                    'continue to come from Codex configuration.',
-                    style: TextStyle(
-                      fontSize: 12.0,
-                      color: theme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: ThemeTokens.space4),
-                  _ExecutionDropdown(
-                    label: 'Model',
-                    value: controller.selectedModelId ?? _inherit,
-                    items: [
-                      const _ExecutionDropdownItem(
-                        value: _inherit,
-                        label: 'Codex default',
-                      ),
-                      for (final model in controller.models)
-                        _ExecutionDropdownItem(
-                          value: model.id,
-                          label: model.displayName,
-                        ),
-                    ],
-                    onChanged: (value) => controller.selectModel(
-                      value == _inherit ? null : value,
-                    ),
-                  ),
-                  const SizedBox(height: ThemeTokens.space3),
-                  _ExecutionDropdown(
-                    label: 'Reasoning effort',
-                    value: controller.selectedReasoningEffort ?? _inherit,
-                    items: [
-                      const _ExecutionDropdownItem(
-                        value: _inherit,
-                        label: 'Model default',
-                      ),
-                      for (final effort in controller.availableReasoningEfforts)
-                        _ExecutionDropdownItem(
-                          value: effort.value,
-                          label: effort.value,
-                        ),
-                    ],
-                    onChanged: (value) => controller.selectReasoningEffort(
-                      value == _inherit ? null : value,
-                    ),
-                  ),
-                  const SizedBox(height: ThemeTokens.space3),
-                  _ExecutionDropdown(
-                    label: 'Approval mode',
-                    value: _approvalValue(controller.approvalPolicy),
-                    items: const [
-                      _ExecutionDropdownItem(
-                        value: _inherit,
-                        label: 'Codex default',
-                      ),
-                      _ExecutionDropdownItem(
-                        value: 'untrusted',
-                        label: 'Ask for untrusted commands',
-                      ),
-                      _ExecutionDropdownItem(
-                        value: 'on-request',
-                        label: 'Ask when Codex requests',
-                      ),
-                      _ExecutionDropdownItem(
-                        value: 'never',
-                        label: 'Never ask',
-                      ),
-                    ],
-                    onChanged: (value) => _setApproval(context, value),
-                  ),
-                  const SizedBox(height: ThemeTokens.space3),
-                  _ExecutionDropdown(
-                    label: 'Sandbox',
-                    value: _sandboxValue(controller.sandbox),
-                    items: const [
-                      _ExecutionDropdownItem(
-                        value: _inherit,
-                        label: 'Codex default',
-                      ),
-                      _ExecutionDropdownItem(
-                        value: 'read-only',
-                        label: 'Read only',
-                      ),
-                      _ExecutionDropdownItem(
-                        value: 'workspace-write',
-                        label: 'Workspace write',
-                      ),
-                      _ExecutionDropdownItem(
-                        value: 'danger-full-access',
-                        label: 'Danger: full access',
-                      ),
-                    ],
-                    onChanged: (value) => _setSandbox(context, value),
-                  ),
-                  if (controller.errorMessage case final error?) ...[
-                    const SizedBox(height: ThemeTokens.space3),
-                    SelectableText(
-                      error,
-                      style: TextStyle(fontSize: 12.0, color: theme.danger),
-                    ),
-                  ],
                   const SizedBox(height: ThemeTokens.space4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
