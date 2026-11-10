@@ -103,6 +103,9 @@ abstract final class OfficialCodexTheme {
   /// Activity / tool card corner radius (8px).
   static const double activityRowRadius = 8.0;
 
+  /// Inline command output scroll region (9rem at the reference scale).
+  static const double commandOutputPreviewHeight = 144.0;
+
   /// Turn work divider pill height (26px).
   static const double workDividerHeight = 26.0;
 

@@ -272,23 +272,25 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('turn-work-turn-combo-1')));
       await tester.pumpAndSettle();
 
-      // Open output viewer
-      final viewOutputBtn = find.text('View output');
-      if (viewOutputBtn.evaluate().isNotEmpty) {
-        await tester.tap(viewOutputBtn);
-        await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Show output preview'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('15 passed, 0 failed'), findsOneWidget);
+      await tester.tap(find.text('View output'));
+      await tester.pumpAndSettle();
+      expect(find.text('Command output'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.textContaining('15 passed, 0 failed'),
+        ),
+        findsOneWidget,
+      );
 
-        expect(find.text('Command output'), findsOneWidget);
-        expect(find.textContaining('15 passed, 0 failed'), findsOneWidget);
-
-        // Close dialog
-        await tester.tap(find.byTooltip('Close'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Command output'), findsNothing);
-        // Timeline still shows activity row
-        expect(find.textContaining('pytest tests/'), findsOneWidget);
-      }
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('Command output'), findsNothing);
+      expect(find.byTooltip('Hide output preview'), findsOneWidget);
+      expect(find.textContaining('pytest tests/'), findsOneWidget);
     });
 
     testWidgets('T3.7: Remote Read-Only + App Lifecycle Suspend/Resume', (

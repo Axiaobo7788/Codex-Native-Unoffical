@@ -127,6 +127,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
   var _detailMode = PresentationDetailMode.commands;
+  ({String turnId, String itemId, OutputViewerController viewer})?
+  _commandOutputPreview;
+  var _commandPreviewReading = false;
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
   final _timelineDetailsPopoverController = CodexPopoverController();
@@ -594,12 +597,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       widget.threadController?.addListener(_handleThreadListChanged);
     }
     if (!identical(oldWidget.outputGateway, widget.outputGateway)) {
+      _clearCommandOutputPreview();
       _bindAttachmentEvents();
       if (_activeThreadId case final activeId?) {
         _requestActiveThreadLinkedPrs(activeId);
       }
     }
     if (oldWidget.hasDesktopShell && !widget.hasDesktopShell) {
+      _clearCommandOutputPreview();
       _timelineDetailsPopoverController.hide();
     }
     if (!oldWidget.isOffstage && widget.isOffstage) {
@@ -634,6 +639,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   @override
   void dispose() {
+    _clearCommandOutputPreview();
     unawaited(_attachmentEventSubscription?.cancel());
     widget.threadController?.removeListener(_handleThreadListChanged);
     widget.controller.removeListener(_handleConversationChanged);
@@ -1678,11 +1684,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ),
                   ],
                   selectedValue: _detailMode,
-                  onSelected: (mode) {
-                    setState(() {
-                      _detailMode = mode;
-                    });
-                  },
+                  onSelected: _setDetailMode,
                 ),
               if (showSearchButton) ...[
                 const SizedBox(width: ThemeTokens.space1),
@@ -1977,7 +1979,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       selectedValue: _detailMode,
       onSelected: (mode) {
         close();
-        setState(() => _detailMode = mode);
+        _setDetailMode(mode);
       },
     ),
     child: CodexIconButton(
@@ -3201,6 +3203,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         outputGateway: widget.outputGateway,
                         detailMode: _detailMode,
                         inlineActivity: widget.hasDesktopShell,
+                        commandPreview: _commandPreviewFor(item),
+                        onToggleCommandPreview: _canPreviewCommand(item)
+                            ? () => unawaited(_toggleCommandOutputPreview(item))
+                            : null,
+                        commandPreviewReading: _commandPreviewReading,
                         overrideEntryText: overrideText,
                         overrideAttachments: overrideAttachments,
                         siblingBranchInfo:
@@ -4305,6 +4312,70 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
   }
 
+  void _setDetailMode(PresentationDetailMode mode) {
+    setState(() {
+      _detailMode = mode;
+      if (mode == PresentationDetailMode.prose) {
+        _clearCommandOutputPreview();
+      }
+    });
+  }
+
+  bool _canPreviewCommand(HistoryItem item) =>
+      widget.hasDesktopShell &&
+      _detailMode != PresentationDetailMode.prose &&
+      item.isCommand &&
+      item.turnId == widget.historyController.selectedTurnId &&
+      item.output?.available == true &&
+      item.output?.reference != null;
+
+  OutputViewerController? _commandPreviewFor(HistoryItem item) {
+    final preview = _commandOutputPreview;
+    if (preview != null &&
+        preview.turnId == item.turnId &&
+        preview.itemId == item.id &&
+        preview.viewer.descriptor.reference == item.output?.reference) {
+      return preview.viewer;
+    }
+    return null;
+  }
+
+  Future<void> _toggleCommandOutputPreview(HistoryItem item) async {
+    if (_commandPreviewFor(item) != null) {
+      setState(_clearCommandOutputPreview);
+      return;
+    }
+    if (_commandPreviewReading || !_canPreviewCommand(item)) {
+      return;
+    }
+    final viewer = OutputViewerController(
+      gateway: widget.outputGateway,
+      descriptor: item.output!,
+      pageBytes: 4 * 1024,
+    );
+    setState(() {
+      _clearCommandOutputPreview();
+      _commandOutputPreview = (
+        turnId: item.turnId,
+        itemId: item.id,
+        viewer: viewer,
+      );
+      _commandPreviewReading = true;
+    });
+    try {
+      await viewer.loadInitial();
+    } finally {
+      if (mounted) {
+        setState(() => _commandPreviewReading = false);
+      }
+    }
+  }
+
+  void _clearCommandOutputPreview() {
+    _commandOutputPreview?.viewer.dispose();
+    _commandOutputPreview = null;
+  }
+
   void _syncActiveThreadSelection() {
     final nextThreadId = widget.controller.thread?.id;
     if (nextThreadId == _activeThreadId) {
@@ -4315,6 +4386,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(previousThreadId);
     }
     _activeThreadId = nextThreadId;
+    _clearCommandOutputPreview();
     _showChanges = false;
     _threadSelectionVersion += 1;
     _queuedLinkedPrThreadId = nextThreadId;
@@ -4356,6 +4428,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   void _handleHistoryChanged() {
     _syncActiveThreadSelection();
+    if (_commandOutputPreview case final preview?) {
+      if (widget.historyController.selectedTurnId != preview.turnId) {
+        _clearCommandOutputPreview();
+      }
+    }
     if (_wasWindowShifted &&
         !widget.historyController.canReturnToNewest &&
         !widget.historyController.loadingTurns) {
@@ -4933,6 +5010,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.isReasoning = false,
     this.isCommand = false,
     this.inlineActivity = false,
+    this.activityDetail,
     this.leadingHeader,
     this.trailingAction,
     this.onForkFromTurn,
@@ -4953,6 +5031,7 @@ class _ConversationEntryView extends StatelessWidget {
   final bool isReasoning;
   final bool isCommand;
   final bool inlineActivity;
+  final Widget? activityDetail;
   final Widget? leadingHeader;
   final Widget? trailingAction;
   final VoidCallback? onForkFromTurn;
@@ -5067,11 +5146,18 @@ class _ConversationEntryView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
                 ),
                 child: isActivity
-                    ? _ActivityContent(
-                        entry: entry,
-                        isCommand: isCommand,
-                        inline: !hasActivitySurface,
-                        trailingAction: trailingAction,
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ActivityContent(
+                            entry: entry,
+                            isCommand: isCommand,
+                            inline: !hasActivitySurface,
+                            trailingAction: trailingAction,
+                          ),
+                          ?activityDetail,
+                        ],
                       )
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

@@ -4682,3 +4682,33 @@ probe before interpreting that result as a content-search limitation.
   the 200% preference from isolated GSettings, displayed a saved stock command
   output at 360×420, and closed the dialog. The stock fixture's output fit in
   a single byte window.
+
+## Desktop inline command output
+
+- Installed renderer build `25894`, chunk `225284.63835849b6.js`, starts the
+  command disclosure collapsed. Its `hideRawCommand` path removes the toggle.
+  The expanded command body uses the chunk's `PuGl` shell module. The command
+  header, output scroller, and exit footer appear inline. The stylesheet
+  resolves the scroller cap to `9rem`. This is static evidence for the available
+  branch. Its current signed-in visibility still needs comparison.
+- The live output-delta path in `182735.5b42af8792.js` retains a 20,000-character
+  tail on the sampled branch. A separate direct-stock probe on the installed
+  binary returned 65,536 bytes for the long disposable command under both
+  `deferOutput` settings. Those are different boundaries. Native can translate
+  the disclosure with a single small Host tail read and keep the paged viewer
+  for the full stored output. The presentation must release the preview with
+  its turn and ignore an outstanding read after selection changes.
+- Native Desktop Commands and Execution use a collapsed command disclosure
+  in opened saved-turn details. Expansion makes one 4 KiB tail request and
+  shows a scroll region capped at 144 logical px. A second expansion replaces
+  the first. Collapse, turn or thread selection changes, and entry to Prose
+  release the preview. A pending read remains single-flight after collapse.
+  The complete stored output opens in the existing paged dialog. Compact
+  layout retains direct dialog access.
+- The packaged Linux client, bundled Host and stock app-server reopened a
+  disposable saved command at 760×800 with the sidebar at its 520 px maximum.
+  The preview displayed the last 4,096 stored bytes. The full viewer reported
+  65,536 stored bytes and showed the start marker. Closing the dialog restored
+  the still-expanded preview. An initial labeled disclosure clipped at that
+  width. The final chevron retains its accessible action name and leaves more
+  room for the command summary.

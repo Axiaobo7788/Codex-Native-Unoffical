@@ -942,17 +942,15 @@ void main() {
         await tester.tap(workDivider);
         await tester.pumpAndSettle();
 
-        final outputButton = find.text('View output');
-        if (outputButton.evaluate().isNotEmpty) {
-          await tester.tap(outputButton);
-          await tester.pumpAndSettle();
-
-          expect(find.text('Command output'), findsOneWidget);
-          expect(
-            find.textContaining('compiled 42 modules with 0 errors'),
-            findsOneWidget,
-          );
-        }
+        await tester.tap(find.byTooltip('Show output preview'));
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('compiled 42 modules with 0 errors'),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('View output'));
+        await tester.pumpAndSettle();
+        expect(find.text('Command output'), findsOneWidget);
       },
     );
 

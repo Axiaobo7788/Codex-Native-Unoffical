@@ -419,6 +419,9 @@ class _HistoryEntryView extends StatelessWidget {
     required this.outputGateway,
     this.detailMode = PresentationDetailMode.commands,
     this.inlineActivity = false,
+    this.commandPreview,
+    this.onToggleCommandPreview,
+    this.commandPreviewReading = false,
     this.onForkFromTurn,
     this.onRevertFromTurn,
     this.onEditFromTurn,
@@ -438,6 +441,9 @@ class _HistoryEntryView extends StatelessWidget {
   final OutputGateway outputGateway;
   final PresentationDetailMode detailMode;
   final bool inlineActivity;
+  final OutputViewerController? commandPreview;
+  final VoidCallback? onToggleCommandPreview;
+  final bool commandPreviewReading;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
   final VoidCallback? onEditFromTurn;
@@ -496,6 +502,16 @@ class _HistoryEntryView extends StatelessWidget {
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
       inlineActivity: inlineActivity,
+      activityDetail: switch (commandPreview) {
+        final viewer? => _InlineCommandOutput(
+          viewer: viewer,
+          openFullOutput: _commandOutputDialogAction(
+            context,
+            viewer.descriptor,
+          ),
+        ),
+        null => null,
+      },
       leadingHeader: showDetails
           ? _TurnWorkDivider(
               actionKey: ValueKey('turn-work-${item.turnId}'),
@@ -525,21 +541,20 @@ class _HistoryEntryView extends StatelessWidget {
   Widget? _commandOutputAction(BuildContext context) {
     final output = item.output;
     if (output != null && output.available && output.reference != null) {
-      final label = output.truncated
-          ? 'View stored output (truncated)'
-          : 'View output';
-      return CodexButton(
-        variant: CodexButtonVariant.ghost,
-        size: CodexButtonSize.sm,
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (context) =>
-              _OutputDialog(gateway: outputGateway, descriptor: output),
-        ),
-        icon: const Icon(Icons.terminal, size: 14),
-        label: label,
-        tooltip: label,
-      );
+      if (onToggleCommandPreview case final toggle?) {
+        final expanded = commandPreview != null;
+        final label = expanded ? 'Hide output preview' : 'Show output preview';
+        return Semantics(
+          expanded: expanded,
+          child: CodexIconButton(
+            size: 28,
+            onPressed: commandPreviewReading && !expanded ? null : toggle,
+            icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+            tooltip: label,
+          ),
+        );
+      }
+      return _commandOutputDialogAction(context, output);
     }
     if (output != null && !output.available) {
       return Text(
@@ -574,6 +589,27 @@ class _HistoryEntryView extends StatelessWidget {
     return null;
   }
 
+  Widget _commandOutputDialogAction(
+    BuildContext context,
+    OutputDescriptor output,
+  ) {
+    final label = output.truncated
+        ? 'View stored output (truncated)'
+        : 'View output';
+    return CodexButton(
+      variant: CodexButtonVariant.ghost,
+      size: CodexButtonSize.sm,
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (context) =>
+            _OutputDialog(gateway: outputGateway, descriptor: output),
+      ),
+      icon: const Icon(Icons.terminal, size: 14),
+      label: label,
+      tooltip: label,
+    );
+  }
+
   Widget? _savedMcpTextAction(BuildContext context) {
     if (!historyController.canReadSavedMcpText(item)) {
       return null;
@@ -588,6 +624,79 @@ class _HistoryEntryView extends StatelessWidget {
         builder: (context) => _SavedMcpTextDialog(
           read: () => historyController.loadSavedMcpText(item),
         ),
+      ),
+    );
+  }
+}
+
+class _InlineCommandOutput extends StatelessWidget {
+  const _InlineCommandOutput({
+    required this.viewer,
+    required this.openFullOutput,
+  });
+
+  final OutputViewerController viewer;
+  final Widget openFullOutput;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final textStyle = Theme.of(context).textTheme.bodySmall;
+    final chunk = viewer.chunk;
+    final output = viewer.text;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: ThemeTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (viewer.loading)
+            Text('Loading output preview…', style: textStyle)
+          else if (viewer.errorMessage != null)
+            Text(
+              'Could not load output preview.',
+              style: textStyle?.copyWith(color: theme.danger),
+            )
+          else
+            ColoredBox(
+              color: OfficialCodexTheme.codeSurface,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxHeight: OfficialCodexTheme.commandOutputPreviewHeight,
+                ),
+                child: SingleChildScrollView(
+                  key: const ValueKey('command-output-preview-scroll'),
+                  primary: false,
+                  padding: const EdgeInsets.all(ThemeTokens.space2),
+                  child: SingleChildScrollView(
+                    primary: false,
+                    scrollDirection: Axis.horizontal,
+                    child: SelectionArea(
+                      child: Text(
+                        output.isEmpty ? 'No output' : output,
+                        softWrap: false,
+                        style: textStyle?.copyWith(
+                          fontFamily: 'monospace',
+                          color: CodexPalette.dark.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Wrap(
+            spacing: ThemeTokens.space2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (chunk != null && chunk.offset > 0)
+                Text(
+                  'Last ${chunk.data.length} stored bytes',
+                  style: textStyle,
+                ),
+              openFullOutput,
+            ],
+          ),
+        ],
       ),
     );
   }

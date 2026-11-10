@@ -97,10 +97,86 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Command output'), findsNothing);
   });
+
+  testWidgets('desktop previews only one command with one bounded tail read', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1191, 865);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final runtime = _OutputRuntimeController(includeSecondCommand: true);
+    addTearDown(runtime.closeStreams);
+
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Output thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Turn details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fetch output safely'));
+    await tester.pumpAndSettle();
+
+    final show = find.byTooltip('Show output preview');
+    final hide = find.byTooltip('Hide output preview');
+    final preview = find.byKey(const ValueKey('command-output-preview-scroll'));
+    expect(show, findsNWidgets(2));
+    expect(runtime.tailLengths, isEmpty);
+
+    final pendingRead = Completer<void>();
+    runtime.tailDelay = pendingRead.future;
+    await tester.tap(show.first);
+    await tester.pumpAndSettle();
+    expect(find.text('Loading output preview…'), findsOneWidget);
+    expect(runtime.tailLengths, [4096]);
+
+    await tester.tap(hide);
+    await tester.pumpAndSettle();
+    await tester.tap(show.last);
+    await tester.pumpAndSettle();
+    expect(runtime.tailLengths, [4096]);
+    pendingRead.complete();
+    runtime.tailDelay = null;
+    await tester.pumpAndSettle();
+    expect(preview, findsNothing);
+
+    await tester.tap(show.first);
+    await tester.pumpAndSettle();
+    expect(preview, findsOneWidget);
+    expect(tester.getSize(preview).height, lessThanOrEqualTo(144));
+    expect(find.textContaining('TAIL'), findsOneWidget);
+    expect(runtime.tailLengths, [4096, 4096]);
+
+    await tester.tap(show);
+    await tester.pumpAndSettle();
+    expect(preview, findsOneWidget);
+    expect(hide, findsOneWidget);
+    expect(runtime.tailLengths, [4096, 4096, 4096]);
+    expect(runtime.rangeReads, isEmpty);
+
+    await tester.tap(find.text('View stored output (truncated)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Command output'), findsOneWidget);
+    expect(runtime.tailLengths.last, 64 * 1024);
+    await tester.tap(find.byTooltip('Close').hitTestable());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Turn details').hitTestable());
+    await tester.pumpAndSettle();
+    expect(preview, findsNothing);
+    await tester.tap(find.text('Turn details').hitTestable());
+    await tester.pumpAndSettle();
+    expect(preview, findsNothing);
+    expect(runtime.tailLengths, [4096, 4096, 4096, 64 * 1024]);
+  });
 }
 
 class _OutputRuntimeController extends RuntimeController {
-  _OutputRuntimeController() : outputBytes = _makeOutput();
+  _OutputRuntimeController({this.includeSecondCommand = false})
+    : outputBytes = _makeOutput();
+
+  final bool includeSecondCommand;
+  Future<void>? tailDelay;
 
   static const descriptor = OutputDescriptor(
     reference: 'bounded-output-ref',
@@ -193,9 +269,9 @@ class _OutputRuntimeController extends RuntimeController {
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async {
     itemListCalls += 1;
-    return const HistoryItemPage(
+    return HistoryItemPage(
       items: [
-        HistoryItem(
+        const HistoryItem(
           id: 'output-command',
           turnId: 'output-turn',
           kind: HistoryItemKind.activity,
@@ -203,6 +279,15 @@ class _OutputRuntimeController extends RuntimeController {
           outputDeferred: true,
           isCommand: true,
         ),
+        if (includeSecondCommand)
+          const HistoryItem(
+            id: 'another-output-command',
+            turnId: 'output-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Generated another bounded output',
+            output: descriptor,
+            isCommand: true,
+          ),
       ],
       nextCursor: null,
     );
@@ -243,6 +328,7 @@ class _OutputRuntimeController extends RuntimeController {
     required int length,
   }) async {
     tailLengths.add(length);
+    await tailDelay;
     return _chunk(reference, outputBytes.length - length, length);
   }
 

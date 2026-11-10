@@ -2,6 +2,10 @@
 
 **Program mode: `SELF_ITERATION`**
 **Current phase: Desktop UI Structural Reconvergence (priority override within Official Client Convergence).**
+**Program objective: reach 0.x pre-release/RC readiness.**
+
+The Desktop priority governs slice selection. Phase checkpoints and
+slice-scoped Human review preserve the broader program objective.
 
 Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md) for the living queue, [Architecture](docs/ARCHITECTURE.md) for system boundaries, and [Decisions](docs/DECISIONS.md) for ADRs. Historical checkpoints are in the [pre-consolidation archive](docs/history/PROJECT_STATUS_through_F14.md) and [F15–F23 record](docs/history/CONVERGENCE_F15_F23.md).
 
@@ -31,6 +35,11 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- Desktop Commands and Execution can expand one saved command output in the
+  timeline. Expansion reads at most 4 KiB from Host. The original paged viewer
+  stays reachable, and compact layout opens it directly. A packaged Linux
+  walkthrough opened the preview and full viewer for a saved stock command in
+  a 240 px workspace. [Inline output evidence](docs/RESEARCH.md#desktop-inline-command-output)
 - At 360×420 with 200% text size, Command output keeps its reading area,
   page actions and close control reachable. Output still uses the same
   bounded byte windows. [Short-window evidence](docs/RESEARCH.md#desktop-short-window-request-stack)
@@ -93,6 +102,12 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- The Desktop inline output checkpoint passed strict Dart analysis, the
+  65-root pure-Dart boundary, 511 Flutter cases with five opt-in skips, all
+  five direct-stock cases when enabled separately, the bounded-history
+  benchmark, and the Linux bundle and license checks. Rust formatting,
+  Clippy, and 100 Rust tests passed. The preceding `62661ab` checkpoint
+  passed all [Hosted CI jobs](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42794120505).
 - The short-window request and cold review checkpoint passed strict Dart
   analysis, the 65-root pure-Dart boundary, 510 Flutter cases with five
   opt-in skips, five separately enabled direct-stock cases, the bounded-history
