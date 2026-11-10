@@ -204,20 +204,15 @@ void main() {
       await tester.tap(find.text('Settings combo thread'));
       await tester.pumpAndSettle();
 
-      // Open settings
+      // Open the composer picker and select GPT-4o.
       await tester.tap(find.byKey(const ValueKey('composer-model-pill')));
-      await tester.pumpAndSettle();
-
-      // 1. Select GPT-4o
-      await tester.tap(find.byKey(const ValueKey('execution-Model')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('GPT-4o').last);
       await tester.pumpAndSettle();
 
-      // 2. Select Danger: full access sandbox
-      await tester.tap(find.byKey(const ValueKey('execution-Sandbox')));
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Danger: full access').last);
+      await tester.tap(find.text('Full access'));
       await tester.pumpAndSettle();
 
       // Confirm danger dialog
@@ -225,12 +220,9 @@ void main() {
       await tester.tap(find.widgetWithText(CodexButton, 'Allow full access'));
       await tester.pumpAndSettle();
 
-      // Close settings dialog
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-
       // Summary pill reflects model and danger state
       expect(find.textContaining('GPT-4o'), findsOneWidget);
+      expect(find.byIcon(Icons.gpp_maybe_outlined), findsOneWidget);
     });
 
     testWidgets('T3.6: Worked for Toggle + Output Viewer Dialog', (

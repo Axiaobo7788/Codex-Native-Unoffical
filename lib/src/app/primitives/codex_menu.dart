@@ -144,7 +144,7 @@ class _CodexMenuItemWidgetState<T> extends State<_CodexMenuItemWidget<T>> {
         : (widget.isSelected ? theme.textPrimary : theme.textSecondary);
 
     Widget content = Container(
-      height: 32.0,
+      constraints: const BoxConstraints(minHeight: 32.0),
       padding: const EdgeInsets.symmetric(horizontal: 10.0),
       decoration: BoxDecoration(
         color: background,

@@ -55,6 +55,7 @@ import 'theme_tokens.dart';
 part 'presentation/app_shell.dart';
 part 'presentation/remote_onboarding.dart';
 part 'presentation/conversation.dart';
+part 'presentation/composer_model_picker.dart';
 part 'presentation/desktop_goal.dart';
 part 'presentation/diff_approval_output.dart';
 part 'presentation/sidebar_activity.dart';

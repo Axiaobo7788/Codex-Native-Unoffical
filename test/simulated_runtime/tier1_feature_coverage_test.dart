@@ -8,6 +8,7 @@ import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'simulated_runtime_harness.dart';
@@ -615,24 +616,57 @@ void main() {
 
       final modelPill = find.byKey(const ValueKey('composer-model-pill'));
       expect(modelPill, findsOneWidget);
-      expect(find.textContaining('o3-mini'), findsOneWidget);
+      expect(find.text('Codex settings'), findsOneWidget);
 
       await tester.tap(modelPill);
       await tester.pumpAndSettle();
 
-      // Open Model dropdown inside settings dialog
-      await tester.tap(find.byKey(const ValueKey('execution-Model')));
+      final picker = find.byKey(const ValueKey('composer-model-picker'));
+      expect(tester.getSize(picker).width, closeTo(224, 1));
+      expect(
+        tester.getRect(picker).bottom,
+        lessThan(tester.getRect(modelPill).top),
+      );
+      tester.view.physicalSize = const Size(820, 420);
       await tester.pumpAndSettle();
-
-      expect(find.text('GPT-4o'), findsWidgets);
-
+      expect(tester.getRect(picker).top, greaterThanOrEqualTo(0));
+      expect(tester.getRect(picker).bottom, lessThanOrEqualTo(420));
       await tester.tap(find.text('GPT-4o').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-
+      expect(picker, findsNothing);
       expect(find.textContaining('GPT-4o'), findsOneWidget);
+      await tester.tap(modelPill);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('o3-mini').last);
+      await tester.pumpAndSettle();
+      final reset = find.byKey(const ValueKey('composer-model-reset'));
+      expect(reset, findsOneWidget);
+      await tester.tap(reset);
+      await tester.pumpAndSettle();
+      expect(reset, findsNothing);
+      expect(picker, findsNothing);
+      expect(find.text('Codex settings'), findsOneWidget);
+      await tester.tap(modelPill);
+      await tester.pumpAndSettle();
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('composer-model-list')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(picker, findsNothing);
+      expect(tester.takeException(), isNull);
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('conversation-composer')),
+        'Check inherited runtime settings.',
+      );
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pumpAndSettle();
+      expect(harness.startedTurns.single.model, isNull);
+      expect(harness.startedTurns.single.reasoningEffort, isNull);
     });
 
     testWidgets(
@@ -648,24 +682,27 @@ void main() {
         await tester.tap(find.text('Effort select thread'));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('Medium'), findsOneWidget);
+        expect(find.text('Codex settings'), findsOneWidget);
 
         await tester.tap(find.byKey(const ValueKey('composer-model-pill')));
         await tester.pumpAndSettle();
-
-        await tester.tap(
-          find.byKey(const ValueKey('execution-Reasoning effort')),
-        );
+        await tester.tap(find.text('o3-mini').last);
         await tester.pumpAndSettle();
+        expect(find.textContaining('Medium'), findsWidgets);
 
-        expect(find.text('high'), findsWidgets);
-        await tester.tap(find.text('high').last);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Done'));
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pumpAndSettle();
 
         expect(find.textContaining('High'), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('conversation-composer')),
+          'Check the selected reasoning effort.',
+        );
+        await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+        await tester.pumpAndSettle();
+        expect(harness.startedTurns.single.reasoningEffort, 'high');
       },
     );
 
@@ -709,8 +746,11 @@ void main() {
 
       await tester.tap(model);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('execution-Model')), findsOneWidget);
-      await tester.tap(find.text('Done'));
+      expect(
+        find.byKey(const ValueKey('composer-model-picker')),
+        findsOneWidget,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
@@ -735,26 +775,28 @@ void main() {
         await tester.tap(find.text('Danger override thread'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const ValueKey('composer-model-pill')));
+        await tester.tap(
+          find.byKey(const ValueKey('execution-settings-button')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Advanced settings…'));
         await tester.pumpAndSettle();
 
         final approvalDropdown = find.byKey(
           const ValueKey('execution-Approval mode'),
         );
-        if (approvalDropdown.evaluate().isNotEmpty) {
-          await tester.tap(approvalDropdown);
-          await tester.pumpAndSettle();
+        await tester.tap(approvalDropdown);
+        await tester.pumpAndSettle();
 
-          await tester.tap(find.text('Never ask').last);
-          await tester.pumpAndSettle();
+        await tester.tap(find.text('Never ask').last);
+        await tester.pumpAndSettle();
 
-          expect(find.text('Disable approval prompts?'), findsOneWidget);
+        expect(find.text('Disable approval prompts?'), findsOneWidget);
 
-          await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
-          await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
+        await tester.pumpAndSettle();
 
-          expect(find.text('Disable approval prompts?'), findsNothing);
-        }
+        expect(find.text('Disable approval prompts?'), findsNothing);
       },
     );
   });

@@ -458,24 +458,17 @@ void main() {
         await tester.tap(find.text('Cancel danger thread'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const ValueKey('composer-model-pill')));
+        await tester.tap(
+          find.byKey(const ValueKey('execution-settings-button')),
+        );
         await tester.pumpAndSettle();
-
-        final sandboxDropdown = find.byKey(const ValueKey('execution-Sandbox'));
-        if (sandboxDropdown.evaluate().isNotEmpty) {
-          await tester.tap(sandboxDropdown);
-          await tester.pumpAndSettle();
-
-          await tester.tap(find.text('Danger: full access').last);
-          await tester.pumpAndSettle();
-
-          expect(find.text('Allow full filesystem access?'), findsOneWidget);
-
-          await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
-          await tester.pumpAndSettle();
-
-          expect(find.text('Allow full filesystem access?'), findsNothing);
-        }
+        await tester.tap(find.text('Full access'));
+        await tester.pumpAndSettle();
+        expect(find.text('Allow full filesystem access?'), findsOneWidget);
+        await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
+        await tester.pumpAndSettle();
+        expect(find.text('Allow full filesystem access?'), findsNothing);
+        expect(find.byIcon(Icons.gpp_maybe_outlined), findsNothing);
       },
     );
 
@@ -535,7 +528,16 @@ void main() {
       await tester.tap(find.text('Single model thread'));
       await tester.pumpAndSettle();
 
+      expect(find.text('Codex settings'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('composer-model-pill')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Only Model'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Only Model'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('composer-reasoning-slider')),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
     });
 

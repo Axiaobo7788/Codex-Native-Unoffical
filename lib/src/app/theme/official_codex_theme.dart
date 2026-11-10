@@ -74,7 +74,9 @@ abstract final class OfficialCodexTheme {
   static const double shellPageTopInset = 8.0;
   static const double contextualSidebarHeaderHeight = 52.0;
   static const double sidebarUnreadIndicatorSize = 8.0;
-  static const Color sidebarUnreadIndicatorColor = Color(0xFF339CFF);
+  // The shipped Desktop fallback resolves both roles through --blue-300.
+  static const Color chartBlue = Color(0xFF339CFF);
+  static const Color sidebarUnreadIndicatorColor = chartBlue;
   static const BoxShadow shellPageShadow = BoxShadow(
     color: Color(0x0D000000),
     offset: Offset(0, 4),

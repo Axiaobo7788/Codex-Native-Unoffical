@@ -301,7 +301,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Open execution settings dialog
-      await tester.tap(find.byKey(const ValueKey('composer-model-pill')));
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced settings…'));
       await tester.pumpAndSettle();
 
       expect(find.text('Execution settings'), findsOneWidget);

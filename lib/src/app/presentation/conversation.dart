@@ -4116,6 +4116,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         controller: widget.settingsController,
                         maxLabelWidth: maxModelLabelWidth,
                         iconOnly: iconOnly,
+                        useDesktopPicker: desktopComposer,
                       ),
                       if (capabilities.supportsSandboxConfiguration)
                         _ExecutionSettingsButton(
@@ -7056,107 +7057,6 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
     SandboxModeOverride.workspaceWrite => 'Workspace write',
     SandboxModeOverride.dangerFullAccess => 'Full access',
   };
-}
-
-class _ComposerModelSummaryButton extends StatelessWidget {
-  const _ComposerModelSummaryButton({
-    required this.controller,
-    this.maxLabelWidth = 190,
-    this.iconOnly = false,
-  });
-
-  final ExecutionSettingsController controller;
-  final double maxLabelWidth;
-  final bool iconOnly;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = ThemeTokens.of(context);
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final model = controller.effectiveModel;
-        final String summary;
-        if (model == null) {
-          summary = controller.loading ? 'Loading models…' : 'Codex default';
-        } else {
-          final rawEffort =
-              controller.selectedReasoningEffort ??
-              model.defaultReasoningEffort;
-          final effortLabel = _formatEffortLabel(rawEffort);
-          summary = effortLabel == null
-              ? model.displayName
-              : '${model.displayName} · $effortLabel';
-        }
-        void showSettings() {
-          unawaited(
-            showDialog<void>(
-              context: context,
-              builder: (_) => _ExecutionSettingsDialog(controller: controller),
-            ),
-          );
-        }
-
-        final tooltip = 'Model and reasoning ($summary)';
-        if (iconOnly) {
-          return CodexIconButton(
-            key: const ValueKey('composer-model-pill'),
-            tooltip: tooltip,
-            size: 28,
-            onPressed: controller.loading ? null : showSettings,
-            icon: const Icon(Icons.tune_rounded, size: 16),
-          );
-        }
-        return Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: CodexButton(
-            key: const ValueKey('composer-model-pill'),
-            variant: CodexButtonVariant.ghost,
-            size: CodexButtonSize.sm,
-            onPressed: controller.loading ? null : showSettings,
-            tooltip: tooltip,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
-                  child: Text(
-                    summary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: palette.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 14,
-                  color: palette.textMuted,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  static String? _formatEffortLabel(String? effort) {
-    if (effort == null || effort.trim().isEmpty) {
-      return null;
-    }
-    return switch (effort.trim().toLowerCase()) {
-      'low' => 'Low',
-      'medium' => 'Medium',
-      'high' => 'High',
-      'xhigh' => 'Extra high',
-      'minimal' => 'Minimal',
-      final other => '${other[0].toUpperCase()}${other.substring(1)}',
-    };
-  }
 }
 
 class _ExecutionDropdownItem {
