@@ -29,6 +29,9 @@ void main() {
               _mcpTextEntry('deferred', [], deferred: true),
               _mcpTextEntry('missing', []),
               _mcpTextEntry('envelope', [_textBlock(' \uFEFF{"content":[]}')]),
+              _mcpTextEntry('unicode-envelope', [
+                _textBlock('\u0085{"content":[]}'),
+              ]),
               _mcpTextEntry('array', [_textBlock('  [1,2]')]),
               _mcpTextEntry('fenced', [_textBlock('  ~~~\ntext\n~~~')]),
               _mcpTextEntry('media', [

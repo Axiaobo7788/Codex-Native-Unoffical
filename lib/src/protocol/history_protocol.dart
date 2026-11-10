@@ -13,7 +13,9 @@ final class HistoryProtocolAdapter {
   static const _maxOccurrenceTokenLength = 4096;
   static const _maxMcpTextBlocks = 64;
   static const _maxMcpTextBytes = 32 * 1024;
-  static final _richMcpTextStart = RegExp(r'^[\s\uFEFF]*(?:\{|\[|```|~~~)');
+  static final _richMcpTextStart = RegExp(
+    r'^[\s\u0085\uFEFF]*(?:\{|\[|```|~~~)',
+  );
 
   const HistoryProtocolAdapter({
     required this.request,
