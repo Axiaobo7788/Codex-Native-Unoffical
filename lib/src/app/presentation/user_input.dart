@@ -723,7 +723,7 @@ class _UserInputCardState extends State<_UserInputCard> {
                         ? () => _showQuestion(_questionIndex + 1)
                         : _submit,
                     label: hasNext
-                        ? 'Next'
+                        ? 'Continue'
                         : widget.desktop
                         ? 'Submit'
                         : 'Submit answers',

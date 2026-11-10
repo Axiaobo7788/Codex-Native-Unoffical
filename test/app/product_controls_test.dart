@@ -722,6 +722,7 @@ void main() {
     final submit = find.byKey(const ValueKey('user-input-submit'));
     final field = find.byKey(const ValueKey('user-input-note-text'));
     expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(tester.widget<CodexButton>(next).label, 'Continue');
     final markers = find.byKey(
       const ValueKey('desktop-question-option-marker'),
     );
