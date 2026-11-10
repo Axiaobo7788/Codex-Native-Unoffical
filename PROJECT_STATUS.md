@@ -114,7 +114,9 @@ deleted and restored an unsent draft through Edit and handed the official
 documentation URI to the system handler. The active activity summary groups
 stock exploration and counts command runs. The saved disclosure uses the
 stock elapsed milliseconds when present and still reads command details on
-open. Home, open
+open. Expanded saved stock exploration has bounded read, search and list
+captions in Commands. The Linux package opened real output and switched
+to raw Execution. Home, open
 Changes, Review, expanded activity, compact and dark/focused states have
 separate evidence gates. [Hosted CI for `4d8b1fa`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42915018905)
 
