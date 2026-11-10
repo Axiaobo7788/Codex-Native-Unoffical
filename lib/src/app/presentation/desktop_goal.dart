@@ -1,5 +1,7 @@
 part of '../codex_native_app.dart';
 
+typedef _GoalEditorDraft = ({String sourceObjective, TextEditingValue value});
+
 class _DesktopGoalUsage extends StatefulWidget {
   const _DesktopGoalUsage({required this.goal, this.budgetText});
 
@@ -87,21 +89,31 @@ class _DesktopGoalEditor extends StatefulWidget {
     required this.saving,
     required this.onClose,
     required this.onSave,
+    this.initialDraft,
   });
 
   final ThreadGoal goal;
   final bool saving;
   final VoidCallback onClose;
   final Future<void> Function(String objective) onSave;
+  final _GoalEditorDraft? initialDraft;
 
   @override
   State<_DesktopGoalEditor> createState() => _DesktopGoalEditorState();
 }
 
 class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
-  late String _sourceObjective = widget.goal.objective;
-  late final _draft = TextEditingController(text: _sourceObjective);
+  late String _sourceObjective =
+      widget.initialDraft?.sourceObjective ?? widget.goal.objective;
+  late final _draft = TextEditingController.fromValue(
+    widget.initialDraft?.value ?? TextEditingValue(text: _sourceObjective),
+  );
   final _focus = FocusNode();
+
+  _GoalEditorDraft get draft => (
+    sourceObjective: _sourceObjective,
+    value: _draft.value.copyWith(composing: TextRange.empty),
+  );
 
   @override
   void didUpdateWidget(covariant _DesktopGoalEditor oldWidget) {

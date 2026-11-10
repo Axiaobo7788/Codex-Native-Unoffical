@@ -129,7 +129,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _showJumpToLatest = false;
   var _showChanges = false;
   String? _goalEditorThreadId;
-  final _goalEditorKey = GlobalKey();
+  final _goalEditorKey = GlobalKey<_DesktopGoalEditorState>();
+  _GoalEditorDraft? _goalEditorDraft;
+  var _reopenGoalFromHeader = false;
   var _usingGoalEditorSidePane = false;
   bool? _usingChangesSidePane;
   var _searchOpen = false;
@@ -617,6 +619,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
     if (oldWidget.hasDesktopShell && !widget.hasDesktopShell) {
       _goalEditorThreadId = null;
+      _goalEditorDraft = null;
+      _reopenGoalFromHeader = false;
       _clearCommandOutputPreview();
       _timelineDetailsPopoverController.hide();
     }
@@ -775,10 +779,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _pendingThreadRestore = false;
     _preLoadOlderAnchor = null;
     _pendingStreamAnchor = null;
-    if (_showChanges || _goalEditorThreadId != null) {
+    if (_showChanges ||
+        _goalEditorThreadId != null ||
+        _goalEditorDraft != null) {
       setState(() {
         _showChanges = false;
         _goalEditorThreadId = null;
+        _goalEditorDraft = null;
+        _reopenGoalFromHeader = false;
       });
     }
     _schedulePostLoadAnchorAlignment(
@@ -937,6 +945,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             ? _DesktopGoalEditor(
                 key: _goalEditorKey,
                 goal: goal,
+                initialDraft: _goalEditorDraft,
                 saving: threadController.mutating,
                 onClose: _closeGoalEditor,
                 onSave: (objective) async {
@@ -970,15 +979,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
         _usingChangesSidePane = showingChanges ? sidePane : null;
         _usingGoalEditorSidePane = splitGoalEditor;
-        final VoidCallback? toggleSidePanel;
-        if (goalEditor != null) {
-          toggleSidePanel = _closeGoalEditor;
-        } else if (showingChanges || (changes?.files.isNotEmpty ?? false)) {
-          toggleSidePanel = () => _toggleChanges(keepsTimeline: canSplit);
-        } else if (threadId != null &&
+        final canEditGoal =
+            threadId != null &&
             goal != null &&
             goal.status != ThreadGoalStatus.complete &&
-            threadController?.canManageGoal(threadId) == true) {
+            threadController?.canManageGoal(threadId) == true;
+        final VoidCallback? toggleSidePanel;
+        if (goalEditor != null) {
+          toggleSidePanel = _hideGoalEditor;
+        } else if (showingChanges ||
+            ((changes?.files.isNotEmpty ?? false) &&
+                !(canEditGoal && _reopenGoalFromHeader))) {
+          toggleSidePanel = () => _toggleChanges(keepsTimeline: canSplit);
+        } else if (canEditGoal) {
           toggleSidePanel = () => _openGoalEditor(threadId);
         } else {
           toggleSidePanel = null;
@@ -2036,7 +2049,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(threadId);
     }
     setState(() {
-      _goalEditorThreadId = null;
+      if (_goalEditorThreadId != null) _parkGoalEditor();
+      _reopenGoalFromHeader = false;
       _showChanges = !_showChanges;
     });
     if (keepsTimeline || !_showChanges) {
@@ -2062,11 +2076,33 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     setState(() {
       _showChanges = false;
       _goalEditorThreadId = threadId;
+      _reopenGoalFromHeader = false;
+      if (_goalEditorDraft?.sourceObjective !=
+          widget.threadController?.goalForThread(threadId)?.objective) {
+        _goalEditorDraft = null;
+      }
     });
   }
 
+  void _parkGoalEditor() {
+    _goalEditorDraft = _goalEditorKey.currentState?.draft;
+    _goalEditorThreadId = null;
+  }
+
+  void _hideGoalEditor() {
+    setState(() {
+      _parkGoalEditor();
+      _reopenGoalFromHeader = true;
+    });
+    _restoreReadingPosition();
+  }
+
   void _closeGoalEditor() {
-    setState(() => _goalEditorThreadId = null);
+    setState(() {
+      _goalEditorThreadId = null;
+      _goalEditorDraft = null;
+      _reopenGoalFromHeader = false;
+    });
     _restoreReadingPosition();
   }
 
@@ -4739,6 +4775,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _restoreReadingPosition();
       }
     }
+    if (_goalEditorDraft case final draft?) {
+      final threadId = _activeThreadId;
+      final goal = threadId == null
+          ? null
+          : threadController.goalForThread(threadId);
+      if (goal == null ||
+          goal.status == ThreadGoalStatus.complete ||
+          goal.objective != draft.sourceObjective) {
+        _goalEditorDraft = null;
+        _reopenGoalFromHeader = false;
+      }
+    }
     if (threadController.revertVersion != _lastHandledRevertVersion) {
       _lastHandledRevertVersion = threadController.revertVersion;
       final revertedId = threadController.lastRevertedThreadId;
@@ -4999,6 +5047,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _clearCommandOutputPreview();
     _showChanges = false;
     _goalEditorThreadId = null;
+    _goalEditorDraft = null;
+    _reopenGoalFromHeader = false;
     _threadSelectionVersion += 1;
     _queuedLinkedPrThreadId = nextThreadId;
     _activeThreadLinkedPrs = null;

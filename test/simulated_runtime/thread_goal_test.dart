@@ -1,3 +1,4 @@
+import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +43,94 @@ void main() {
     expect(stripRect.bottom, lessThan(composerRect.top));
     expect(stripRect.left - composerRect.left, 13);
     expect(composerRect.right - stripRect.right, 13);
+  });
+
+  testWidgets('switching to Changes preserves only the current Goal draft', (
+    tester,
+  ) async {
+    final harness = _GoalHarness()
+      ..goal = const ThreadGoal(
+        objective: 'Saved objective',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 1,
+        tokensUsed: 0,
+        timeUsedSeconds: 1,
+      )
+      ..threads.add(createTestThread(id: 'other', preview: 'Other thread'));
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    await tester.tap(find.text('Goal thread'));
+    await tester.pumpAndSettle();
+    harness.emitDiff(
+      const DiffSnapshot(
+        threadId: 'goal-thread',
+        turnId: 'fixture-turn',
+        files: [
+          DiffFile(
+            path: 'notes.md',
+            additions: 1,
+            deletions: 0,
+            lines: ['+Fixture'],
+            truncated: false,
+          ),
+        ],
+        additions: 1,
+        deletions: 0,
+        truncated: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final title = find.byKey(const ValueKey('desktop-thread-goal-title'));
+    final editor = find.byKey(const ValueKey('desktop-goal-editor-objective'));
+    final changes = find.byKey(const ValueKey('changes-view-button'));
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    await tester.enterText(editor, 'Unsaved objective');
+    await tester.pump();
+    await tester.tap(changes);
+    await tester.pumpAndSettle();
+    expect(editor, findsNothing);
+    expect(find.byKey(const ValueKey('desktop-changes-pane')), findsOneWidget);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Unsaved objective',
+    );
+    final panelToggle = find.byKey(
+      const ValueKey('workspace-side-panel-toggle'),
+    );
+    await tester.tap(panelToggle);
+    await tester.pumpAndSettle();
+    expect(editor, findsNothing);
+    await tester.tap(panelToggle);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Unsaved objective',
+    );
+    expect(harness.goal?.objective, 'Saved objective');
+    await tester.tap(find.byTooltip('Close goal editor'));
+    await tester.pumpAndSettle();
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Saved objective',
+    );
+
+    await tester.enterText(editor, 'Another unsaved objective');
+    await tester.pump();
+    await tester.tap(changes);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Saved objective',
+    );
   });
 
   testWidgets('manages a local goal and confirms clearing it', (tester) async {
