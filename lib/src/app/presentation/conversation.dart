@@ -1019,7 +1019,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   if (widget.hasDesktopShell &&
                       changes != null &&
                       (_showChanges || changes.files.isNotEmpty))
-                    _desktopChangesSummary(changes, canSplit: canSplit),
+                    _desktopChangesSummary(
+                      changes,
+                      canSplit: canSplit,
+                      running: controller.busy,
+                    ),
                   if (widget.hasDesktopShell &&
                       threadId != null &&
                       threadController != null &&
@@ -2218,6 +2222,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   Widget _desktopChangesSummary(
     DiffSnapshot snapshot, {
     required bool canSplit,
+    required bool running,
   }) {
     final theme = OfficialCodexTheme.of(context);
     final count = snapshot.files.length;
@@ -2228,6 +2233,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         : count == 1
         ? '1 file changed'
         : '$count files changed';
+    final preview = running && !_showChanges && count > 0;
+    final summary = '$label, +${snapshot.additions} −${snapshot.deletions}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       child: Center(
@@ -2244,52 +2251,147 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               width: OfficialCodexTheme.hairlineBorderWidth,
             ),
           ),
-          child: CodexButton(
-            key: const ValueKey('changes-view-button'),
-            variant: CodexButtonVariant.ghost,
-            onPressed: () => _toggleChanges(keepsTimeline: canSplit),
-            label: _showChanges
-                ? (canSplit ? 'Hide changes' : 'Conversation')
-                : null,
-            tooltip: _showChanges
-                ? (canSplit ? 'Hide changes' : 'Return to conversation')
-                : '$label, +${snapshot.additions} −${snapshot.deletions}',
-            child: _showChanges
-                ? null
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        flex: 2,
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: theme.textSecondary),
+          child: _changesPreview(
+            snapshot,
+            enabled: preview,
+            label: summary,
+            canSplit: canSplit,
+            child: CodexButton(
+              key: const ValueKey('changes-view-button'),
+              variant: CodexButtonVariant.ghost,
+              onPressed: () => _toggleChanges(keepsTimeline: canSplit),
+              label: _showChanges
+                  ? (canSplit ? 'Hide changes' : 'Conversation')
+                  : null,
+              tooltip: preview
+                  ? null
+                  : _showChanges
+                  ? (canSplit ? 'Hide changes' : 'Return to conversation')
+                  : summary,
+              child: _showChanges
+                  ? null
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: ThemeTokens.space2),
-                      Flexible(
-                        child: Text(
-                          '+${snapshot.additions}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: theme.diffAddedText),
+                        const SizedBox(width: ThemeTokens.space2),
+                        Flexible(
+                          child: Text(
+                            '+${snapshot.additions}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: theme.diffAddedText),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: ThemeTokens.space1),
-                      Flexible(
-                        child: Text(
-                          '-${snapshot.deletions}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: theme.diffRemovedText),
+                        const SizedBox(width: ThemeTokens.space1),
+                        Flexible(
+                          child: Text(
+                            '-${snapshot.deletions}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: theme.diffRemovedText),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _changesPreview(
+    DiffSnapshot snapshot, {
+    required bool enabled,
+    required String label,
+    required bool canSplit,
+    required Widget child,
+  }) {
+    if (!enabled) return child;
+    final theme = OfficialCodexTheme.of(context);
+    return Semantics(
+      label: label,
+      child: Tooltip(
+        richMessage: WidgetSpan(
+          child: SizedBox(
+            key: const ValueKey('desktop-changes-file-preview'),
+            width: 256,
+            height: math.min(288.0, snapshot.files.length * 36.0),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemExtent: 36,
+              itemCount: snapshot.files.length,
+              itemBuilder: (context, index) {
+                final file = snapshot.files[index];
+                return Semantics(
+                  label: file.path,
+                  child: CodexButton(
+                    size: CodexButtonSize.sm,
+                    variant: CodexButtonVariant.ghost,
+                    onPressed: () {
+                      final current = widget.diffController.snapshot;
+                      if (_showChanges ||
+                          _activeThreadId != snapshot.threadId ||
+                          current == null ||
+                          current.turnId != snapshot.turnId ||
+                          !current.files.any(
+                            (entry) => entry.path == file.path,
+                          )) {
+                        return;
+                      }
+                      widget.diffController.selectFile(file.path);
+                      _toggleChanges(keepsTimeline: canSplit);
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            file.path.split('/').last,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                        ),
+                        const SizedBox(width: ThemeTokens.space2),
+                        Text(
+                          '+${file.additions}',
+                          style: TextStyle(color: theme.diffAddedText),
+                        ),
+                        const SizedBox(width: ThemeTokens.space1),
+                        Text(
+                          '−${file.deletions}',
+                          style: TextStyle(color: theme.diffRemovedText),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        excludeFromSemantics: true,
+        preferBelow: false,
+        verticalOffset: 24,
+        waitDuration: const Duration(milliseconds: 300),
+        exitDuration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: theme.elevatedSurface,
+          border: Border.all(color: theme.hairlineBorder),
+          borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+          boxShadow: const [OfficialCodexTheme.shellPageShadow],
+        ),
+        child: child,
       ),
     );
   }
