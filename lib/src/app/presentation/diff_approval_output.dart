@@ -806,11 +806,12 @@ class _TurnWorkDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (inline) {
+      final theme = OfficialCodexTheme.of(context);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Semantics(
-            toggled: expanded,
+            expanded: expanded,
             child: CodexButton(
               key: actionKey,
               label: label,
@@ -820,9 +821,17 @@ class _TurnWorkDivider extends StatelessWidget {
               onPressed: onTap,
               trailingIcon: Icon(
                 expanded
-                    ? Icons.expand_less_rounded
-                    : Icons.expand_more_rounded,
+                    ? Icons.expand_more_rounded
+                    : Icons.chevron_right_rounded,
                 size: 15,
+                color: theme.textSecondary,
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: theme.textSecondary),
               ),
             ),
           ),

@@ -16,12 +16,26 @@ void main() {
 
     expect(find.text('Turn details'), findsOneWidget);
     expect(find.text('Command: synthetic fixture'), findsNothing);
+    expect(
+      find.descendant(
+        of: _divider,
+        matching: find.byIcon(Icons.chevron_right_rounded),
+      ),
+      findsOneWidget,
+    );
     expect(harness.requests, isEmpty);
 
     await tester.tap(_divider);
     await tester.pumpAndSettle();
 
     expect(find.text('Command: synthetic fixture'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: _divider,
+        matching: find.byIcon(Icons.expand_more_rounded),
+      ),
+      findsOneWidget,
+    );
     final query = harness.requests.single;
     expect(query.threadId, 'details-thread');
     expect(query.turnId, _turnId);
