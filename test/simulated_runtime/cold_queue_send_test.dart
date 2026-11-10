@@ -117,12 +117,19 @@ void main() {
       await _select(tester, 'Cold queue');
       await tester.enterText(_composer, 'Draft next to running work');
       await tester.tap(_send);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
       expect(harness.resumedThreadIds, ['cold']);
       expect(harness.startedTurns, isEmpty);
       expect(harness.steeredTurns, isEmpty);
       expect(find.text('Draft next to running work'), findsOneWidget);
+      final running = find.byKey(const ValueKey('thread-running-cold'));
+      final menu = find.byKey(const ValueKey('thread-menu-cold'));
+      expect(
+        tester.getRect(running).left,
+        greaterThan(tester.getRect(menu).right),
+      );
       expect(
         find.textContaining('The resumed thread is already running'),
         findsOneWidget,

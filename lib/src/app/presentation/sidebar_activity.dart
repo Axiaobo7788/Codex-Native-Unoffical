@@ -769,6 +769,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           key: ValueKey(thread.id),
           thread: thread,
           selected: selected,
+          hasNavigationRail: widget.hasNavigationRail,
           showGoalBadge: !widget.hasNavigationRail || !selected,
           pinned: controller.isPinnedThread(thread),
           persistedPinned: thread.isPersistedPinned,
@@ -1675,6 +1676,7 @@ class _ThreadRow extends StatefulWidget {
     super.key,
     required this.thread,
     required this.selected,
+    required this.hasNavigationRail,
     required this.showGoalBadge,
     required this.pinned,
     this.persistedPinned = false,
@@ -1700,6 +1702,7 @@ class _ThreadRow extends StatefulWidget {
 
   final ThreadSummary thread;
   final bool selected;
+  final bool hasNavigationRail;
   final bool showGoalBadge;
   final bool pinned;
   final bool persistedPinned;
@@ -1811,13 +1814,29 @@ class _ThreadRowState extends State<_ThreadRow> {
     final palette = ThemeTokens.of(context);
     final thread = widget.thread;
     final unread = thread.readReceipt?.unread ?? false;
+    final showRunning =
+        widget.hasNavigationRail && thread.status == ThreadRuntimeStatus.active;
     final toggleReadReceipt = widget.onToggleReadReceipt;
     final statusColor = switch (thread.status) {
-      ThreadRuntimeStatus.active => palette.accent,
+      ThreadRuntimeStatus.active when !showRunning => palette.accent,
       ThreadRuntimeStatus.systemError => palette.danger,
       _ => null,
     };
-    final leadingColor = statusColor ?? (unread ? palette.accent : null);
+    final leadingColor =
+        statusColor ?? (unread && !showRunning ? palette.accent : null);
+    final runningIndicator = showRunning
+        ? SizedBox.square(
+            key: ValueKey('thread-running-${thread.id}'),
+            dimension: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.7,
+              color: palette.textMuted,
+              semanticsLabel: unread
+                  ? 'Running, unread thread'
+                  : 'Running thread',
+            ),
+          )
+        : null;
 
     final pinBadge = _formatPinBadge();
     final gitReference = _formatGitReference(thread.gitInfo);
@@ -1979,6 +1998,10 @@ class _ThreadRowState extends State<_ThreadRow> {
                   icon: const Icon(Icons.more_horiz_rounded, size: 15),
                 ),
               ),
+              if (runningIndicator != null) ...[
+                const SizedBox(width: 6),
+                runningIndicator,
+              ],
             ],
           );
         }
@@ -1989,11 +2012,14 @@ class _ThreadRowState extends State<_ThreadRow> {
               Icon(Icons.push_pin_rounded, size: 12, color: palette.textMuted),
               const SizedBox(width: 4),
             ],
-            Text(
-              _shortTime(thread.updatedAt),
-              style: Theme.of(context).textTheme.labelSmall
-                  ?.copyWith(fontSize: 11, color: palette.textMuted),
-            ),
+            if (runningIndicator != null)
+              runningIndicator
+            else
+              Text(
+                _shortTime(thread.updatedAt),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(fontSize: 11, color: palette.textMuted),
+              ),
           ],
         );
       },
