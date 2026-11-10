@@ -31,7 +31,7 @@ got here.
 
 | State | Official evidence | Native evidence | Native implementation | Known delta | Status | Next machine-actionable correction |
 | --- | --- | --- | --- | --- | --- | --- |
-| A0 Application/window strip | H1 y0–50 shows Back, Forward, sidebar toggle, File/Edit/View/Help and window controls. `499225.mJEk.z` reads navigation availability from the active destination router. `189497.7105543924.js` registers Cmd/Ctrl+[ and Cmd/Ctrl+] and pointer navigation. | Linux release used both arrows and Ctrl+[ to revisit stock threads. The workspace keeps a 32-ID visit list across resizing. Failed reads leave the current thread and cursor intact. | `8ce73dd`, `5dc63ca`, `b6e2e1a`, `b10b27a` | The Native scope is thread visits. Official history includes more routes. Edit/Help, pointer history and native frame placement differ. | PARTIAL | Compare the signed-in menu commands and decorated frame. Extend only routes with a supported Native destination. |
+| A0 Application/window strip | H1 y0–50 shows Back, Forward, sidebar toggle, File/Edit/View/Help and window controls. `499225.mJEk.z` reads navigation availability from the active destination router. `189497.7105543924.js` registers Cmd/Ctrl+[ and Cmd/Ctrl+] plus MouseBack/MouseForward. | Linux release used both arrows, the keyboard and X11 mouse buttons 8/9 to revisit stock threads. The workspace keeps a 32-ID visit list across resizing. Failed reads leave the current thread and cursor intact. | `8ce73dd`, `5dc63ca`, `b6e2e1a`, `b10b27a`, `135e8fb` | Native history contains thread visits. Official history includes more routes. Edit/Help and native frame placement differ. | PARTIAL | Compare the current application menu roles and decorated frame. Extend only commands with a backed Native action. |
 | A1 Global navigation rail | H1 x0–60 has selected Home and separated destination clusters. `499225.36a7812ae9.js` `lp/lu/lc` define the rail, scrolling group and footer. `890434.9dbaee449e.js` `GO7r.wdY` resolves to the 20 px Plugins asset. | The release uses the equivalent multi-tile glyph and transfers selection from Home to the existing ecosystem dialog. Escape returns selection to Home without leaving the thread. Remote and Runtime details remain in the lower cluster. | `8ce73dd`, `373305e`, `3a6e846` | Native uses a dialog for Skills, Plugins and MCP. The official destination, configurable ordering and account footer have distinct capabilities. | PARTIAL | Compare the signed-in supported destination and focus transitions. Keep the account and private-service roles separate from Native runtime status. |
 | A2 Contextual Codex sidebar | H1 starts with product, notifications, search, New chat, Dot and Projects. In `499225`, `ZIk0` guards the empty Pinned heading and `dR` shows project actions on group hover/focus. | Wide Projects hides its action icons at rest and preserves them on pointer or keyboard interaction. The release omits empty Pinned, and View still opens the stock-scoped pins catalog. | `fe31e9e`, `373305e`, `b6e2e1a`, `a3737b9` | Native project operations differ from official organize/create. Dot and notifications depend on account services. | PARTIAL | Map the current project menu and supported operations. Track unsupported account entries and the open product selector separately. |
 | A3 Project/thread rows | H1 has indented single-line titles and a trailing spinner or merged-PR glyph. `499225.36a7812ae9.js` suppresses project-list timestamps and floats indicators at the end. `cSic`, `JHLi` and `Kg7g` define the working/unread/PR slot. | Paired stock captures verify 36 px rows, the running spinner, the 8 px blue unread dot and quiet idle titles. Hover swaps the indicator for actions. Scoped and archived views retain recency. | `fe31e9e`, `9bff30d`, `9785c1a`, `8ee189e` | `927552.2a3666383e.js` derives the purple glyph from an actual merged PR state. Native thread attachments carry link identity but lack provider merge state and stay on-demand. | PARTIAL | Verify the supported Git/PR indicators with comparable data. Keep the merged glyph evidence-blocked until reliable state is available. Do not scan attachments for every visible thread. |
@@ -50,6 +50,16 @@ and `MISSING` retain the next concrete correction. `EVIDENCE_BLOCKED`
 names the evidence a specific state requires. `HUMAN_REVIEW_PENDING` applies
 to remaining subjective differences after machine-actionable discrepancies
 are addressed. Golden State A remains active in `SELF_ITERATION`.
+
+## A0 navigation inputs
+
+The two side buttons from the current renderer command registry reuse
+the same thread navigation callbacks as the toolbar and keyboard.
+The Linux release exercised mouse buttons 8 and 9 over the thread body.
+Its captured header moved from the second stock thread to the first,
+remained at the history boundary on a second Back, and returned to the
+second on Forward. App, Host and stock exited. The simulated test also
+covers resize, failed reads and keyboard navigation.
 
 ## A5 and A9 Goal draft lifetime
 
