@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
+import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
@@ -143,6 +144,20 @@ void main() {
     await tester.tap(show.first);
     await tester.pumpAndSettle();
     expect(preview, findsOneWidget);
+    final surface = find.byKey(
+      const ValueKey('command-output-preview-surface'),
+    );
+    final decoration =
+        tester.widget<Container>(surface).decoration! as BoxDecoration;
+    final theme = OfficialCodexTheme.of(tester.element(surface));
+    expect(decoration.color, theme.elevatedSurface);
+    expect(
+      find.descendant(
+        of: surface,
+        matching: find.byTooltip('View stored output (truncated)'),
+      ),
+      findsOneWidget,
+    );
     expect(tester.getSize(preview).height, lessThanOrEqualTo(144));
     expect(find.textContaining('TAIL'), findsOneWidget);
     expect(runtime.tailLengths, [4096, 4096]);

@@ -248,3 +248,25 @@ selected response, and returned the next assistant message. A separate
 empty-options fixture completed without showing a question, so it does not
 verify the H1 free-text workflow. Native free-text and private answers retain
 their simulated product coverage.
+
+The official `agy` peer ranked the command-heavy surface next after seeing
+the dark Native preview. Independent readback of `225284.63835849b6.js`
+module `PuGl` confirms a rounded bordered shell block with a theme-adaptive
+surface, a command line and a `max-h-36` output scroller. This is static
+evidence for the expanded component. H1 shows only collapsed activity. The
+third pass uses an elevated neutral surface for the existing 144 px Native
+preview and groups its byte-window status and full-output action inside it.
+The raw command stays in the existing activity row. The Native release
+opened the 4,096-byte live preview and the first and last windows of the
+179,835-byte Host spool while the turn was still active. It also reopened
+Changes at 1450×865 with the conversation and a real one-file patch visible
+side by side. Matching signed-in official expanded captures remain open.
+
+The next wide comparison has direct evidence for two separate issues. The
+`309406.5b468e9851.js` composer context-usage component draws a small ring,
+visible in H1 near the model controls. Native still places the full numeric
+usage in the workspace header. The peer also identified the permanent
+left-gutter user message action strip. The current bundle places the actions
+under the user bubble and reveals them on hover or focus. Header/composer
+placement has matching H1 evidence. The message-action comparison uses the
+bundle because H1 has no user bubble.

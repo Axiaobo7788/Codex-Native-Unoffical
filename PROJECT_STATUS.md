@@ -58,7 +58,11 @@ tooltip. A paired Linux release capture measures a 54 → 36 logical px thread
 pitch and shows Git context and row actions on hover. The pending question
 now uses the neutral surface visible in H1. The release app submitted a
 choice through the bundled Host and stock app-server. Next, compare the
-expanded command surface and title/composer diagnostics using build `25894`.
+title/composer diagnostics against build `25894`. The command preview now
+groups the neutral output surface and full-output action in one card. The
+Linux release opened the 4 KiB preview and the first and last pages of the
+same live spool. A fresh wide capture shows the real Changes pane beside the
+timeline.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

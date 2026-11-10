@@ -615,27 +615,34 @@ class _InlineCommandOutput extends StatelessWidget {
     final output = viewer.text;
     return Padding(
       padding: const EdgeInsetsDirectional.only(start: ThemeTokens.space4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (viewer.loading)
-            Text('Loading output preview…', style: textStyle)
-          else if (viewer.errorMessage != null)
-            Text(
-              'Could not load output preview.',
-              style: textStyle?.copyWith(color: theme.danger),
-            )
-          else
-            ColoredBox(
-              color: OfficialCodexTheme.codeSurface,
-              child: ConstrainedBox(
+      child: Container(
+        key: const ValueKey('command-output-preview-surface'),
+        padding: const EdgeInsets.all(ThemeTokens.space2),
+        decoration: BoxDecoration(
+          color: theme.elevatedSurface,
+          border: Border.all(color: theme.hairlineBorder),
+          borderRadius: BorderRadius.circular(
+            OfficialCodexTheme.activityRowRadius,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (viewer.loading)
+              Text('Loading output preview…', style: textStyle)
+            else if (viewer.errorMessage != null)
+              Text(
+                'Could not load output preview.',
+                style: textStyle?.copyWith(color: theme.danger),
+              )
+            else
+              ConstrainedBox(
                 constraints: const BoxConstraints(
                   maxHeight: OfficialCodexTheme.commandOutputPreviewHeight,
                 ),
                 child: SingleChildScrollView(
                   key: const ValueKey('command-output-preview-scroll'),
                   primary: false,
-                  padding: const EdgeInsets.all(ThemeTokens.space2),
                   child: SingleChildScrollView(
                     primary: false,
                     scrollDirection: Axis.horizontal,
@@ -645,27 +652,31 @@ class _InlineCommandOutput extends StatelessWidget {
                         softWrap: false,
                         style: textStyle?.copyWith(
                           fontFamily: 'monospace',
-                          color: CodexPalette.dark.textPrimary,
+                          color: theme.textPrimary,
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
+            const SizedBox(height: ThemeTokens.space2),
+            Wrap(
+              alignment: chunk != null && chunk.offset > 0
+                  ? WrapAlignment.spaceBetween
+                  : WrapAlignment.end,
+              spacing: ThemeTokens.space2,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (chunk != null && chunk.offset > 0)
+                  Text(
+                    'Last ${chunk.data.length} stored bytes',
+                    style: textStyle?.copyWith(color: theme.textSecondary),
+                  ),
+                openFullOutput,
+              ],
             ),
-          Wrap(
-            spacing: ThemeTokens.space2,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (chunk != null && chunk.offset > 0)
-                Text(
-                  'Last ${chunk.data.length} stored bytes',
-                  style: textStyle,
-                ),
-              openFullOutput,
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
