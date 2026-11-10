@@ -35,6 +35,11 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- The empty Home workspace supports keyboard project selection and retains
+  the draft across directory changes. A 760 px viewport at 200% text scale
+  keeps the model and execution controls reachable. The current official
+  bundle distinguishes the Home hero from the new-thread placeholder.
+  [Home keyboard and source evidence](docs/RESEARCH.md#desktop-home-project-control)
 - Desktop Commands and Execution share one bounded inline output preview
   across completed live commands and opened saved-turn details. Switching
   to another visible command replaces the preview. A pending read still
@@ -113,6 +118,10 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- Home keyboard and large-text controls passed strict Dart analysis, the
+  pure-Dart boundary, 515 Flutter cases with five opt-in skips, and Linux
+  release bundle and license checks. The unified-preview predecessor
+  passed all [Hosted CI jobs](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42815775318).
 - Unified command output passed strict Dart analysis, the pure-Dart
   boundary, 514 Flutter cases with five opt-in skips, all five enabled
   direct-stock cases, the bounded-history benchmark, and Linux release

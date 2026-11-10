@@ -36,6 +36,14 @@ contains no `.map` entries.
   feeds measured client width into the shell, with 52 px used as a fallback
   by the same bundle's related left-panel calculations. H1 does not establish
   the untouched default sidebar width or the window's zoom.
+- **S3, current static bundle** — `605278.9a7ad6f681.js` module `IoIX`
+  sets `isCodexHome` for the Home component in
+  `634175.4437e0034c.js` module `ZlsN`. That component has separate
+  projectless and project-selected hero text, with an interactive project
+  control in the selected-project heading. `943693.334f9bc224.js` module
+  `Hy2Z` separately renders the new-thread placeholder. These component
+  contracts leave signed-in placement, gating, and the compact transition
+  open for live comparison.
 - **L1, live accountless control** — the installed app opened on a private
   Xvfb display using a fresh profile and the normal launcher. After startup
   it reached sign-in (1090×760, DPR 1). The frame/workspace/sidebar selectors

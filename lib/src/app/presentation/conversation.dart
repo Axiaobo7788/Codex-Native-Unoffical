@@ -187,21 +187,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   Future<void> _chooseProjectDirectory() async {
-    final field = TextEditingController(text: _activeProjectDirectory);
+    var directory = _activeProjectDirectory;
     final next = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Select project directory'),
         content: SizedBox(
           width: 480,
-          child: TextField(
-            controller: field,
+          child: TextFormField(
+            initialValue: directory,
             autofocus: true,
+            onChanged: (value) => directory = value,
             decoration: const InputDecoration(
               labelText: 'Working directory',
               hintText: '/path/to/repository',
             ),
-            onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+            onFieldSubmitted: (value) =>
+                Navigator.of(context).pop(value.trim()),
           ),
         ),
         actions: [
@@ -212,13 +214,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           ),
           CodexButton(
             variant: CodexButtonVariant.primary,
-            onPressed: () => Navigator.of(context).pop(field.text.trim()),
+            onPressed: () => Navigator.of(context).pop(directory.trim()),
             label: 'Use directory',
           ),
         ],
       ),
     );
-    field.dispose();
     if (next == null || next.isEmpty || !mounted) {
       return;
     }
@@ -3580,7 +3581,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 builder: (context, rowConstraints) {
                   final width = rowConstraints.maxWidth;
                   final compactComposer = width < 560;
-                  final iconOnly = width < 320;
+                  final controlTextScale = math.max(
+                    1.0,
+                    MediaQuery.textScalerOf(context).scale(12) / 12,
+                  );
+                  final iconOnly = width < 320 * controlTextScale;
                   // Reserve room for the input even when both Steer and Stop
                   // are visible. The controls keep their own row below it.
                   final inlineInput =
@@ -3711,7 +3716,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       ],
                       if (!desktopComposer) const Spacer(),
-                      if (controller.busy && !showStop && width >= 240)
+                      if (controller.busy &&
+                          !showStop &&
+                          width >= 240 * controlTextScale)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
@@ -6097,6 +6104,21 @@ class _ConversationEmptyState extends StatelessWidget {
     final projectLabel = workingDirectory.trim().isEmpty
         ? null
         : _projectName(workingDirectory);
+    final projectText = projectLabel == null
+        ? null
+        : Text(
+            projectLabel,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: theme.textMuted,
+              fontSize: 22,
+              fontWeight: FontWeight.w400,
+              letterSpacing: -0.4,
+              height: 1.25,
+            ),
+          );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -6116,47 +6138,51 @@ class _ConversationEmptyState extends StatelessWidget {
             height: 1.2,
           ),
         ),
-        if (projectLabel != null) ...[
+        if (projectText != null) ...[
           const SizedBox(height: 2),
-          GestureDetector(
-            onTap: onChooseDirectory,
-            child: MouseRegion(
-              cursor: onChooseDirectory != null
-                  ? SystemMouseCursors.click
-                  : SystemMouseCursors.basic,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          if (onChooseDirectory != null)
+            CodexTooltip(
+              message: 'Select project directory',
+              child: TextButton(
+                key: const ValueKey('home-project-selector'),
+                onPressed: onChooseDirectory,
+                style:
+                    TextButton.styleFrom(
+                      foregroundColor: theme.textMuted,
+                      minimumSize: const Size(0, 34),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          OfficialCodexTheme.buttonRadius,
+                        ),
+                      ),
+                    ).copyWith(
+                      splashFactory: NoSplash.splashFactory,
+                      side: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.focused)
+                            ? BorderSide(color: theme.focusRing, width: 1.5)
+                            : BorderSide.none,
+                      ),
+                    ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Flexible(
-                      child: Text(
-                        projectLabel,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: theme.textMuted,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: -0.4,
-                          height: 1.25,
-                        ),
-                      ),
-                    ),
-                    if (onChooseDirectory != null) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 20,
-                        color: theme.textMuted,
-                      ),
-                    ],
+                    Flexible(child: projectText),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
                   ],
                 ),
               ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: projectText,
             ),
-          ),
         ],
       ],
     );

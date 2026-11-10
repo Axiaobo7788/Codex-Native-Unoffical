@@ -4742,3 +4742,22 @@ probe before interpreting that result as a content-search limitation.
   paged access. The Linux release bundle showed the 4,096-byte preview and
   opened byte 114,299 and byte zero of the same 179,835-byte spool while
   the fixture still held the assistant turn open.
+
+## Desktop Home project control
+
+- Installed build `25894` separates Codex Home with its project-sensitive
+  hero and interactive project control from the new-thread placeholder.
+  [Component evidence](reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#current-official-evidence)
+  identifies the shipped modules. Signed-in layout and compact placement
+  still need the matching captures.
+- Native Home's local project chooser now participates in keyboard focus
+  traversal and shows a focus ring. The directory dialog retains its
+  existing trim and cancel behavior. In the Linux release bundle, Shift+Tab
+  focused the project from the composer, Space opened the chooser, and
+  submitting a second disposable directory preserved the draft. Simulated
+  Enter activates the selector. Return did not open it in the Xvfb run.
+- The Home regression exercised a 760×800 window at 200% text scale. The
+  prior control row overflowed by 68 px. The project control now grows
+  with its label, and the composer switches to icon controls based on
+  text scale as well as width. Both model and execution controls remain
+  hit-testable in that fixture.

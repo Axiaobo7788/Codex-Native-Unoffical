@@ -291,6 +291,72 @@ void main() {
       });
     }
 
+    testWidgets('opens the Home project chooser from keyboard focus', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1191, 865);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _GeometryTestRuntimeController();
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      final selector = tester.element(
+        find.byKey(const ValueKey('home-project-selector')),
+      );
+      bool selectorHasFocus() {
+        var focused = false;
+        (FocusManager.instance.primaryFocus?.context as Element?)
+            ?.visitAncestorElements((ancestor) {
+              focused = identical(ancestor, selector);
+              return !focused;
+            });
+        return focused;
+      }
+
+      final composer = find.byKey(const ValueKey('conversation-composer'));
+      await tester.enterText(composer, 'Draft for the next project');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      for (var i = 0; i < 12 && !selectorHasFocus(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(selectorHasFocus(), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Select project directory'), findsOneWidget);
+      await tester.enterText(
+        find.byType(TextFormField),
+        '  /workspace/chosen-project  ',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('Select project directory'), findsNothing);
+      expect(find.text('chosen-project'), findsOneWidget);
+      expect(find.text('Draft for the next project'), findsOneWidget);
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.physicalSize = const Size(760, 800);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('home-project-selector')))
+            .height,
+        greaterThan(44),
+      );
+      expect(
+        find.byKey(const ValueKey('composer-model-pill')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('execution-settings-button')).hitTestable(),
+        findsOneWidget,
+      );
+    });
+
     testWidgets(
       'resizes the sidebar and preserves the draft across a compact window',
       (tester) async {
