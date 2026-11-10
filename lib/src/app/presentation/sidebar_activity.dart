@@ -2271,8 +2271,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   String? _mcpLoadError;
   String? _pluginActionNotice;
   List<SkillSummary> _skills = const [];
-  List<PluginSummaryModel> _plugins = const [];
-  var _pluginCatalogIsPartial = false;
+  PluginCatalogSnapshot _pluginCatalog = const PluginCatalogSnapshot(
+    plugins: [],
+  );
   List<InstalledAppSnapshotModel> _installedApps = const [];
   List<AppSummaryModel> _catalogApps = const [];
   String? _appsNextCursor;
@@ -2308,6 +2309,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     final McpCapabilityGateway g when g.supportsMcpCapabilities => g,
     _ => null,
   };
+
+  List<PluginSummaryModel> get _plugins => _pluginCatalog.plugins;
 
   int get _appsBadgeCount =>
       _catalogApps.isNotEmpty ? _catalogApps.length : _installedApps.length;
@@ -2534,8 +2537,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       }
       final nextPlugins = snapshot.plugins;
       setState(() {
-        _plugins = nextPlugins;
-        _pluginCatalogIsPartial = snapshot.isPartial;
+        _pluginCatalog = snapshot;
         _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
         _pluginsLoadFailed = false;
         _pluginsError = null;
@@ -3263,6 +3265,29 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
+    final sectionSelector = CodexSegment<_EcosystemSection>(
+      key: const ValueKey('ecosystem-section-selector'),
+      items: [
+        CodexSegmentItem(
+          value: _EcosystemSection.skills,
+          label: 'Skills (${_skills.length})',
+        ),
+        CodexSegmentItem(
+          value: _EcosystemSection.plugins,
+          label: 'Plugins (${_plugins.length})',
+        ),
+        CodexSegmentItem(
+          value: _EcosystemSection.apps,
+          label: 'Apps ($_appsBadgeCount)',
+        ),
+        CodexSegmentItem(
+          value: _EcosystemSection.mcp,
+          label: 'MCP (${_mcpServers.length})',
+        ),
+      ],
+      selectedValue: _section,
+      onSelected: (next) => setState(() => _section = next),
+    );
     return Dialog(
       backgroundColor: theme.modalSurface,
       shape: RoundedRectangleBorder(
@@ -3284,52 +3309,48 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ThemeTokens.space3,
                 ThemeTokens.space3,
               ),
-              child: Row(
+              child: OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
+                spacing: ThemeTokens.space2,
+                overflowSpacing: ThemeTokens.space2,
                 children: [
-                  const Icon(Icons.extension_outlined, size: 20),
-                  const SizedBox(width: ThemeTokens.space2),
-                  Expanded(
-                    child: Text(
-                      'Skills, Plugins & MCP',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                  CodexSegment<_EcosystemSection>(
-                    key: const ValueKey('ecosystem-section-selector'),
-                    items: [
-                      CodexSegmentItem(
-                        value: _EcosystemSection.skills,
-                        label: 'Skills (${_skills.length})',
-                      ),
-                      CodexSegmentItem(
-                        value: _EcosystemSection.plugins,
-                        label: 'Plugins (${_plugins.length})',
-                      ),
-                      CodexSegmentItem(
-                        value: _EcosystemSection.apps,
-                        label: 'Apps ($_appsBadgeCount)',
-                      ),
-                      CodexSegmentItem(
-                        value: _EcosystemSection.mcp,
-                        label: 'MCP (${_mcpServers.length})',
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.extension_outlined, size: 20),
+                      const SizedBox(width: ThemeTokens.space2),
+                      Flexible(
+                        child: Text(
+                          'Skills, Plugins & MCP',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
                       ),
                     ],
-                    selectedValue: _section,
-                    onSelected: (next) => setState(() => _section = next),
                   ),
-                  const SizedBox(width: ThemeTokens.space2),
-                  CodexIconButton(
-                    key: const ValueKey('ecosystem-refresh-button'),
-                    tooltip: 'Refresh',
-                    onPressed: _activeSectionLoading
-                        ? null
-                        : () => _refresh(forceRefetch: true),
-                    icon: const Icon(Icons.refresh_rounded, size: 17),
-                  ),
-                  CodexIconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, size: 18),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: sectionSelector,
+                        ),
+                      ),
+                      const SizedBox(width: ThemeTokens.space2),
+                      CodexIconButton(
+                        key: const ValueKey('ecosystem-refresh-button'),
+                        tooltip: 'Refresh',
+                        onPressed: _activeSectionLoading
+                            ? null
+                            : () => _refresh(forceRefetch: true),
+                        icon: const Icon(Icons.refresh_rounded, size: 17),
+                      ),
+                      CodexIconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -3348,7 +3369,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ),
               ),
             if (_section == _EcosystemSection.plugins &&
-                _pluginCatalogIsPartial &&
+                _pluginCatalog.isPartial &&
                 !_pluginsLoadFailed)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -3358,6 +3379,21 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                     icon: Icons.warning_amber_rounded,
                     color: palette.warning,
                     text: 'The plugin catalog may be incomplete.',
+                  ),
+                ),
+              ),
+            if (_section == _EcosystemSection.plugins &&
+                _pluginCatalog.isTruncated &&
+                !_pluginsLoadFailed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: KeyedSubtree(
+                  key: const ValueKey('ecosystem-plugins-truncated'),
+                  child: _InlineNotice(
+                    icon: Icons.info_outline_rounded,
+                    color: palette.textSecondary,
+                    text:
+                        'Showing the first ${_plugins.length} catalog entries.',
                   ),
                 ),
               ),
@@ -3591,7 +3627,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               key: const ValueKey('ecosystem-plugins-unavailable'),
               style: Theme.of(context).textTheme.bodySmall,
             )
-          else if (_pluginCatalogIsPartial)
+          else if (_pluginCatalog.isPartial)
             Text(
               'No plugin entries are available.',
               key: const ValueKey('ecosystem-plugins-partial-empty'),

@@ -268,6 +268,7 @@ class EcosystemProtocolAdapter {
     });
     final plugins = <PluginSummaryModel>[];
     final seenIds = <String>{};
+    var isTruncated = false;
 
     void addPluginMap(
       Map<String, Object?> map, {
@@ -275,6 +276,15 @@ class EcosystemProtocolAdapter {
       String? fallbackMarketplacePath,
     }) {
       if (plugins.length >= maxBoundedItems) {
+        final id = _nonEmptyString(map['id']) ?? _nonEmptyString(map['name']);
+        final enabled = map['enabled'];
+        final installed = map['installed'];
+        // Check the fields that can reject a row without constructing it.
+        isTruncated =
+            id != null &&
+            !seenIds.contains(id) &&
+            (enabled == null || enabled is bool) &&
+            (installed == null || installed is bool);
         return;
       }
       final summary = _parsePluginSummary(
@@ -290,6 +300,7 @@ class EcosystemProtocolAdapter {
 
     final marketplaces = result['marketplaces'];
     if (marketplaces is List<Object?>) {
+      marketplaceLoop:
       for (final marketplace in marketplaces) {
         if (marketplace is! Map<String, Object?>) {
           continue;
@@ -305,22 +316,29 @@ class EcosystemProtocolAdapter {
                 fallbackMarketplaceName: mpName,
                 fallbackMarketplacePath: mpPath,
               );
+              if (isTruncated) {
+                break marketplaceLoop;
+              }
             }
           }
         }
       }
     }
     final directPlugins = result['plugins'];
-    if (directPlugins is List<Object?>) {
+    if (!isTruncated && directPlugins is List<Object?>) {
       for (final item in directPlugins) {
         if (item is Map<String, Object?>) {
           addPluginMap(item);
+          if (isTruncated) {
+            break;
+          }
         }
       }
     }
     final errors = result['marketplaceLoadErrors'];
     return PluginCatalogSnapshot(
       plugins: List<PluginSummaryModel>.unmodifiable(plugins),
+      isTruncated: isTruncated,
       isPartial: switch (errors) {
         null => false,
         final List<Object?> entries => entries.isNotEmpty,

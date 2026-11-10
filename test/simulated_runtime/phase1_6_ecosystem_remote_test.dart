@@ -1319,6 +1319,68 @@ void main() {
     );
 
     testWidgets(
+      'discloses truncated plugin catalogs independently of partial sources',
+      (tester) async {
+        final plugins = [
+          for (var index = 0; index < maxBoundedEcosystemItems; index++)
+            PluginSummaryModel(
+              id: 'fixture-$index@local',
+              name: 'Fixture $index',
+              description: '',
+              enabled: false,
+              installed: false,
+            ),
+        ];
+        var snapshot = PluginCatalogSnapshot(plugins: plugins);
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginCatalogOverride: (_) async => snapshot,
+        );
+        await pumpSimulatedRuntimeApp(
+          tester,
+          harness: harness,
+          size: const Size(720, 800),
+        );
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Plugins (100)'));
+        await tester.pumpAndSettle();
+
+        final truncated = find.byKey(
+          const ValueKey('ecosystem-plugins-truncated'),
+        );
+        final partial = find.byKey(const ValueKey('ecosystem-plugins-partial'));
+        final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
+        expect(truncated, findsNothing);
+        expect(partial, findsNothing);
+
+        snapshot = PluginCatalogSnapshot(
+          plugins: plugins,
+          isTruncated: true,
+          isPartial: true,
+        );
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(truncated, findsOneWidget);
+        expect(
+          find.text('Showing the first 100 catalog entries.'),
+          findsOneWidget,
+        );
+        expect(partial, findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('plugin-row-fixture-0@local')),
+          findsOneWidget,
+        );
+
+        snapshot = PluginCatalogSnapshot(plugins: plugins, isPartial: true);
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(truncated, findsNothing);
+        expect(partial, findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'fails closed visibly when backend does not support ecosystem catalog mutations',
       (tester) async {
         final harness = SimulatedRuntimeHarness()..catalogSupported = false;

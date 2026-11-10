@@ -111,6 +111,71 @@ void main() {
     expect(legacy.map((plugin) => plugin.id), mixed.plugins.map((p) => p.id));
   });
 
+  test('reports truncation only for an omitted usable catalog entry', () async {
+    final retained = [
+      for (var index = 0; index < maxBoundedEcosystemItems; index++)
+        {'id': 'plugin-$index', 'enabled': true},
+    ];
+    var marketplaces = [
+      {'name': 'fixture', 'plugins': retained},
+    ];
+    var direct = <Map<String, Object?>>[];
+    var errors = <Map<String, Object?>>[];
+    final adapter = EcosystemProtocolAdapter(
+      request: (method, [params = const {}]) async {
+        expect(method, 'plugin/list');
+        return {
+          'marketplaces': marketplaces,
+          'plugins': direct,
+          'marketplaceLoadErrors': errors,
+        };
+      },
+    );
+
+    final exact = await adapter.listPluginCatalog();
+    expect(exact.plugins, hasLength(maxBoundedEcosystemItems));
+    expect(exact.isTruncated, isFalse);
+
+    direct = [
+      {'id': 'plugin-0', 'enabled': true},
+      {'description': 'A row without identity'},
+      {'id': 'malformed-enabled', 'enabled': 'invalid'},
+      {'id': 'malformed-installed', 'installed': 1},
+    ];
+    final ignored = await adapter.listPluginCatalog();
+    expect(ignored.isTruncated, isFalse);
+
+    direct.add({'name': 'omitted-direct'});
+    final truncated = await adapter.listPluginCatalog();
+    expect(truncated.isTruncated, isTrue);
+    expect(truncated.isPartial, isFalse);
+    expect(
+      truncated.plugins.map((plugin) => plugin.id),
+      exact.plugins.map((plugin) => plugin.id),
+    );
+
+    direct = [];
+    marketplaces = [
+      ...marketplaces,
+      {
+        'name': 'later-market',
+        'plugins': [
+          {'id': 'omitted-nested', 'enabled': true},
+        ],
+      },
+    ];
+    errors = [
+      {
+        'marketplacePath': '/fixture/marketplace.json',
+        'message': 'Fixture failure',
+      },
+    ];
+    final partial = await adapter.listPluginCatalog();
+    expect(partial.isTruncated, isTrue);
+    expect(partial.isPartial, isTrue);
+    expect(partial.plugins, hasLength(maxBoundedEcosystemItems));
+  });
+
   test(
     'parses plugin/list and mcpServerStatus/list with bounded items',
     () async {

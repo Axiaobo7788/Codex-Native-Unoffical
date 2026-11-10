@@ -25,12 +25,19 @@ class SkillSummary {
 }
 
 final class PluginCatalogSnapshot {
-  const PluginCatalogSnapshot({required this.plugins, this.isPartial = false});
+  const PluginCatalogSnapshot({
+    required this.plugins,
+    this.isPartial = false,
+    this.isTruncated = false,
+  });
 
   final List<PluginSummaryModel> plugins;
 
   /// Stock reported a marketplace error or an unreadable error field.
   final bool isPartial;
+
+  /// The catalog contained another distinct usable row beyond the retained cap.
+  final bool isTruncated;
 }
 
 class PluginSummaryModel {
