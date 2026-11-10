@@ -2285,6 +2285,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   var _reloadingMcp = false;
   String? _mcpNotice;
 
+  final Set<String> _mutatingSkillPaths = <String>{};
   final Set<String> _expandedPluginIds = <String>{};
   final Set<String> _readingPluginIds = <String>{};
   final Set<String> _mutatingPluginIds = <String>{};
@@ -2315,7 +2316,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       : <String>[widget.cwd.trim()];
 
   bool get _activeSectionLoading => switch (_section) {
-    _EcosystemSection.skills => _skillsLoading,
+    _EcosystemSection.skills =>
+      _skillsLoading || _mutatingSkillPaths.isNotEmpty,
     _EcosystemSection.plugins =>
       _pluginsLoading || _mutatingPluginIds.isNotEmpty,
     _EcosystemSection.apps => _appsLoading,
@@ -2970,7 +2972,13 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   Future<void> _toggleSkill(SkillSummary skill) async {
-    setState(() => _skillsError = null);
+    if (_skillsLoading || _mutatingSkillPaths.contains(skill.path)) {
+      return;
+    }
+    setState(() {
+      _mutatingSkillPaths.add(skill.path);
+      _skillsError = null;
+    });
     try {
       final effective = await widget.gateway.setSkillEnabled(
         path: skill.path,
@@ -2980,6 +2988,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         return;
       }
       setState(() {
+        ++_skillsRefreshGeneration;
         _skills = [
           for (final item in _skills)
             if (item.path == skill.path)
@@ -2993,12 +3002,16 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         return;
       }
       setState(() => _skillsError = '$error');
+    } finally {
+      if (mounted) {
+        setState(() => _mutatingSkillPaths.remove(skill.path));
+      }
     }
   }
 
   Future<void> _togglePluginDetails(PluginSummaryModel plugin) async {
     final catalog = _catalogGateway;
-    if (catalog == null) {
+    if (catalog == null || _pluginsLoading) {
       return;
     }
     if (_expandedPluginIds.contains(plugin.id)) {
@@ -3039,7 +3052,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _installPlugin(PluginSummaryModel plugin) async {
     final catalog = _catalogGateway;
-    if (catalog == null || _mutatingPluginIds.contains(plugin.id)) {
+    if (catalog == null ||
+        _pluginsLoading ||
+        _mutatingPluginIds.contains(plugin.id)) {
       return;
     }
     setState(() {
@@ -3087,7 +3102,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _uninstallPlugin(PluginSummaryModel plugin) async {
     final catalog = _catalogGateway;
-    if (catalog == null || _mutatingPluginIds.contains(plugin.id)) {
+    if (catalog == null ||
+        _pluginsLoading ||
+        _mutatingPluginIds.contains(plugin.id)) {
       return;
     }
     setState(() {
@@ -3442,7 +3459,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   variant: skill.enabled
                       ? CodexButtonVariant.secondary
                       : CodexButtonVariant.ghost,
-                  onPressed: () => _toggleSkill(skill),
+                  loading: _mutatingSkillPaths.contains(skill.path),
+                  onPressed:
+                      _skillsLoading || _mutatingSkillPaths.contains(skill.path)
+                      ? null
+                      : () => _toggleSkill(skill),
                   label: skill.enabled ? 'Enabled' : 'Disabled',
                 ),
               ],
@@ -3609,7 +3630,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                             size: CodexButtonSize.sm,
                             variant: CodexButtonVariant.ghost,
                             loading: _readingPluginIds.contains(plugin.id),
-                            onPressed: _readingPluginIds.contains(plugin.id)
+                            onPressed:
+                                _pluginsLoading ||
+                                    _readingPluginIds.contains(plugin.id)
                                 ? null
                                 : () => _togglePluginDetails(plugin),
                             label: _expandedPluginIds.contains(plugin.id)
@@ -3624,7 +3647,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                               variant: CodexButtonVariant.secondary,
                               loading: _mutatingPluginIds.contains(plugin.id),
                               onPressed:
-                                  plugin.canInstall &&
+                                  !_pluginsLoading &&
+                                      plugin.canInstall &&
                                       !_mutatingPluginIds.contains(plugin.id)
                                   ? () => _installPlugin(plugin)
                                   : null,
@@ -3637,7 +3661,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                               variant: CodexButtonVariant.ghost,
                               loading: _mutatingPluginIds.contains(plugin.id),
                               onPressed:
-                                  plugin.canUninstall &&
+                                  !_pluginsLoading &&
+                                      plugin.canUninstall &&
                                       !_mutatingPluginIds.contains(plugin.id)
                                   ? () => _uninstallPlugin(plugin)
                                   : null,

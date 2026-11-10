@@ -1545,5 +1545,61 @@ void main() {
       expect(progress, findsNothing);
       expect(find.text('settled-mcp'), findsOneWidget);
     });
+
+    testWidgets(
+      'a pending skills refresh cannot overwrite a successful toggle',
+      (tester) async {
+        const fixture = SkillSummary(
+          name: 'fixture-skill',
+          description: 'Fixture',
+          path: '/tmp/fixture-skill/SKILL.md',
+          enabled: true,
+        );
+        final pendingRefresh = Completer<List<SkillSummary>>();
+        var reads = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listSkillsOverride: (_) {
+            reads += 1;
+            return reads == 1
+                ? Future<List<SkillSummary>>.value(
+                    List<SkillSummary>.unmodifiable(harness.skills),
+                  )
+                : pendingRefresh.future;
+          },
+        );
+        harness.skills
+          ..clear()
+          ..add(fixture);
+        addTearDown(() {
+          if (!pendingRefresh.isCompleted) {
+            pendingRefresh.complete(const <SkillSummary>[]);
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(reads, 2);
+
+        final toggle = find.byKey(const ValueKey('skill-toggle-fixture-skill'));
+        expect(toggle, findsOneWidget);
+        await tester.tap(toggle, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        pendingRefresh.complete(const [fixture]);
+        await tester.pumpAndSettle();
+
+        if (harness.toggledSkills.isNotEmpty) {
+          expect(harness.toggledSkills.single.enabled, isFalse);
+          expect(find.text('Disabled'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }
