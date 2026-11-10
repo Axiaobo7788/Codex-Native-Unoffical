@@ -121,7 +121,10 @@ Future<void> main() async {
             'content': [
               {'type': 'text', 'text': 'echo: $value'},
             ],
-            'structuredContent': {'result': value},
+            'structuredContent': {
+              'result': value,
+              'nested': {'aggregatedOutput': 'synthetic MCP result'},
+            },
             'isError': false,
           });
         }
