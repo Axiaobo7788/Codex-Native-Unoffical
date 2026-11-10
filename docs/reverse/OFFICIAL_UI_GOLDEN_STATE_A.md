@@ -41,7 +41,7 @@ got here.
 | A7 Thought/activity/read-run | H1 shows quiet Thinking and borderless read/run. `225284.NKAf` groups exploration and pluralizes runs. `getw` supplies the completed disclosure, `100921.waM8/F9dY` formats duration and `225284.O3Io` supplies expanded exploration captions. | A stock live turn displayed one Read files segment and singular ran a command. The saved 570 ms turn opened four commands on disclosure. The release displayed typed read, search and list captions, previewed the first output and showed the raw commands in Execution. | `388147a`, `0a0f79c`, `31d2abd`, `0c8caca`, `f68889c`, `a18b1fa` | The genuinely untimed fallback lacks a collapsed count. Expanded group boundaries, titled reasoning, resumed states and specialized command captions remain open. | PARTIAL | Compare the supported expanded group boundaries. Preserve per-command output actions and keep detailed reads lazy. |
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `309406.Ceox.tn` routes title and expand through the same visible-tab toggle and retains dirty state while the tab is parked. The `cI4i` rail applies a 13 px inset. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Switching panes retains an unsaved draft. Explicit Close or a second click on the visible Goal strip closes the tab and returns to the saved objective. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4`, `dc7c3ee`, `3505385` | Native confirms clear and uses a full reading surface when both columns cannot fit. The signed-in editor toolbar and terminal status variants remain open. | PARTIAL | Compare editor toolbar, budget and terminal states with the current official tab. |
-| A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. `42793.vMUJ.E` labels an intermediate stock step Continue. | The Linux release used numbered stock options, clicked Continue and Submit and returned both answers. Widget tests cover arrows/Enter, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1`, `39bd7ea` | The ordinary official stock call site wires Escape to interruption. Native Cancel request uses the existing request cancellation response. H1 async free text and voice require separate supported evidence. | PARTIAL | Compare the ordinary stock focused and free-text states. Track H1 async input and the interruption delta separately. |
+| A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. `42793.vMUJ.L/E/N` initializes the first selection, labels intermediate steps Continue and renders the custom-answer editor. | The Linux release submitted two preselected answers through Continue and Submit. Clicking Other opened a focused field and the typed answer reached stock. Widget coverage verifies changing the default, keyboard traversal, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1`, `39bd7ea`, `9402faa`, `8b9fe5c` | Native shows Other and its field on separate rows. The official ordinary call site uses an inline custom editor and wires Escape to interruption. Native Cancel request uses request cancellation. This stock binary rejects questions without options. H1 async free text and voice remain separate. | PARTIAL | Translate the supported inline Other layout and numbered shortcuts, preserving the bounded short-window request stack. Track H1 async input and the interruption delta separately. |
 | A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.LUWz` defines the permission control. `104066.dig0 → 209288.vdOM` maps the end-aligned model list and effort slider. `309406.tYeY.Zp → rG` resolves one primary action. `16389.Ips7.C` gives it an 8 px leading gap and the ordinary Electron surface retains its elevation border on focus. | The release opens stock model and Sandbox controls and respects inheritance. A single action changes between disabled Send, Send, Stop and Steer. Keyboard and pointer stop exercised real stock turns. The release kept a stable outline while the editor accepted typing. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1`, `6c9bc6c`, `e64d1e6`, `fe17af8`, `43e4d35` | Native uses its existing 34 px diameter and 45% disabled opacity. The official ordinary and dictation-enabled branches have different action sizes. Account model bundles, locked tiers and queue/voice variants remain separate. | PARTIAL | Measure the default and dictation-enabled button diameter and multiline footer in the appropriate signed-in branch. Preserve bounded draft and stock inheritance. |
 
 `MATCH` requires current same-state evidence. `PARITY_ACCEPTABLE` records
@@ -102,6 +102,31 @@ For this checkpoint, 526 default Flutter cases and five opt-in stock
 cases passed. Format, ASCII-path analysis, the pure-Dart gate, bundle
 closure and bounded-history benchmark passed. The Linux list capture
 exited the app, bundled Host and stock app-server.
+
+## A10 stock choice and custom-answer focus
+
+`474578.IpGh.to` restores a draft only for the matching request.
+For a fresh single-select step `42793.vMUJ.L` sets the actual
+selected option to the first label. The agy peer confirmed the
+initialization and distinguished the separate option-picker RPC.
+The Linux release clicked Continue and Submit with no option click.
+The loopback received both default labels through stock. Simulated
+coverage verifies that changing the selected option takes precedence.
+
+`42793.vMUJ.N` puts the custom editor in the question footer and
+clears the active option when the user enters it. Native still
+expands the existing Other row. It now places focus in the text field
+on that same action. The Linux release typed without clicking the
+field and the exact custom answer reached the loopback through stock.
+App, bundled Host and stock exited cleanly. The 527 default Flutter
+cases, format and ASCII-path analysis passed.
+
+The current renderer has a standalone no-options editor. In separate
+real stock attempts, both an empty options array and an omitted
+options field returned `request_user_input requires non-empty options
+for every question`. The simulated standalone autofocus candidate
+was withdrawn. The supported Other path and H1's account-driven async
+question have distinct evidence.
 
 ## A7 live grouping and recorded saved duration
 

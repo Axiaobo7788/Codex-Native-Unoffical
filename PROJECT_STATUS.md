@@ -125,11 +125,20 @@ stock turn while keeping its unsent draft. An arriving approval disarms
 that shortcut, verified on the packaged app. Empty Send is disabled and
 separated from the permissions control by 8 px. The ordinary focused
 composer retains its neutral border. Desktop assistant Markdown uses
-the measured body-relative heading proportions. Home, open Changes,
+the measured body-relative heading proportions. Desktop stock choices
+preselect the first answer, and selecting Other focuses the custom field.
+Home, open Changes,
 Review, expanded activity, compact and dark variants have separate
 evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
 
 ## Current checkpoint
+
+- `9402faa` and `8b9fe5c` translate the stock question default and
+  custom-answer focus. Linux release runs sent both default selections
+  and the typed Other answer through stock. The installed binary rejected
+  no-options requests in both sampled shapes. The official inline Other
+  placement and numbered shortcuts remain machine work in A10.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `80d318d` translates the Desktop assistant heading proportions.
   Paired Linux stock responses confirmed the heading hierarchy and
