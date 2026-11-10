@@ -105,7 +105,9 @@ an anchored Sandbox menu. The clean package displayed and dismissed the
 existing Full access confirmation without starting a turn. The Desktop model
 picker opens an anchored stock catalog and explicit reasoning slider.
 The Linux release verified model/effort overrides and subsequent stock
-session inheritance. Home, open
+session inheritance. The current Goal draft survives a switch to Changes
+and header hide/reopen. Explicit close still returns to the saved objective,
+as verified during a real stock turn. Home, open
 Changes, Review, expanded activity, compact and dark/focused states have
 separate evidence gates. [Hosted CI for `738e9b2`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42907568863)
 
