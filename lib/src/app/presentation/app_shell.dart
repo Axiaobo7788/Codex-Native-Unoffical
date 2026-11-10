@@ -101,6 +101,7 @@ class _ConnectedWorkspace extends StatefulWidget {
 
 class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   final _conversationKey = GlobalKey<_ConversationPanelState>();
+  var _desktopLeftPanelWidth = OfficialCodexTheme.desktopLeftPanelWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -138,9 +139,34 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
             ),
           );
         }
+        final maximum =
+            (constraints.maxWidth - OfficialCodexTheme.desktopWorkspaceMinWidth)
+                .clamp(
+                  OfficialCodexTheme.desktopLeftPanelMinWidth,
+                  OfficialCodexTheme.sidebarMaxWidth,
+                );
+        final leftWidth = _desktopLeftPanelWidth.clamp(
+          OfficialCodexTheme.desktopLeftPanelMinWidth,
+          maximum,
+        );
         return _DesktopSplitWorkspace(
           key: const ValueKey('desktop-split-workspace'),
           conversationKey: _conversationKey,
+          sidebarWidth: leftWidth - OfficialCodexTheme.navigationRailWidth,
+          onSidebarResize: (delta) {
+            final visibleWidth = _desktopLeftPanelWidth.clamp(
+              OfficialCodexTheme.desktopLeftPanelMinWidth,
+              maximum,
+            );
+            final width = (visibleWidth + delta).clamp(
+              OfficialCodexTheme.desktopLeftPanelMinWidth,
+              maximum,
+            );
+            if (_desktopLeftPanelWidth == width) {
+              return;
+            }
+            setState(() => _desktopLeftPanelWidth = width);
+          },
           runtimeController: widget.runtimeController,
           threadController: widget.threadController,
           conversationController: widget.conversationController,
@@ -160,6 +186,8 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   const _DesktopSplitWorkspace({
     super.key,
     required this.conversationKey,
+    required this.sidebarWidth,
+    required this.onSidebarResize,
     required this.runtimeController,
     required this.threadController,
     required this.conversationController,
@@ -172,6 +200,8 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   });
 
   final GlobalKey<_ConversationPanelState> conversationKey;
+  final double sidebarWidth;
+  final ValueChanged<double> onSidebarResize;
   final RuntimeController runtimeController;
   final ThreadListController threadController;
   final ConversationController conversationController;
@@ -260,19 +290,31 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                                   ),
                                   child: SizedBox(
                                     key: const ValueKey('app_shell_sidebar'),
-                                    width: OfficialCodexTheme.sidebarWidth,
-                                    child: _ThreadPanel(
-                                      key: _threadPanelKey,
-                                      controller: widget.threadController,
-                                      settingsController:
-                                          widget.settingsController,
-                                      runtimeController:
-                                          widget.runtimeController,
-                                      userInputController:
-                                          widget.userInputController,
-                                      defaultWorkingDirectory:
-                                          widget.defaultWorkingDirectory,
-                                      hasNavigationRail: true,
+                                    width: widget.sidebarWidth,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        _ThreadPanel(
+                                          key: _threadPanelKey,
+                                          controller: widget.threadController,
+                                          settingsController:
+                                              widget.settingsController,
+                                          runtimeController:
+                                              widget.runtimeController,
+                                          userInputController:
+                                              widget.userInputController,
+                                          defaultWorkingDirectory:
+                                              widget.defaultWorkingDirectory,
+                                          hasNavigationRail: true,
+                                        ),
+                                        PositionedDirectional(
+                                          top: 0,
+                                          bottom: 0,
+                                          end: 0,
+                                          width: ThemeTokens.space2,
+                                          child: _sidebarResizeHandle(),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -308,6 +350,48 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sidebarResizeHandle() {
+    const step = 24.0;
+    final direction = Directionality.of(context) == TextDirection.ltr ? 1 : -1;
+    void grow() => widget.onSidebarResize(step);
+    void shrink() => widget.onSidebarResize(-step);
+
+    return Semantics(
+      label: 'Sidebar width',
+      onIncrease: grow,
+      onDecrease: shrink,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): direction == 1
+              ? shrink
+              : grow,
+          const SingleActivator(LogicalKeyboardKey.arrowRight): direction == 1
+              ? grow
+              : shrink,
+        },
+        child: Focus(
+          child: Builder(
+            builder: (context) => MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                key: const ValueKey('sidebar-resize-handle'),
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onHorizontalDragUpdate: (event) =>
+                    widget.onSidebarResize(event.delta.dx * direction),
+                child: ColoredBox(
+                  color: Focus.of(context).hasPrimaryFocus
+                      ? OfficialCodexTheme.of(context).focusRing
+                      : Colors.transparent,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

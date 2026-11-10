@@ -437,6 +437,9 @@ class _HistoryEntryView extends StatelessWidget {
   Widget? _commandOutputAction(BuildContext context) {
     final output = item.output;
     if (output != null && output.available && output.reference != null) {
+      final label = output.truncated
+          ? 'View stored output (truncated)'
+          : 'View output';
       return CodexButton(
         variant: CodexButtonVariant.ghost,
         size: CodexButtonSize.sm,
@@ -446,14 +449,15 @@ class _HistoryEntryView extends StatelessWidget {
               _OutputDialog(gateway: outputGateway, descriptor: output),
         ),
         icon: const Icon(Icons.terminal, size: 14),
-        label: output.truncated
-            ? 'View stored output (truncated)'
-            : 'View output',
+        label: label,
+        tooltip: label,
       );
     }
     if (output != null && !output.available) {
       return Text(
         'Output unavailable',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.labelSmall,
       );
     }
@@ -465,6 +469,7 @@ class _HistoryEntryView extends StatelessWidget {
             ? null
             : () => historyController.loadDeferredOutput(item),
         label: 'Fetch output safely',
+        tooltip: 'Fetch output safely',
       );
     }
     if (historyController.selectedTurnId != item.turnId) {
@@ -475,6 +480,7 @@ class _HistoryEntryView extends StatelessWidget {
             ? null
             : () => historyController.loadTurnItems(item.turnId),
         label: 'Load turn details',
+        tooltip: 'Load turn details',
       );
     }
     return null;
@@ -488,6 +494,7 @@ class _HistoryEntryView extends StatelessWidget {
       variant: CodexButtonVariant.ghost,
       size: CodexButtonSize.sm,
       label: 'View saved text',
+      tooltip: 'View saved text',
       onPressed: () => showDialog<void>(
         context: context,
         builder: (context) => _SavedMcpTextDialog(

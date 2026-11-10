@@ -77,9 +77,10 @@ abstract final class OfficialCodexTheme {
     blurRadius: 16,
   );
 
-  /// Sidebar resize boundaries.
-  static const double sidebarMinWidth = 240.0;
+  /// Resize bounds include the navigation rail and reserve workspace room.
+  static const double desktopLeftPanelMinWidth = 290.0;
   static const double sidebarMaxWidth = 520.0;
+  static const double desktopWorkspaceMinWidth = 240.0;
 
   /// Sidebar split breakpoint (760px).
   static const double splitBreakpoint = 760.0;

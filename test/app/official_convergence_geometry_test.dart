@@ -10,6 +10,7 @@ import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -289,6 +290,69 @@ void main() {
         );
       });
     }
+
+    testWidgets(
+      'resizes the sidebar and preserves the draft across a compact window',
+      (tester) async {
+        tester.view.physicalSize = const Size(1191, 865);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final runtime = _GeometryTestRuntimeController();
+        addTearDown(runtime.closeStreams);
+        await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Geometry Test Thread'));
+        await tester.pumpAndSettle();
+
+        final composer = find.byKey(const ValueKey('conversation-composer'));
+        final workspace = find.byKey(const ValueKey('app-shell-workspace'));
+        final handle = find.byKey(const ValueKey('sidebar-resize-handle'));
+        await tester.enterText(composer, 'Draft through sidebar resize');
+
+        await tester.drag(handle, const Offset(-130, 0));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          OfficialCodexTheme.desktopLeftPanelMinWidth,
+        );
+
+        Focus.of(tester.element(handle)).requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          greaterThan(OfficialCodexTheme.desktopLeftPanelMinWidth),
+        );
+
+        await tester.drag(handle, const Offset(350, 0));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          OfficialCodexTheme.sidebarMaxWidth,
+        );
+
+        tester.view.physicalSize = const Size(760, 800);
+        await tester.pumpAndSettle();
+        expect(find.text('Draft through sidebar resize'), findsOneWidget);
+
+        tester.view.physicalSize = const Size(720, 800);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
+        expect(handle, findsNothing);
+        expect(find.text('Draft through sidebar resize'), findsOneWidget);
+
+        tester.view.physicalSize = const Size(1191, 865);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(workspace).dx,
+          OfficialCodexTheme.sidebarMaxWidth,
+        );
+        expect(find.text('Draft through sidebar resize'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'validates compact workspace geometry on 720x800 compact viewport (< 760px breakpoint)',
