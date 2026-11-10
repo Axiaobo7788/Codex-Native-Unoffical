@@ -1232,6 +1232,7 @@ Future<void> _send(WidgetTester tester, String text) async {
         widget.decoration?.hintText == 'Send a message to Codex',
   );
   await tester.enterText(composer, text);
+  await tester.pump();
   await tester.tap(find.byKey(const ValueKey('composer-send-button')));
   await tester.pumpAndSettle();
 }

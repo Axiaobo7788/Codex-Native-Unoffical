@@ -663,6 +663,7 @@ void main() {
         find.byKey(const ValueKey('conversation-composer')),
         'Check inherited runtime settings.',
       );
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
       await tester.pumpAndSettle();
       expect(harness.startedTurns.single.model, isNull);
@@ -700,6 +701,7 @@ void main() {
           find.byKey(const ValueKey('conversation-composer')),
           'Check the selected reasoning effort.',
         );
+        await tester.pump();
         await tester.tap(find.byKey(const ValueKey('composer-send-button')));
         await tester.pumpAndSettle();
         expect(harness.startedTurns.single.reasoningEffort, 'high');
@@ -720,10 +722,18 @@ void main() {
       await tester.pumpAndSettle();
 
       final composerField = find.byKey(const ValueKey('conversation-composer'));
+      final send = find.byKey(const ValueKey('composer-send-button'));
+      final execution = find.byKey(const ValueKey('execution-settings-button'));
+      expect(tester.widget<CodexIconButton>(send).isEnabled, isFalse);
+      expect(tester.getRect(send).left - tester.getRect(execution).right, 8);
+      await tester.enterText(composerField, '   ');
+      await tester.pump();
+      expect(tester.widget<CodexIconButton>(send).isEnabled, isFalse);
       await tester.enterText(composerField, 'Compute prime numbers');
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      expect(tester.widget<CodexIconButton>(send).isEnabled, isTrue);
+      await tester.tap(send);
       await tester.pumpAndSettle();
 
       final stop = find.byKey(const ValueKey('composer-stop-button'));
@@ -1703,6 +1713,7 @@ void main() {
         final send = find.byKey(const ValueKey('composer-send-button'));
         for (final text in ['First prompt', 'Second prompt']) {
           await tester.enterText(composer, text);
+          await tester.pump();
           await tester.tap(send);
           await tester.pumpAndSettle();
         }

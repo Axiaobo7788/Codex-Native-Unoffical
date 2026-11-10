@@ -16,6 +16,7 @@ void main() {
       await _select(tester, 'Cold queue');
       await _attachFile(tester);
       await tester.enterText(_composer, 'New draft');
+      await tester.pump();
       await tester.tap(_send);
       await tester.pumpAndSettle();
 
@@ -52,6 +53,7 @@ void main() {
       await pumpSimulatedRuntimeApp(tester, harness: harness);
       await _select(tester, 'Cold queue');
       await tester.enterText(_composer, 'First draft');
+      await tester.pump();
       await tester.tap(_send);
       await tester.pump();
       await tester.tap(_send);
@@ -77,6 +79,7 @@ void main() {
     await pumpSimulatedRuntimeApp(tester, harness: harness);
     await _select(tester, 'Cold queue');
     await tester.enterText(_composer, 'Draft after timeout');
+    await tester.pump();
     await tester.tap(_send);
     await tester.pump();
     await tester.pump(const Duration(seconds: 4));
@@ -99,6 +102,7 @@ void main() {
     await pumpSimulatedRuntimeApp(tester, harness: harness);
     await _select(tester, 'Cold queue');
     await tester.enterText(_composer, 'Ordinary draft');
+    await tester.pump();
     await tester.tap(_send);
     await tester.pumpAndSettle();
 
@@ -117,6 +121,7 @@ void main() {
       await pumpSimulatedRuntimeApp(tester, harness: harness);
       await _select(tester, 'Cold queue');
       await tester.enterText(_composer, 'Draft next to running work');
+      await tester.pump();
       await tester.tap(_send);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));

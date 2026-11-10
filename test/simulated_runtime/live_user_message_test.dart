@@ -39,6 +39,7 @@ void main() {
         find.byKey(const ValueKey('conversation-composer')),
         'Composer projection',
       );
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
       await tester.pumpAndSettle();
       final clientId = harness.startedTurns.single.clientUserMessageId;
@@ -76,6 +77,7 @@ void main() {
       final composer = find.byKey(const ValueKey('conversation-composer'));
 
       await tester.enterText(composer, 'First send');
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
       await tester.pumpAndSettle();
       expect(harness.startedTurns.single.text, 'First send');

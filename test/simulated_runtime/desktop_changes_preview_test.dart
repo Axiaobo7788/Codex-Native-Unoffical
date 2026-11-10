@@ -22,6 +22,7 @@ void main() {
       find.byKey(const ValueKey('conversation-composer')),
       'Make a disposable change',
     );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('composer-send-button')));
     await tester.pump();
     runtime.emitDiff(

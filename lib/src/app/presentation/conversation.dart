@@ -4322,13 +4322,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             style: Theme.of(context).textTheme.labelSmall,
                           ),
                         ),
+                      if (desktopComposer)
+                        const SizedBox(width: ThemeTokens.space2),
                       ValueListenableBuilder<TextEditingValue>(
                         valueListenable: _composerController,
                         builder: (context, draft, _) {
-                          final showSteer =
-                              canSteer &&
-                              (draft.text.trim().isNotEmpty ||
-                                  _composerAttachments.isNotEmpty);
+                          final hasDraft =
+                              draft.text.trim().isNotEmpty ||
+                              _composerAttachments.isNotEmpty;
+                          final showSteer = canSteer && hasDraft;
                           if (showStop && !showSteer) {
                             final armed =
                                 _armedComposerStop != null &&
@@ -4364,7 +4366,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             size: 34,
                             shape: BoxShape.circle,
                             variant: CodexButtonVariant.primary,
-                            onPressed: enabled ? _send : null,
+                            onPressed: enabled && (!desktopComposer || hasDraft)
+                                ? _send
+                                : null,
                             icon: Icon(
                               canSteer && !desktopComposer
                                   ? Icons.subdirectory_arrow_right_rounded
