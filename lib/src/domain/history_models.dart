@@ -46,6 +46,7 @@ class HistoryTurn {
     required this.items,
     this.startedAt,
     this.completedAt,
+    this.reportedWorkDuration,
   });
 
   final String id;
@@ -53,8 +54,10 @@ class HistoryTurn {
   final List<HistoryItem> items;
   final DateTime? startedAt;
   final DateTime? completedAt;
+  final Duration? reportedWorkDuration;
 
   Duration? get workDuration {
+    if (reportedWorkDuration case final reported?) return reported;
     final start = startedAt;
     final end = completedAt;
     if (start == null || end == null || !end.isAfter(start)) {
@@ -68,25 +71,17 @@ class HistoryTurn {
     if (duration == null) {
       return null;
     }
-    final totalSeconds = duration.inSeconds;
-    if (totalSeconds <= 0) {
-      return null;
-    }
-    if (totalSeconds < 60) {
-      return 'Worked for ${totalSeconds}s';
-    }
-    final totalMinutes = duration.inMinutes;
-    final seconds = totalSeconds % 60;
-    if (totalMinutes < 60) {
-      return seconds == 0
-          ? 'Worked for ${totalMinutes}m'
-          : 'Worked for ${totalMinutes}m ${seconds}s';
-    }
-    final hours = duration.inHours;
-    final minutes = totalMinutes % 60;
-    return minutes == 0
-        ? 'Worked for ${hours}h'
-        : 'Worked for ${hours}h ${minutes}m';
+    final days = duration.inDays;
+    final hours = duration.inHours.remainder(24);
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    final parts = [
+      if (days > 0) '${days}d',
+      if (hours > 0) '${hours}h',
+      if (minutes > 0) '${minutes}m',
+      if (seconds > 0 || duration.inSeconds == 0) '${seconds}s',
+    ];
+    return 'Worked for ${parts.join(' ')}';
   }
 }
 

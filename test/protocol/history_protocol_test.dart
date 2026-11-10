@@ -14,6 +14,45 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'prefers stock elapsed milliseconds with a legacy timestamp fallback',
+    () async {
+      final adapter = HistoryProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          expect(method, 'thread/turns/list');
+          expect(params['itemsView'], 'summary');
+          return {
+            'data': [
+              for (final (id, start, end, duration) in [
+                ('subsecond', 1760000000, 1760000000, 570),
+                ('hour', null, null, 3602000),
+                ('legacy', 1760000000, 1760000015, -1),
+                ('unmeasured', null, null, null),
+              ])
+                {
+                  'id': id,
+                  'status': 'completed',
+                  'items': [],
+                  'startedAt': start,
+                  'completedAt': end,
+                  'durationMs': duration,
+                },
+            ],
+          };
+        },
+      );
+      final page = await adapter.listTurns(
+        const HistoryTurnQuery(threadId: 'thread-1'),
+      );
+      expect(page.turns.map((turn) => turn.formattedWorkDuration), [
+        'Worked for 0s',
+        'Worked for 1h 2s',
+        'Worked for 15s',
+        null,
+      ]);
+    },
+  );
+
+  test(
     'projects only eligible saved MCP text and requests local deferral',
     () async {
       final adapter = HistoryProtocolAdapter(

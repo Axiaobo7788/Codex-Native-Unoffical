@@ -305,6 +305,9 @@ final class HistoryProtocolAdapter {
     if (items is! List<Object?>) {
       throw const ProtocolViolation('History turn items must be an array.');
     }
+    final durationMs = value['durationMs'];
+    const maxDurationMs =
+        0x7fffffffffffffff ~/ Duration.microsecondsPerMillisecond;
     return HistoryTurn(
       id: turnId,
       status: _turnStatus(_requiredString(value, 'status')),
@@ -314,6 +317,10 @@ final class HistoryProtocolAdapter {
           .toList(growable: false),
       startedAt: _optionalTimestamp(value, 'startedAt'),
       completedAt: _optionalTimestamp(value, 'completedAt'),
+      reportedWorkDuration:
+          durationMs is int && durationMs >= 0 && durationMs <= maxDurationMs
+          ? Duration(milliseconds: durationMs)
+          : null,
     );
   }
 

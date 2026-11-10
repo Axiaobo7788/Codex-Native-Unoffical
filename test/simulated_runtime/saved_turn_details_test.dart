@@ -14,7 +14,7 @@ void main() {
     final harness = _TurnDetailsHarness();
     await _open(tester, harness);
 
-    expect(find.text('Turn details'), findsOneWidget);
+    expect(find.text('Worked for 0s'), findsOneWidget);
     expect(find.text('Command: synthetic fixture'), findsNothing);
     expect(
       find.descendant(
@@ -234,12 +234,14 @@ class _TurnDetailsHarness extends SimulatedRuntimeHarness {
              id: _turnId,
              status: TurnRuntimeStatus.completed,
              items: [_user, if (!userOnly) _assistant],
-             startedAt: DateTime.utc(2026),
-             completedAt: DateTime.utc(2026).add(
-               timed
-                   ? const Duration(seconds: 3)
-                   : const Duration(milliseconds: 221),
-             ),
+             startedAt: userOnly ? null : DateTime.utc(2026),
+             completedAt: userOnly
+                 ? null
+                 : DateTime.utc(2026)
+                       .add(timed ? const Duration(seconds: 3) : Duration.zero),
+             reportedWorkDuration: timed || userOnly
+                 ? null
+                 : const Duration(milliseconds: 221),
            ),
          ],
          initialHistoryItems: [
