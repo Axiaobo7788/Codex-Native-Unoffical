@@ -54,24 +54,46 @@ void main() {
         await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
         await tester.pumpAndSettle();
 
-        // 1. Assert single sidebar header geometry: height 46px, no duplicate Codex Native titlebar
+        // The app toolbar spans all columns above the persistent rail and page.
         final titlebarFinder = find.byKey(const ValueKey('app_shell_titlebar'));
         expect(titlebarFinder, findsOneWidget);
         expect(find.text('Codex Native'), findsNothing);
+        final titlebarRect = tester.getRect(titlebarFinder);
         expect(
-          tester.getSize(titlebarFinder).height,
-          equals(OfficialCodexTheme.titlebarHeight),
+          titlebarRect.size,
+          Size(vp.width / vp.dpr, OfficialCodexTheme.shellToolbarHeight),
         );
-        expect(tester.getSize(titlebarFinder).height, equals(46.0));
 
-        // 2. Assert Sidebar width: exactly 260px and nested thread row indentation under project folder
-        final sidebarFinder = find.byKey(const ValueKey('app_shell_sidebar'));
-        expect(sidebarFinder, findsOneWidget);
-        expect(
-          tester.getSize(sidebarFinder).width,
-          equals(OfficialCodexTheme.sidebarWidth),
+        final rail = tester.getRect(
+          find.byKey(const ValueKey('app-shell-navigation-rail')),
         );
-        expect(tester.getSize(sidebarFinder).width, equals(260.0));
+        final pageFinder = find.byKey(const ValueKey('app-shell-page-surface'));
+        final page = tester.getRect(pageFinder);
+        expect(rail.left, titlebarRect.left);
+        expect(rail.top, titlebarRect.bottom);
+        expect(rail.width, OfficialCodexTheme.navigationRailWidth);
+        expect(page.top, rail.top);
+        expect(page.left, rail.right);
+        expect(page.right, titlebarRect.right);
+        expect(
+          tester.widget<ClipRRect>(pageFinder).borderRadius,
+          BorderRadius.circular(OfficialCodexTheme.mainSurfaceRadius),
+        );
+
+        final sidebarFinder = find.byKey(const ValueKey('app_shell_sidebar'));
+        final sidebar = tester.getRect(sidebarFinder);
+        final workspace = tester.getRect(
+          find.byKey(const ValueKey('app-shell-workspace')),
+        );
+        expect(sidebar.topLeft, page.topLeft);
+        expect(sidebar.width, OfficialCodexTheme.sidebarWidth);
+        expect(workspace.left, sidebar.right);
+        expect(workspace.top, sidebar.top);
+        expect(workspace.right, page.right);
+        expect(
+          workspace.left - rail.left,
+          OfficialCodexTheme.desktopLeftPanelWidth,
+        );
         final projectHeadingFinder = find.text('project');
         final threadRowFinder = find.byKey(
           const ValueKey('thread-row-geom-thread-1'),
@@ -83,23 +105,7 @@ void main() {
           greaterThan(tester.getTopLeft(sidebarFinder).dx + 14.0),
         );
 
-        // 3. Assert Inset workspace card: top-left corner radius 12px and 6px inset margin
-        final insetCardFinder = find.byKey(
-          const ValueKey('inset_workspace_card'),
-        );
-        expect(insetCardFinder, findsOneWidget);
-        final container = tester.widget<Container>(insetCardFinder);
-        expect(
-          container.margin,
-          equals(const EdgeInsets.fromLTRB(0.0, 6.0, 6.0, 6.0)),
-        );
-        final boxDecoration = container.decoration as BoxDecoration;
-        expect(
-          boxDecoration.borderRadius,
-          equals(BorderRadius.circular(OfficialCodexTheme.mainSurfaceRadius)),
-        );
-
-        // 3b. Assert Home (Let's build) state: header has no bottom border, detail modes hidden, composer centered with hero and uses Tier 2 elevatedSurface
+        // Home keeps a centered composer and hides thread detail modes.
         final emptyHeaderContainer = tester.widget<Container>(
           find.byKey(const ValueKey('thread_header_bar')),
         );

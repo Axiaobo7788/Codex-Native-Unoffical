@@ -63,8 +63,12 @@ abstract final class OfficialCodexTheme {
   /// Segmented control pill corner radius (8px).
   static const double segmentRadius = 8.0;
 
-  /// Sidebar default width on desktop viewports (260px).
-  static const double sidebarWidth = 260.0;
+  /// Current rail-with-contextual-sidebar geometry.
+  static const double navigationRailWidth = 52.0;
+  static const double desktopLeftPanelWidth = 340.0;
+  static const double sidebarWidth =
+      desktopLeftPanelWidth - navigationRailWidth;
+  static const double shellToolbarHeight = 36.0;
 
   /// Sidebar resize boundaries.
   static const double sidebarMinWidth = 240.0;
@@ -152,6 +156,8 @@ abstract final class OfficialCodexTheme {
 
   // Light Mode Surface Hierarchy
   static const Color lightShellBackground = Color(0xFFF9F9F9); // Tier 0
+  static const Color lightNavigationBackground = Color(0xFFF4F4F4);
+  static const Color lightContextualSidebarBackground = Color(0xFFFBFBFB);
   static const Color lightWorkspaceBackground = Color(0xFFFFFFFF); // Tier 1
   static const Color lightElevatedSurface = Color(0xFFF4F4F4); // Tier 2
   static const Color lightModalSurface = Color(0xFFFFFFFF); // Tier 3

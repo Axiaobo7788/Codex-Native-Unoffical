@@ -61,7 +61,6 @@ part 'presentation/runtime_details.dart';
 part 'presentation/user_input.dart';
 
 const _desktopSplitMinimumWidth = OfficialCodexTheme.splitBreakpoint;
-const _desktopSidebarWidth = OfficialCodexTheme.sidebarWidth;
 
 class CodexNativeApp extends StatefulWidget {
   const CodexNativeApp({

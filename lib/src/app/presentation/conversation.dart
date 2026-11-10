@@ -15,9 +15,7 @@ class _ConversationPanel extends StatefulWidget {
     required this.outputGateway,
     required this.transportCapabilities,
     this.defaultWorkingDirectory = '',
-    this.sidebarCollapsed = false,
     this.isOffstage = false,
-    this.onToggleSidebar,
   });
 
   final ConversationController controller;
@@ -30,9 +28,7 @@ class _ConversationPanel extends StatefulWidget {
   final OutputGateway outputGateway;
   final BackendCapabilities transportCapabilities;
   final String defaultWorkingDirectory;
-  final bool sidebarCollapsed;
   final bool isOffstage;
-  final VoidCallback? onToggleSidebar;
 
   @override
   State<_ConversationPanel> createState() => _ConversationPanelState();
@@ -1402,16 +1398,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               constraints.maxWidth >= 520;
           return Row(
             children: [
-              if (widget.sidebarCollapsed &&
-                  widget.onToggleSidebar != null) ...[
-                CodexIconButton(
-                  key: const ValueKey('sidebar-expand-button'),
-                  tooltip: 'Show sidebar (Ctrl+B)',
-                  onPressed: widget.onToggleSidebar,
-                  icon: const Icon(Icons.view_sidebar_outlined, size: 17),
-                ),
-                const SizedBox(width: ThemeTokens.space2),
-              ],
               Expanded(
                 child: thread == null
                     ? const SizedBox.shrink()
