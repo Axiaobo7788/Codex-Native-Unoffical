@@ -109,13 +109,73 @@ impl<'a> Transformer<'a> {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PathStep {
+    Opaque,
+    Element,
+    Params,
+    Result,
+    Data,
+    InitialTurnsPage,
+    Thread,
+    Turn,
+    Turns,
+    Items,
+    Item,
+    Output,
+}
+
+impl PathStep {
+    fn from_key(key: &[u8]) -> Self {
+        match key {
+            b"params" => Self::Params,
+            b"result" => Self::Result,
+            b"data" => Self::Data,
+            b"initialTurnsPage" => Self::InitialTurnsPage,
+            b"thread" => Self::Thread,
+            b"turn" => Self::Turn,
+            b"turns" => Self::Turns,
+            b"items" => Self::Items,
+            b"item" => Self::Item,
+            TARGET_KEY => Self::Output,
+            _ => Self::Opaque,
+        }
+    }
+}
+
+struct Container {
+    step: PathStep,
+    is_array: bool,
+}
+
+// A direct ThreadItem field at these stock v2 paths is command output.
+// The schema reserves it to commandExecution, regardless of key order.
+// An identically named field in an opaque result or argument stays untouched.
+const COMMAND_ITEM_PATHS: &[&[PathStep]] = {
+    use PathStep::*;
+    &[
+        &[Params, Item],
+        &[Params, Turn, Items, Element],
+        &[Params, Thread, Turns, Element, Items, Element],
+        &[Result, Data, Element, Item],
+        &[Result, Data, Element, Items, Element],
+        &[Result, Data, Element, Turns, Element, Items, Element],
+        &[
+            Result, Data, Element, Thread, Turns, Element, Items, Element,
+        ],
+        &[Result, Turn, Items, Element],
+        &[Result, Thread, Turns, Element, Items, Element],
+        &[Result, InitialTurnsPage, Data, Element, Items, Element],
+    ]
+};
+
 struct Processor<'a> {
     store: &'a SpoolStore,
     candidate: Option<CandidateFile>,
     cursor: u64,
-    depth: usize,
+    containers: Vec<Container>,
     key: Option<KeyCollector>,
-    pending_target_depth: Option<usize>,
+    pending_path_key: PathStep,
     pending_id_depth: Option<usize>,
     pending_method_depth: Option<usize>,
     active_output: Option<ActiveOutput<'a>>,
@@ -137,9 +197,9 @@ impl<'a> Processor<'a> {
             store,
             candidate: None,
             cursor: 0,
-            depth: 0,
+            containers: Vec::new(),
             key: None,
-            pending_target_depth: None,
+            pending_path_key: PathStep::Opaque,
             pending_id_depth: None,
             pending_method_depth: None,
             active_output: None,
@@ -179,9 +239,9 @@ impl<'a> Processor<'a> {
                     return Err(invalid_data("unfinished output candidate lifecycle"));
                 }
                 self.candidate = Some(self.store.start_candidate()?);
-                self.depth = 0;
+                self.containers.clear();
                 self.key = None;
-                self.pending_target_depth = None;
+                self.pending_path_key = PathStep::Opaque;
                 self.pending_id_depth = None;
                 self.pending_method_depth = None;
                 self.active_output = None;
@@ -192,17 +252,21 @@ impl<'a> Processor<'a> {
                 self.top_level_has_id = false;
                 self.separator_has_line_break = false;
             }
-            Event::ObjectStart { .. } | Event::ArrayStart { .. } => {
+            start @ (Event::ObjectStart { .. } | Event::ArrayStart { .. }) => {
+                let step = if self.containers.last().is_some_and(|parent| parent.is_array) {
+                    PathStep::Element
+                } else {
+                    self.pending_path_key
+                };
                 self.clear_pending_for_non_string_value();
-                self.depth = self
-                    .depth
-                    .checked_add(1)
-                    .ok_or_else(|| invalid_data("JSON depth overflow"))?;
+                self.containers.push(Container {
+                    step,
+                    is_array: matches!(start, Event::ArrayStart { .. }),
+                });
             }
             Event::ObjectEnd { .. } | Event::ArrayEnd { .. } => {
-                self.depth = self
-                    .depth
-                    .checked_sub(1)
+                self.containers
+                    .pop()
                     .ok_or_else(|| invalid_data("JSON depth underflow"))?;
             }
             Event::StringStart { kind, offset } => {
@@ -212,14 +276,16 @@ impl<'a> Processor<'a> {
                         self.key = Some(KeyCollector::default());
                     }
                     StringKind::Value => {
-                        if self.pending_id_depth.take() == Some(self.depth) {
+                        let depth = self.containers.len();
+                        if self.pending_id_depth.take() == Some(depth) {
                             self.active_id = Some(BoundedStringCollector::new(MAX_REMOTE_ID_BYTES));
                         }
-                        if self.pending_method_depth.take() == Some(self.depth) {
+                        if self.pending_method_depth.take() == Some(depth) {
                             self.active_method =
                                 Some(BoundedStringCollector::new(MAX_REMOTE_METHOD_BYTES));
                         }
-                        if self.pending_target_depth.take() == Some(self.depth) {
+                        let key = std::mem::replace(&mut self.pending_path_key, PathStep::Opaque);
+                        if key == PathStep::Output && self.is_command_item_path() {
                             self.candidate_mut()?.write_all(b"null")?;
                             self.cursor = offset + 1;
                             self.active_output = Some(ActiveOutput {
@@ -270,15 +336,16 @@ impl<'a> Processor<'a> {
                         .take()
                         .ok_or_else(|| invalid_data("missing JSON key state"))?;
                     if let Some(key) = key.finish() {
-                        self.pending_target_depth = (key == TARGET_KEY).then_some(self.depth);
-                        if self.depth == 1 && key == ID_KEY {
+                        self.pending_path_key = PathStep::from_key(&key);
+                        let depth = self.containers.len();
+                        if depth == 1 && key == ID_KEY {
                             self.top_level_has_id = true;
-                            self.pending_id_depth = Some(self.depth);
+                            self.pending_id_depth = Some(depth);
                         } else {
                             self.pending_id_depth = None;
                         }
                         self.pending_method_depth =
-                            (self.depth == 1 && key == METHOD_KEY).then_some(self.depth);
+                            (depth == 1 && key == METHOD_KEY).then_some(depth);
                     }
                 }
                 StringKind::Value if self.active_output.is_some() => {
@@ -306,9 +373,9 @@ impl<'a> Processor<'a> {
             }
             Event::CandidateEnd { span, .. } => {
                 self.copy_until(span.end, input, base)?;
-                if self.depth != 0
+                if !self.containers.is_empty()
                     || self.key.is_some()
-                    || self.pending_target_depth.is_some()
+                    || self.pending_path_key != PathStep::Opaque
                     || self.pending_id_depth.is_some()
                     || self.pending_method_depth.is_some()
                     || self.active_output.is_some()
@@ -392,14 +459,23 @@ impl<'a> Processor<'a> {
         Ok(())
     }
 
+    fn is_command_item_path(&self) -> bool {
+        COMMAND_ITEM_PATHS.iter().any(|path| {
+            self.containers
+                .iter()
+                .skip(1)
+                .map(|container| container.step)
+                .eq(path.iter().copied())
+        })
+    }
+
     fn clear_pending_for_non_string_value(&mut self) {
-        if self.pending_target_depth == Some(self.depth) {
-            self.pending_target_depth = None;
-        }
-        if self.pending_id_depth == Some(self.depth) {
+        self.pending_path_key = PathStep::Opaque;
+        let depth = self.containers.len();
+        if self.pending_id_depth == Some(depth) {
             self.pending_id_depth = None;
         }
-        if self.pending_method_depth == Some(self.depth) {
+        if self.pending_method_depth == Some(depth) {
             self.pending_method_depth = None;
         }
     }
@@ -414,7 +490,7 @@ impl<'a> Processor<'a> {
         self.candidate.take();
         self.active_output.take();
         self.key.take();
-        self.pending_target_depth = None;
+        self.pending_path_key = PathStep::Opaque;
         self.pending_id_depth = None;
         self.pending_method_depth = None;
         self.active_id.take();
@@ -635,11 +711,89 @@ mod tests {
     }
 
     #[test]
+    fn preserves_opaque_mcp_result_and_argument_objects() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"id":1,"result":{"structuredContent":{"nested":{"aggregatedOutput":"mcp value","type":"commandExecution"}}}}
+{"method":"item/completed","params":{"item":{"id":"m","type":"mcpToolCall","arguments":{"aggregatedOutput":"arg"},"result":{"structuredContent":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"fake command"}}]}}}}}
+"#;
+        for chunk_size in [1, 7, input.len()] {
+            assert_eq!(
+                fixture.transform(input, chunk_size).unwrap(),
+                input,
+                "chunk={chunk_size}",
+            );
+        }
+        assert_eq!(fixture.store.stored_bytes(), 0);
+        assert_eq!(fixture.store.stored_output_count(), 0);
+    }
+
+    #[test]
+    fn spools_direct_command_output_at_each_supported_path_in_any_key_order() {
+        use serde_json::json;
+
+        let fixture = Fixture::new(1024, 4096);
+        let command = || json!({"aggregatedOutput": "output", "type": "commandExecution"});
+        let cases = [
+            (
+                json!({"method":"item/completed","params":{"item":command()}}),
+                "/params/item",
+            ),
+            (
+                json!({"method":"turn/completed","params":{"turn":{"items":[command()]}}}),
+                "/params/turn/items/0",
+            ),
+            (
+                json!({"method":"thread/started","params":{"thread":{"turns":[{"items":[command()]}]}}}),
+                "/params/thread/turns/0/items/0",
+            ),
+            (
+                json!({"id":1,"result":{"data":[{"item":command()}]}}),
+                "/result/data/0/item",
+            ),
+            (
+                json!({"id":1,"result":{"data":[{"items":[command()]}]}}),
+                "/result/data/0/items/0",
+            ),
+            (
+                json!({"id":1,"result":{"data":[{"turns":[{"items":[command()]}]}]}}),
+                "/result/data/0/turns/0/items/0",
+            ),
+            (
+                json!({"id":1,"result":{"data":[{"thread":{"turns":[{"items":[command()]}]}}]}}),
+                "/result/data/0/thread/turns/0/items/0",
+            ),
+            (
+                json!({"id":1,"result":{"turn":{"items":[command()]}}}),
+                "/result/turn/items/0",
+            ),
+            (
+                json!({"id":1,"result":{"thread":{"turns":[{"items":[command()]}]}}}),
+                "/result/thread/turns/0/items/0",
+            ),
+            (
+                json!({"id":1,"result":{"initialTurnsPage":{"data":[{"items":[command()]}]}}}),
+                "/result/initialTurnsPage/data/0/items/0",
+            ),
+        ];
+        for (message, path) in cases {
+            let input = message.to_string();
+            assert!(input.find("aggregatedOutput").unwrap() < input.find("type").unwrap());
+            let output = fixture.transform(input.as_bytes(), 3).unwrap();
+            let value: Value = serde_json::from_slice(&output).unwrap();
+            let item = value.pointer(path).unwrap();
+            assert!(item["aggregatedOutput"].is_null(), "{path}");
+            assert_eq!(item["type"], "commandExecution");
+            assert_eq!(item["_codexNativeOutput"]["bytes"], 6, "{path}");
+        }
+        assert_eq!(fixture.store.stored_output_count(), 1);
+    }
+
+    #[test]
     fn handles_multiple_messages_nested_keys_and_non_string_values() {
         let fixture = Fixture::new(1024, 4096);
         let input =
-            br#"{"id":1,"result":{"aggregatedOutput":null,"nested":{"aggregatedOutput":"one"}}}
-{"method":"event","params":{"aggregatedOutput":"two"}}
+            br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":null}},{"item":{"type":"mcpToolCall","arguments":{"aggregatedOutput":"one"}}}]}}
+{"method":"item/completed","params":{"item":{"type":"commandExecution","aggregatedOutput":"two"}}}
 "#;
         let output = fixture.transform(input, 7).unwrap();
         let lines = std::str::from_utf8(&output)
@@ -649,17 +803,20 @@ mod tests {
         assert_eq!(lines.len(), 2);
         let first: Value = serde_json::from_str(lines[0]).unwrap();
         let second: Value = serde_json::from_str(lines[1]).unwrap();
-        assert!(first["result"]["aggregatedOutput"].is_null());
-        assert!(first["result"]["nested"]["aggregatedOutput"].is_null());
-        assert_eq!(first["result"]["nested"]["_codexNativeOutput"]["bytes"], 3);
-        assert_eq!(second["params"]["_codexNativeOutput"]["bytes"], 3);
+        let command = &first["result"]["data"][0]["item"];
+        assert!(command["aggregatedOutput"].is_null());
+        assert!(command.get("_codexNativeOutput").is_none());
+        let arguments = &first["result"]["data"][1]["item"]["arguments"];
+        assert_eq!(arguments["aggregatedOutput"], "one");
+        assert!(arguments.get("_codexNativeOutput").is_none());
+        assert_eq!(second["params"]["item"]["_codexNativeOutput"]["bytes"], 3);
     }
 
     #[test]
     fn reuses_one_spool_for_repeated_complete_output_messages() {
         let fixture = Fixture::new(1024, 4096);
-        let input = br#"{"id":1,"result":{"aggregatedOutput":"repeat"}}
-{"id":2,"result":{"aggregatedOutput":"repeat"}}
+        let input = br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"repeat"}}]}}
+{"id":2,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"repeat"}}]}}
 "#;
         let output = fixture.transform(input, 3).unwrap();
         let messages = std::str::from_utf8(&output)
@@ -670,8 +827,8 @@ mod tests {
 
         assert_eq!(messages.len(), 2);
         assert_eq!(
-            messages[0]["result"]["_codexNativeOutput"]["ref"],
-            messages[1]["result"]["_codexNativeOutput"]["ref"]
+            messages[0]["result"]["data"][0]["item"]["_codexNativeOutput"]["ref"],
+            messages[1]["result"]["data"][0]["item"]["_codexNativeOutput"]["ref"]
         );
         assert_eq!(fixture.store.stored_bytes(), 6);
         assert_eq!(fixture.store.stored_output_count(), 1);
@@ -680,7 +837,7 @@ mod tests {
     #[test]
     fn rolls_back_a_finished_output_when_the_json_candidate_is_invalid() {
         let fixture = Fixture::new(1024, 4096);
-        let input = br#"{"aggregatedOutput":"temporary","invalid":]}
+        let input = br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"temporary","invalid":]}}]}}
 "#;
 
         assert!(fixture.transform(input, 2).is_err());
@@ -706,21 +863,20 @@ mod tests {
         let fixture = Fixture::new(1024, 4096);
         let valid = fixture
             .transform(
-                br#"{"aggregatedOutput":"durable"}
+                br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"durable"}}]}}
 "#,
                 2,
             )
             .unwrap();
-        let output_ref =
-            serde_json::from_slice::<Value>(&valid).unwrap()["_codexNativeOutput"]["ref"]
-                .as_str()
-                .unwrap()
-                .to_owned();
+        let output_ref = transformed_item(&valid)["_codexNativeOutput"]["ref"]
+            .as_str()
+            .unwrap()
+            .to_owned();
 
         assert!(
             fixture
                 .transform(
-                    br#"{"aggregatedOutput":"durable","invalid":]}
+                    br#"{"id":2,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"durable","invalid":]}}]}}
 "#,
                     2,
                 )
@@ -737,7 +893,7 @@ mod tests {
     #[test]
     fn rolls_back_an_undelivered_remote_response_when_the_observer_fails() {
         let fixture = Fixture::new(1024, 4096);
-        let input = br#"{"id":"codex-remote:session:1","result":{"aggregatedOutput":"temporary"}}
+        let input = br#"{"id":"codex-remote:session:1","result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"temporary"}}]}}
 "#;
         let mut transformer =
             Transformer::new(&fixture.store, Some("codex-remote:session:".to_owned()));
@@ -758,7 +914,7 @@ mod tests {
     fn keeps_output_after_local_notification_delivery_if_remote_observation_fails() {
         let fixture = Fixture::new(1024, 4096);
         let input =
-            br#"{"method":"item/completed","params":{"item":{"aggregatedOutput":"durable"}}}
+            br#"{"method":"item/completed","params":{"item":{"type":"commandExecution","aggregatedOutput":"durable"}}}
 "#;
         let mut transformer =
             Transformer::new(&fixture.store, Some("codex-remote:session:".to_owned()));
@@ -785,7 +941,7 @@ mod tests {
     fn suppresses_only_top_level_reserved_responses_after_sanitizing_them() {
         let fixture = Fixture::new(1024, 4096);
         let input = br#"{"id":1,"result":{"value":"desktop"}}
-{"result":{"aggregatedOutput":"secret output"},"id":"codex-remote:session:1"}
+{"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"secret output"}}]},"id":"codex-remote:session:1"}
 {"method":"event","params":{"id":"codex-remote:not-a-top-level-response"}}
 {"id":"codex-remote:other-session:1","result":{"value":"not ours"}}
 "#;
@@ -813,8 +969,9 @@ mod tests {
         };
         assert_eq!(response.host_id, "codex-remote:session:1");
         let captured: Value = serde_json::from_slice(response.payload.as_ref().unwrap()).unwrap();
-        assert!(captured["result"]["aggregatedOutput"].is_null());
-        assert_eq!(captured["result"]["_codexNativeOutput"]["bytes"], 13);
+        let item = &captured["result"]["data"][0]["item"];
+        assert!(item["aggregatedOutput"].is_null());
+        assert_eq!(item["_codexNativeOutput"]["bytes"], 13);
         assert!(
             !String::from_utf8_lossy(response.payload.as_ref().unwrap()).contains("secret output")
         );
@@ -825,7 +982,10 @@ mod tests {
         let fixture = Fixture::new(1024, 4096);
         let input = serde_json::to_vec(&serde_json::json!({
             "id": "codex-remote:session:2",
-            "result": {"padding": "x".repeat(MAX_REMOTE_RESPONSE_BYTES)},
+            "result": {"data": [{"item": {
+                "type": "mcpToolCall",
+                "arguments": {"aggregatedOutput": "x".repeat(MAX_REMOTE_RESPONSE_BYTES)},
+            }}]},
         }))
         .unwrap();
         let (output, remote) = fixture.transform_with_remote(&input, 8192).unwrap();
@@ -842,7 +1002,7 @@ mod tests {
     fn captures_only_allowlisted_notifications_after_sanitizing_desktop_output() {
         let fixture = Fixture::new(1024, 4096);
         let input =
-            br#"{"method":"item/completed","params":{"item":{"aggregatedOutput":"secret output"}}}
+            br#"{"method":"item/completed","params":{"item":{"type":"commandExecution","aggregatedOutput":"secret output"}}}
 {"method":"item/completed","id":7,"params":{"request":"not an event"}}
 {"method":"item/agentMessage/delta","params":{"delta":"token"}}
 "#;
@@ -892,12 +1052,12 @@ mod tests {
         let fixture = Fixture::new(1024, 4096);
         let output = fixture
             .transform(
-                br#"{"aggregated\u004futput":"data"}
+                br#"{"id":1,"res\u0075lt":{"data":[{"item":{"type":"commandExecution","aggregated\u004futput":"data"}}]}}
 "#,
                 1,
             )
             .unwrap();
-        let value: Value = serde_json::from_slice(&output).unwrap();
+        let value = transformed_item(&output);
         assert!(value["aggregatedOutput"].is_null());
         assert_eq!(value["_codexNativeOutput"]["bytes"], 4);
     }
@@ -907,13 +1067,13 @@ mod tests {
         let fixture = Fixture::new(4, 4);
         let output = fixture
             .transform(
-                br#"{"aggregatedOutput":"0123456789"}
+                br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"0123456789"}}]}}
 "#,
                 3,
             )
             .unwrap();
         assert!(!std::str::from_utf8(&output).unwrap().contains("0123456789"));
-        let value: Value = serde_json::from_slice(&output).unwrap();
+        let value = transformed_item(&output);
         assert_eq!(value["_codexNativeOutput"]["bytes"], 10);
         assert_eq!(value["_codexNativeOutput"]["storedBytes"], 4);
         assert_eq!(value["_codexNativeOutput"]["truncated"], true);
@@ -923,10 +1083,11 @@ mod tests {
     fn rejects_malformed_truncated_junk_and_missing_newline() {
         let fixture = Fixture::new(1024, 4096);
         for invalid in [
-            br#"{"aggregatedOutput":"unterminated"#.as_slice(),
+            br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"unterminated"#.as_slice(),
             b"not-json\n",
             b"{}{}\n",
-            b"{\"aggregatedOutput\":\"\\ud83d\"}\n",
+            br#"{"id":1,"result":{"data":[{"item":{"type":"commandExecution","aggregatedOutput":"\ud83d"}}]}}
+"#,
         ] {
             assert!(fixture.transform(invalid, 2).is_err());
             assert_eq!(fixture.store.stored_bytes(), 0);

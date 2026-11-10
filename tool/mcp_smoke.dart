@@ -152,11 +152,19 @@ tool_timeout_sec = 8
       );
     }
     final echo = await call(withoutApprovals.id, 'deterministic');
+    final structured = jsonDecode(echo.structuredContentPreview ?? 'null');
+    final nested = structured is Map<String, Object?>
+        ? structured['nested']
+        : null;
     _check(
       !echo.isError &&
           echo.content.single.text == 'echo: deterministic' &&
-          echo.structuredContentPreview?.contains('deterministic') == true,
-      'Unexpected MCP tool result.',
+          structured is Map<String, Object?> &&
+          structured['result'] == 'deterministic' &&
+          nested is Map<String, Object?> &&
+          nested.length == 1 &&
+          nested['aggregatedOutput'] == 'synthetic MCP result',
+      'Unexpected or transformed MCP tool result.',
     );
     final declined = await call(withoutApprovals.id, 'needs-form');
     _check(
