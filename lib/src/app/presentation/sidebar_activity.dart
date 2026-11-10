@@ -184,24 +184,23 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 8, 8, 2),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          controller.showArchived
-                              ? 'Archived'
-                              : widget.hasNavigationRail
-                              ? 'Projects'
-                              : 'Threads',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: palette.textMuted,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.1,
-                              ),
-                        ),
+                  child: _ThreadCatalogHeader(
+                    revealActions:
+                        widget.hasNavigationRail && !controller.showArchived,
+                    title: Text(
+                      controller.showArchived
+                          ? 'Archived'
+                          : widget.hasNavigationRail
+                          ? 'Projects'
+                          : 'Threads',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: palette.textMuted,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.1,
                       ),
+                    ),
+                    actions: [
                       if (!controller.showArchived &&
                           controller.supportsThreadSections)
                         CodexIconButton(
@@ -1086,6 +1085,56 @@ typedef _GoalDialogResult = ({
   ThreadGoalStatus? status,
   bool clear,
 });
+
+class _ThreadCatalogHeader extends StatefulWidget {
+  const _ThreadCatalogHeader({
+    required this.revealActions,
+    required this.title,
+    required this.actions,
+  });
+
+  final bool revealActions;
+  final Widget title;
+  final List<Widget> actions;
+
+  @override
+  State<_ThreadCatalogHeader> createState() => _ThreadCatalogHeaderState();
+}
+
+class _ThreadCatalogHeaderState extends State<_ThreadCatalogHeader> {
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: widget.actions,
+    );
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        canRequestFocus: false,
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        child: Row(
+          children: [
+            Expanded(child: widget.title),
+            if (widget.revealActions)
+              Opacity(
+                key: const ValueKey('desktop-project-header-actions'),
+                opacity: _hovered || _focused ? 1 : 0,
+                alwaysIncludeSemantics: true,
+                child: actions,
+              )
+            else
+              actions,
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _ThreadGoalDialog extends StatefulWidget {
   const _ThreadGoalDialog({required this.goal});

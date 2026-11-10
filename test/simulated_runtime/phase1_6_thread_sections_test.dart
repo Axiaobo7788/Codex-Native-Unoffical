@@ -1,5 +1,6 @@
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +25,35 @@ void main() {
         ordered: [saved],
       )..threadSections.add(pinned);
       await pumpSimulatedRuntimeApp(tester, harness: harness);
+
+      final headerActions = find.byKey(
+        const ValueKey('desktop-project-header-actions'),
+      );
+      final actionsRect = tester.getRect(headerActions);
+      expect(tester.widget<Opacity>(headerActions).opacity, 0);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(find.text('Projects')));
+      await tester.pump();
+      expect(tester.widget<Opacity>(headerActions).opacity, 1);
+      expect(tester.getRect(headerActions), actionsRect);
+      await mouse.removePointer();
+      await tester.pump();
+      expect(tester.widget<Opacity>(headerActions).opacity, 0);
+      final archive = find.byKey(const ValueKey('thread-archive-toggle'));
+      final archiveFocus = Focus.of(
+        tester.element(
+          find
+              .descendant(of: archive, matching: find.byType(GestureDetector))
+              .last,
+        ),
+      );
+      archiveFocus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(archiveFocus.hasFocus, isTrue);
+      expect(tester.widget<Opacity>(headerActions).opacity, 1);
+      archiveFocus.unfocus();
+      await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(headerActions).opacity, 0);
 
       expect(
         find.byKey(const ValueKey('pinned-threads-heading')),
