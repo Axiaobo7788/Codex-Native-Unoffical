@@ -76,13 +76,18 @@ void main() {
         final pageFinder = find.byKey(const ValueKey('app-shell-page-surface'));
         final page = tester.getRect(pageFinder);
         expect(rail.left, titlebarRect.left);
-        expect(rail.top, titlebarRect.bottom);
+        expect(
+          rail.top,
+          titlebarRect.bottom + OfficialCodexTheme.shellPageTopInset,
+        );
         expect(rail.width, OfficialCodexTheme.navigationRailWidth);
         expect(page.top, rail.top);
         expect(page.left, rail.right);
         expect(page.right, titlebarRect.right);
+        final pageDecoration =
+            tester.widget<Container>(pageFinder).decoration as BoxDecoration;
         expect(
-          tester.widget<ClipRRect>(pageFinder).borderRadius,
+          pageDecoration.borderRadius,
           BorderRadius.circular(OfficialCodexTheme.mainSurfaceRadius),
         );
 
@@ -102,6 +107,12 @@ void main() {
         );
         expect(find.text('New chat'), findsOneWidget);
         expect(find.text('Projects'), findsOneWidget);
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('codex-sidebar-header')))
+              .height,
+          OfficialCodexTheme.contextualSidebarHeaderHeight,
+        );
         expect(
           find.descendant(
             of: find.byKey(const ValueKey('codex-sidebar-header')),

@@ -69,6 +69,13 @@ abstract final class OfficialCodexTheme {
   static const double sidebarWidth =
       desktopLeftPanelWidth - navigationRailWidth;
   static const double shellToolbarHeight = 36.0;
+  static const double shellPageTopInset = 8.0;
+  static const double contextualSidebarHeaderHeight = 52.0;
+  static const BoxShadow shellPageShadow = BoxShadow(
+    color: Color(0x0D000000),
+    offset: Offset(0, 4),
+    blurRadius: 16,
+  );
 
   /// Sidebar resize boundaries.
   static const double sidebarMinWidth = 240.0;

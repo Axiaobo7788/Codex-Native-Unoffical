@@ -221,84 +221,86 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
         child: Column(
           children: [
             _applicationToolbar(),
+            const SizedBox(height: OfficialCodexTheme.shellPageTopInset),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _navigationRail(),
                   Expanded(
-                    child: ClipRRect(
+                    child: Container(
                       key: const ValueKey('app-shell-page-surface'),
-                      borderRadius: BorderRadius.circular(
-                        OfficialCodexTheme.mainSurfaceRadius,
-                      ),
-                      child: ColoredBox(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
                         color: theme.workspaceBackground,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Offstage(
-                              offstage: _sidebarCollapsed,
-                              child: TickerMode(
-                                enabled: !_sidebarCollapsed,
-                                child: ExcludeFocus(
-                                  excluding: _sidebarCollapsed,
-                                  child: DecoratedBox(
-                                    position: DecorationPosition.foreground,
-                                    decoration: BoxDecoration(
-                                      border: BorderDirectional(
-                                        end: BorderSide(
-                                          color: theme.hairlineBorder,
-                                          width: OfficialCodexTheme
-                                              .hairlineBorderWidth,
-                                        ),
+                        borderRadius: BorderRadius.circular(
+                          OfficialCodexTheme.mainSurfaceRadius,
+                        ),
+                        boxShadow: const [OfficialCodexTheme.shellPageShadow],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Offstage(
+                            offstage: _sidebarCollapsed,
+                            child: TickerMode(
+                              enabled: !_sidebarCollapsed,
+                              child: ExcludeFocus(
+                                excluding: _sidebarCollapsed,
+                                child: DecoratedBox(
+                                  position: DecorationPosition.foreground,
+                                  decoration: BoxDecoration(
+                                    border: BorderDirectional(
+                                      end: BorderSide(
+                                        color: theme.hairlineBorder,
+                                        width: OfficialCodexTheme
+                                            .hairlineBorderWidth,
                                       ),
                                     ),
-                                    child: SizedBox(
-                                      key: const ValueKey('app_shell_sidebar'),
-                                      width: OfficialCodexTheme.sidebarWidth,
-                                      child: _ThreadPanel(
-                                        key: _threadPanelKey,
-                                        controller: widget.threadController,
-                                        settingsController:
-                                            widget.settingsController,
-                                        runtimeController:
-                                            widget.runtimeController,
-                                        userInputController:
-                                            widget.userInputController,
-                                        defaultWorkingDirectory:
-                                            widget.defaultWorkingDirectory,
-                                        hasNavigationRail: true,
-                                      ),
+                                  ),
+                                  child: SizedBox(
+                                    key: const ValueKey('app_shell_sidebar'),
+                                    width: OfficialCodexTheme.sidebarWidth,
+                                    child: _ThreadPanel(
+                                      key: _threadPanelKey,
+                                      controller: widget.threadController,
+                                      settingsController:
+                                          widget.settingsController,
+                                      runtimeController:
+                                          widget.runtimeController,
+                                      userInputController:
+                                          widget.userInputController,
+                                      defaultWorkingDirectory:
+                                          widget.defaultWorkingDirectory,
+                                      hasNavigationRail: true,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                            Expanded(
-                              child: KeyedSubtree(
-                                key: const ValueKey('app-shell-workspace'),
-                                child: _ConversationPanel(
-                                  key: widget.conversationKey,
-                                  controller: widget.conversationController,
-                                  threadController: widget.threadController,
-                                  historyController: widget.historyController,
-                                  approvalController: widget.approvalController,
-                                  userInputController:
-                                      widget.userInputController,
-                                  settingsController: widget.settingsController,
-                                  diffController: widget.diffController,
-                                  outputGateway: widget.runtimeController,
-                                  transportCapabilities:
-                                      widget.runtimeController.capabilities,
-                                  defaultWorkingDirectory:
-                                      widget.defaultWorkingDirectory,
-                                  hasDesktopShell: true,
-                                ),
+                          ),
+                          Expanded(
+                            child: KeyedSubtree(
+                              key: const ValueKey('app-shell-workspace'),
+                              child: _ConversationPanel(
+                                key: widget.conversationKey,
+                                controller: widget.conversationController,
+                                threadController: widget.threadController,
+                                historyController: widget.historyController,
+                                approvalController: widget.approvalController,
+                                userInputController: widget.userInputController,
+                                settingsController: widget.settingsController,
+                                diffController: widget.diffController,
+                                outputGateway: widget.runtimeController,
+                                transportCapabilities:
+                                    widget.runtimeController.capabilities,
+                                defaultWorkingDirectory:
+                                    widget.defaultWorkingDirectory,
+                                hasDesktopShell: true,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

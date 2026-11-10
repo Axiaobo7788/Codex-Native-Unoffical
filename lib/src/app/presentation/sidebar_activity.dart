@@ -413,7 +413,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     final theme = OfficialCodexTheme.of(context);
     return Container(
       key: const ValueKey('codex-sidebar-header'),
-      height: OfficialCodexTheme.titlebarHeight,
+      height: widget.hasNavigationRail
+          ? OfficialCodexTheme.contextualSidebarHeaderHeight
+          : OfficialCodexTheme.titlebarHeight,
       padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
       child: Row(
         children: [
