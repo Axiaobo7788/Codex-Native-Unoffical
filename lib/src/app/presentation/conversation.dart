@@ -6342,7 +6342,28 @@ class _ReasoningEntryView extends StatelessWidget {
     final raw = inline && entry.text.startsWith('Reasoning: ')
         ? entry.text.substring('Reasoning: '.length).trim()
         : entry.text.trim();
-    final summary = raw.isEmpty || raw == 'Reasoning'
+    final hasSummary = raw.isNotEmpty && raw != 'Reasoning';
+    final textTheme = Theme.of(context).textTheme;
+    final summaryStyle = textTheme.bodySmall?.copyWith(
+      color: palette.textSecondary,
+      height: 1.4,
+    );
+    if (inline && !entry.completed) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: ThemeTokens.space2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Thinking',
+              style: textTheme.bodyMedium?.copyWith(color: palette.textMuted),
+            ),
+            if (hasSummary) SelectableText(raw, style: summaryStyle),
+          ],
+        ),
+      );
+    }
+    final summary = !hasSummary
         ? (entry.completed ? 'Thought' : 'Thinking…')
         : raw;
     return Padding(
@@ -6361,13 +6382,7 @@ class _ReasoningEntryView extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          Expanded(
-            child: SelectableText(
-              summary,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: palette.textSecondary, height: 1.4),
-            ),
-          ),
+          Expanded(child: SelectableText(summary, style: summaryStyle)),
         ],
       ),
     );

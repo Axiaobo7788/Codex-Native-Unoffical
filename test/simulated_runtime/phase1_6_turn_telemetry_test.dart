@@ -41,7 +41,6 @@ void main() {
         await tester.tap(find.text('Telemetry Test Thread'));
         await tester.pumpAndSettle();
 
-        // Emit live turn plan, token usage, reasoning summary delta, MCP progress, hook lifecycle, model reroute, and warning
         harness.telemetryEvents
           ..add(
             const TurnStartedEvent(
@@ -49,6 +48,22 @@ void main() {
               turnId: 'turn-live-1',
             ),
           )
+          ..add(
+            const ActivityEvent(
+              threadId: 'active-thread',
+              turnId: 'turn-live-1',
+              itemId: 'reason-item-1',
+              summary: 'Reasoning',
+              status: 'inProgress',
+              completed: false,
+            ),
+          );
+        await tester.pump();
+        expect(find.text('Thinking'), findsOneWidget);
+        expect(find.text('Reasoning'), findsNothing);
+
+        // Emit live turn plan, token usage, reasoning summary delta, MCP progress, hook lifecycle, model reroute, and warning
+        harness.telemetryEvents
           ..add(
             TurnPlanUpdatedEvent(
               plan: const TurnPlanSnapshot(
@@ -161,6 +176,7 @@ void main() {
           );
 
         await tester.pumpAndSettle();
+        expect(find.text('Thinking'), findsNothing);
 
         final usage = find.byKey(const ValueKey('composer-context-usage'));
         expect(
