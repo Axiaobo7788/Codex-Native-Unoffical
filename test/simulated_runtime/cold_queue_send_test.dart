@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:flutter/widgets.dart';
@@ -126,10 +127,22 @@ void main() {
       expect(find.text('Draft next to running work'), findsOneWidget);
       final running = find.byKey(const ValueKey('thread-running-cold'));
       final menu = find.byKey(const ValueKey('thread-menu-cold'));
+      final row = find.byKey(const ValueKey('thread-row-cold'));
       expect(
         tester.getRect(running).left,
-        greaterThan(tester.getRect(menu).right),
+        greaterThan(tester.getCenter(row).dx),
       );
+      expect(menu, findsNothing);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(row));
+      addTearDown(mouse.removePointer);
+      await tester.pump();
+      expect(running, findsNothing);
+      expect(menu, findsOneWidget);
+      await mouse.moveTo(tester.getCenter(_composer));
+      await tester.pump();
+      expect(running, findsOneWidget);
+      expect(menu, findsNothing);
       expect(
         find.textContaining('The resumed thread is already running'),
         findsOneWidget,

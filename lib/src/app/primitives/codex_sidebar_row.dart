@@ -15,6 +15,7 @@ class CodexSidebarRow extends StatefulWidget {
     this.leading,
     this.trailing,
     this.trailingBuilder,
+    this.revealTrailingOnFocus = false,
     this.selected = false,
     this.onTap,
     this.onLongPress,
@@ -29,6 +30,7 @@ class CodexSidebarRow extends StatefulWidget {
   final Widget? leading;
   final Widget? trailing;
   final Widget Function(BuildContext context, bool isHovered)? trailingBuilder;
+  final bool revealTrailingOnFocus;
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -107,7 +109,11 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
             ),
             () {
               final trailing = widget.trailingBuilder != null
-                  ? widget.trailingBuilder!(context, _isHovered)
+                  ? widget.trailingBuilder!(
+                      context,
+                      _isHovered ||
+                          (widget.revealTrailingOnFocus && _isFocused),
+                    )
                   : widget.trailing;
               if (trailing != null) {
                 return Row(

@@ -1821,7 +1821,7 @@ class _ThreadRowState extends State<_ThreadRow> {
     final runningIndicator = showRunning
         ? SizedBox.square(
             key: ValueKey('thread-running-${thread.id}'),
-            dimension: 14,
+            dimension: 16,
             child: CircularProgressIndicator(
               strokeWidth: 1.7,
               color: palette.textMuted,
@@ -1847,6 +1847,7 @@ class _ThreadRowState extends State<_ThreadRow> {
           : '${thread.displayTitle}\nGit · $gitReference',
       selected: widget.selected,
       onTap: widget.enabled ? widget.onSelect : null,
+      revealTrailingOnFocus: showRunning,
       padding: EdgeInsets.only(left: leadingColor != null ? 8 : 10, right: 8),
       leading: leadingColor != null
           ? Semantics(
@@ -1863,7 +1864,9 @@ class _ThreadRowState extends State<_ThreadRow> {
             )
           : null,
       trailingBuilder: (context, isHovered) {
-        if (isHovered || _menuController.isOpen || widget.selected) {
+        if (isHovered ||
+            _menuController.isOpen ||
+            (widget.selected && !showRunning)) {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1992,10 +1995,6 @@ class _ThreadRowState extends State<_ThreadRow> {
                   icon: const Icon(Icons.more_horiz_rounded, size: 15),
                 ),
               ),
-              if (runningIndicator != null) ...[
-                const SizedBox(width: 6),
-                runningIndicator,
-              ],
             ],
           );
         }
