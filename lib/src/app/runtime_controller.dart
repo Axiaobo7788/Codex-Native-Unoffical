@@ -812,6 +812,16 @@ class RuntimeController extends ChangeNotifier
   }
 
   @override
+  Future<ModelProviderInventorySnapshot> listModelProviders() {
+    if (_usesRemote) {
+      throw UnsupportedError(
+        'Model provider inventory is unavailable on read-only Remote.',
+      );
+    }
+    return _connectedTransport().listModelProviders();
+  }
+
+  @override
   Future<HooksDiagnosticsSnapshot> listHooks({
     List<String> cwds = const [],
     String? threadId,

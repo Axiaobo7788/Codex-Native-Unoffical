@@ -343,6 +343,9 @@ class SimulatedRuntimeHarness extends RuntimeController {
         imageGeneration: true,
         webSearch: true,
       );
+  ModelProviderInventorySnapshot modelProviderInventory =
+      const ModelProviderInventorySnapshot.unsupported();
+  Object? modelProviderInventoryError;
   HooksDiagnosticsSnapshot hooksDiagnostics = HooksDiagnosticsSnapshot(
     entries: [
       WorkspaceHooksEntrySummary(
@@ -378,6 +381,7 @@ class SimulatedRuntimeHarness extends RuntimeController {
   var configReadCount = 0;
   var configRequirementsReadCount = 0;
   var providerCapabilitiesReadCount = 0;
+  var providerInventoryReadCount = 0;
   var hooksListCount = 0;
   OfficialRemoteControlStatus officialRemoteStatus =
       const OfficialRemoteControlStatus(
@@ -1328,6 +1332,20 @@ class SimulatedRuntimeHarness extends RuntimeController {
     }
     providerCapabilitiesReadCount++;
     return modelProviderCapabilities;
+  }
+
+  @override
+  Future<ModelProviderInventorySnapshot> listModelProviders() async {
+    if (!supportsRuntimeDiagnostics) {
+      throw UnsupportedError(
+        'Model provider inventory is unavailable on read-only Remote.',
+      );
+    }
+    providerInventoryReadCount++;
+    if (modelProviderInventoryError case final error?) {
+      throw error;
+    }
+    return modelProviderInventory;
   }
 
   @override

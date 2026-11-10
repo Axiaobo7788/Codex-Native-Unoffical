@@ -7,6 +7,7 @@ const maxHooksPerWorkspace = 64;
 const maxTotalDiagnosticsHooks = 64;
 const maxHookDiagnosticsPerWorkspace = 16;
 const maxRateLimitBuckets = 8;
+const maxModelProviders = 32;
 const maxDiagnosticsAllowedItems = 16;
 const maxDiagnosticsIdentifierLength = 256;
 const maxDiagnosticsLabelLength = 256;
@@ -345,6 +346,39 @@ final class ModelProviderCapabilitiesSnapshot {
 
   final bool imageGeneration;
   final bool webSearch;
+}
+
+enum ModelProviderKind { openai, customGateway, bedrock, gcp, other }
+
+@immutable
+final class ModelProviderInventoryEntry {
+  const ModelProviderInventoryEntry({
+    required this.name,
+    required this.kind,
+    required this.isDefault,
+  });
+
+  final String name;
+  final ModelProviderKind kind;
+  final bool isDefault;
+}
+
+@immutable
+final class ModelProviderInventorySnapshot {
+  ModelProviderInventorySnapshot({
+    required Iterable<ModelProviderInventoryEntry> providers,
+    required this.reportedCount,
+  }) : isSupported = true,
+       providers = List.unmodifiable(providers.take(maxModelProviders));
+
+  const ModelProviderInventorySnapshot.unsupported()
+    : isSupported = false,
+      providers = const [],
+      reportedCount = 0;
+
+  final bool isSupported;
+  final List<ModelProviderInventoryEntry> providers;
+  final int reportedCount;
 }
 
 @immutable

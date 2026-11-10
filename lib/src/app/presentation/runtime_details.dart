@@ -27,6 +27,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
   ConfigDiagnosticsSnapshot? _config;
   ConfigRequirementsSummaryModel? _configRequirements;
   ModelProviderCapabilitiesSnapshot? _providerCapabilities;
+  ModelProviderInventorySnapshot? _providerInventory;
   HooksDiagnosticsSnapshot? _hooks;
 
   String? get _errorMessage {
@@ -52,6 +53,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       _config != null ||
       _configRequirements != null ||
       _providerCapabilities != null ||
+      _providerInventory != null ||
       _hooks != null;
 
   @override
@@ -173,6 +175,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       _config = null;
       _configRequirements = null;
       _providerCapabilities = null;
+      _providerInventory = null;
       _hooks = null;
     });
   }
@@ -291,6 +294,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
         () => widget.controller.readModelProviderCapabilities(),
       ),
       safeLoad('Hooks', () => widget.controller.listHooks()),
+      safeLoad('Model providers', () => widget.controller.listModelProviders()),
     ]);
 
     if (!mounted ||
@@ -306,6 +310,7 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
     final nextRequirements = results[4] as ConfigRequirementsSummaryModel?;
     final nextCapabilities = results[5] as ModelProviderCapabilitiesSnapshot?;
     final nextHooks = results[6] as HooksDiagnosticsSnapshot?;
+    final nextProviders = results[7] as ModelProviderInventorySnapshot?;
 
     setState(() {
       if (accountGeneration == _accountRefreshGeneration) {
@@ -347,6 +352,13 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
       _setSectionError(
         'Provider capabilities',
         sectionFailures['Provider capabilities'],
+      );
+      _providerInventory = nextProviders;
+      _setSectionError(
+        'Model providers',
+        sectionFailures['Model providers'] == null
+            ? null
+            : 'Could not read the provider inventory.',
       );
       _setSectionError('Hooks', sectionFailures['Hooks']);
       _loading = false;
@@ -532,6 +544,14 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
                     ],
                   ),
                 ],
+                if (_providerInventory case final inventory?) ...[
+                  const SizedBox(height: ThemeTokens.space3),
+                  _DiagnosticsCard(
+                    key: const ValueKey('runtime-diagnostics-providers-card'),
+                    title: 'Model providers',
+                    children: _buildProviderInventory(inventory),
+                  ),
+                ],
                 if (_hooks case final hooks?) ...[
                   const SizedBox(height: ThemeTokens.space3),
                   _DiagnosticsCard(
@@ -553,6 +573,45 @@ class _RuntimeDetailsDialogState extends State<_RuntimeDetailsDialog> {
         ),
       ],
     );
+  }
+
+  List<Widget> _buildProviderInventory(
+    ModelProviderInventorySnapshot inventory,
+  ) {
+    if (!inventory.isSupported) {
+      return [const Text('Unavailable on this runtime version.')];
+    }
+    if (inventory.providers.isEmpty) {
+      return [const Text('No providers returned.')];
+    }
+    return [
+      if (inventory.reportedCount > inventory.providers.length) ...[
+        Text(
+          'Showing ${inventory.providers.length} of ${inventory.reportedCount} providers.',
+        ),
+        const SizedBox(height: ThemeTokens.space2),
+      ],
+      for (final provider in inventory.providers)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ThemeTokens.space2),
+          child: _Detail(
+            label: switch (provider.kind) {
+              ModelProviderKind.openai => 'OpenAI',
+              ModelProviderKind.customGateway => 'Custom gateway',
+              ModelProviderKind.bedrock => 'Amazon Bedrock',
+              ModelProviderKind.gcp => 'Google Cloud',
+              ModelProviderKind.other => 'Provider',
+            },
+            value: provider.isDefault
+                ? '${provider.name} · Default'
+                : provider.name,
+          ),
+        ),
+      if (!inventory.providers.any((provider) => provider.isDefault))
+        const Text(
+          'The configured default is outside the displayed inventory.',
+        ),
+    ];
   }
 
   List<Widget> _buildAccountDetails(AccountDiagnosticsSnapshot account) {

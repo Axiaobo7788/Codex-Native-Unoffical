@@ -438,6 +438,129 @@ void main() {
       expect(calls.last.params, {'threadId': 'thread-loaded-1'});
     });
 
+    test(
+      'projects only bounded provider names, kinds, and exact default',
+      () async {
+        final longNamePrefix = 'x' * (maxDiagnosticsLabelLength - 1);
+        final adapter = RuntimeDiagnosticsProtocolAdapter(
+          request: (method, [params = const {}]) async {
+            expect(method, 'modelProvider/list');
+            expect(params, isEmpty);
+            return {
+              'defaultProviderId': 'gateway',
+              'canChangeDefault': true,
+              'data': [
+                {
+                  'id': 'gateway',
+                  'name': ' Synthetic\u202E\nGateway ',
+                  'canEdit': true,
+                  'baseUrl': 'https://private-provider.invalid/',
+                  'settings': {
+                    'type': 'customGateway',
+                    'auth': {
+                      'mode': 'future-auth',
+                      'envKey': 'PRIVATE_FIXTURE_ENV_IDENTIFIER',
+                    },
+                  },
+                },
+                {
+                  'id': 'gateway ',
+                  'name': '\u2066\u0000',
+                  'settings': {
+                    'type': 'gcp',
+                    'projectId': 'private-fixture-project',
+                    'credentialFile': '/tmp/provider-private-fixture',
+                  },
+                },
+                {
+                  'id': 'next',
+                  'name': '$longNamePrefix🧪',
+                  'settings': {'type': 'future-provider'},
+                },
+                for (var i = 3; i < maxModelProviders; i++)
+                  {
+                    'id': 'provider-$i',
+                    'name': 'Provider $i',
+                    'settings': {'type': 'openai'},
+                  },
+                // Rows beyond the cap must not be parsed.
+                null,
+              ],
+            };
+          },
+        );
+
+        final inventory = await adapter.listModelProviders();
+        expect(inventory.isSupported, isTrue);
+        expect(inventory.reportedCount, maxModelProviders + 1);
+        expect(inventory.providers, hasLength(maxModelProviders));
+        expect(inventory.providers.take(3).map((provider) => provider.name), [
+          'Synthetic Gateway',
+          'Unnamed provider',
+          longNamePrefix,
+        ]);
+        expect(inventory.providers.take(3).map((provider) => provider.kind), [
+          ModelProviderKind.customGateway,
+          ModelProviderKind.gcp,
+          ModelProviderKind.other,
+        ]);
+        expect(inventory.providers.where((provider) => provider.isDefault), [
+          inventory.providers.first,
+        ]);
+      },
+    );
+
+    test(
+      'only exact method absence makes provider inventory unsupported',
+      () async {
+        var error = const JsonRpcException(
+          code: -32601,
+          message: 'Method not found',
+        );
+        final adapter = RuntimeDiagnosticsProtocolAdapter(
+          request: (_, [params = const {}]) async => throw error,
+        );
+
+        expect((await adapter.listModelProviders()).isSupported, isFalse);
+
+        error = const JsonRpcException(
+          code: -32600,
+          message: 'Invalid request: unknown variant `modelProvider/list`, expected one of ...',
+        );
+        expect((await adapter.listModelProviders()).isSupported, isFalse);
+
+        for (final message in [
+          'Invalid request: unsupported configuration',
+          'Invalid request: unknown variant `modelProvider/listOther`',
+        ]) {
+          error = JsonRpcException(code: -32600, message: message);
+          await expectLater(adapter.listModelProviders(), throwsA(same(error)));
+        }
+      },
+    );
+
+    test(
+      'malformed provider inventory response remains a protocol failure',
+      () async {
+        final adapter = RuntimeDiagnosticsProtocolAdapter(
+          request: (_, [params = const {}]) async => {
+            'data': [
+              {
+                'id': 'test',
+                'name': 'Test',
+                'settings': {'type': null},
+              },
+            ],
+            'defaultProviderId': 'test',
+          },
+        );
+        await expectLater(
+          adapter.listModelProviders(),
+          throwsA(isA<ProtocolViolation>()),
+        );
+      },
+    );
+
     test('emits typed events for account/updated and account/rateLimits/updated notifications', () async {
       final notifications = StreamController<CodexNotification>.broadcast();
       addTearDown(notifications.close);
@@ -497,6 +620,7 @@ void main() {
         () => controller.readModelProviderCapabilities(),
         throwsUnsupportedError,
       );
+      expect(() => controller.listModelProviders(), throwsUnsupportedError);
       expect(() => controller.listHooks(), throwsUnsupportedError);
     });
   });

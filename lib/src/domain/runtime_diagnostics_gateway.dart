@@ -34,6 +34,8 @@ abstract interface class RuntimeDiagnosticsGateway {
 
   Future<ModelProviderCapabilitiesSnapshot> readModelProviderCapabilities();
 
+  Future<ModelProviderInventorySnapshot> listModelProviders();
+
   Future<HooksDiagnosticsSnapshot> listHooks({
     List<String> cwds = const [],
     String? threadId,
