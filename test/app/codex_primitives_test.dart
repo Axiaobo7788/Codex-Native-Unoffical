@@ -10,6 +10,7 @@ import 'package:codex_native_unofficial/src/app/primitives/codex_tooltip.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -186,6 +187,60 @@ void main() {
   });
 
   group('CodexPopover and CodexMenu', () {
+    testWidgets('menu arrow keys skip disabled items and wrap focus', (
+      tester,
+    ) async {
+      final controller = CodexPopoverController();
+      addTearDown(controller.dispose);
+      final chosen = <String>[];
+
+      await tester.pumpWidget(
+        wrap(
+          CodexPopoverAnchor(
+            controller: controller,
+            popoverBuilder: (context, close) => CodexMenu<String>(
+              items: const [
+                CodexMenuItem(value: 'first', label: 'First'),
+                CodexMenuItem(
+                  value: 'disabled',
+                  label: 'Disabled',
+                  disabled: true,
+                ),
+                CodexMenuItem(value: 'last', label: 'Last'),
+              ],
+              onSelected: (value) {
+                chosen.add(value);
+                close();
+              },
+            ),
+            child: CodexButton(
+              label: 'Open menu',
+              onPressed: controller.toggle,
+            ),
+          ),
+        ),
+      );
+
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      await tester.tap(find.text('Open menu'));
+      await tester.pumpAndSettle();
+      await press(LogicalKeyboardKey.arrowDown);
+      await press(LogicalKeyboardKey.arrowDown);
+      await press(LogicalKeyboardKey.enter);
+      expect(chosen, ['last']);
+
+      await tester.tap(find.text('Open menu'));
+      await tester.pumpAndSettle();
+      await press(LogicalKeyboardKey.arrowUp);
+      await press(LogicalKeyboardKey.arrowDown);
+      await press(LogicalKeyboardKey.enter);
+      expect(chosen, ['last', 'first']);
+    });
+
     testWidgets('opens and selects an item from menu', (tester) async {
       final controller = CodexPopoverController();
       String? chosen;
