@@ -663,6 +663,62 @@ void main() {
       },
     );
 
+    testWidgets('keeps turn MCP form actions reachable in a short window', (
+      tester,
+    ) async {
+      final harness = SimulatedRuntimeHarness(
+        initialThreads: [
+          createTestThread(id: 'thread-mcp', preview: 'MCP form test'),
+        ],
+      );
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(820, 420),
+      );
+      await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
+      await tester.pumpAndSettle();
+
+      harness.emitMcpElicitation(
+        McpElicitationRequest(
+          requestId: 'elicitation-short',
+          serverName: 'filesystem-mcp',
+          threadId: 'thread-mcp',
+          message: 'Choose parameters for the disposable fixture.',
+          mode: McpElicitationMode.form,
+          fields: [
+            for (var i = 1; i <= 9; i++)
+              McpElicitationField(
+                id: 'option-$i',
+                title: 'Option $i',
+                description: 'A disposable fixture value.',
+                kind: McpElicitationFieldKind.string,
+                required: false,
+              ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final decline = find.byKey(const ValueKey('mcp-elicitation-decline'));
+      expect(tester.getBottomLeft(decline).dy, lessThan(420));
+      final body = find.byKey(const ValueKey('mcp-elicitation-scroll'));
+      await tester.drag(body, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(
+            find.descendant(of: body, matching: find.byType(Scrollable)).first,
+          )
+          .position;
+      expect(position.pixels, greaterThan(0));
+      await tester.tap(decline);
+      await tester.pumpAndSettle();
+      expect(
+        harness.mcpElicitationResponses.single.action,
+        McpElicitationAction.decline,
+      );
+    });
+
     testWidgets('keeps non-finite MCP number elicitation values unsubmitable', (
       tester,
     ) async {

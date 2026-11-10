@@ -123,6 +123,7 @@ class _McpElicitationCardState extends State<_McpElicitationCard> {
     final palette = ThemeTokens.of(context);
     final submitting = widget.controller.isSubmitting(widget.request.requestId);
     return Center(
+      heightFactor: 1,
       child: Container(
         key: const ValueKey('mcp-elicitation-card'),
         constraints: const BoxConstraints(
@@ -160,38 +161,45 @@ class _McpElicitationCardState extends State<_McpElicitationCard> {
               ],
             ),
             const SizedBox(height: ThemeTokens.space2),
-            Text(
-              widget.request.message,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: ThemeTokens.space2),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: widget.maxFieldsHeight),
-              child: SingleChildScrollView(
-                key: const ValueKey('mcp-elicitation-scroll'),
-                child: switch (widget.request.mode) {
-                  McpElicitationMode.form => Column(
+            Flexible(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: widget.maxFieldsHeight),
+                child: SingleChildScrollView(
+                  key: const ValueKey('mcp-elicitation-scroll'),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final field in widget.request.fields)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: ThemeTokens.space3,
-                          ),
-                          child: _buildField(field, submitting),
+                      Text(
+                        widget.request.message,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: ThemeTokens.space2),
+                      switch (widget.request.mode) {
+                        McpElicitationMode.form => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final field in widget.request.fields)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: ThemeTokens.space3,
+                                ),
+                                child: _buildField(field, submitting),
+                              ),
+                          ],
                         ),
+                        McpElicitationMode.url => _buildUrlPrompt(submitting),
+                        McpElicitationMode.openaiForm => _InlineNotice(
+                          icon: Icons.info_outline_rounded,
+                          color: palette.textSecondary,
+                          text:
+                              'This request uses an OpenAI-hosted form renderer that '
+                              'is not embedded in this unofficial native client. You '
+                              'can safely decline or cancel it.',
+                        ),
+                      },
                     ],
                   ),
-                  McpElicitationMode.url => _buildUrlPrompt(submitting),
-                  McpElicitationMode.openaiForm => _InlineNotice(
-                    icon: Icons.info_outline_rounded,
-                    color: palette.textSecondary,
-                    text:
-                        'This request uses an OpenAI-hosted form renderer that '
-                        'is not embedded in this unofficial native client. You '
-                        'can safely decline or cancel it.',
-                  ),
-                },
+                ),
               ),
             ),
             if (widget.errorMessage case final error?) ...[
