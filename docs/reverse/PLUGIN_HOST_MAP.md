@@ -1,8 +1,9 @@
 # ChatGPT Desktop Plugin, Skill, MCP & Skybridge Host Map (Recalibrated)
 
 > **Evidence Sources**:
-> - `STATIC_BUNDLE`: `/opt/codex-desktop/resources/plugins/openai-bundled/` (`marketplace.json`, 17 `.codex-plugin/plugin.json` manifests, `.mcp.json` configs, and 33 `SKILL.md` files) inspected via `python3 tools/reverse/inspect_chatgpt_desktop.py --plugins`, plus `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (`@2193000..2201500`) and `webview/assets/async/182735.d3d917f28d.js`.
-> - `PUBLIC_SOURCE`: Stock `/opt/codex-desktop/resources/codex app-server generate-json-schema` (`0.167.0-alpha.3.2`) for `plugin/*`, `skills/*`, `mcpServer/*`, and `apps/*` RPCs.
+> - `STATIC_BUNDLE`: The original bundle sample covered `/opt/codex-desktop/resources/plugins/openai-bundled/` (`marketplace.json`, 17 `.codex-plugin/plugin.json` manifests, `.mcp.json` configs, and 33 `SKILL.md` files), plus `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (`@2193000..2201500`) and `webview/assets/async/182735.d3d917f28d.js`.
+> - `LOCAL_SCHEMA`: Stock `0.167.0-alpha.3.2` generated schema for `plugin/*`, `skills/*`, `mcpServer/*`, and `app/*` RPCs.
+> - Current catalog and installed-path re-audit. [F30B plugin catalog evidence](PLUGIN_CATALOG_TRUTH_EVIDENCE.md)
 
 ---
 
@@ -68,5 +69,6 @@ When an MCP tool returns a resource URI with scheme `ui://`, the protocol bounda
      - `openai/requestModal` & `openai/requestClose`
      - `openai/openExternal` (`ui/open-link`)
 - **Policy & Reclassification for `Codex-Native-Unoffical`**:
-  - Layer A (`mcpServer/resource/read`, `mcpServer/tool/call`, `mcpServer/elicitation/request`, plus `app/list`, `app/installed`, `app/read` and `config/mcpServer/reload`) is `PUBLIC_SUPPORTED` stable schema in `0.167.0-alpha.3.2`. Because Native `HEAD` currently implements only `mcpServerStatus/list`, `plugin/list`, `skills/list`, and `skills/config/write`, these independent stable protocol surfaces are classified as `MISSING` / `PARTIAL` and queued in the active `READY` backlog (`OFFICIAL_FEATURE_MATRIX.md` §3.1).
+  - Native implements the Layer A MCP resource, tool, reload, and standard elicitation paths. The local ecosystem surface also implements stock Apps list, installed snapshot, and detail reads, plugin catalog and detail reads with install/uninstall, and Skills list and enablement. The feature matrix tracks coverage and evidence for each path. [Current ecosystem matrix](OFFICIAL_FEATURE_MATRIX.md#26-plugins-skills--mcp-ecosystem)
+  - Native's Plugins list projects `plugin/list` catalog rows. The separate `plugin/installed` request, suggestion semantics, and marketplace load errors have independent evidence and coverage. [F30B plugin catalog evidence](PLUGIN_CATALOG_TRUTH_EVIDENCE.md)
   - Layer B (`ui://` WebView host) is classified as `RESEARCH_EXHAUSTED` / `DEFERRED_OPTIONAL_WEBVIEW` per `AGENTS.md` Rule #5 (*"No Electron or Node requirement for the core client. Optional plugin web UI may use a system/embedded WebView later, only when required"*). Core client needs no WebView until a user-configured third-party MCP server actively emits `ui://` interactive widget resources.
