@@ -65,7 +65,10 @@ timeline. The wide composer shows stock context usage in a ring with a
 detailed tooltip, freeing the title from its numeric badge. The Home project
 selector now sits inside the heading and keeps its keyboard and draft
 behavior. The complete Flutter suite passed 515 cases with five opt-in
-stock cases skipped. Next, compare the placement of user message actions.
+stock cases passed in a separate isolated run. Desktop user message actions
+now reveal below the right-aligned bubble on hover or focus. The release app
+opened and dismissed the existing Edit confirmation. Next, compare the
+remaining workspace title and action hierarchy.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

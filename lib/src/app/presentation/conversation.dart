@@ -5182,6 +5182,7 @@ class _ConversationEntryView extends StatelessWidget {
         entry: entry,
         turnId: turnId,
         attachments: attachments,
+        revealActions: inlineActivity,
         onForkFromTurn: onForkFromTurn,
         onRevertFromTurn: onRevertFromTurn,
         onEditFromTurn: onEditFromTurn,
@@ -5324,7 +5325,7 @@ class _ConversationEntryView extends StatelessWidget {
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 if (showAssistantCopy)
-                                  _AssistantCopyButton(
+                                  _MessageCopyButton(
                                     key: ValueKey('assistant-copy-${entry.id}'),
                                     text: entry.text,
                                   ),
@@ -5381,16 +5382,21 @@ class _ConversationEntryView extends StatelessWidget {
   }
 }
 
-class _AssistantCopyButton extends StatefulWidget {
-  const _AssistantCopyButton({super.key, required this.text});
+class _MessageCopyButton extends StatefulWidget {
+  const _MessageCopyButton({
+    super.key,
+    required this.text,
+    this.tooltip = 'Copy response',
+  });
 
   final String text;
+  final String tooltip;
 
   @override
-  State<_AssistantCopyButton> createState() => _AssistantCopyButtonState();
+  State<_MessageCopyButton> createState() => _MessageCopyButtonState();
 }
 
-class _AssistantCopyButtonState extends State<_AssistantCopyButton> {
+class _MessageCopyButtonState extends State<_MessageCopyButton> {
   var _copied = false;
 
   Future<void> _copy() async {
@@ -5408,26 +5414,14 @@ class _AssistantCopyButtonState extends State<_AssistantCopyButton> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    return CodexTooltip(
-      message: _copied ? 'Copied' : 'Copy response',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _copy,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              color: Colors.transparent,
-            ),
-            child: Icon(
-              _copied ? Icons.check_rounded : Icons.content_copy_rounded,
-              size: 14,
-              color: _copied ? palette.success : palette.textMuted,
-            ),
-          ),
-        ),
+    return CodexIconButton(
+      tooltip: _copied ? 'Copied' : widget.tooltip,
+      size: 22,
+      onPressed: _copy,
+      icon: Icon(
+        _copied ? Icons.check_rounded : Icons.content_copy_rounded,
+        size: 14,
+        color: _copied ? palette.success : palette.textMuted,
       ),
     );
   }
@@ -5451,6 +5445,7 @@ class _UserMessageEntryView extends StatelessWidget {
     required this.entry,
     this.turnId,
     required this.attachments,
+    required this.revealActions,
     this.onForkFromTurn,
     this.onRevertFromTurn,
     this.onEditFromTurn,
@@ -5464,6 +5459,7 @@ class _UserMessageEntryView extends StatelessWidget {
   final ConversationEntry entry;
   final String? turnId;
   final List<UserAttachment> attachments;
+  final bool revealActions;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
   final VoidCallback? onEditFromTurn;
@@ -5489,188 +5485,156 @@ class _UserMessageEntryView extends StatelessWidget {
         ),
     ];
     final keySuffix = turnId ?? entry.id;
-    final hasBranches =
-        siblingBranchInfo != null && siblingBranchInfo!.hasMultipleBranches;
-    final hasTurnActions =
-        fullText.isNotEmpty ||
-        hasBranches ||
-        onEditFromTurn != null ||
-        onRegenerateFromTurn != null ||
-        onForkFromTurn != null ||
-        onRevertFromTurn != null;
+    final branch = siblingBranchInfo;
+    final selectBranch = onSelectSiblingBranch;
+    final actionButtons = [
+      if (branch != null && branch.hasMultipleBranches) ...[
+        CodexIconButton(
+          key: ValueKey('branch-prev-$keySuffix'),
+          tooltip: 'Previous response branch',
+          size: 18,
+          onPressed: branch.canSelectPrevious && selectBranch != null
+              ? () => selectBranch(-1)
+              : null,
+          icon: const Icon(Icons.chevron_left_rounded, size: 14),
+        ),
+        Text(
+          branch.displayLabel,
+          key: ValueKey('branch-label-$keySuffix'),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(fontSize: 11, color: palette.textSecondary),
+        ),
+        CodexIconButton(
+          key: ValueKey('branch-next-$keySuffix'),
+          tooltip: 'Next response branch',
+          size: 18,
+          onPressed: branch.canSelectNext && selectBranch != null
+              ? () => selectBranch(1)
+              : null,
+          icon: const Icon(Icons.chevron_right_rounded, size: 14),
+        ),
+        const SizedBox(width: 2),
+      ],
+      if (fullText.isNotEmpty)
+        _MessageCopyButton(
+          key: ValueKey('user-copy-${entry.id}'),
+          text: fullText,
+          tooltip: 'Copy message',
+        ),
+      if (onEditFromTurn != null)
+        CodexIconButton(
+          key: ValueKey('turn-edit-$keySuffix'),
+          tooltip: 'Edit message and resubmit',
+          size: 22,
+          onPressed: onEditFromTurn,
+          icon: const Icon(Icons.edit_outlined, size: 14),
+        ),
+      if (onRegenerateFromTurn != null)
+        CodexIconButton(
+          key: ValueKey('turn-regenerate-$keySuffix'),
+          tooltip: 'Regenerate response from this turn',
+          size: 22,
+          onPressed: onRegenerateFromTurn,
+          icon: const Icon(Icons.refresh_rounded, size: 14),
+        ),
+      if (onForkFromTurn != null)
+        CodexIconButton(
+          key: ValueKey('turn-fork-$keySuffix'),
+          tooltip: 'Fork thread before this turn',
+          size: 22,
+          onPressed: onForkFromTurn,
+          icon: const Icon(Icons.call_split_rounded, size: 14),
+        ),
+      if (onRevertFromTurn != null)
+        CodexIconButton(
+          key: ValueKey('turn-revert-$keySuffix'),
+          tooltip: 'Revert thread before this turn',
+          size: 22,
+          onPressed: onRevertFromTurn,
+          icon: const Icon(Icons.undo_rounded, size: 14),
+        ),
+    ];
+    final bubble = CodexMessageBubble(
+      key: ValueKey('user-message-bubble-${entry.id}'),
+      text: fullText,
+      attachments: attachmentWidgets,
+      expandKey: ValueKey('user-expand-${entry.id}'),
+    );
 
     return Padding(
       key: isActiveSearchMatch
           ? ValueKey('active-search-match-${entry.id}')
           : null,
-      padding: const EdgeInsets.only(bottom: ThemeTokens.space4),
-      child: Stack(
-        alignment: Alignment.centerRight,
-        children: [
-          if (hasTurnActions)
-            Positioned(
-              left: 0,
-              bottom: 4,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (hasBranches) ...[
-                    GestureDetector(
-                      key: ValueKey('branch-prev-$keySuffix'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap:
-                          siblingBranchInfo!.canSelectPrevious &&
-                              onSelectSiblingBranch != null
-                          ? () => onSelectSiblingBranch!(-1)
-                          : null,
-                      child: MouseRegion(
-                        cursor: siblingBranchInfo!.canSelectPrevious
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.chevron_left_rounded,
-                            size: 14,
-                            color: siblingBranchInfo!.canSelectPrevious
-                                ? palette.textSecondary
-                                : palette.textMuted.withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      siblingBranchInfo!.displayLabel,
-                      key: ValueKey('branch-label-$keySuffix'),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        fontSize: 11,
-                        color: palette.textSecondary,
-                      ),
-                    ),
-                    GestureDetector(
-                      key: ValueKey('branch-next-$keySuffix'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap:
-                          siblingBranchInfo!.canSelectNext &&
-                              onSelectSiblingBranch != null
-                          ? () => onSelectSiblingBranch!(1)
-                          : null,
-                      child: MouseRegion(
-                        cursor: siblingBranchInfo!.canSelectNext
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.chevron_right_rounded,
-                            size: 14,
-                            color: siblingBranchInfo!.canSelectNext
-                                ? palette.textSecondary
-                                : palette.textMuted.withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                  ],
-                  if (fullText.isNotEmpty)
-                    _AssistantCopyButton(
-                      key: ValueKey('user-copy-${entry.id}'),
-                      text: fullText,
-                    ),
-                  if (onEditFromTurn != null)
-                    CodexTooltip(
-                      message: 'Edit message and resubmit',
-                      child: GestureDetector(
-                        key: ValueKey('turn-edit-$keySuffix'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onEditFromTurn,
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.edit_outlined,
-                              size: 14,
-                              color: palette.textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (onRegenerateFromTurn != null)
-                    CodexTooltip(
-                      message: 'Regenerate response from this turn',
-                      child: GestureDetector(
-                        key: ValueKey('turn-regenerate-$keySuffix'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onRegenerateFromTurn,
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.refresh_rounded,
-                              size: 14,
-                              color: palette.textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (onForkFromTurn != null)
-                    CodexTooltip(
-                      message: 'Fork thread before this turn',
-                      child: GestureDetector(
-                        key: ValueKey('turn-fork-$keySuffix'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onForkFromTurn,
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.call_split_rounded,
-                              size: 14,
-                              color: palette.textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (onRevertFromTurn != null)
-                    CodexTooltip(
-                      message: 'Revert thread before this turn',
-                      child: GestureDetector(
-                        key: ValueKey('turn-revert-$keySuffix'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onRevertFromTurn,
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.undo_rounded,
-                              size: 14,
-                              color: palette.textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+      padding: EdgeInsets.only(
+        bottom: revealActions && actionButtons.isNotEmpty
+            ? ThemeTokens.space1
+            : ThemeTokens.space4,
+      ),
+      child: actionButtons.isEmpty
+          ? bubble
+          : revealActions
+          ? _HoverUserMessageActions(
+              bubble: bubble,
+              actions: Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: actionButtons,
               ),
+            )
+          : Stack(
+              alignment: Alignment.centerRight,
+              children: [
+                Positioned(
+                  left: 0,
+                  bottom: 4,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: actionButtons,
+                  ),
+                ),
+                bubble,
+              ],
             ),
-          CodexMessageBubble(
-            key: ValueKey('user-message-bubble-${entry.id}'),
-            text: fullText,
-            attachments: attachmentWidgets,
-            expandKey: ValueKey('user-expand-${entry.id}'),
+    );
+  }
+}
+
+class _HoverUserMessageActions extends StatefulWidget {
+  const _HoverUserMessageActions({required this.bubble, required this.actions});
+
+  final Widget bubble;
+  final Widget actions;
+
+  @override
+  State<_HoverUserMessageActions> createState() =>
+      _HoverUserMessageActionsState();
+}
+
+class _HoverUserMessageActionsState extends State<_HoverUserMessageActions> {
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _hovered = true),
+    onExit: (_) => setState(() => _hovered = false),
+    child: Focus(
+      canRequestFocus: false,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          widget.bubble,
+          Opacity(
+            key: const ValueKey('desktop-user-message-actions'),
+            opacity: _hovered || _focused ? 1 : 0,
+            alwaysIncludeSemantics: true,
+            child: widget.actions,
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _ComposerAttachmentDraftChip extends StatelessWidget {

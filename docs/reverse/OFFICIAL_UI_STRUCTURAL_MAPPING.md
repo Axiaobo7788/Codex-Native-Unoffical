@@ -292,3 +292,16 @@ The initial inline implementation scaled the project label twice and pushed
 the model control out of the visible 760 px viewport at 200% text size. Using
 the inline span's own scaling preserves the effective hit target. The fixed
 760×800 release capture shows the model and execution controls.
+
+The sixth pass follows the current user-message component `y5H2` in
+`225284.63835849b6.js`. Its user-message action group is right-aligned for
+the ordinary right-aligned bubble and reveals its controls on hover or
+focus in the corresponding variant. This evidence comes from the user
+component, separate from the assistant copy row. Native aligns its Desktop
+actions with the bubble, reserves their space, and keeps the existing
+capability checks and confirmation routes. Targeted tests exercise hover,
+focus, fixed row geometry, and turn mutations. In the packaged Linux
+app, hovering a saved stock user message revealed the right-aligned row.
+Edit opened the existing truncate confirmation and dismissing it left the
+conversation intact. H1 contains no user bubble, so this comparison uses
+the static component and the paired Native releases.

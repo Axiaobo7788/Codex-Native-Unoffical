@@ -949,6 +949,44 @@ void main() {
         find.byKey(const ValueKey('assistant-copy-hist-assistant-1')),
         findsOneWidget,
       );
+      final message = find.byKey(
+        const ValueKey('user-message-bubble-hist-user-1'),
+      );
+      final actions = find.byKey(
+        const ValueKey('desktop-user-message-actions'),
+      );
+      expect(tester.widget<Opacity>(actions).opacity, 0);
+      final actionRect = tester.getRect(actions);
+      final messageRect = tester.getRect(message);
+      expect(actionRect.top, messageRect.bottom);
+      expect(actionRect.right, messageRect.right);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(5, 90));
+      await mouse.moveTo(tester.getCenter(find.text('Run verification')));
+      await tester.pump();
+      expect(tester.widget<Opacity>(actions).opacity, 1);
+      expect(find.byTooltip('Copy message'), findsOneWidget);
+      expect(tester.getRect(actions), actionRect);
+      await mouse.moveTo(const Offset(5, 90));
+      await tester.pump();
+      expect(tester.widget<Opacity>(actions).opacity, 0);
+      await mouse.removePointer();
+      final copyButton = find.byKey(const ValueKey('user-copy-hist-user-1'));
+      final copyFocus = Focus.of(
+        tester.element(
+          find
+              .descendant(
+                of: copyButton,
+                matching: find.byType(GestureDetector),
+              )
+              .last,
+        ),
+      );
+      copyFocus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(actions).opacity, 1);
+      copyFocus.unfocus();
+      await tester.pumpAndSettle();
       expect(find.text('Command: flutter test'), findsNothing);
 
       // Expand turn details via Worked for 3m 58s disclosure row.
