@@ -2552,10 +2552,13 @@ work on a divergent presentation would increase later rework.
    preferentially refreshes current official visual/structural evidence and
    Codex preferentially translates it into Flutter, with evidence-based peer
    review.
-7. Resume feature-long-tail priority after current shell, sidebar/workspace
-   hierarchy, timeline/activity composition, composer and responsive structure
-   have refreshed evidence and translated Native implementations suitable for
-   same-state screenshot/Human comparison.
+7. Track each screen in a Golden-State matrix with current official and
+   Native evidence, implementation revisions, deltas and next corrections.
+   Machine-actionable rows remain active before screen-wide subjective review.
+   Freeze only the state that genuinely lacks evidence. If no UI state can
+   progress, resume independent functional READY or RESEARCH_MORE work.
+   [Golden State A](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) starts with the
+   signed-in wide active conversation.
 
 ### Consequences
 

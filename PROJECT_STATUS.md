@@ -29,15 +29,16 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
   preferentially refreshes live/ASAR/visual evidence; Codex preferentially
   performs clean-room Flutter translation and protects architecture/state
   invariants. Both review the actual result.
-- Resume F33+ feature-long-tail priority only after shell, sidebar hierarchy,
-  workspace header, timeline/activity structure, composer, and responsive
-  composition have current official evidence and translated Native structure.
+- F33+ remains DEFERRED_BY_UI_PRIORITY while evidenced Golden-State work
+  can progress. Freeze only the state that lacks evidence. When no UI state
+  can progress, resume independent functional READY or RESEARCH_MORE work.
 
 ## Current work selector
 
-The structural translation checkpoint is established. The next UI work is chosen
-by **current official-vs-Native visual/behavioral divergence**, not by recursively
-expanding edge-case tests.
+The structural translation checkpoint is established. [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+is the current acceptance matrix for the signed-in wide active conversation.
+Use the current official-to-Native divergence to choose the next correction.
+The screen remains in machine-actionable reconstruction.
 
 Priority order:
 
@@ -51,8 +52,8 @@ Tests remain mandatory gates. They are not the default source of new UI slices.
 Speculative extreme-size combinations and test-only follow-ups should be recorded
 and deferred unless they expose a material defect.
 
-Compare the largest remaining differences in the
-[wide Desktop ranking](docs/reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#wide-desktop-visual-parity-ranking).
+The [historical wide Desktop ranking](docs/reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#wide-desktop-visual-parity-ranking)
+records the earlier passes.
 The ordinary project thread rows now retain their Git reference in the hover
 tooltip. A paired Linux release capture measures a 54 → 36 logical px thread
 pitch and shows Git context and row actions on hover. The pending question
@@ -74,11 +75,10 @@ shell. Active Commands groups the stock read/run categories on the existing
 latest row. Execution and the bounded output preview remain available. The
 selected goal now appears above the request and composer, using the existing
 goal management and a single hydration. The latest Linux bundle captured the
-wide pending goal/question stack, Home and the open Changes pane. The primary
-wide comparison is ready for Human review after the shared checkpoint gate.
-Signed-in Home, open Changes, expanded saved activity and matching focused,
-compact and dark states remain direct-comparison gates. [Hosted CI for the rail checkpoint](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42825470672)
-F33+ remains DEFERRED_BY_UI_PRIORITY.
+wide pending goal/question stack, Home and the open Changes pane. The
+selected Goal actions, saved activity, and question/composer grouping have
+machine-actionable A rows. Home, open Changes, Review, expanded activity,
+compact and dark/focused states have separate evidence gates. [Hosted CI for `70a12da`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42829481686)
 
 ## Current checkpoint
 
@@ -134,8 +134,8 @@ F33+ remains DEFERRED_BY_UI_PRIORITY.
   and active composer. R0 ties the changes to installed renderer build
   `25894` and a signed-in official reference supplied by the user. Packaged
   Linux validation exercised a Git diff, a cold working-tree review and
-  wide/compact draft continuity. Signed-in comparison of the new Native UI
-  and remaining official states is `HUMAN_REVIEW_PENDING`.
+  wide/compact draft continuity. The current Golden-State matrix supersedes
+  the earlier screen-wide review designation.
   [Evidence and known differences](docs/reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md)
 - Third-party consolidation landed at `a64b8e7`. [Hosted CI 42648632704](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42648632704) passed on that SHA. See [findings](docs/RESEARCH.md#third-party-consolidation).
 - F28 integrated bounded saved MCP text, a JSON-RPC lifecycle fix, and [workspace index evidence](docs/reverse/LOCAL_WORKSPACE_INDEX_EVIDENCE.md). [Hosted CI 42749446986](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42749446986) passed on `a1f7610`.
@@ -207,9 +207,11 @@ F33+ remains DEFERRED_BY_UI_PRIORITY.
 - F30 passed 495 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 100 Rust tests, the 65-root pure-Dart gate, the history benchmark, Linux bundle checks, and six bundled Host smoke paths. The Linux walkthrough covered real healthy sections, a selectively delayed and failed plugin read, retry, and 720×800 navigation. See [F30 evidence](docs/RESEARCH.md#f30-independent-ecosystem-loads-and-plugin-catalog-truth).
 - F29 passed 485 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 100 Rust tests, the 65-root pure-Dart gate, the bounded-history benchmark, Linux bundle checks, and Host MCP, Turn and Review smoke. The packaged walkthrough preserved text and a mention through wide and narrow layouts and same-thread reselection. See [F29 evidence](docs/RESEARCH.md#f29-responsive-conversation-continuity-and-saved-queue-readback).
 - F28 passed 484 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 100 Rust tests, the 65-root pure-Dart gate, the history benchmark, Linux packaging, and Host MCP, Turn and Review smoke. Four stock versions read the saved fixture. Packaged walkthroughs verified inline and deferred results, including a long preview at 720×800. See [F28 evidence](docs/RESEARCH.md#f28-bounded-saved-mcp-text-and-workspace-index-evidence).
-- `HUMAN_REVIEW_PENDING`: desktop visual fidelity and interaction feel, including responsive navigation, sections, composer, approval/diff/output/review interactions, the saved MCP text viewer, and ecosystem loading, partial-state and retry presentation. Physical Android TLS/Keystore, camera and cross-network pairing remain separate device gates.
+- `HUMAN_REVIEW_PENDING`: subjective section interaction, the saved MCP text
+  viewer, and ecosystem loading, partial-state and retry presentation.
+  Physical Android TLS/Keystore, camera and cross-network pairing remain
+  separate device gates.
 - Account security notice presentation remains unavailable. A disposable probe showed that experimental cached account routing can match an already stale notice. A future presentation requires a verified public stock identity contract.
-- Signed-in official comparisons remain open for compact and secondary
-  surfaces. Continue independent Desktop research and machine-verifiable
-  corrections during `SELF_ITERATION`. F33 feature expansion remains deferred
-  under the Desktop priority override. [Living queue](docs/reverse/OFFICIAL_FEATURE_MATRIX.md#36-active-queue-after-consolidation)
+- The primary Desktop screen has open machine-actionable rows in the
+  Golden-State contract. Signed-in official comparisons for later states
+  are tracked there individually. [Living queue](docs/reverse/OFFICIAL_FEATURE_MATRIX.md#36-active-queue-after-consolidation)

@@ -1,5 +1,8 @@
 # Official Desktop to Native structural mapping
 
+The [Golden State A matrix](OFFICIAL_UI_GOLDEN_STATE_A.md) owns current
+acceptance status. This document retains the baseline and translation history.
+
 This map applies [ADR-041](../DECISIONS.md#adr-041--current-official-ui-evidence-is-a-translation-contract) and the [translation plan](OFFICIAL_UI_TRANSLATION_PLAN.md). It compares the connected Codex experience on the installed Linux renderer with Native. The desktop app's other product experiences have separate backends. The [official desktop guide](https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex) confirms a product menu, but gives no Linux geometry or navigation hierarchy.
 
 ## Current official evidence

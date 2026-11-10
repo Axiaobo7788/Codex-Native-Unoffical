@@ -16,6 +16,15 @@ Observable official hierarchy, geometry, state and interaction are the
 clean-room implementation specification. Existing Native domain/controller
 behavior should be retained and re-presented through the translated hierarchy.
 
+## Current acceptance contract
+
+The [Golden State A matrix](OFFICIAL_UI_GOLDEN_STATE_A.md) owns the wide
+active conversation's current evidence, implementation and next correction.
+Close machine-actionable rows before a screen-wide subjective review.
+Freeze only the state that requires unavailable evidence. Proceed to the next
+evidenced Golden State, or to independent functional work when every UI
+state is blocked. The program remains in `SELF_ITERATION`.
+
 ## Evidence order
 
 Use the strongest current evidence in this order:
@@ -138,8 +147,8 @@ During this priority phase:
 - do not copy proprietary official source/assets;
 - do fix correctness regressions discovered by the translation.
 
-Existing feature backlog remains valid and resumes after the primary structural
-milestone.
+The existing feature backlog remains valid. The current acceptance contract
+governs when independent functional work resumes.
 
 ## Peer workflow
 
