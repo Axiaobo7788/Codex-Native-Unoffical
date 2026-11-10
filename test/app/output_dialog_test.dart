@@ -84,6 +84,18 @@ void main() {
     expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
     expect(runtime.tailLengths, [64 * 1024, 64 * 1024]);
     expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(360, 420);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('First').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Window at byte 0 of 150000'), findsOneWidget);
+    expect(find.textContaining('START').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Close').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Command output'), findsNothing);
   });
 }
 

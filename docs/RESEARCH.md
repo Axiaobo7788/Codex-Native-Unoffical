@@ -4673,3 +4673,12 @@ probe before interpreting that result as a content-search limitation.
   Xvfb setup in light mode. This exercises Native's system theme selection
   with a controlled OS setting. Signed-in official dark comparison remains
   open.
+- At 360×420 and 200% text scale, the simulated output viewer reproduced
+  clipped page actions and a displaced code viewport. The activity disclosure
+  also overflowed horizontally. The output notice now scrolls within a capped
+  area, the actions wrap, and the log rows follow the text scale while keeping
+  the same bounded byte reads. The regression test opens truncated output,
+  changes its byte window, and closes it at that size. The Linux bundle read
+  the 200% preference from isolated GSettings, displayed a saved stock command
+  output at 360×420, and closed the dialog. The stock fixture's output fit in
+  a single byte window.

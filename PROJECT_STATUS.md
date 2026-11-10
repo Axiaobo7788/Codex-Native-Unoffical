@@ -31,6 +31,9 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- At 360×420 with 200% text size, Command output keeps its reading area,
+  page actions and close control reachable. Output still uses the same
+  bounded byte windows. [Short-window evidence](docs/RESEARCH.md#desktop-short-window-request-stack)
 - `fb866dd`, `061f0da` and `5769e31` complete the short-window request audit.
   Approval details and MCP fields scroll within their budgets, and a short
   workspace with two pending cards gives them one shared scroll region. The

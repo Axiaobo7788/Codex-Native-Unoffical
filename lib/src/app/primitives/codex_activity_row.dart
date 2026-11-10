@@ -256,7 +256,9 @@ class _CodexActivityDividerState extends State<CodexActivityDivider> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 80),
                     curve: Curves.easeOut,
-                    height: OfficialCodexTheme.workDividerHeight,
+                    constraints: const BoxConstraints(
+                      minHeight: OfficialCodexTheme.workDividerHeight,
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 10.0),
                     decoration: BoxDecoration(
                       color: pillColor,
@@ -275,12 +277,16 @@ class _CodexActivityDividerState extends State<CodexActivityDivider> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          widget.label,
-                          style: TextStyle(
-                            fontSize: 12.0,
-                            color: textColor,
-                            fontWeight: FontWeight.w500,
+                        Flexible(
+                          child: Text(
+                            widget.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12.0,
+                              color: textColor,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 4.0),

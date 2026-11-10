@@ -813,25 +813,20 @@ class _OutputDialogState extends State<_OutputDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(ThemeTokens.space3),
+                  padding: const EdgeInsets.fromLTRB(
+                    ThemeTokens.space3,
+                    ThemeTokens.space3,
+                    ThemeTokens.space3,
+                    0,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Command output',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            Text(
-                              chunk == null
-                                  ? '${widget.descriptor.storedBytes} stored byte(s)'
-                                  : 'Window at byte ${chunk.offset} of '
-                                        '${widget.descriptor.storedBytes}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
+                        child: Text(
+                          'Command output',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
                       CodexIconButton(
@@ -842,26 +837,52 @@ class _OutputDialogState extends State<_OutputDialog> {
                     ],
                   ),
                 ),
-                if (widget.descriptor.truncated)
-                  Container(
-                    padding: const EdgeInsets.all(ThemeTokens.space2),
-                    color: palette.warning.withValues(alpha: 0.1),
-                    child: Text(
-                      'Only ${widget.descriptor.storedBytes} of '
-                      '${widget.descriptor.bytes} bytes were retained by the '
-                      'configured Host limit.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: height / 3),
+                  child: SingleChildScrollView(
+                    primary: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            ThemeTokens.space3,
+                            0,
+                            ThemeTokens.space3,
+                            ThemeTokens.space3,
+                          ),
+                          child: Text(
+                            chunk == null
+                                ? '${widget.descriptor.storedBytes} stored byte(s)'
+                                : 'Window at byte ${chunk.offset} of '
+                                      '${widget.descriptor.storedBytes}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        if (widget.descriptor.truncated)
+                          Container(
+                            padding: const EdgeInsets.all(ThemeTokens.space2),
+                            color: palette.warning.withValues(alpha: 0.1),
+                            child: Text(
+                              'Only ${widget.descriptor.storedBytes} of '
+                              '${widget.descriptor.bytes} bytes were retained by the '
+                              'configured Host limit.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        if (_controller.errorMessage case final error?)
+                          Padding(
+                            padding: const EdgeInsets.all(ThemeTokens.space2),
+                            child: SelectableText(
+                              error,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: palette.danger),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                if (_controller.errorMessage case final error?)
-                  Padding(
-                    padding: const EdgeInsets.all(ThemeTokens.space2),
-                    child: SelectableText(
-                      error,
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: palette.danger),
-                    ),
-                  ),
+                ),
                 const Divider(
                   height: 1,
                   thickness: OfficialCodexTheme.hairlineBorderWidth,
@@ -874,7 +895,10 @@ class _OutputDialogState extends State<_OutputDialog> {
                         : SelectionArea(
                             child: ListView.builder(
                               key: const ValueKey('output-window-list'),
-                              itemExtent: 20,
+                              itemExtent: math.max(
+                                20,
+                                MediaQuery.textScalerOf(context).scale(20),
+                              ),
                               itemCount: rows.length,
                               itemBuilder: (context, index) => Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -902,8 +926,10 @@ class _OutputDialogState extends State<_OutputDialog> {
                 ),
                 Padding(
                   padding: const EdgeInsets.all(ThemeTokens.space2),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
                       CodexButton(
                         variant: CodexButtonVariant.ghost,
@@ -913,7 +939,6 @@ class _OutputDialogState extends State<_OutputDialog> {
                             : _controller.loadStart,
                         label: 'First',
                       ),
-                      const SizedBox(width: 4),
                       CodexButton(
                         variant: CodexButtonVariant.ghost,
                         size: CodexButtonSize.sm,
@@ -922,7 +947,6 @@ class _OutputDialogState extends State<_OutputDialog> {
                             : null,
                         label: 'Previous',
                       ),
-                      const SizedBox(width: 4),
                       CodexButton(
                         variant: CodexButtonVariant.ghost,
                         size: CodexButtonSize.sm,
@@ -931,7 +955,6 @@ class _OutputDialogState extends State<_OutputDialog> {
                             : null,
                         label: 'Next',
                       ),
-                      const SizedBox(width: 4),
                       CodexButton(
                         variant: CodexButtonVariant.ghost,
                         size: CodexButtonSize.sm,
