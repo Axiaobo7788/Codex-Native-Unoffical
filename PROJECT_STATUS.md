@@ -89,9 +89,13 @@ own warning glyph. The execution dialog and dropdown stay usable at 820×420
 and 1191×865. The wide sidebar omits the empty Pinned group and the saved
 stock scope stays reachable from View. Desktop assistant prose uses the
 measured 1.625 line-height ratio. The release rendered saved stock paragraphs
-and lists and retained the bounded timeline behavior. Home, open Changes,
-Review, expanded activity, compact and dark/focused states have separate
-evidence gates. [Hosted CI for `b6d031a`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42895183024)
+and lists and retained the bounded timeline behavior. The wide project
+list now uses trailing running/unread indicators and quiet idle rows.
+The real stock Thinking state now gives way to Thought and final prose.
+Goal is inset 13 logical px from the composer. The Plugins rail glyph
+and selection use the backed ecosystem route. Home, open Changes, Review,
+expanded activity, compact and dark/focused states have separate evidence
+gates. [Hosted CI for `3ca2f8a`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42898842754)
 
 ## Current checkpoint
 
