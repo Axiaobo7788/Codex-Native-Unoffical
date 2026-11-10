@@ -755,11 +755,13 @@ class _UserInputCardState extends State<_UserInputCard> {
         Text(question.question, style: Theme.of(context).textTheme.bodyMedium),
         if (question.options.isNotEmpty) ...[
           const SizedBox(height: ThemeTokens.space2),
-          for (final option in question.options) ...[
+          for (final (index, option) in question.options.indexed) ...[
             _UserInputOptionTile(
               key: ValueKey('user-input-${question.id}-${option.label}'),
               label: option.label,
               description: option.description,
+              desktop: widget.desktop,
+              number: question.options.length > 1 ? index + 1 : null,
               selected:
                   !usesOther && _selectedOptions[question.id] == option.label,
               enabled: !submitting,
@@ -777,6 +779,8 @@ class _UserInputCardState extends State<_UserInputCard> {
               key: ValueKey('user-input-${question.id}-other'),
               label: 'Other',
               description: 'Enter a different answer.',
+              desktop: widget.desktop,
+              custom: true,
               selected: usesOther,
               enabled: !submitting,
               onPressed: () {
@@ -855,6 +859,9 @@ class _UserInputOptionTile extends StatefulWidget {
     super.key,
     required this.label,
     required this.description,
+    this.desktop = false,
+    this.number,
+    this.custom = false,
     required this.selected,
     required this.enabled,
     required this.onPressed,
@@ -862,6 +869,9 @@ class _UserInputOptionTile extends StatefulWidget {
 
   final String label;
   final String description;
+  final bool desktop;
+  final int? number;
+  final bool custom;
   final bool selected;
   final bool enabled;
   final VoidCallback onPressed;
@@ -877,6 +887,7 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final background = widget.selected
         ? palette.selected
         : _hovered && widget.enabled
@@ -884,12 +895,17 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
         : Colors.transparent;
     final borderColor = _focused
         ? palette.accent
+        : widget.desktop
+        ? Colors.transparent
         : widget.selected
         ? palette.borderStrong
         : palette.border;
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 80),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: widget.desktop
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
+          : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      constraints: widget.desktop ? const BoxConstraints(minHeight: 32) : null,
       decoration: BoxDecoration(
         color: background,
         border: Border.all(color: borderColor),
@@ -898,16 +914,19 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Icon(
-              widget.selected
-                  ? Icons.radio_button_checked_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              size: 16,
-              color: widget.selected ? palette.accent : palette.textMuted,
+          if (widget.desktop)
+            _desktopMarker(theme)
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                widget.selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 16,
+                color: widget.selected ? palette.accent : palette.textMuted,
+              ),
             ),
-          ),
           const SizedBox(width: ThemeTokens.space2),
           Expanded(
             child: Column(
@@ -936,6 +955,8 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
     return Semantics(
       button: true,
       selected: widget.selected,
+      checked: widget.desktop ? widget.selected : null,
+      inMutuallyExclusiveGroup: widget.desktop,
       enabled: widget.enabled,
       label: widget.label,
       child: FocusableActionDetector(
@@ -965,6 +986,44 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _desktopMarker(OfficialCodexThemeData theme) {
+    final number = widget.number;
+    if (widget.custom) {
+      return SizedBox.square(
+        dimension: 20,
+        child: Icon(Icons.edit_outlined, size: 14, color: theme.textMuted),
+      );
+    }
+    final foreground = widget.selected
+        ? theme.workspaceBackground
+        : theme.textSecondary;
+    return Container(
+      key: const ValueKey('desktop-question-option-marker'),
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: widget.selected ? theme.textPrimary : theme.elevatedSurface,
+        border: Border.all(
+          color: widget.selected ? theme.textPrimary : theme.hairlineBorder,
+        ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: number != null
+          ? Text(
+              '$number',
+              style: TextStyle(
+                color: foreground,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          : widget.selected
+          ? Icon(Icons.circle, size: 6, color: foreground)
+          : null,
     );
   }
 }

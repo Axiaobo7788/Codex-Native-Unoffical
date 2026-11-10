@@ -679,6 +679,10 @@ void main() {
                 label: 'Incremental',
                 description: 'Small changes',
               ),
+              UserInputOption(
+                label: 'Full pass',
+                description: 'Review the whole fixture',
+              ),
             ],
             allowsOther: false,
             isSecret: false,
@@ -699,10 +703,40 @@ void main() {
     final submit = find.byKey(const ValueKey('user-input-submit'));
     final field = find.byKey(const ValueKey('user-input-note-text'));
     expect(find.text('Question 1 of 2'), findsOneWidget);
+    final markers = find.byKey(
+      const ValueKey('desktop-question-option-marker'),
+    );
+    expect(markers, findsNWidgets(2));
+    expect(tester.getSize(markers.first), const Size.square(20));
+    expect(
+      find.descendant(of: markers, matching: find.text('2')),
+      findsOneWidget,
+    );
     expect(field, findsNothing);
     expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
 
-    await tester.tap(find.text('Incremental'));
+    FocusNode optionFocus(String label) => Focus.of(
+      tester.element(
+        find
+            .descendant(
+              of: find.byKey(ValueKey('user-input-approach-$label')),
+              matching: find.byType(GestureDetector),
+            )
+            .last,
+      ),
+    );
+
+    final incremental = optionFocus('Incremental');
+    final fullPass = optionFocus('Full pass');
+    incremental.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(fullPass.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(incremental.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     await tester.tap(next);
     await tester.pumpAndSettle();
