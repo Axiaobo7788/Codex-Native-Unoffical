@@ -2499,3 +2499,21 @@ lifecycle presentation the source of truth.
   results are different outcomes. Stock may include marketplace
   errors inside a successful response, so the last outcome needs a
   separate typed projection. [F30 evidence](RESEARCH.md#f30-independent-ecosystem-loads-and-plugin-catalog-truth)
+
+## ADR-057 — Preserve partial local plugin catalogs
+
+- **Status:** Accepted.
+- **Context:** Stock can return a successful `plugin/list` with
+  `marketplaceLoadErrors`. The result can contain healthy rows,
+  or no rows at all when the only queried source fails.
+- **Decision:** Keep bounded typed plugin rows and one partial
+  flag on the local catalog capability. Discard failed source
+  paths and parser messages. Missing and empty error fields keep
+  the previous projection. Unreadable non-null fields conservatively
+  mark the result as potentially incomplete.
+- **Consequences:** The Plugins tab retains usable rows and distinguishes
+  a partial result from a clean empty response and a failed RPC.
+  The compatibility list method still returns rows. Remote admission,
+  installed-inventory scope, and plugin mutation ownership continue
+  to follow their existing contracts.
+  [F31 evidence](RESEARCH.md#f31-partial-plugin-catalogs-and-saved-thread-provider-scope)

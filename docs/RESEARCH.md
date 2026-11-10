@@ -4349,6 +4349,8 @@ probe before interpreting that result as a content-search limitation.
 
 ## F30 — Independent ecosystem loads and plugin catalog truth
 
+[Hosted CI 42760384522](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42760384522) passed on `033eda8`.
+
 - At `a755915`, the shared Skills, Plugins and MCP load waited for
   every source. Three simulated runtime cases reproduced a pending
   plugin read blocking healthy sections and an RPC error leaving
@@ -4416,3 +4418,73 @@ probe before interpreting that result as a content-search limitation.
   fixture. A second run without fault injection rendered the
   fixture Skill, catalog and MCP server at 720×800. Both app and
   runtime process trees shut down. Human review remains open.
+
+## F31 — Partial plugin catalogs and saved-thread provider scope
+
+- F31A `e0e9f07` adds a local typed catalog snapshot. The adapter
+  retains the existing bounded rows and one partial-state bit.
+  A missing or empty stock error list preserves the previous
+  complete-empty behavior. A nonempty list or unreadable error
+  field marks the projection as potentially incomplete. The
+  snapshot discards failed source paths and parser messages.
+  Read-only Remote rejects the new catalog method.
+- Protocol cases covered legacy responses, clean empty, invalid-only,
+  mixed, malformed error shape and the existing 100-row cap. The
+  simulated runtime verified that a mixed row can open details,
+  the invalid-only result uses separate copy, and a healthy
+  refresh clears the partial notice. Existing catalog and MCP
+  lifecycle tests still passed.
+- A disposable typed ProcessTransport probe through the bundled Host
+  tested installed `0.167.0-alpha.3.2`, public stable `0.167.0`,
+  Desktop-train `0.167.0-alpha.4.1`, and public alpha
+  `0.169.0-alpha.7`. Each returned zero complete rows for a clean
+  empty catalog, zero partial rows for an invalid local manifest,
+  and three partial rows for a valid and invalid source. The
+  available fixture's detail remained readable.
+- The Linux package used normal bundled Host traffic and a
+  disposable invalid marketplace manifest, with no injected
+  response. Clean empty and invalid-only had different presentation
+  at 1280×720. An independent valid home marketplace supplied three
+  rows while the workspace manifest failed. At 720×800, the warning
+  remained visible and a valid row opened Details. Repairing the
+  invalid manifest and refreshing removed the warning in the same
+  dialog. The test-owned process trees exited.
+- F31B `05a6aee`, `4c12f61` and `0033969` compared four
+  stock builds, current public source and the installed Desktop
+  bundle. Native omits the provider filter, so ordinary stock
+  lists, Section rows and saved search use the configured default
+  provider. The measured Desktop uses different scopes for its
+  recent list, saved search and storage/section paths.
+- Explicit all-provider discovery returned the synthetic rows.
+  Older measured stock rejected cross-provider cold resume.
+  Public alpha `0.169.0-alpha.7` could resume with the recorded
+  provider still configured. Independent fresh-process checks
+  reproduced cold override rejection and a successful loaded
+  repeat that retained the recorded provider. A peer correction
+  separated these two results after comparing the first table
+  with its actual response log.
+- On stock builds that expose `currentAccountOnly`, a locally
+  marked fixture disappeared from account-free discovery while
+  its direct ID read still succeeded. Older measured schemas
+  lacked the field. The owner corrected the document to limit
+  the claim to measured discovery and direct read. Response
+  paging retained its measured cap. Server-side refill can scan
+  beyond that returned page. No account login or production
+  provider was involved. Cross-provider discovery stays
+  `RESEARCH_MORE` pending a deliberate scope and resume policy.
+  [F31B provider scope evidence](reverse/THREAD_PROVIDER_SCOPE_EVIDENCE.md)
+- The official `agy` audit of `e0e9f07` returned zero P0, P1 or
+  P2 findings. The F31B owner corrected the cold/warm,
+  direct-read, and server-scan findings in ordinary commits and
+  released its single document. Both histories were integrated
+  in `a497fb5`.
+- Shared `a497fb5` passed Dart format and analyze, the 65-root
+  pure-Dart gate, 497 Flutter cases with five opt-in skips, all
+  five isolated direct-stock cases, and the bounded-history
+  benchmark. The identical Rust tree passed formatting, Clippy
+  and 100 tests. Linux packaging, runtime and license checks, and
+  the bundled Host Runtime, Thread, Model, MCP, Turn and Review
+  smoke paths passed. Shared packaged screenshots verified the
+  clean, invalid-only, repaired and mixed detail states at
+  1280×720 and 720×800. The test-owned app, Host and stock trees
+  exited. Subjective UI and physical Android remain separate.
