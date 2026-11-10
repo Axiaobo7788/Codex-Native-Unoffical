@@ -124,10 +124,19 @@ Desktop composer uses one Stop/Steer slot. Double Escape interrupts a
 stock turn while keeping its unsent draft. An arriving approval disarms
 that shortcut, verified on the packaged app. Empty Send is disabled and
 separated from the permissions control by 8 px. The ordinary focused
-composer retains its neutral border. Home, open Changes, Review, expanded
-activity, compact and dark variants have separate evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
+composer retains its neutral border. Desktop assistant Markdown uses
+the measured body-relative heading proportions. Home, open Changes,
+Review, expanded activity, compact and dark variants have separate
+evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
 
 ## Current checkpoint
+
+- `80d318d` translates the Desktop assistant heading proportions.
+  Paired Linux stock responses confirmed the heading hierarchy and
+  unchanged body glyph widths. The full 527-case Flutter suite and
+  ASCII-path analysis passed. Block adjacency remains open because
+  the current Markdown renderer exposes one uniform sibling gap.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `e64d1e6` translates the active Desktop primary action and turn-scoped
   Escape confirmation. The Linux release verified stock Steer, keyboard
