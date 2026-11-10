@@ -74,15 +74,13 @@ with an empty scan. Runtime details open from the lower rail in the wide
 shell. Active Commands groups the stock read/run categories on the existing
 latest row. Execution and the bounded output preview remain available. The
 selected goal now appears above the request and composer, using the existing
-stock controller and a single hydration. `09037a2` adds quick clear,
-pause/resume and edit actions. A clean release capture confirmed the action
-group, clear confirmation, edit dialog and pending stock answer. The Goal
-side-tab editor is still open. The Linux bundle captured the
-wide pending goal/question stack, Home and the open Changes pane.
-`5b8ef6a` moves the running thread indicator to the far end of the wide
-row. A stock pending-request capture verifies the new position. The
-selected Goal actions, saved activity, and question/composer grouping have
-machine-actionable A rows. Home, open Changes, Review, expanded activity,
+stock controller and a single hydration. The selected Goal now has quick
+actions and a right-side editor. The release saved an objective, closed on
+Escape and submitted the pending stock answer. The active thread row swaps its
+trailing spinner for actions on interaction. The release opened saved stock
+activity with the corrected chevron and a real +80/−0 diff from the translated
+Changes summary. The Golden-State matrix records the remaining machine work.
+Home, open Changes, Review, expanded activity,
 compact and dark/focused states have separate evidence gates. [Hosted CI for `70a12da`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42829481686)
 
 ## Current checkpoint
