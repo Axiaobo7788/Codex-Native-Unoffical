@@ -33,6 +33,7 @@ class HistoryController extends ChangeNotifier {
   var _loadingTurns = false;
   var _loadingOlderTurns = false;
   var _loadingItems = false;
+  var _turnDetailsLoadFailed = false;
   var _windowShifted = false;
   var _loadOlderVersion = 0;
   var _evictionVersion = 0;
@@ -56,6 +57,7 @@ class HistoryController extends ChangeNotifier {
   bool get loadingTurns => _loadingTurns;
   bool get loadingOlderTurns => _loadingOlderTurns;
   bool get loadingItems => _loadingItems;
+  bool get selectedTurnDetailsLoadFailed => _turnDetailsLoadFailed;
   bool get canLoadOlderTurns => _turnCursor != null;
   bool get canReturnToNewest => _windowShifted;
   int get loadOlderVersion => _loadOlderVersion;
@@ -261,7 +263,7 @@ class HistoryController extends ChangeNotifier {
       ? _selectedTurnItems
       : turn.items;
 
-  bool isFirstNonUserItemInTurn(HistoryItem candidate) {
+  bool isTurnDetailsAnchor(HistoryItem candidate) {
     final turn = turnForId(candidate.turnId);
     if (turn == null) {
       return false;
@@ -272,7 +274,7 @@ class HistoryController extends ChangeNotifier {
         return item.id == candidate.id;
       }
     }
-    return false;
+    return source.isNotEmpty && source.last.id == candidate.id;
   }
 
   void collapseTurnItems() {
@@ -432,6 +434,7 @@ class HistoryController extends ChangeNotifier {
     _selectedTurnId = turnId;
     _selectedTurnItems.clear();
     _itemCursor = null;
+    _turnDetailsLoadFailed = false;
     _loadingItems = true;
     _errorMessage = null;
     _notify();
@@ -450,6 +453,7 @@ class HistoryController extends ChangeNotifier {
       _itemCursor = page.nextCursor;
     } catch (error) {
       if (_isCurrentItemLoad(turnId, itemGeneration)) {
+        _turnDetailsLoadFailed = true;
         _errorMessage = error.toString();
       }
     } finally {
@@ -558,6 +562,7 @@ class HistoryController extends ChangeNotifier {
     _selectedTurnId = null;
     _selectedTurnItems.clear();
     _itemCursor = null;
+    _turnDetailsLoadFailed = false;
     _loadingItems = false;
   }
 

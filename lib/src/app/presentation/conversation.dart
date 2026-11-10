@@ -2572,7 +2572,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               final turn = widget.historyController.turnForId(item.turnId);
               final hasWorkDivider =
                   turn?.formattedWorkDuration != null &&
-                  widget.historyController.isFirstNonUserItemInTurn(item);
+                  widget.historyController.isTurnDetailsAnchor(item);
               final isTurnExpanded =
                   widget.historyController.selectedTurnId == item.turnId;
               return isTurnExpanded ||
@@ -4545,24 +4545,26 @@ class _ConversationEntryView extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     if (entry.kind == ConversationEntryKind.user) {
+      final message = _UserMessageEntryView(
+        entry: entry,
+        turnId: turnId,
+        attachments: attachments,
+        onForkFromTurn: onForkFromTurn,
+        onRevertFromTurn: onRevertFromTurn,
+        onEditFromTurn: onEditFromTurn,
+        onRegenerateFromTurn: onRegenerateFromTurn,
+        siblingBranchInfo: siblingBranchInfo,
+        onSelectSiblingBranch: onSelectSiblingBranch,
+        isSearchMatch: isSearchMatch,
+        isActiveSearchMatch: isActiveSearchMatch,
+      );
+      final header = leadingHeader;
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
             maxWidth: OfficialCodexTheme.maxContentWidth,
           ),
-          child: _UserMessageEntryView(
-            entry: entry,
-            turnId: turnId,
-            attachments: attachments,
-            onForkFromTurn: onForkFromTurn,
-            onRevertFromTurn: onRevertFromTurn,
-            onEditFromTurn: onEditFromTurn,
-            onRegenerateFromTurn: onRegenerateFromTurn,
-            siblingBranchInfo: siblingBranchInfo,
-            onSelectSiblingBranch: onSelectSiblingBranch,
-            isSearchMatch: isSearchMatch,
-            isActiveSearchMatch: isActiveSearchMatch,
-          ),
+          child: header == null ? message : Column(children: [message, header]),
         ),
       );
     }

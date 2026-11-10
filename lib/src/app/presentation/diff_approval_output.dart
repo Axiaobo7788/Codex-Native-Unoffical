@@ -373,12 +373,14 @@ class _HistoryEntryView extends StatelessWidget {
     };
     final turn = historyController.turnForId(item.turnId);
     final durationLabel = turn?.formattedWorkDuration;
-    final showWorkDivider =
-        durationLabel != null &&
-        historyController.isFirstNonUserItemInTurn(item);
-    final expanded =
-        detailMode == PresentationDetailMode.execution ||
-        historyController.selectedTurnId == item.turnId;
+    final showDetails =
+        historyController.isTurnDetailsAnchor(item) &&
+        (detailMode != PresentationDetailMode.prose ||
+            (durationLabel != null && item.kind != HistoryItemKind.user));
+    final selected = historyController.selectedTurnId == item.turnId;
+    final loadFailed =
+        selected && historyController.selectedTurnDetailsLoadFailed;
+    final expanded = selected && !loadFailed;
     final effectiveAttachments = overrideAttachments ?? item.attachments;
     return _ConversationEntryView(
       entry: ConversationEntry(
@@ -403,12 +405,14 @@ class _HistoryEntryView extends StatelessWidget {
       isActiveSearchMatch: isActiveSearchMatch,
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
-      leadingHeader: showWorkDivider
+      leadingHeader: showDetails
           ? _TurnWorkDivider(
               key: ValueKey('turn-work-${item.turnId}'),
-              label: durationLabel,
+              label: loadFailed
+                  ? 'Retry turn details'
+                  : durationLabel ?? 'Turn details',
               expanded: expanded,
-              loading: expanded && historyController.loadingItems,
+              loading: selected && historyController.loadingItems,
               onTap: historyController.loadingItems
                   ? null
                   : () {
