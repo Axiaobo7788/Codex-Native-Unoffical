@@ -6753,7 +6753,9 @@ class _ExecutionSettingsButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Icon(
-                iconOnly || fullAccess
+                fullAccess
+                    ? Icons.gpp_maybe_outlined
+                    : iconOnly
                     ? Icons.shield_outlined
                     : Icons.tune_rounded,
                 size: 15,

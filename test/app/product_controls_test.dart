@@ -313,6 +313,7 @@ void main() {
 
       await tester.tap(find.widgetWithText(CodexButton, 'Done'));
       await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.gpp_maybe_outlined), findsNothing);
       await _send(tester, 'defaults remain inherited');
       expect(runtime.turnOptions.last.approvalPolicy, isNull);
       expect(runtime.turnOptions.last.sandbox, isNull);
@@ -335,6 +336,17 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(CodexButton, 'Done'));
       await tester.pumpAndSettle();
+      final execution = find.byKey(const ValueKey('execution-settings-button'));
+      final fullAccessIcon = tester.widget<Icon>(
+        find.descendant(
+          of: execution,
+          matching: find.byIcon(Icons.gpp_maybe_outlined),
+        ),
+      );
+      expect(
+        fullAccessIcon.color,
+        ThemeTokens.of(tester.element(execution)).warning,
+      );
 
       await _send(tester, 'confirmed dangerous overrides');
       expect(
