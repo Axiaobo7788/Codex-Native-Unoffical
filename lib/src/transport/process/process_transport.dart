@@ -59,6 +59,7 @@ class ProcessTransport
     required ChildProcess process,
     required this.shutdownTimeout,
     required this.stderrTailLimit,
+    required bool includeHostCommandOutput,
   }) : _process = process,
        assert(stderrTailLimit > 0) {
     _peer = JsonRpcPeer(
@@ -85,6 +86,7 @@ class ProcessTransport
     _turnProtocol = TurnProtocolAdapter(
       request: _request,
       includeUserMessages: true,
+      includeHostCommandOutput: includeHostCommandOutput,
       notifications: _peer.notifications,
     );
     _serverRequestProtocol = ServerRequestProtocolAdapter(
@@ -132,6 +134,7 @@ class ProcessTransport
     ProcessLauncher launcher = launchIoProcess,
     Duration shutdownTimeout = const Duration(seconds: 3),
     int stderrTailLimit = 32 * 1024,
+    bool includeHostCommandOutput = false,
   }) async {
     final process = await launcher(executablePath, arguments);
     return ProcessTransport._(
@@ -139,6 +142,7 @@ class ProcessTransport
       process: process,
       shutdownTimeout: shutdownTimeout,
       stderrTailLimit: stderrTailLimit,
+      includeHostCommandOutput: includeHostCommandOutput,
     );
   }
 
@@ -154,6 +158,7 @@ class ProcessTransport
     launcher: launcher,
     shutdownTimeout: shutdownTimeout,
     stderrTailLimit: stderrTailLimit,
+    includeHostCommandOutput: true,
   );
 
   int get processId => _process.pid;

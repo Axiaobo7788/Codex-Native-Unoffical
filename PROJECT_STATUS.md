@@ -35,6 +35,10 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- Completed commands in the active conversation can open their paged output
+  as soon as the bundled Host provides a valid spool reference. The Linux
+  package opened the first and last windows of 179,835 stored bytes before the
+  assistant completed the turn. [Active command evidence](docs/RESEARCH.md#completed-commands-in-the-active-conversation)
 - Desktop Commands and Execution can expand one saved command output in the
   timeline. Expansion reads at most 4 KiB from Host. The original paged viewer
   stays reachable, and compact layout opens it directly. A packaged Linux
@@ -102,6 +106,10 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- Active command output passed strict Dart analysis, the 65-root pure-Dart
+  boundary, 513 Flutter cases with five opt-in skips, all five direct-stock
+  cases when enabled separately, the bounded-history benchmark, and the Linux
+  bundle and license checks. Rust formatting, Clippy, and 100 Rust tests passed.
 - The Desktop inline output checkpoint passed strict Dart analysis, the
   65-root pure-Dart boundary, 511 Flutter cases with five opt-in skips, all
   five direct-stock cases when enabled separately, the bounded-history

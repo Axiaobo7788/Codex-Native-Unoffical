@@ -169,6 +169,59 @@ void main() {
     expect(preview, findsNothing);
     expect(runtime.tailLengths, [4096, 4096, 4096, 64 * 1024]);
   });
+
+  testWidgets('opens completed live command output without reading history', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1191, 865);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final runtime = _OutputRuntimeController();
+    addTearDown(runtime.closeStreams);
+
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Output thread'));
+    await tester.pumpAndSettle();
+    runtime.emitTurnEvent(
+      const TurnStartedEvent(threadId: 'output-thread', turnId: 'active-turn'),
+    );
+    runtime.emitTurnEvent(
+      const ActivityEvent(
+        threadId: 'output-thread',
+        turnId: 'active-turn',
+        itemId: 'active-command',
+        summary: 'Command: fixture still running',
+        status: 'inProgress',
+        completed: false,
+      ),
+    );
+    await tester.pump();
+    final view = find.text('View stored output (truncated)');
+    expect(view, findsNothing);
+
+    runtime.emitTurnEvent(
+      const ActivityEvent(
+        threadId: 'output-thread',
+        turnId: 'active-turn',
+        itemId: 'active-command',
+        summary: 'Command: fixture still running',
+        status: 'completed',
+        completed: true,
+        commandOutput: _OutputRuntimeController.descriptor,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(view, findsOneWidget);
+    expect(runtime.tailLengths, isEmpty);
+    await tester.tap(view);
+    await tester.pumpAndSettle();
+    expect(find.text('Window at byte 84464 of 150000'), findsOneWidget);
+    expect(runtime.tailLengths, [64 * 1024]);
+    expect(runtime.itemListCalls, 0);
+    expect(runtime.itemReadCalls, 0);
+  });
 }
 
 class _OutputRuntimeController extends RuntimeController {
@@ -216,6 +269,8 @@ class _OutputRuntimeController extends RuntimeController {
 
   @override
   Stream<TurnEvent> get turnEvents => _turns.stream;
+
+  void emitTurnEvent(TurnEvent event) => _turns.add(event);
 
   @override
   Stream<ApprovalEvent> get approvalEvents => _approvals.stream;

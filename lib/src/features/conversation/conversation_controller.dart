@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../../domain/output_models.dart';
 import '../../domain/thread_models.dart';
 import '../../domain/turn_gateway.dart';
 import '../../domain/turn_models.dart';
@@ -20,6 +21,7 @@ class ConversationEntry {
     this.turnId,
     this.stockItemId,
     this.status,
+    this.commandOutput,
     this.attachments = const [],
   });
 
@@ -30,6 +32,7 @@ class ConversationEntry {
   final String? turnId;
   final String? stockItemId;
   final String? status;
+  final OutputDescriptor? commandOutput;
   final List<UserAttachment> attachments;
 
   ConversationEntry copyWith({
@@ -47,6 +50,7 @@ class ConversationEntry {
     turnId: turnId ?? this.turnId,
     stockItemId: stockItemId ?? this.stockItemId,
     status: status ?? this.status,
+    commandOutput: commandOutput,
     attachments: attachments ?? this.attachments,
   );
 }
@@ -653,6 +657,7 @@ class ConversationController extends ChangeNotifier {
             completed: event.completed,
             turnId: event.turnId,
             status: event.status,
+            commandOutput: event.commandOutput,
           ),
         );
         if (_deltaBuffers.isEmpty && _reasoningDeltaBuffers.isEmpty) {

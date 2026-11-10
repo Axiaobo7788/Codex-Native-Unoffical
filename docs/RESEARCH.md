@@ -4712,3 +4712,25 @@ probe before interpreting that result as a content-search limitation.
   the still-expanded preview. An initial labeled disclosure clipped at that
   width. The final chevron retains its accessible action name and leaves more
   room for the command summary.
+
+### Completed commands in the active conversation
+
+- On the same installed stock build, a fresh isolated Linux Host session
+  received command `item/completed` notifications with file-backed descriptors
+  for 179,835 and 21 bytes. The aggregate field was empty on both forwarded
+  items. Explicit Host tail reads returned 4,096 and 21 bytes. The saved
+  history probe for the long fixture returned 65,536 bytes. These measured
+  payload sizes describe two different stock paths.
+- Native previously projected command lifecycle notifications to summary and
+  status. The bundled Host path now projects the optional completed-command
+  descriptor into the existing bounded activity entry and uses the paged
+  viewer. The pure stock and Remote adapters ignore the Host extension.
+  Invalid optional metadata leaves the command summary available. Output
+  deltas and stock inline output remain outside this projection.
+- In a packaged Linux walkthrough with the real Host and stock app-server,
+  a disposable loopback model paused after the command completed. While the
+  turn was still active, View output opened at byte 114,299 of 179,835. First
+  opened byte zero and displayed the command's start marker. The dialog was
+  dismissed and the fixture then finished the turn. Unit and widget tests
+  cover the adapter boundary and zero output or saved-item reads before the
+  user opens the viewer.

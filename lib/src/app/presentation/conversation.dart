@@ -3360,6 +3360,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
                       inlineActivity: widget.hasDesktopShell,
+                      trailingAction: switch (effectiveEntry.commandOutput) {
+                        final output?
+                            when output.available && output.reference != null =>
+                          _commandOutputDialogAction(
+                            context,
+                            widget.outputGateway,
+                            output,
+                          ),
+                        _ => null,
+                      },
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:

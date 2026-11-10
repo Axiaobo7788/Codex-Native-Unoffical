@@ -1,5 +1,6 @@
 import 'execution_settings.dart';
 import 'diff_models.dart';
+import 'output_models.dart';
 import 'user_message_presentation.dart';
 
 export 'user_message_presentation.dart';
@@ -188,12 +189,14 @@ class ActivityEvent extends TurnEvent {
     required this.summary,
     required this.status,
     required this.completed,
+    this.commandOutput,
   });
 
   final String itemId;
   final String summary;
   final String status;
   final bool completed;
+  final OutputDescriptor? commandOutput;
 }
 
 enum ReviewModePhase { entered, exited }

@@ -507,6 +507,7 @@ class _HistoryEntryView extends StatelessWidget {
           viewer: viewer,
           openFullOutput: _commandOutputDialogAction(
             context,
+            outputGateway,
             viewer.descriptor,
           ),
         ),
@@ -554,7 +555,7 @@ class _HistoryEntryView extends StatelessWidget {
           ),
         );
       }
-      return _commandOutputDialogAction(context, output);
+      return _commandOutputDialogAction(context, outputGateway, output);
     }
     if (output != null && !output.available) {
       return Text(
@@ -589,27 +590,6 @@ class _HistoryEntryView extends StatelessWidget {
     return null;
   }
 
-  Widget _commandOutputDialogAction(
-    BuildContext context,
-    OutputDescriptor output,
-  ) {
-    final label = output.truncated
-        ? 'View stored output (truncated)'
-        : 'View output';
-    return CodexButton(
-      variant: CodexButtonVariant.ghost,
-      size: CodexButtonSize.sm,
-      onPressed: () => showDialog<void>(
-        context: context,
-        builder: (context) =>
-            _OutputDialog(gateway: outputGateway, descriptor: output),
-      ),
-      icon: const Icon(Icons.terminal, size: 14),
-      label: label,
-      tooltip: label,
-    );
-  }
-
   Widget? _savedMcpTextAction(BuildContext context) {
     if (!historyController.canReadSavedMcpText(item)) {
       return null;
@@ -627,6 +607,27 @@ class _HistoryEntryView extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _commandOutputDialogAction(
+  BuildContext context,
+  OutputGateway gateway,
+  OutputDescriptor output,
+) {
+  final label = output.truncated
+      ? 'View stored output (truncated)'
+      : 'View output';
+  return CodexButton(
+    variant: CodexButtonVariant.ghost,
+    size: CodexButtonSize.sm,
+    onPressed: () => showDialog<void>(
+      context: context,
+      builder: (context) => _OutputDialog(gateway: gateway, descriptor: output),
+    ),
+    icon: const Icon(Icons.terminal, size: 14),
+    label: label,
+    tooltip: label,
+  );
 }
 
 class _InlineCommandOutput extends StatelessWidget {

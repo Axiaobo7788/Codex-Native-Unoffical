@@ -1,6 +1,8 @@
 import '../domain/execution_settings.dart';
+import '../domain/output_models.dart';
 import '../domain/turn_models.dart';
 import 'jsonl_decoder.dart';
+import 'output_protocol.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
 import 'unified_diff_parser.dart';
@@ -25,6 +27,7 @@ final class TurnProtocolAdapter {
     required this.request,
     required Stream<CodexNotification> notifications,
     bool includeUserMessages = false,
+    bool includeHostCommandOutput = false,
     UnifiedDiffParser diffParser = const UnifiedDiffParser(),
   }) : events = notifications
            .map(
@@ -32,6 +35,7 @@ final class TurnProtocolAdapter {
                notification,
                diffParser,
                includeUserMessages: includeUserMessages,
+               includeHostCommandOutput: includeHostCommandOutput,
              ),
            )
            .where((event) => event != null)
@@ -177,6 +181,7 @@ final class TurnProtocolAdapter {
     CodexNotification notification,
     UnifiedDiffParser diffParser, {
     required bool includeUserMessages,
+    required bool includeHostCommandOutput,
   }) {
     final params = notification.params;
     return switch (notification.method) {
@@ -193,6 +198,7 @@ final class TurnProtocolAdapter {
         params,
         completed: true,
         includeUserMessages: includeUserMessages,
+        includeHostCommandOutput: includeHostCommandOutput,
       ),
       'turn/diff/updated' => TurnDiffUpdatedEvent(
         snapshot: diffParser.parse(
@@ -471,6 +477,7 @@ final class TurnProtocolAdapter {
     JsonObject params, {
     required bool completed,
     bool includeUserMessages = false,
+    bool includeHostCommandOutput = false,
   }) {
     final item = _requiredObject(params, 'item', 'item lifecycle');
     final type = _requiredString(item, 'type');
@@ -538,7 +545,24 @@ final class TurnProtocolAdapter {
       summary: _activitySummary(type, item),
       status: _activityStatus(item, completed),
       completed: completed,
+      commandOutput:
+          includeHostCommandOutput && completed && type == 'commandExecution'
+          ? _commandOutput(item['_codexNativeOutput'])
+          : null,
     );
+  }
+
+  static OutputDescriptor? _commandOutput(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    try {
+      final output = OutputProtocolAdapter.descriptorFromItem(value);
+      return (output.reference?.length ?? 0) <= 128 ? output : null;
+    } on ProtocolViolation {
+      // The optional Host extension cannot erase a completed command row.
+      return null;
+    }
   }
 
   static TurnErrorEvent _parseError(JsonObject params) {

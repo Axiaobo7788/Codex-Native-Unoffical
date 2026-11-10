@@ -445,6 +445,53 @@ void main() {
     expect(event.status, 'completed');
   });
 
+  test('projects completed command references only on the Host path', () async {
+    final host = TurnProtocolAdapter(
+      request: (_, [params = const {}]) async => const {},
+      notifications: notifications.stream,
+      includeHostCommandOutput: true,
+    );
+    final hostEvents = host.events.take(3).cast<ActivityEvent>().toList();
+    final stockEvents = adapter.events.take(3).cast<ActivityEvent>().toList();
+    const item = {
+      'type': 'commandExecution',
+      'id': 'command-1',
+      'command': 'flutter test',
+      'status': 'completed',
+      'aggregatedOutput': 'OUTPUT_STAYS_OUT_OF_THE_ACTIVITY_EVENT',
+      '_codexNativeOutput': {
+        'ref': 'host-command-ref',
+        'bytes': 200000,
+        'storedBytes': 179835,
+        'truncated': true,
+        'available': true,
+      },
+    };
+    for (final (method, value) in [
+      ('item/started', item),
+      ('item/completed', item),
+      ('item/completed', {...item, '_codexNativeOutput': 'invalid'}),
+    ]) {
+      notifications.add(
+        CodexNotification(
+          method: method,
+          params: {'threadId': 'thread-1', 'turnId': 'turn-1', 'item': value},
+        ),
+      );
+    }
+    final events = await hostEvents;
+    expect(events.first.commandOutput, isNull);
+    expect(events[1].commandOutput?.reference, 'host-command-ref');
+    expect(events[1].commandOutput?.storedBytes, 179835);
+    expect(events[1].summary, 'Command: flutter test');
+    expect(events.last.commandOutput, isNull);
+    expect(events.last.completed, isTrue);
+    expect(
+      (await stockEvents).map((event) => event.commandOutput),
+      everyElement(isNull),
+    );
+  });
+
   test('projects bounded review-mode lifecycle items', () async {
     final events = <TurnEvent>[];
     final subscription = adapter.events.listen(events.add);
