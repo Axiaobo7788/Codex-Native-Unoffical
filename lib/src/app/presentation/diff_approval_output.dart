@@ -330,6 +330,7 @@ class _HistoryEntryView extends StatelessWidget {
     required this.historyController,
     required this.outputGateway,
     this.detailMode = PresentationDetailMode.commands,
+    this.inlineActivity = false,
     this.onForkFromTurn,
     this.onRevertFromTurn,
     this.onEditFromTurn,
@@ -348,6 +349,7 @@ class _HistoryEntryView extends StatelessWidget {
   final HistoryController historyController;
   final OutputGateway outputGateway;
   final PresentationDetailMode detailMode;
+  final bool inlineActivity;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
   final VoidCallback? onEditFromTurn;
@@ -405,13 +407,15 @@ class _HistoryEntryView extends StatelessWidget {
       isActiveSearchMatch: isActiveSearchMatch,
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
+      inlineActivity: inlineActivity,
       leadingHeader: showDetails
           ? _TurnWorkDivider(
-              key: ValueKey('turn-work-${item.turnId}'),
+              actionKey: ValueKey('turn-work-${item.turnId}'),
               label: loadFailed
                   ? 'Retry turn details'
                   : durationLabel ?? 'Turn details',
               expanded: expanded,
+              inline: inlineActivity,
               loading: selected && historyController.loadingItems,
               onTap: historyController.loadingItems
                   ? null
@@ -600,21 +604,53 @@ enum _SavedMcpTextFailure { unsupported, retryable }
 
 class _TurnWorkDivider extends StatelessWidget {
   const _TurnWorkDivider({
-    super.key,
+    required this.actionKey,
     required this.label,
     required this.expanded,
     required this.loading,
+    required this.inline,
     this.onTap,
   });
 
+  final Key actionKey;
   final String label;
   final bool expanded;
   final bool loading;
+  final bool inline;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    if (inline) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            toggled: expanded,
+            child: CodexButton(
+              key: actionKey,
+              label: label,
+              variant: CodexButtonVariant.ghost,
+              size: CodexButtonSize.sm,
+              loading: loading,
+              onPressed: onTap,
+              trailingIcon: Icon(
+                expanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                size: 15,
+              ),
+            ),
+          ),
+          const Divider(
+            height: 4,
+            thickness: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ],
+      );
+    }
     return CodexActivityDivider(
+      key: actionKey,
       label: label,
       isExpanded: expanded,
       isLoading: loading,

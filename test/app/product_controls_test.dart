@@ -525,7 +525,8 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.text('Changes 2'));
+      expect(find.text('2 files shown'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('changes-view-button')));
       await tester.pumpAndSettle();
       expect(
         find.text('Large diff truncated to the bounded presentation limit.'),

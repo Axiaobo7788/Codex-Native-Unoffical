@@ -858,8 +858,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ],
                 );
               }
-              final timelineChild =
-                  _showChanges && widget.diffController.snapshot != null
+              final changes = widget.diffController.snapshot;
+              final timelineChild = _showChanges && changes != null
                   ? _DiffView(controller: widget.diffController)
                   : _timeline(controller);
               return Column(
@@ -881,6 +881,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   if (controller.thread != null && controller.reviewModeActive)
                     _reviewModeBanner(controller),
                   Expanded(child: timelineChild),
+                  if (widget.hasDesktopShell &&
+                      changes != null &&
+                      changes.files.isNotEmpty)
+                    _desktopChangesSummary(changes),
                   _ApprovalBanner(controller: widget.approvalController),
                   _UserInputBanner(controller: widget.userInputController),
                   _composer(controller),
@@ -1549,8 +1553,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ],
                       ),
               ),
-              if (widget.diffController.snapshot?.files.isNotEmpty ??
-                  false) ...[
+              if (!widget.hasDesktopShell &&
+                  (widget.diffController.snapshot?.files.isNotEmpty ??
+                      false)) ...[
                 CodexButton(
                   key: const ValueKey('changes-view-button'),
                   size: CodexButtonSize.sm,
@@ -1768,6 +1773,58 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _desktopChangesSummary(DiffSnapshot snapshot) {
+    final theme = OfficialCodexTheme.of(context);
+    final count = snapshot.files.length;
+    final label = snapshot.truncated
+        ? count == 1
+              ? '1 file shown'
+              : '$count files shown'
+        : count == 1
+        ? '1 file changed'
+        : '$count files changed';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      child: Center(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(
+              OfficialCodexTheme.composerRadiusPill,
+            ),
+            border: Border.all(
+              color: theme.hairlineBorder,
+              width: OfficialCodexTheme.hairlineBorderWidth,
+            ),
+          ),
+          child: CodexButton(
+            key: const ValueKey('changes-view-button'),
+            variant: CodexButtonVariant.ghost,
+            onPressed: () => setState(() => _showChanges = !_showChanges),
+            label: _showChanges ? 'Conversation' : null,
+            child: _showChanges
+                ? null
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(label),
+                      const SizedBox(width: ThemeTokens.space2),
+                      Text(
+                        '+${snapshot.additions}',
+                        style: TextStyle(color: theme.diffAddedText),
+                      ),
+                      const SizedBox(width: ThemeTokens.space1),
+                      Text(
+                        '-${snapshot.deletions}',
+                        style: TextStyle(color: theme.diffRemovedText),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -2948,6 +3005,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         historyController: widget.historyController,
                         outputGateway: widget.outputGateway,
                         detailMode: _detailMode,
+                        inlineActivity: widget.hasDesktopShell,
                         overrideEntryText: overrideText,
                         overrideAttachments: overrideAttachments,
                         siblingBranchInfo:
@@ -3099,6 +3157,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     child: _ConversationEntryView(
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
+                      inlineActivity: widget.hasDesktopShell,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:
@@ -4611,6 +4670,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.attachments = const [],
     this.isReasoning = false,
     this.isCommand = false,
+    this.inlineActivity = false,
     this.leadingHeader,
     this.trailingAction,
     this.onForkFromTurn,
@@ -4630,6 +4690,7 @@ class _ConversationEntryView extends StatelessWidget {
   final List<UserAttachment> attachments;
   final bool isReasoning;
   final bool isCommand;
+  final bool inlineActivity;
   final Widget? leadingHeader;
   final Widget? trailingAction;
   final VoidCallback? onForkFromTurn;
@@ -4673,7 +4734,8 @@ class _ConversationEntryView extends StatelessWidget {
 
     if (isReasoning ||
         (entry.kind == ConversationEntryKind.activity &&
-            entry.text == 'Reasoning')) {
+            (entry.text == 'Reasoning' ||
+                (inlineActivity && entry.text.startsWith('Reasoning: '))))) {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -4683,7 +4745,7 @@ class _ConversationEntryView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ?leadingHeader,
-              _ReasoningEntryView(entry: entry),
+              _ReasoningEntryView(entry: entry, inline: inlineActivity),
             ],
           ),
         ),
@@ -4692,6 +4754,7 @@ class _ConversationEntryView extends StatelessWidget {
 
     final isReview = entry.kind == ConversationEntryKind.review;
     final isActivity = entry.kind == ConversationEntryKind.activity || isReview;
+    final hasActivitySurface = isActivity && (!inlineActivity || isReview);
     final isError = entry.kind == ConversationEntryKind.error;
     final showAssistantCopy =
         entry.kind == ConversationEntryKind.assistant &&
@@ -4719,20 +4782,20 @@ class _ConversationEntryView extends StatelessWidget {
                 margin: EdgeInsets.only(
                   bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
                 ),
-                padding: isActivity || isError
+                padding: hasActivitySurface || isError
                     ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
                     : EdgeInsets.zero,
                 decoration: BoxDecoration(
                   color: isError
                       ? palette.danger.withValues(alpha: 0.08)
-                      : isActivity
+                      : hasActivitySurface
                       ? isReview
                             ? palette.accent.withValues(alpha: 0.06)
                             : palette.surfaceRaised
                       : isActiveSearchMatch
                       ? palette.accent.withValues(alpha: 0.06)
                       : Colors.transparent,
-                  border: isActivity || isError
+                  border: hasActivitySurface || isError
                       ? Border.all(
                           color: isError
                               ? palette.danger.withValues(alpha: 0.3)
@@ -4745,6 +4808,7 @@ class _ConversationEntryView extends StatelessWidget {
                     ? _ActivityContent(
                         entry: entry,
                         isCommand: isCommand,
+                        inline: !hasActivitySurface,
                         trailingAction: trailingAction,
                       )
                     : Column(
@@ -5457,14 +5521,17 @@ class _UserAttachmentChip extends StatelessWidget {
 }
 
 class _ReasoningEntryView extends StatelessWidget {
-  const _ReasoningEntryView({required this.entry});
+  const _ReasoningEntryView({required this.entry, required this.inline});
 
   final ConversationEntry entry;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final raw = entry.text.trim();
+    final raw = inline && entry.text.startsWith('Reasoning: ')
+        ? entry.text.substring('Reasoning: '.length).trim()
+        : entry.text.trim();
     final summary = raw.isEmpty || raw == 'Reasoning'
         ? (entry.completed ? 'Thought' : 'Thinking…')
         : raw;
@@ -5473,15 +5540,17 @@ class _ReasoningEntryView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.psychology_outlined,
-              size: 15,
-              color: palette.textMuted,
+          if (!inline) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.psychology_outlined,
+                size: 15,
+                color: palette.textMuted,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: SelectableText(
               summary,
@@ -5499,11 +5568,13 @@ class _ActivityContent extends StatelessWidget {
   const _ActivityContent({
     required this.entry,
     this.isCommand = false,
+    required this.inline,
     this.trailingAction,
   });
 
   final ConversationEntry entry;
   final bool isCommand;
+  final bool inline;
   final Widget? trailingAction;
 
   @override
@@ -5560,6 +5631,16 @@ class _ActivityContent extends StatelessWidget {
       isRunning: !entry.completed,
       isError: statusBadge != null,
       trailingAction: trailingAction,
+      inline: inline,
+      textWidget: inline && !effectiveCommand
+          ? Text(
+              entry.text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: palette.textSecondary),
+            )
+          : null,
     );
   }
 }

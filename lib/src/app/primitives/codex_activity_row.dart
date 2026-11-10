@@ -18,6 +18,7 @@ class CodexActivityRow extends StatelessWidget {
     this.actionLabel = 'View output',
     this.trailingAction,
     this.textWidget,
+    this.inline = false,
   });
 
   final String summary;
@@ -29,6 +30,7 @@ class CodexActivityRow extends StatelessWidget {
   final String actionLabel;
   final Widget? trailingAction;
   final Widget? textWidget;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
@@ -36,20 +38,26 @@ class CodexActivityRow extends StatelessWidget {
 
     return Container(
       height: OfficialCodexTheme.activityRowHeight,
-      margin: const EdgeInsets.symmetric(vertical: 3.0),
-      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-      decoration: BoxDecoration(
-        color: theme.elevatedSurface,
-        borderRadius: BorderRadius.circular(
-          OfficialCodexTheme.activityRowRadius,
-        ),
-        border: Border.all(
-          color: isError
-              ? theme.danger.withValues(alpha: 0.5)
-              : theme.hairlineBorder,
-          width: OfficialCodexTheme.hairlineBorderWidth,
-        ),
-      ),
+      margin: inline
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(vertical: 3.0),
+      padding: inline
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 10.0),
+      decoration: inline
+          ? null
+          : BoxDecoration(
+              color: theme.elevatedSurface,
+              borderRadius: BorderRadius.circular(
+                OfficialCodexTheme.activityRowRadius,
+              ),
+              border: Border.all(
+                color: isError
+                    ? theme.danger.withValues(alpha: 0.5)
+                    : theme.hairlineBorder,
+                width: OfficialCodexTheme.hairlineBorderWidth,
+              ),
+            ),
       child: Row(
         children: [
           if (isRunning) ...[
