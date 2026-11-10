@@ -4287,3 +4287,54 @@ probe before interpreting that result as a content-search limitation.
   the bounded-history benchmark, Linux packaging, and Host-backed
   MCP, Turn and Review smoke. Rust formatting, Clippy and 100 tests
   passed on the unchanged Rust tree.
+
+## F29 — Responsive conversation continuity and saved queue readback
+
+- A packaged baseline at `a1f7610` lost an unsent draft when resizing
+  from 1280×720 to 720×800 and back. At a constant 720×800, opening
+  Threads and reselecting the same thread lost both its draft and
+  pending mention. Two independent widget cases reproduced the loss.
+- F29A `f7a7e67` gives the connected workspace one active conversation
+  state across the 760 px breakpoint and compact navigation. The
+  hidden pane is excluded from focus and tickers. Focus and
+  scroll restoration check the active layout and scroll position
+  readiness. Cold compact startup still opens Threads without an
+  active conversation or draft.
+- An interim review caught previous-thread text carrying into a
+  different compact thread. The first corrective draft would also
+  have removed the existing wide-layout text retention. Independent
+  tests established both baselines. The final change clears the
+  previous draft on a different thread while compact Threads is
+  open, retains text on ordinary wide thread changes, and clears
+  old thread attachments. A failed read and same-thread reselection
+  preserve the draft. The committed three-file tree matched the
+  corrected snapshot that passed 17 focused cases.
+- F29B `e3fe91a` and `38fe116` used four stock builds through the
+  bundled Host. Offset cursors skipped surviving rows after deletion
+  and repeated rows after reorder. A one-row read returned about
+  1.05 MB of whole stored input in the near-cap samples. Nine large
+  rows fit into one response. Reading ten ended the reader at the
+  default 8 MiB forward limit, and an independent connection could
+  still read the queue. Loaded same-process change notifications
+  carried only `threadId`. The separate cold reader refreshed by
+  explicit list. The optional queue browser remains `RESEARCH_MORE`.
+  [F29B queue evidence](reverse/QUEUED_SUBMISSION_READBACK_EVIDENCE.md)
+- Both exact branches were read and reviewed through official `agy`.
+  The queue evidence audit returned zero open findings. F29A's
+  original owner corrected the compact thread-change finding and
+  released the three-file write surface for integration.
+- Shared `fae9f85` passed Dart format and analyze, the 65-root
+  pure-Dart gate, 485 Flutter cases with five opt-in skips, five
+  isolated direct-stock cases, Rust formatting and Clippy, and
+  100 Rust tests. The bounded-history benchmark retained 100 of
+  1,000 turns and exercised ten 3 MiB outputs. Linux packaging,
+  runtime closure and licenses, and bundled Host MCP, Turn and
+  Review smoke all passed.
+- The shared Linux package used the same disposable saved thread
+  as the baseline. At 720×800, the cold application opened Threads.
+  It kept the same synthetic text and `fixture.md` mention through
+  720×800 → 1280×720 → 720×800, same-thread reselection, and a second
+  expansion while Threads was visible. The test compared the actual
+  selected composer text in its private display and checked the
+  attachment visually. The app, Host and stock process tree exited.
+  Subjective interaction and physical Android remain separate gates.

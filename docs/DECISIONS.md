@@ -2458,3 +2458,25 @@ lifecycle presentation the source of truth.
   text subset. Structured, rich and live result presentation remain
   separate evidence surfaces.
   [F28 evidence](RESEARCH.md#f28-bounded-saved-mcp-text-and-workspace-index-evidence)
+
+---
+
+## ADR-055 — Retain one conversation state through responsive navigation
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- The connected workspace keeps one active conversation widget state
+  across desktop and compact layouts. The compact shell keeps it
+  mounted when the Threads pane is visible and excludes the hidden
+  pane from focus and tickers.
+- A selected conversation or unsent draft stays visible when crossing
+  into compact layout. Cold compact startup opens Threads. Resizing,
+  opening Threads, failed selection, and same-thread reselection
+  preserve the draft and its pending attachments.
+- Preserve the measured draft behavior on a successful different
+  thread selection. Compact Threads clears the prior draft. Wide
+  selection retains text and clears prior thread attachments. History
+  ownership and working-set limits stay in the existing controllers.
+  [F29 evidence](RESEARCH.md#f29-responsive-conversation-continuity-and-saved-queue-readback)
