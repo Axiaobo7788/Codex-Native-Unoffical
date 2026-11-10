@@ -1,28 +1,50 @@
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'simulated_runtime_harness.dart';
 
 void main() {
-  testWidgets('local sidebar marks the displayed receipt without resuming', (
+  testWidgets('wide sidebar projects and updates a trailing unread receipt', (
     tester,
   ) async {
     final harness = _ReceiptHarness();
     await pumpSimulatedRuntimeApp(tester, harness: harness);
+    expect(_unreadIndicator, findsOneWidget);
+    expect(tester.getSize(_unreadIndicator), const Size.square(8));
+    expect(find.text('Read sibling'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('thread-timestamp-read-sibling')),
+      findsNothing,
+    );
+    expect(
+      tester.getCenter(_unreadIndicator).dx,
+      greaterThan(tester.getCenter(find.text('Receipt fixture')).dx),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(_receiptRow));
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    expect(_unreadIndicator, findsNothing);
+    expect(_receiptMenu, findsOneWidget);
+    await mouse.moveTo(const Offset(600, 20));
+    await tester.pump();
     expect(_unreadIndicator, findsOneWidget);
     await tester.tap(find.text('Receipt fixture'));
     await tester.pumpAndSettle();
     expect(_unreadIndicator, findsOneWidget);
     expect(harness.writes, isEmpty);
 
-    await _openMenu(tester);
+    await _openMenu(tester, mouse);
     await tester.tap(find.text('Mark as read'));
     await tester.pumpAndSettle();
     expect(harness.writes, [('saved', 'initial', false)]);
     expect(_unreadIndicator, findsNothing);
-    await _openMenu(tester);
+    await _openMenu(tester, mouse);
     await tester.tap(find.text('Mark as unread'));
+    await tester.pumpAndSettle();
+    await mouse.moveTo(const Offset(600, 20));
     await tester.pumpAndSettle();
     expect(harness.writes, [
       ('saved', 'initial', false),
@@ -40,18 +62,25 @@ void main() {
     await pumpSimulatedRuntimeApp(tester, harness: harness);
     await tester.tap(find.text('Receipt fixture'));
     await tester.pumpAndSettle();
-    await _openMenu(tester);
+    expect(_unreadIndicator, findsOneWidget);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(600, 20));
+    addTearDown(mouse.removePointer);
+    await _openMenu(tester, mouse);
     expect(find.text('Mark as read'), findsNothing);
     expect(find.text('Mark as unread'), findsNothing);
-    expect(_unreadIndicator, findsOneWidget);
     expect(harness.writes, isEmpty);
   });
 }
 
 final _unreadIndicator = find.byKey(const ValueKey('thread-unread-saved'));
+final _receiptRow = find.byKey(const ValueKey('thread-row-saved'));
+final _receiptMenu = find.byKey(const ValueKey('thread-menu-saved'));
 
-Future<void> _openMenu(WidgetTester tester) async {
-  await tester.tap(find.byKey(const ValueKey('thread-menu-saved')));
+Future<void> _openMenu(WidgetTester tester, TestGesture mouse) async {
+  await mouse.moveTo(tester.getCenter(_receiptRow));
+  await tester.pump();
+  await tester.tap(_receiptMenu);
   await tester.pumpAndSettle();
 }
 
@@ -69,6 +98,7 @@ class _ReceiptHarness extends SimulatedRuntimeHarness {
               unread: true,
             ),
           ),
+          createTestThread(id: 'read-sibling', preview: 'Read sibling'),
         ],
       );
 

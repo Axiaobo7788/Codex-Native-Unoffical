@@ -771,6 +771,8 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           thread: thread,
           selected: selected,
           hasNavigationRail: widget.hasNavigationRail,
+          showTimestamp:
+              !widget.hasNavigationRail || flat || controller.showArchived,
           showGoalBadge:
               !widget.hasNavigationRail ||
               !selected ||
@@ -1672,6 +1674,7 @@ class _ThreadRow extends StatefulWidget {
     required this.thread,
     required this.selected,
     required this.hasNavigationRail,
+    required this.showTimestamp,
     required this.showGoalBadge,
     required this.pinned,
     this.persistedPinned = false,
@@ -1698,6 +1701,7 @@ class _ThreadRow extends StatefulWidget {
   final ThreadSummary thread;
   final bool selected;
   final bool hasNavigationRail;
+  final bool showTimestamp;
   final bool showGoalBadge;
   final bool pinned;
   final bool persistedPinned;
@@ -1817,8 +1821,14 @@ class _ThreadRowState extends State<_ThreadRow> {
       ThreadRuntimeStatus.systemError => palette.danger,
       _ => null,
     };
+    final showTrailingUnread =
+        widget.hasNavigationRail &&
+        unread &&
+        !showRunning &&
+        statusColor == null;
     final leadingColor =
-        statusColor ?? (unread && !showRunning ? palette.accent : null);
+        statusColor ??
+        (unread && !showRunning && !showTrailingUnread ? palette.accent : null);
     final runningIndicator = showRunning
         ? SizedBox.square(
             key: ValueKey('thread-running-${thread.id}'),
@@ -1848,7 +1858,7 @@ class _ThreadRowState extends State<_ThreadRow> {
           : '${thread.displayTitle}\nGit · $gitReference',
       selected: widget.selected,
       onTap: widget.enabled ? widget.onSelect : null,
-      revealTrailingOnFocus: showRunning,
+      revealTrailingOnFocus: showRunning || showTrailingUnread,
       padding: EdgeInsets.only(left: leadingColor != null ? 8 : 10, right: 8),
       leading: leadingColor != null
           ? Semantics(
@@ -1867,7 +1877,7 @@ class _ThreadRowState extends State<_ThreadRow> {
       trailingBuilder: (context, isHovered) {
         if (isHovered ||
             _menuController.isOpen ||
-            (widget.selected && !showRunning)) {
+            (widget.selected && !showRunning && !showTrailingUnread)) {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2008,8 +2018,27 @@ class _ThreadRowState extends State<_ThreadRow> {
             ],
             if (runningIndicator != null)
               runningIndicator
-            else
+            else if (showTrailingUnread)
+              SizedBox.square(
+                dimension: 16,
+                child: Center(
+                  child: Semantics(
+                    label: 'Unread thread',
+                    child: Container(
+                      key: ValueKey('thread-unread-${thread.id}'),
+                      width: OfficialCodexTheme.sidebarUnreadIndicatorSize,
+                      height: OfficialCodexTheme.sidebarUnreadIndicatorSize,
+                      decoration: const BoxDecoration(
+                        color: OfficialCodexTheme.sidebarUnreadIndicatorColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (widget.showTimestamp)
               Text(
+                key: ValueKey('thread-timestamp-${thread.id}'),
                 _shortTime(thread.updatedAt),
                 style: Theme.of(context).textTheme.labelSmall
                     ?.copyWith(fontSize: 11, color: palette.textMuted),
