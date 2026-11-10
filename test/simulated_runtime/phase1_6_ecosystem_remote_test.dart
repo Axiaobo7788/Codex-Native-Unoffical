@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/ecosystem_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
@@ -160,8 +161,13 @@ void main() {
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         // Global resource read when no thread is selected stays threadless.
-        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        final home = find.byKey(const ValueKey('app-shell-home-button'));
+        final ecosystem = find.byKey(const ValueKey('ecosystem-button'));
+        expect(tester.widget<CodexIconButton>(home).selected, isTrue);
+        await tester.tap(ecosystem);
         await tester.pumpAndSettle();
+        expect(tester.widget<CodexIconButton>(home).selected, isFalse);
+        expect(tester.widget<CodexIconButton>(ecosystem).selected, isTrue);
         await tester.tap(find.text('MCP (1)'));
         await tester.pumpAndSettle();
         await tester.tap(
@@ -183,6 +189,8 @@ void main() {
         harness.mcpResourceReadQueries.clear();
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pumpAndSettle();
+        expect(tester.widget<CodexIconButton>(home).selected, isTrue);
+        expect(tester.widget<CodexIconButton>(ecosystem).selected, isFalse);
 
         await tester.tap(find.byKey(const ValueKey('thread-row-thread-mcp')));
         await tester.pumpAndSettle();

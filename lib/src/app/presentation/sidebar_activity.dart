@@ -851,7 +851,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     );
   }
 
-  void _openEcosystem() => showDialog<void>(
+  Future<void> _openEcosystem() => showDialog<void>(
     context: context,
     builder: (context) => _EcosystemDialog(
       gateway: widget.runtimeController,

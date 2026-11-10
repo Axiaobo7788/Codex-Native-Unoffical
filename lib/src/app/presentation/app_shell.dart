@@ -221,9 +221,25 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   final _fileMenu = CodexPopoverController();
   final _viewMenu = CodexPopoverController();
   var _sidebarCollapsed = false;
+  var _ecosystemOpen = false;
 
   void _toggleSidebar() {
     setState(() => _sidebarCollapsed = !_sidebarCollapsed);
+  }
+
+  Future<void> _openRailEcosystem() async {
+    final panel = _threadPanelKey.currentState;
+    if (panel == null || _ecosystemOpen) {
+      return;
+    }
+    setState(() => _ecosystemOpen = true);
+    try {
+      await panel._openEcosystem();
+    } finally {
+      if (mounted) {
+        setState(() => _ecosystemOpen = false);
+      }
+    }
   }
 
   @override
@@ -512,7 +528,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                   CodexIconButton(
                     key: const ValueKey('app-shell-home-button'),
                     tooltip: 'Codex home',
-                    selected: true,
+                    selected: !_ecosystemOpen,
                     size: 36,
                     icon: const Icon(Icons.home_rounded, size: 19),
                     onPressed: () => widget
@@ -525,10 +541,10 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                   CodexIconButton(
                     key: const ValueKey('ecosystem-button'),
                     tooltip: 'Skills, Plugins & MCP',
+                    selected: _ecosystemOpen,
                     size: 36,
-                    icon: const Icon(Icons.extension_outlined, size: 19),
-                    onPressed: () =>
-                        _threadPanelKey.currentState?._openEcosystem(),
+                    icon: const Icon(Icons.widgets_outlined, size: 20),
+                    onPressed: _openRailEcosystem,
                   ),
                 ],
               ),
