@@ -44,7 +44,7 @@ class _ColdReviewHarness extends SimulatedRuntimeHarness {
         ],
       );
 
-  final ThreadQueuePresence presence;
+  ThreadQueuePresence presence;
   final bool failResume;
   final queueReads = <String>[];
 
@@ -131,10 +131,11 @@ void main() {
     await _openThreadActions(tester);
     await tester.tap(find.text('Code review…'));
     await tester.pumpAndSettle();
+    expect(harness.resumedThreadIds, isEmpty);
     await tester.tap(find.byKey(const ValueKey('start-review-submit-button')));
     await tester.pumpAndSettle();
 
-    expect(harness.queueReads, ['cold-review']);
+    expect(harness.queueReads, ['cold-review', 'cold-review']);
     expect(harness.resumedThreadIds, ['cold-review']);
     expect(harness.startedReviews.single.threadId, 'cold-review');
     expect(
@@ -143,6 +144,34 @@ void main() {
     );
     expect(harness.startedTurns, isEmpty);
     expect(find.text('Unsent review draft'), findsOneWidget);
+  });
+
+  testWidgets('cold queued review asks for resume before opening its target', (
+    tester,
+  ) async {
+    final harness = _ColdReviewHarness(ThreadQueuePresence.pending);
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    await tester.tap(find.text('Cold review fixture'));
+    await tester.pumpAndSettle();
+
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Code review…'));
+    await tester.pumpAndSettle();
+    final submit = find.byKey(const ValueKey('start-review-submit-button'));
+    expect(submit, findsNothing);
+    expect(find.text('Resume queued work?'), findsOneWidget);
+    await tester.tap(find.text('Resume queued work'));
+    await tester.pumpAndSettle();
+    expect(harness.resumedThreadIds, ['cold-review']);
+    expect(harness.startedReviews, isEmpty);
+
+    await _openThreadActions(tester);
+    await tester.tap(find.text('Code review…'));
+    await tester.pumpAndSettle();
+    expect(submit, findsOneWidget);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(harness.startedReviews.single.threadId, 'cold-review');
   });
 
   testWidgets('cold queued review separates consent to resume from review', (
@@ -176,6 +205,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(harness.startedReviews.single.threadId, 'cold-review');
   });
+
+  testWidgets(
+    'a queue appearing while review target is open requires consent',
+    (tester) async {
+      final harness = _ColdReviewHarness(ThreadQueuePresence.empty);
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
+      await tester.tap(find.text('Cold review fixture'));
+      await tester.pumpAndSettle();
+      await _openThreadActions(tester);
+      await tester.tap(find.text('Code review…'));
+      await tester.pumpAndSettle();
+
+      harness.presence = ThreadQueuePresence.pending;
+      await tester.tap(
+        find.byKey(const ValueKey('start-review-submit-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Resume queued work?'), findsOneWidget);
+      expect(harness.queueReads, ['cold-review', 'cold-review']);
+      expect(harness.resumedThreadIds, isEmpty);
+      expect(harness.startedReviews, isEmpty);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('cold review reports failed resume in compact conversation', (
     tester,
