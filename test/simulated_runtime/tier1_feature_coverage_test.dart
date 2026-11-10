@@ -892,8 +892,10 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('No file changes for this turn.'), findsOneWidget);
-        expect(changesBtn, findsOneWidget);
-        await tester.tap(changesBtn);
+        expect(changesBtn, findsNothing);
+        await tester.tap(
+          find.byKey(const ValueKey('workspace-side-panel-toggle')),
+        );
         await tester.pumpAndSettle();
         expect(find.text('No file changes for this turn.'), findsNothing);
         expect(changesBtn, findsNothing);

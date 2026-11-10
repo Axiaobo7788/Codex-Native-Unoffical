@@ -291,7 +291,10 @@ void main() {
       await tester.tap(changes);
       await tester.pumpAndSettle();
       expect(find.text('+fixture change'), findsOneWidget);
-      await tester.tap(changes);
+      expect(changes, findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-side-panel-toggle')),
+      );
       await tester.pumpAndSettle();
 
       expect(target, findsOneWidget);

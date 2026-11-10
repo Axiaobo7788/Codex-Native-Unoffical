@@ -1017,8 +1017,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         : _timeline(controller),
                   ),
                   if (widget.hasDesktopShell &&
+                      !showingChanges &&
                       changes != null &&
-                      (_showChanges || changes.files.isNotEmpty))
+                      changes.files.isNotEmpty)
                     _desktopChangesSummary(
                       changes,
                       canSplit: canSplit,
@@ -2245,7 +2246,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         : count == 1
         ? '1 file changed'
         : '$count files changed';
-    final preview = running && !_showChanges && count > 0;
+    final preview = running;
     final summary = '$label, +${snapshot.additions} −${snapshot.deletions}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
@@ -2272,48 +2273,39 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               key: const ValueKey('changes-view-button'),
               variant: CodexButtonVariant.ghost,
               onPressed: () => _toggleChanges(keepsTimeline: canSplit),
-              label: _showChanges
-                  ? (canSplit ? 'Hide changes' : 'Conversation')
-                  : null,
-              tooltip: preview
-                  ? null
-                  : _showChanges
-                  ? (canSplit ? 'Hide changes' : 'Return to conversation')
-                  : summary,
-              child: _showChanges
-                  ? null
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          flex: 2,
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: theme.textSecondary),
-                          ),
-                        ),
-                        const SizedBox(width: ThemeTokens.space2),
-                        Flexible(
-                          child: Text(
-                            '+${snapshot.additions}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: theme.diffAddedText),
-                          ),
-                        ),
-                        const SizedBox(width: ThemeTokens.space1),
-                        Flexible(
-                          child: Text(
-                            '-${snapshot.deletions}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: theme.diffRemovedText),
-                          ),
-                        ),
-                      ],
+              tooltip: preview ? null : summary,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    flex: 2,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: theme.textSecondary),
                     ),
+                  ),
+                  const SizedBox(width: ThemeTokens.space2),
+                  Flexible(
+                    child: Text(
+                      '+${snapshot.additions}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: theme.diffAddedText),
+                    ),
+                  ),
+                  const SizedBox(width: ThemeTokens.space1),
+                  Flexible(
+                    child: Text(
+                      '-${snapshot.deletions}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: theme.diffRemovedText),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

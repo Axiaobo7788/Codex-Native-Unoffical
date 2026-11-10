@@ -76,6 +76,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(preview, findsNothing);
+    expect(chip, findsNothing);
     expect(find.textContaining('second disposable patch'), findsOneWidget);
     expect(find.textContaining('first disposable patch'), findsNothing);
     expect(tester.takeException(), isNull);

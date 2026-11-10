@@ -162,7 +162,9 @@ void main() {
       expect(find.textContaining('CREATE TABLE users'), findsOneWidget);
 
       // Close diff view
-      await tester.tap(changesBtn);
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-side-panel-toggle')),
+      );
       await tester.pumpAndSettle();
 
       // 7. Complete turn
