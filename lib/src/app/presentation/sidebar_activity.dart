@@ -2317,11 +2317,16 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   bool get _activeSectionLoading => switch (_section) {
     _EcosystemSection.skills =>
-      _skillsLoading || _mutatingSkillPaths.isNotEmpty,
+      _skillsLoading ||
+          _skillsRefreshInFlight != null ||
+          _mutatingSkillPaths.isNotEmpty,
     _EcosystemSection.plugins =>
-      _pluginsLoading || _mutatingPluginIds.isNotEmpty,
-    _EcosystemSection.apps => _appsLoading,
-    _EcosystemSection.mcp => _mcpLoading || _reloadingMcp,
+      _pluginsLoading ||
+          _pluginsRefreshInFlight != null ||
+          _mutatingPluginIds.isNotEmpty,
+    _EcosystemSection.apps => _appsLoading || _appsRefreshInFlight != null,
+    _EcosystemSection.mcp =>
+      _mcpLoading || _mcpRefreshInFlight != null || _reloadingMcp,
   };
 
   String? get _activeSectionError => switch (_section) {
@@ -2496,7 +2501,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         .whenComplete(() {
           if (identical(_pluginsRefreshInFlight, future)) {
             _pluginsRefreshInFlight = null;
-            if (mounted && _pluginsLoading) {
+            if (mounted) {
               setState(() => _pluginsLoading = false);
             }
           }
@@ -2530,29 +2535,13 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pluginsLoading = false;
       });
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
-        final expandedPlugins = nextPlugins
-            .where((p) => _expandedPluginIds.contains(p.id))
-            .toList(growable: false);
-        for (final plugin in expandedPlugins) {
-          try {
-            final updatedDetail = await catalog.readPlugin(
-              pluginName: plugin.effectivePluginName,
-              marketplacePath: plugin.marketplacePath,
-              remoteMarketplaceName: plugin.marketplacePath == null
-                  ? plugin.marketplaceName
-                  : null,
-            );
-            if (mounted &&
-                generation == _pluginsRefreshGeneration &&
-                _expandedPluginIds.contains(plugin.id)) {
-              setState(() {
-                _pluginDetails[plugin.id] = updatedDetail;
-              });
-            }
-          } on Object {
-            // Keep existing detail if refresh re-read fails.
-          }
-        }
+        unawaited(
+          _refreshExpandedPluginDetails(
+            catalog: catalog,
+            plugins: nextPlugins,
+            generation: generation,
+          ),
+        );
       }
     } catch (error) {
       if (!mounted || generation != _pluginsRefreshGeneration) {
@@ -2563,6 +2552,36 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pluginsError = '$error';
         _pluginsLoading = false;
       });
+    }
+  }
+
+  Future<void> _refreshExpandedPluginDetails({
+    required EcosystemCatalogGateway catalog,
+    required List<PluginSummaryModel> plugins,
+    required int generation,
+  }) async {
+    final expandedPlugins = plugins
+        .where((p) => _expandedPluginIds.contains(p.id))
+        .toList(growable: false);
+    for (final plugin in expandedPlugins) {
+      try {
+        final updatedDetail = await catalog.readPlugin(
+          pluginName: plugin.effectivePluginName,
+          marketplacePath: plugin.marketplacePath,
+          remoteMarketplaceName: plugin.marketplacePath == null
+              ? plugin.marketplaceName
+              : null,
+        );
+        if (mounted &&
+            generation == _pluginsRefreshGeneration &&
+            _expandedPluginIds.contains(plugin.id)) {
+          setState(() {
+            _pluginDetails[plugin.id] = updatedDetail;
+          });
+        }
+      } on Object {
+        // Keep existing detail if refresh re-read fails.
+      }
     }
   }
 
@@ -3680,6 +3699,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                               loading: _mutatingPluginIds.contains(plugin.id),
                               onPressed:
                                   !_pluginsLoading &&
+                                      _pluginsRefreshInFlight == null &&
                                       plugin.canInstall &&
                                       _mutatingPluginIds.isEmpty
                                   ? () => _installPlugin(plugin)
@@ -3694,6 +3714,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                               loading: _mutatingPluginIds.contains(plugin.id),
                               onPressed:
                                   !_pluginsLoading &&
+                                      _pluginsRefreshInFlight == null &&
                                       plugin.canUninstall &&
                                       _mutatingPluginIds.isEmpty
                                   ? () => _uninstallPlugin(plugin)
