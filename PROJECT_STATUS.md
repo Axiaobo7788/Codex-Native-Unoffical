@@ -80,6 +80,9 @@ Escape and submitted the pending stock answer. The active thread row swaps its
 trailing spinner for actions on interaction. The release opened saved stock
 activity with the corrected chevron and a real +80/−0 diff from the translated
 Changes summary. The Golden-State matrix records the remaining machine work.
+The workspace header now ends with thread menu, detail options and the
+supported side-panel toggle. Release search and Goal opening use the new
+routes. The active Goal label now ticks locally without new stock reads.
 Home, open Changes, Review, expanded activity,
 compact and dark/focused states have separate evidence gates. [Hosted CI for `70a12da`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42829481686)
 
