@@ -297,6 +297,44 @@ void main() {
       expect(target, findsOneWidget);
       expect(tester.getTopLeft(target).dy, closeTo(topBefore, 1.5));
       expect(runtime.olderTurnPageCalls, olderPageCalls);
+
+      await tester.tap(changes);
+      await tester.pumpAndSettle();
+      await tester.drag(timeline, const Offset(0, 430));
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(timeline);
+      final measured = find.byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> &&
+            key.value.startsWith('measured-history-');
+      });
+      final visible =
+          [
+                for (final element in measured.evaluate())
+                  (
+                    key: element.widget.key!,
+                    top: tester.getTopLeft(find.byKey(element.widget.key!)).dy,
+                  ),
+              ]
+              .where(
+                (item) =>
+                    item.top >= viewport.top && item.top < viewport.bottom,
+              )
+              .toList()
+            ..sort((first, second) => first.top.compareTo(second.top));
+      final readingAnchor = visible.first;
+
+      tester.view.physicalSize = const Size(1191, 865);
+      await tester.pumpAndSettle();
+      expect(timeline, findsNothing);
+      tester.view.physicalSize = const Size(1400, 900);
+      await tester.pumpAndSettle();
+      expect(find.byKey(readingAnchor.key), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(readingAnchor.key)).dy,
+        closeTo(readingAnchor.top, 1.5),
+      );
+      expect(runtime.olderTurnPageCalls, olderPageCalls);
     },
   );
 

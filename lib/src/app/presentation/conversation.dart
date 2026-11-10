@@ -118,6 +118,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
   var _showChanges = false;
+  bool? _usingChangesSidePane;
   var _searchOpen = false;
   var _checkingColdResume = false;
   var _threadSelectionVersion = 0;
@@ -792,6 +793,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               if (widget.threadController != null) widget.threadController!,
               widget.diffController,
               widget.historyController,
+              widget.userInputController,
             ]),
             builder: (context, _) {
               final controller = widget.controller;
@@ -859,11 +861,35 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ],
                 );
               }
-              final changes = widget.diffController.snapshot;
-              final timelineChild = _showChanges && changes != null
-                  ? _DiffView(controller: widget.diffController)
-                  : _timeline(controller);
-              return Column(
+              return _activeWorkspace(controller);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _activeWorkspace(ConversationController controller) {
+    final changes = widget.diffController.snapshot;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final constrainQuestion =
+            constraints.maxHeight < 560 &&
+            widget.userInputController.pending.isNotEmpty;
+        // The official resize coordinator switches pane behavior at a 960 px
+        // workspace. Keep the compact replacement view below that boundary.
+        final canSplit = widget.hasDesktopShell && constraints.maxWidth > 960;
+        final showingChanges = _showChanges && changes != null;
+        final sidePane = showingChanges && canSplit;
+        if (sidePane && _usingChangesSidePane == false) {
+          _restoreChangesReadingPosition();
+        }
+        _usingChangesSidePane = showingChanges ? sidePane : null;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _conversationHeader(controller),
@@ -881,20 +907,44 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     _turnPlanBanner(controller),
                   if (controller.thread != null && controller.reviewModeActive)
                     _reviewModeBanner(controller),
-                  Expanded(child: timelineChild),
+                  Expanded(
+                    child: showingChanges && !sidePane
+                        ? _DiffView(controller: widget.diffController)
+                        : _timeline(controller),
+                  ),
                   if (widget.hasDesktopShell &&
                       changes != null &&
                       (_showChanges || changes.files.isNotEmpty))
-                    _desktopChangesSummary(changes),
+                    _desktopChangesSummary(changes, canSplit: canSplit),
                   _ApprovalBanner(controller: widget.approvalController),
-                  _UserInputBanner(controller: widget.userInputController),
+                  Flexible(
+                    flex: constrainQuestion ? 5 : 0,
+                    child: _UserInputBanner(
+                      controller: widget.userInputController,
+                    ),
+                  ),
                   _composer(controller),
                 ],
-              );
-            },
-          ),
-        ),
-      ),
+              ),
+            ),
+            if (sidePane)
+              _DesktopChangesPane(
+                width: math.max(
+                  320.0,
+                  math.max(
+                    math.min(
+                      1.6 * constraints.maxHeight,
+                      constraints.maxWidth - 500,
+                    ),
+                    math.min(640.0, constraints.maxWidth - 352),
+                  ),
+                ),
+                controller: widget.diffController,
+                onClose: () => _toggleChanges(keepsTimeline: true),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -1781,25 +1831,33 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
-  void _toggleChanges() {
+  void _toggleChanges({bool keepsTimeline = false}) {
     final threadId = _activeThreadId;
-    if (!_showChanges && threadId != null && !_pendingThreadRestore) {
+    if ((!_showChanges || keepsTimeline) &&
+        threadId != null &&
+        !_pendingThreadRestore) {
       _captureThreadScrollBookmark(threadId);
     }
-    setState(() {
-      _showChanges = !_showChanges;
-      if (!_showChanges && threadId != null) {
-        _pendingThreadRestore = true;
-        _restorePagesLoaded = 0;
-        _restoreAlignmentPasses = 0;
-      }
-    });
-    if (!_showChanges && _pendingThreadRestore) {
-      _scheduleThreadScrollRestore();
+    setState(() => _showChanges = !_showChanges);
+    if (keepsTimeline || !_showChanges) {
+      _restoreChangesReadingPosition();
     }
   }
 
-  Widget _desktopChangesSummary(DiffSnapshot snapshot) {
+  void _restoreChangesReadingPosition() {
+    if (_activeThreadId == null) {
+      return;
+    }
+    _pendingThreadRestore = true;
+    _restorePagesLoaded = 0;
+    _restoreAlignmentPasses = 0;
+    _scheduleThreadScrollRestore();
+  }
+
+  Widget _desktopChangesSummary(
+    DiffSnapshot snapshot, {
+    required bool canSplit,
+  }) {
     final theme = OfficialCodexTheme.of(context);
     final count = snapshot.files.length;
     final label = snapshot.truncated
@@ -1825,10 +1883,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           child: CodexButton(
             key: const ValueKey('changes-view-button'),
             variant: CodexButtonVariant.ghost,
-            onPressed: _toggleChanges,
-            label: _showChanges ? 'Conversation' : null,
+            onPressed: () => _toggleChanges(keepsTimeline: canSplit),
+            label: _showChanges
+                ? (canSplit ? 'Hide changes' : 'Conversation')
+                : null,
             tooltip: _showChanges
-                ? 'Return to conversation'
+                ? (canSplit ? 'Hide changes' : 'Return to conversation')
                 : '$label, +${snapshot.additions} −${snapshot.deletions}',
             child: _showChanges
                 ? null

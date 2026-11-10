@@ -493,9 +493,94 @@ void main() {
   });
 
   testWidgets(
+    'a pending question and warning fit after resizing a Desktop window',
+    (tester) async {
+      tester.view.physicalSize = const Size(820, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController();
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+
+      await _send(tester, 'Start a fixture turn.');
+      await tester.pumpAndSettle();
+      runtime.emitWarning(
+        'Model metadata was unavailable and the runtime is using fallback '
+        'metadata for this disposable fixture.',
+      );
+
+      runtime.emitUserInput(
+        UserInputRequest(
+          requestId: 'short-input',
+          threadId: runtime.thread.id,
+          turnId: 'turn-1',
+          itemId: 'item-1',
+          isBlocking: true,
+          questions: [
+            UserInputQuestion(
+              id: 'approach',
+              header: 'Approach',
+              question: 'Which implementation should be used?',
+              options: [
+                for (var i = 1; i <= 8; i++)
+                  UserInputOption(
+                    label: 'Option $i',
+                    description: 'A distinct implementation option.',
+                  ),
+              ],
+              allowsOther: false,
+              isSecret: false,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scroll = find.byKey(const ValueKey('user-input-question-scroll'));
+      final submit = find.byKey(const ValueKey('user-input-submit'));
+      final last = find.byKey(const ValueKey('user-input-approach-Option 8'));
+      await tester.tap(
+        find.byKey(const ValueKey('user-input-approach-Option 1')),
+      );
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(820, 420);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(submit).dy, lessThan(420));
+      expect(tester.widget<CodexButton>(submit).isEnabled, isTrue);
+      expect(
+        tester
+            .getBottomLeft(find.byKey(const ValueKey('floating_composer')))
+            .dy,
+        lessThanOrEqualTo(420),
+      );
+      await tester.scrollUntilVisible(
+        last,
+        70,
+        scrollable: find.descendant(
+          of: scroll,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(last);
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(runtime.userInputSubmissions.single.$2.values, {
+        'approach': ['Option 8'],
+      });
+    },
+  );
+
+  testWidgets(
     'large diff view is truncated, virtualized, and file-selectable',
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
+      await _send(tester, 'Fixture conversation remains available.');
+      await tester.pumpAndSettle();
       runtime.emitDiff(
         DiffSnapshot(
           threadId: runtime.thread.id,
@@ -528,6 +613,15 @@ void main() {
       expect(find.text('2 files shown'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('changes-view-button')));
       await tester.pumpAndSettle();
+      final changesPane = find.byKey(const ValueKey('desktop-changes-pane'));
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+      expect(changesPane, findsOneWidget);
+      expect(timeline, findsOneWidget);
+      expect(
+        tester.getRect(timeline).right,
+        lessThanOrEqualTo(tester.getRect(changesPane).left),
+      );
+      expect(tester.getSize(changesPane).width, greaterThanOrEqualTo(320));
       expect(
         find.text('Large diff truncated to the bounded presentation limit.'),
         findsOneWidget,
@@ -550,6 +644,20 @@ void main() {
       expect(addedText.style?.color, expectedTheme.diffAddedText);
       expect(removedText.style?.color, expectedTheme.diffRemovedText);
       expect(find.text('+line-0'), findsNothing);
+
+      tester.view.physicalSize = const Size(1191, 865);
+      await tester.pumpAndSettle();
+      expect(changesPane, findsNothing);
+      expect(find.text('+second'), findsOneWidget);
+
+      tester.view.physicalSize = const Size(1600, 1000);
+      await tester.pumpAndSettle();
+      expect(changesPane, findsOneWidget);
+      expect(find.text('+second'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close Changes pane'));
+      await tester.pumpAndSettle();
+      expect(changesPane, findsNothing);
+      expect(timeline, findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -901,6 +1009,10 @@ class _ProductRuntimeController extends RuntimeController {
 
   void emitDiff(DiffSnapshot snapshot) {
     _turns.add(TurnDiffUpdatedEvent(snapshot: snapshot));
+  }
+
+  void emitWarning(String message) {
+    _turns.add(TurnWarningEvent(threadId: thread.id, message: message));
   }
 
   void emitApproval(ApprovalRequest request) {

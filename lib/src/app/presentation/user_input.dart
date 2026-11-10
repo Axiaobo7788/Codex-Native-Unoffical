@@ -558,6 +558,7 @@ class _UserInputCardState extends State<_UserInputCard> {
     final palette = ThemeTokens.of(context);
     final submitting = widget.controller.isSubmitting(widget.request.requestId);
     return Center(
+      heightFactor: 1,
       child: Container(
         key: const ValueKey('user-input-card'),
         constraints: const BoxConstraints(
@@ -599,28 +600,30 @@ class _UserInputCardState extends State<_UserInputCard> {
               ],
             ),
             const SizedBox(height: ThemeTokens.space2),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: SingleChildScrollView(
-                key: const ValueKey('user-input-question-scroll'),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (
-                      var index = 0;
-                      index < widget.request.questions.length;
-                      index++
-                    ) ...[
-                      if (index > 0)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: ThemeTokens.space3,
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: SingleChildScrollView(
+                  key: const ValueKey('user-input-question-scroll'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (
+                        var index = 0;
+                        index < widget.request.questions.length;
+                        index++
+                      ) ...[
+                        if (index > 0)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: ThemeTokens.space3,
+                            ),
+                            child: Divider(height: 1, color: palette.border),
                           ),
-                          child: Divider(height: 1, color: palette.border),
-                        ),
-                      _question(widget.request.questions[index], submitting),
+                        _question(widget.request.questions[index], submitting),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
