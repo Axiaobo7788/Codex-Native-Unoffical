@@ -71,6 +71,17 @@ class AssistantMarkdown extends StatelessWidget {
                       (lineHeight + 1.5 / 4) -
                   (baseStyleSheet.listBulletPadding?.horizontal ?? 0))
               .clamp(0.0, double.infinity);
+    TextStyle? desktopHeading(double sizeRatio, double lineBoxRatio) {
+      if (lineHeight == null || fontSize == null) {
+        return null;
+      }
+      return bodyStyle?.copyWith(
+        fontSize: fontSize * sizeRatio,
+        height: lineBoxRatio / sizeRatio,
+        fontWeight: FontWeight.w600,
+      );
+    }
+
     final styleSheet = baseStyleSheet.copyWith(
       a: bodyStyle?.copyWith(
         color: theme.colorScheme.primary,
@@ -84,10 +95,18 @@ class AssistantMarkdown extends StatelessWidget {
         fontFamily: 'monospace',
         fontSize: 12.5,
       ),
-      h1: theme.textTheme.titleLarge?.copyWith(height: 1.35),
-      h2: theme.textTheme.titleMedium?.copyWith(fontSize: 15.5, height: 1.35),
-      h3: theme.textTheme.titleSmall?.copyWith(fontSize: 14, height: 1.35),
-      h4: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
+      h1:
+          desktopHeading(1.5, 2) ??
+          theme.textTheme.titleLarge?.copyWith(height: 1.35),
+      h2:
+          desktopHeading(1.25, 1.75) ??
+          theme.textTheme.titleMedium?.copyWith(fontSize: 15.5, height: 1.35),
+      h3:
+          desktopHeading(1.125, 1.75) ??
+          theme.textTheme.titleSmall?.copyWith(fontSize: 14, height: 1.35),
+      h4:
+          desktopHeading(1, 1.5) ??
+          bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       h5: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       h6: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       blockSpacing: 10,

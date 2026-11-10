@@ -123,6 +123,49 @@ Raw <em>inline</em> HTML.
     );
   });
 
+  testWidgets('renders desktop Markdown heading sizes relative to body text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const AssistantMarkdown(
+          data: '''
+# Heading one
+## Heading two
+### Heading three
+#### Heading four
+##### Heading five
+###### Heading six
+''',
+          completed: true,
+          proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+        ),
+      ),
+    );
+    const measurements = <(String, double, double)>[
+      ('Heading one', 1.5, 2),
+      ('Heading two', 1.25, 1.75),
+      ('Heading three', 1.125, 1.75),
+      ('Heading four', 1, 1.5),
+      ('Heading five', 1, 1.625),
+      ('Heading six', 1, 1.625),
+    ];
+    for (final (heading, sizeRatio, lineBoxRatio) in measurements) {
+      final text = find.text(heading);
+      final style = tester.widget<Text>(text).textSpan!.style!;
+      final bodySize = Theme.of(tester.element(text))
+          .textTheme
+          .bodyMedium!
+          .fontSize!;
+      expect(style.fontWeight, FontWeight.w600);
+      expect(style.fontSize, closeTo(bodySize * sizeRatio, 0.01));
+      expect(
+        style.fontSize! * style.height!,
+        closeTo(bodySize * lineBoxRatio, 0.01),
+      );
+    }
+  });
+
   testWidgets('caps the source passed to the Markdown parser', (tester) async {
     final oversized =
         'prefix-${List.filled(AssistantMarkdown.maxSourceCharacters + 32, 'x').join()}';
