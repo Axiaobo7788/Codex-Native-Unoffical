@@ -9,6 +9,46 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'simulated_runtime_harness.dart';
 
+class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
+  _ConfigurableEcosystemHarness({
+    this.listSkillsOverride,
+    this.listPluginsOverride,
+    this.listMcpServerStatusOverride,
+  });
+
+  Future<List<SkillSummary>> Function(List<String> cwds)? listSkillsOverride;
+  Future<List<PluginSummaryModel>> Function(List<String> cwds)?
+  listPluginsOverride;
+  Future<List<McpServerStatusModel>> Function()? listMcpServerStatusOverride;
+
+  @override
+  Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) {
+    final override = listSkillsOverride;
+    if (override != null) {
+      return override(cwds);
+    }
+    return super.listSkills(cwds: cwds);
+  }
+
+  @override
+  Future<List<PluginSummaryModel>> listPlugins({List<String> cwds = const []}) {
+    final override = listPluginsOverride;
+    if (override != null) {
+      return override(cwds);
+    }
+    return super.listPlugins(cwds: cwds);
+  }
+
+  @override
+  Future<List<McpServerStatusModel>> listMcpServerStatus() {
+    final override = listMcpServerStatusOverride;
+    if (override != null) {
+      return override();
+    }
+    return super.listMcpServerStatus();
+  }
+}
+
 void main() {
   group('F8 Stable MCP Capabilities simulated runtime', () {
     testWidgets(
@@ -1178,6 +1218,232 @@ void main() {
         expect(
           () => remoteController.uninstallPlugin(pluginId: 'documents'),
           throwsUnsupportedError,
+        );
+      },
+    );
+
+    testWidgets(
+      'keeps healthy Skills and MCP visible when plugin list fails and distinguishes failed from empty plugin catalog',
+      (tester) async {
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) async {
+            throw StateError('Synthetic plugin catalog unavailable');
+          },
+        );
+        harness.skills.add(
+          const SkillSummary(
+            name: 'fixture-skill',
+            description: 'Working skill list',
+            path: '/tmp/fixture-skill/SKILL.md',
+            enabled: true,
+          ),
+        );
+        harness.mcpServers.add(
+          const McpServerStatusModel(
+            name: 'fixture-mcp',
+            status: 'connected',
+            toolCount: 1,
+            resourceCount: 1,
+          ),
+        );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        // Healthy Skills section renders without being suppressed or polluted by plugin error.
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-error')),
+          findsNothing,
+        );
+
+        // Healthy MCP section also loads and renders its servers.
+        await tester.tap(find.text('MCP (2)'));
+        await tester.pumpAndSettle();
+        expect(find.text('fixture-mcp'), findsOneWidget);
+
+        // Failed Plugins section reports catalog failure rather than claiming 'No plugins installed.'
+        await tester.tap(find.text('Plugins (0)'));
+        await tester.pumpAndSettle();
+        expect(find.text('No plugins installed.'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-empty')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-unavailable')),
+          findsOneWidget,
+        );
+        expect(find.text('Unable to load plugin catalog.'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-error')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Synthetic plugin catalog unavailable'),
+          findsOneWidget,
+        );
+
+        // Recovering with a zero-row plugin catalog projection transitions to truthful 'No plugin entries returned.'
+        harness.listPluginsOverride = (_) async => const <PluginSummaryModel>[];
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-error')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-unavailable')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-empty')),
+          findsOneWidget,
+        );
+        expect(find.text('No plugin entries returned.'), findsOneWidget);
+        expect(find.text('No plugins installed.'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'pending plugin list leaves healthy Skills and MCP actionable and shows section-scoped loading',
+      (tester) async {
+        final pendingPlugins = Completer<List<PluginSummaryModel>>();
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) => pendingPlugins.future,
+        );
+        harness.skills.add(
+          const SkillSummary(
+            name: 'fixture-skill',
+            description: 'Working skill list',
+            path: '/tmp/fixture-skill/SKILL.md',
+            enabled: true,
+          ),
+        );
+        harness.mcpServers.add(
+          const McpServerStatusModel(
+            name: 'fixture-mcp',
+            status: 'connected',
+            toolCount: 1,
+            resourceCount: 1,
+          ),
+        );
+        addTearDown(() {
+          if (!pendingPlugins.isCompleted) {
+            pendingPlugins.complete(const <PluginSummaryModel>[]);
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+
+        // Toggling a skill works while plugin/list is still pending.
+        await tester.tap(
+          find.byKey(const ValueKey('skill-toggle-fixture-skill')),
+        );
+        await tester.pump();
+        expect(harness.toggledSkills, [
+          (path: '/tmp/fixture-skill/SKILL.md', enabled: false),
+        ]);
+
+        // Switching to Plugins while still in flight shows loading copy rather than empty copy.
+        await tester.tap(find.text('Plugins (0)'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-loading')),
+          findsOneWidget,
+        );
+        expect(find.text('Loading plugin catalog...'), findsOneWidget);
+        expect(find.text('No plugins installed.'), findsNothing);
+
+        // Fulfilling the pending plugin list updates the Plugins section cleanly.
+        pendingPlugins.complete(const [
+          PluginSummaryModel(
+            id: 'late-plugin@local',
+            name: 'Late Plugin',
+            pluginName: 'late-plugin',
+            description: 'Arrived after initial skills load',
+            enabled: true,
+            installed: true,
+            marketplaceName: 'local',
+            marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+          ),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-loading')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('plugin-row-late-plugin@local')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'distinguishes failed Skills and MCP loads from genuinely empty workspace lists',
+      (tester) async {
+        final harness = _ConfigurableEcosystemHarness(
+          listSkillsOverride: (_) async {
+            throw StateError('Synthetic skills index unavailable');
+          },
+          listMcpServerStatusOverride: () async {
+            throw StateError('Synthetic MCP status unavailable');
+          },
+        );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-unavailable')),
+          findsOneWidget,
+        );
+        expect(find.text('Unable to load workspace skills.'), findsOneWidget);
+        expect(
+          find.text('No skills discovered in this workspace.'),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-error')),
+          findsOneWidget,
+        );
+
+        // Healthy Plugins tab remains unaffected by Skills/MCP failures.
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-error')),
+          findsNothing,
+        );
+
+        // Failed MCP tab reports unavailable status rather than 'No MCP servers configured.'
+        await tester.tap(find.text('MCP (0)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('ecosystem-mcp-unavailable')),
+          findsOneWidget,
+        );
+        expect(find.text('Unable to load MCP server status.'), findsOneWidget);
+        expect(find.text('No MCP servers configured.'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('ecosystem-mcp-error')),
+          findsOneWidget,
         );
       },
     );

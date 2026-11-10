@@ -2247,12 +2247,24 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   static const _maxDisplayedAppTools = 20;
 
   var _section = _EcosystemSection.skills;
-  var _loading = true;
+  var _skillsLoading = true;
+  var _pluginsLoading = true;
   var _appsLoading = false;
+  var _mcpLoading = true;
   var _loadingMoreApps = false;
+  var _skillsRefreshGeneration = 0;
+  var _pluginsRefreshGeneration = 0;
   var _appsRefreshGeneration = 0;
-  String? _error;
+  var _mcpRefreshGeneration = 0;
+  var _skillsLoadFailed = false;
+  var _pluginsLoadFailed = false;
+  var _installedAppsLoadFailed = false;
+  var _catalogAppsLoadFailed = false;
+  var _mcpLoadFailed = false;
+  String? _skillsError;
+  String? _pluginsError;
   String? _appsError;
+  String? _mcpLoadError;
   String? _pluginActionNotice;
   List<SkillSummary> _skills = const [];
   List<PluginSummaryModel> _plugins = const [];
@@ -2293,6 +2305,31 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   int get _appsBadgeCount =>
       _catalogApps.isNotEmpty ? _catalogApps.length : _installedApps.length;
+
+  List<String> get _normalizedCwds => widget.cwd.trim().isEmpty
+      ? const <String>[]
+      : <String>[widget.cwd.trim()];
+
+  bool get _activeSectionLoading => switch (_section) {
+    _EcosystemSection.skills => _skillsLoading,
+    _EcosystemSection.plugins => _pluginsLoading,
+    _EcosystemSection.apps => _appsLoading,
+    _EcosystemSection.mcp => _mcpLoading,
+  };
+
+  String? get _activeSectionError => switch (_section) {
+    _EcosystemSection.skills => _skillsError,
+    _EcosystemSection.plugins => _pluginsError,
+    _EcosystemSection.apps => null,
+    _EcosystemSection.mcp => _mcpLoadError,
+  };
+
+  ValueKey<String> get _activeSectionErrorKey => switch (_section) {
+    _EcosystemSection.skills => const ValueKey('ecosystem-skills-error'),
+    _EcosystemSection.plugins => const ValueKey('ecosystem-plugins-error'),
+    _EcosystemSection.apps => const ValueKey('ecosystem-apps-error'),
+    _EcosystemSection.mcp => const ValueKey('ecosystem-mcp-error'),
+  };
 
   @override
   void initState() {
@@ -2377,33 +2414,69 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   Future<void> _refresh({bool forceRefetch = false}) async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    final cwds = _normalizedCwds;
     unawaited(_refreshApps(forceRefetch: forceRefetch));
-    final cwds = widget.cwd.trim().isEmpty
-        ? const <String>[]
-        : <String>[widget.cwd.trim()];
-    final catalog = _catalogGateway;
+    await Future.wait<void>([
+      _refreshSkills(cwds: cwds),
+      _refreshPlugins(cwds: cwds, forceRefetch: forceRefetch),
+      _refreshMcp(forceRefetch: forceRefetch),
+    ]);
+  }
+
+  Future<void> _refreshSkills({required List<String> cwds}) async {
+    final generation = ++_skillsRefreshGeneration;
+    if (mounted) {
+      setState(() {
+        _skillsLoading = true;
+        _skillsError = null;
+      });
+    }
     try {
-      final results = await Future.wait<Object>([
-        widget.gateway.listSkills(cwds: cwds),
-        widget.gateway.listPlugins(cwds: cwds),
-        widget.gateway.listMcpServerStatus(),
-      ]);
-      if (!mounted) {
+      final nextSkills = await widget.gateway.listSkills(cwds: cwds);
+      if (!mounted || generation != _skillsRefreshGeneration) {
         return;
       }
-      final nextPlugins = results[1] as List<PluginSummaryModel>;
-      final nextMcpServers = results[2] as List<McpServerStatusModel>;
       setState(() {
-        _skills = results[0] as List<SkillSummary>;
+        _skills = nextSkills;
+        _skillsLoadFailed = false;
+        _skillsError = null;
+        _skillsLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || generation != _skillsRefreshGeneration) {
+        return;
+      }
+      setState(() {
+        _skillsLoadFailed = true;
+        _skillsError = '$error';
+        _skillsLoading = false;
+      });
+    }
+  }
+
+  Future<void> _refreshPlugins({
+    required List<String> cwds,
+    required bool forceRefetch,
+  }) async {
+    final generation = ++_pluginsRefreshGeneration;
+    final catalog = _catalogGateway;
+    if (mounted) {
+      setState(() {
+        _pluginsLoading = true;
+        _pluginsError = null;
+      });
+    }
+    try {
+      final nextPlugins = await widget.gateway.listPlugins(cwds: cwds);
+      if (!mounted || generation != _pluginsRefreshGeneration) {
+        return;
+      }
+      setState(() {
         _plugins = nextPlugins;
         _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
-        _mcpServers = nextMcpServers;
-        _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
-        _loading = false;
+        _pluginsLoadFailed = false;
+        _pluginsError = null;
+        _pluginsLoading = false;
       });
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
         final expandedPlugins = nextPlugins
@@ -2418,7 +2491,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   ? plugin.marketplaceName
                   : null,
             );
-            if (mounted && _expandedPluginIds.contains(plugin.id)) {
+            if (mounted &&
+                generation == _pluginsRefreshGeneration &&
+                _expandedPluginIds.contains(plugin.id)) {
               setState(() {
                 _pluginDetails[plugin.id] = updatedDetail;
               });
@@ -2429,12 +2504,45 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         }
       }
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || generation != _pluginsRefreshGeneration) {
         return;
       }
       setState(() {
-        _error = '$error';
-        _loading = false;
+        _pluginsLoadFailed = true;
+        _pluginsError = '$error';
+        _pluginsLoading = false;
+      });
+    }
+  }
+
+  Future<void> _refreshMcp({required bool forceRefetch}) async {
+    final generation = ++_mcpRefreshGeneration;
+    if (mounted) {
+      setState(() {
+        _mcpLoading = true;
+        _mcpLoadError = null;
+      });
+    }
+    try {
+      final nextMcpServers = await widget.gateway.listMcpServerStatus();
+      if (!mounted || generation != _mcpRefreshGeneration) {
+        return;
+      }
+      setState(() {
+        _mcpServers = nextMcpServers;
+        _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
+        _mcpLoadFailed = false;
+        _mcpLoadError = null;
+        _mcpLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || generation != _mcpRefreshGeneration) {
+        return;
+      }
+      setState(() {
+        _mcpLoadFailed = true;
+        _mcpLoadError = '$error';
+        _mcpLoading = false;
       });
     }
   }
@@ -2450,6 +2558,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _installedApps = const [];
         _catalogApps = const [];
         _appsNextCursor = null;
+        _installedAppsLoadFailed = false;
+        _catalogAppsLoadFailed = false;
         _appsError = null;
         _appsLoading = false;
         _loadingMoreApps = false;
@@ -2468,6 +2578,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
     var installedApps = _installedApps;
     var catalogApps = _catalogApps;
+    var installedAppsLoadFailed = false;
+    var catalogAppsLoadFailed = false;
     String? nextCursor = _appsNextCursor;
     String? appsError;
 
@@ -2479,9 +2591,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       if (mounted && generation == _appsRefreshGeneration) {
         setState(() {
           _installedApps = installedApps;
+          _installedAppsLoadFailed = false;
         });
       }
     } catch (error) {
+      installedAppsLoadFailed = true;
       appsError = '$error';
     }
 
@@ -2500,6 +2614,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           ? null
           : page.nextCursor;
     } catch (error) {
+      catalogAppsLoadFailed = true;
       appsError = appsError == null ? '$error' : '$appsError\n$error';
     }
 
@@ -2509,6 +2624,8 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     setState(() {
       _installedApps = installedApps;
       _catalogApps = catalogApps;
+      _installedAppsLoadFailed = installedAppsLoadFailed;
+      _catalogAppsLoadFailed = catalogAppsLoadFailed;
       _appsNextCursor = nextCursor;
       _appsError = appsError;
       _appsLoading = false;
@@ -2604,20 +2721,25 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     if (gateway == null || _reloadingMcp) {
       return;
     }
+    final generation = ++_mcpRefreshGeneration;
     setState(() {
       _reloadingMcp = true;
       _mcpNotice = null;
+      _mcpLoadError = null;
       _mcpErrors.clear();
     });
     try {
       await gateway.reloadMcpServers();
       final servers = await widget.gateway.listMcpServerStatus();
-      if (!mounted) {
+      if (!mounted || generation != _mcpRefreshGeneration) {
         return;
       }
       setState(() {
         _mcpServers = servers;
         _pruneMcpCaches(servers, forceRefetch: true);
+        _mcpLoadFailed = false;
+        _mcpLoadError = null;
+        _mcpLoading = false;
         _mcpNotice = 'MCP server configuration reloaded.';
       });
     } catch (error) {
@@ -2783,6 +2905,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   Future<void> _toggleSkill(SkillSummary skill) async {
+    setState(() => _skillsError = null);
     try {
       final effective = await widget.gateway.setSkillEnabled(
         path: skill.path,
@@ -2804,7 +2927,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       if (!mounted) {
         return;
       }
-      setState(() => _error = '$error');
+      setState(() => _skillsError = '$error');
     }
   }
 
@@ -2820,7 +2943,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     setState(() {
       _expandedPluginIds.add(plugin.id);
       _readingPluginIds.add(plugin.id);
-      _error = null;
+      _pluginsError = null;
     });
     try {
       final detail = await catalog.readPlugin(
@@ -2844,7 +2967,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       setState(() {
         _readingPluginIds.remove(plugin.id);
         _expandedPluginIds.remove(plugin.id);
-        _error = '$error';
+        _pluginsError = '$error';
       });
     }
   }
@@ -2856,7 +2979,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
     setState(() {
       _mutatingPluginIds.add(plugin.id);
-      _error = null;
+      _pluginsError = null;
       _pluginActionNotice = null;
     });
     try {
@@ -2874,7 +2997,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       final notice = authApps.isNotEmpty
           ? 'Installed ${plugin.name} (${result.authPolicy}). Connector authentication required: $authApps.'
           : 'Installed ${plugin.name}.';
-      await _refresh(forceRefetch: true);
+      final cwds = _normalizedCwds;
+      unawaited(_refreshSkills(cwds: cwds));
+      unawaited(_refreshMcp(forceRefetch: true));
+      unawaited(_refreshApps(forceRefetch: true));
+      await _refreshPlugins(cwds: cwds, forceRefetch: true);
       if (!mounted) {
         return;
       }
@@ -2888,7 +3015,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       }
       setState(() {
         _mutatingPluginIds.remove(plugin.id);
-        _error = '$error';
+        _pluginsError = '$error';
       });
     }
   }
@@ -2900,7 +3027,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
     setState(() {
       _mutatingPluginIds.add(plugin.id);
-      _error = null;
+      _pluginsError = null;
       _pluginActionNotice = null;
     });
     try {
@@ -2908,7 +3035,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       if (!mounted) {
         return;
       }
-      await _refresh(forceRefetch: true);
+      final cwds = _normalizedCwds;
+      unawaited(_refreshSkills(cwds: cwds));
+      unawaited(_refreshMcp(forceRefetch: true));
+      unawaited(_refreshApps(forceRefetch: true));
+      await _refreshPlugins(cwds: cwds, forceRefetch: true);
       if (!mounted) {
         return;
       }
@@ -2924,7 +3055,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       }
       setState(() {
         _mutatingPluginIds.remove(plugin.id);
-        _error = '$error';
+        _pluginsError = '$error';
       });
     }
   }
@@ -3046,7 +3177,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   CodexIconButton(
                     key: const ValueKey('ecosystem-refresh-button'),
                     tooltip: 'Refresh',
-                    onPressed: _loading
+                    onPressed: _activeSectionLoading
                         ? null
                         : () => _refresh(forceRefetch: true),
                     icon: const Icon(Icons.refresh_rounded, size: 17),
@@ -3060,16 +3191,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               ),
             ),
             Divider(height: 1, color: palette.border),
-            if (_error case final error?)
+            if (_activeSectionError case final error?)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: _InlineNotice(
-                  icon: Icons.error_outline_rounded,
-                  color: palette.danger,
-                  text: error,
+                child: KeyedSubtree(
+                  key: _activeSectionErrorKey,
+                  child: _InlineNotice(
+                    icon: Icons.error_outline_rounded,
+                    color: palette.danger,
+                    text: error,
+                  ),
                 ),
               ),
-            if (_pluginActionNotice case final notice?)
+            if (_pluginActionNotice case final notice?
+                when _section == _EcosystemSection.plugins)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: KeyedSubtree(
@@ -3128,9 +3263,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 },
               ),
             Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _section == _EcosystemSection.apps
+              child: _section == _EcosystemSection.apps
                   ? _buildAppsList(context)
                   : SingleChildScrollView(
                       padding: const EdgeInsets.all(ThemeTokens.space5),
@@ -3151,6 +3284,31 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   Widget _buildSkillsList(BuildContext context) {
     final palette = ThemeTokens.of(context);
     if (_skills.isEmpty) {
+      if (_skillsLoading) {
+        return Row(
+          key: const ValueKey('ecosystem-skills-loading'),
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: ThemeTokens.space2),
+            Text(
+              'Loading skills...',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: palette.textMuted),
+            ),
+          ],
+        );
+      }
+      if (_skillsLoadFailed) {
+        return Text(
+          'Unable to load workspace skills.',
+          key: const ValueKey('ecosystem-skills-unavailable'),
+          style: Theme.of(context).textTheme.bodySmall,
+        );
+      }
       return Text(
         'No skills discovered in this workspace.',
         key: const ValueKey('ecosystem-skills-empty'),
@@ -3248,11 +3406,35 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ),
               ),
             ),
-          Text(
-            'No plugins installed.',
-            key: const ValueKey('ecosystem-plugins-empty'),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (_pluginsLoading)
+            Row(
+              key: const ValueKey('ecosystem-plugins-loading'),
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: ThemeTokens.space2),
+                Text(
+                  'Loading plugin catalog...',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.textMuted),
+                ),
+              ],
+            )
+          else if (_pluginsLoadFailed)
+            Text(
+              'Unable to load plugin catalog.',
+              key: const ValueKey('ecosystem-plugins-unavailable'),
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            Text(
+              'No plugin entries returned.',
+              key: const ValueKey('ecosystem-plugins-empty'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         ],
       );
     }
@@ -3534,10 +3716,16 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(
-                    _appsLoading ? 'Loading installed connector runtime...' : 'No installed connector runtime apps in the committed snapshot.',
+                    _appsLoading
+                        ? 'Loading installed connector runtime...'
+                        : _installedAppsLoadFailed
+                        ? 'Unable to load installed connector runtime.'
+                        : 'No installed connector runtime apps in the committed snapshot.',
                     key: ValueKey(
                       _appsLoading
                           ? 'ecosystem-installed-apps-loading'
+                          : _installedAppsLoadFailed
+                          ? 'ecosystem-installed-apps-unavailable'
                           : 'ecosystem-installed-apps-empty',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
@@ -3586,8 +3774,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: ThemeTokens.space5),
                   child: Text(
-                    'No catalog apps returned.',
-                    key: const ValueKey('ecosystem-apps-empty'),
+                    _catalogAppsLoadFailed
+                        ? 'Unable to load app catalog.'
+                        : 'No catalog apps returned.',
+                    key: ValueKey(
+                      _catalogAppsLoadFailed
+                          ? 'ecosystem-apps-unavailable'
+                          : 'ecosystem-apps-empty',
+                    ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 )
@@ -3976,11 +4170,35 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         ),
         const SizedBox(height: ThemeTokens.space3),
         if (_mcpServers.isEmpty)
-          Text(
-            'No MCP servers configured.',
-            key: const ValueKey('ecosystem-mcp-empty'),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          if (_mcpLoading)
+            Row(
+              key: const ValueKey('ecosystem-mcp-loading'),
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: ThemeTokens.space2),
+                Text(
+                  'Loading MCP servers...',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.textMuted),
+                ),
+              ],
+            )
+          else if (_mcpLoadFailed)
+            Text(
+              'Unable to load MCP server status.',
+              key: const ValueKey('ecosystem-mcp-unavailable'),
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            Text(
+              'No MCP servers configured.',
+              key: const ValueKey('ecosystem-mcp-empty'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         for (final server in _mcpServers)
           Builder(
             builder: (context) {
