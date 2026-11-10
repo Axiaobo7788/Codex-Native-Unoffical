@@ -98,7 +98,11 @@ revisit a bounded list of stock threads, and older assistant copy actions
 appear on interaction. The Linux release opened the selected patch directly
 from a two-file Changes preview during a real stock turn. Opening the pane
 removes the closed chip. The Goal title opens the same editor as its expand
-control. Projects reveals its current actions on interaction. Home, open
+control. Projects reveals its current actions on interaction. Numbered
+stock question choices work with arrows and Enter. The packaged app delivered
+both answers in a real stock request. The desktop permission shield opens
+an anchored Sandbox menu. The clean package displayed and dismissed the
+existing Full access confirmation without starting a turn. Home, open
 Changes, Review, expanded activity, compact and dark/focused states have
 separate evidence gates. [Hosted CI for `ca51e7b`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42902044133)
 

@@ -41,8 +41,8 @@ got here.
 | A7 Thought/activity/read-run | H1 shows a quiet Thinking line and borderless read/run summary. In `225284.63835849b6.js`, `NKAf` distinguishes read/search/list/run, `reasoningItem.thinking` supplies the active label and `getw` supplies the completed disclosure. | The release shows quiet Thinking during a real stock stream, then Thought and final prose. The saved turn opens two commands and thought with the correct chevron. | `388147a`, `0a0f79c`, `31d2abd` | Titled reasoning and exact expanded grouping remain open. Official untimed fallback counts collapsed messages. Stock bounded summaries lack that count, so Native retains Turn details. | PARTIAL | Compare completed group boundaries and titled/resumed reasoning. Keep detailed item reads lazy. |
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `Ceox` orders the actions. Its title and expand action open the same side editor. The `cI4i` rail applies a 13 px inset. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Active elapsed ticks only on the visible label. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4` | Native confirms clear and uses a full reading surface when both columns cannot fit. Matching signed-in editor and terminal status variants are still open. | PARTIAL | Compare editor toolbar, budget and terminal states with the current official tab when equivalent evidence is available. |
-| A10 Pending question/request | H1 shows Question, dismiss, Reply with voice, Skip and Send. `qMAt` in `42793.61ccb40e22.js` and `Ceox.t6` identify the async-question branch. For stock input, `Ceox.iL` mounts `RoutedPendingRequestItemPanel`, module `IpGh` in `474578.483b200efe.js`. It passes one-question-at-a-time state to `vMUJ`. | The Linux release displays one stock question at a time, preserves choices and text when moving backward and forwards typed answers through the bundled Host. The disposable two-question request received both answers. | `3899c23`, `515d283`, `5769e31`, `b32af57` | The H1 async and Native stock fixtures exercise separate paths. Installed stock schema includes `item/tool/requestUserInput`. H1 async free-text/voice remains evidence-blocked as a separate capability. | PARTIAL | Compare the current stock choice, Skip and focused keyboard presentation. Track H1 async input until a supported runtime contract is established. |
-| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406.5b468e9851.js` defines the context ring. `LUWz` in `341692` renders a warning-shield variant for Full access. | The Linux release shows the warning shield only after affirmative confirmation. Sandbox dropdown aligns to its trigger at 1191×865 and opens upward at 820×420. The execution dialog keeps Done visible while its controls scroll. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3` | Native permission icon opens advanced settings. The official preset menu, focused/running geometry and voice remain separate comparisons. | PARTIAL | Map the verified supported permission presets before replacing the toolbar interaction. Retain the existing advanced settings and Full access confirmation. Verify focused/running toolbar geometry separately. |
+| A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. | The Linux release used numbered stock options, completed both steps and returned both answers. Widget tests cover arrows/Enter, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1` | H1 async free text and voice require separate supported evidence. Native Cancel sends the existing cancellation response. The renderer also has a Skip branch that can send empty answers or interrupt, depending on request state. | PARTIAL | Trace the supported stock Skip/Continue interaction independently. Keep cancellation semantics explicit and track H1 async input separately. |
+| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.2d62107713.js` `LUWz` defines the anchored permission control and Full access warning glyph. | The Linux release opens supported stock Sandbox overrides above the shield and routes Advanced settings to the existing dialog. It displays Full access confirmation and restores defaults when dismissed. The advanced menu fits 1191×865 and 820×420. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1` | The stock menu preserves separate approval and sandbox settings. It does not claim the renderer’s profile or Auto-review contract. Model picker, focused/running toolbar and voice have separate gaps. | PARTIAL | Map the supported model/reasoning popover from `104066` and compare focused/running toolbar geometry. Track voice and unbacked permission profiles separately. |
 
 `MATCH` requires current same-state evidence. `PARITY_ACCEPTABLE` records
 an evidenced equivalent with a bounded known delta. `PARTIAL`, `DIVERGED`
@@ -174,6 +174,28 @@ preview inherited a white tooltip foreground. The corrected package showed
 both filenames and per-file counts in the current surface colors. The
 follow-up regression tests keep the chip absent while its pane is open
 and verify the timeline anchor through close and resize.
+
+## Numbered questions and composer permissions
+
+The current release captured a two-step real stock question with numbered
+options and both typed answers reached the loopback model. The simulated
+path verifies directional focus, Enter selection and preservation of private
+text when going back. The H1 async card and voice route remain separate.
+
+The wide composer shows an anchored stock Sandbox menu. Existing safety
+confirmations and the advanced execution dialog remain the same paths.
+The first layout pass lengthened a compact Home control and overflowed by
+31 px near the split threshold. A compact label restored all four affected
+layout cases. In private Xvfb, short captures after selecting Full access
+showed the menu closed before the confirmation was visible. A disposable
+instrumented run verified the callback and showed the dialog on a later
+frame. The clean uninstrumented package reproduced the confirmation and
+Escape dismissal. No new turn was started under the changed permissions.
+
+The exact release also reopened the selected file patch from the in-turn
+preview, switched to the wide split at 1450×865 and closed from the header.
+The chip appeared only with the pane closed. This confirms the A8
+transition. It does not close the official open-pane comparison in D.
 
 ## State order and evidence gates
 
