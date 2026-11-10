@@ -3961,6 +3961,8 @@ probe before interpreting that result as a content-search limitation.
 
 ## F24 authoritative local user items and output deferral evidence
 
+[Hosted CI 42724519230](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42724519230) passed on `be1f39e`.
+
 - Installed stock `0.167.0-alpha.3.2`, public stable `0.167.0`, and public
   alpha `0.169.0-alpha.7` echoed independently supplied
   `clientUserMessageId` values on direct start and steer in disposable
@@ -4025,6 +4027,8 @@ probe before interpreting that result as a content-search limitation.
 
 ## F25 bounded saved-turn details and provider diagnostics evidence
 
+[Hosted CI 42729503871](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42729503871) passed on `4c9ea61`.
+
 - On base `be1f39e`, saved subsecond turns on installed stock and public
   alpha contained command items, but their summaries contained only user
   and assistant rows. A formatted elapsed time was required for the
@@ -4086,6 +4090,8 @@ probe before interpreting that result as a content-search limitation.
 
 
 ## F26 local provider inventory and MCP result integrity
+
+[Hosted CI 42736330309](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42736330309) passed on `a7b0fcd`.
 
 - F26A (`c95df74`) reads `modelProvider/list` only when opening or
   refreshing local Runtime details. The retained snapshot keeps at most
@@ -4152,6 +4158,8 @@ probe before interpreting that result as a content-search limitation.
   review and physical Android remain separate gates.
 
 ## F27 scoped Host command output and account identity evidence
+
+[Hosted CI 42744314663](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42744314663) passed on `b42f534`.
 
 - A structured result from a disposable MCP tool contained an ordinary
   nested `aggregatedOutput` string. The F26 Host replaced it with null
@@ -4338,3 +4346,73 @@ probe before interpreting that result as a content-search limitation.
   selected composer text in its private display and checked the
   attachment visually. The app, Host and stock process tree exited.
   Subjective interaction and physical Android remain separate gates.
+
+## F30 — Independent ecosystem loads and plugin catalog truth
+
+- At `a755915`, the shared Skills, Plugins and MCP load waited for
+  every source. Three simulated runtime cases reproduced a pending
+  plugin read blocking healthy sections and an RPC error leaving
+  misleading empty states. In the Linux package, a test-only Host
+  fault held and then failed the first `plugin/list`. Healthy stock
+  Skills stayed hidden while it waited, and the Plugins tab later
+  claimed “No plugins installed.” The fault was injected only for
+  that list. Other list traffic went through the bundled Host to
+  installed stock in a disposable profile.
+- F30A isolates loading, error, empty and cached state by source.
+  Pending list reads are coalesced. Same-source writes and list
+  reads have a single owner until the relevant readback completes.
+  The Plugins tab uses catalog language and leaves cached rows
+  usable when refresh fails.
+- Peer review exercised duplicate reads, failed MCP reload during
+  initial load, a skill toggle against a pending list, a global
+  refresh during MCP reload, and a global refresh during a skill
+  toggle. Each initial fault was reproduced on the relevant draft
+  and independently retested after correction. A separate probe
+  confirmed that the pristine parent could show two successful
+  installs and then roll the second row back when an earlier
+  readback arrived last. Serial catalog mutation and readback
+  addresses that parent defect and avoids a stale joined response.
+- F30B `f1ab0c4` compared catalog, installed and explicit suggestion
+  paths on four stock builds through the bundled Host. A clean
+  empty source returned zero rows and zero errors. An invalid
+  source also returned a successful RPC with zero rows and one
+  `marketplaceLoadErrors` entry. A mixed response preserved three
+  catalog rows and one error. The measured installed response kept
+  two installed rows and the same error, and an explicit suggestion
+  added the available third row. Typed Native probes on two builds
+  showed that current projection drops the error. A bounded
+  partial-result projection is now independently actionable.
+  [F30B plugin catalog evidence](reverse/PLUGIN_CATALOG_TRUTH_EVIDENCE.md)
+- The pristine parent and interim `f0c3089` each issued four total
+  detail reads when three Refresh clicks overlapped one delayed
+  detail read. The corrected flight held the total at two, including
+  the initial expansion. The audited production tree at `0faceaf`
+  matched the snapshot used for seven focused probes. The peer added
+  the bounded-detail case to the repository suite and released both
+  writable paths. The official `agy` review of `f1ab0c4` returned zero
+  P0, P1 or P2 findings after checking the actual response evidence.
+  Both histories were preserved in `f393a4f`.
+- Shared `f393a4f` passed Dart format and analyze, the 65-root
+  pure-Dart gate, 495 Flutter cases with five opt-in skips, and
+  five isolated direct-stock tests. The Rust tree matched the
+  parent and passed formatting, Clippy and 100 tests. The history
+  benchmark retained 100 of 1,000 turns while exercising ten
+  3 MiB outputs. Linux build, runtime bundle and license checks,
+  and Host-backed MCP, Turn, Review, Runtime, Thread and Model
+  smoke passed. The model responses in Turn, Review and fixture
+  creation came from disposable loopback fixtures.
+- The first Thread smoke attempt found no persistent row after
+  copying only rollout files. A fresh, completed fixture turn
+  created a visible row. Reopening under a different configured
+  provider excluded it from the default stock list. Keeping the
+  fixture provider for Thread smoke verified list, read, resume,
+  create and cleanup. Model smoke used the default provider.
+- At 1280×720, the Linux package with the same selective Host
+  fixture kept real Skills and MCP visible while the first
+  plugin request waited. Refreshing Skills left that single
+  plugin request in flight. The Plugins tab showed loading, then
+  an explicit failure. Retry issued exactly one more list request
+  and rendered the 54 entries returned by installed stock in this
+  fixture. A second run without fault injection rendered the
+  fixture Skill, catalog and MCP server at 720×800. Both app and
+  runtime process trees shut down. Human review remains open.

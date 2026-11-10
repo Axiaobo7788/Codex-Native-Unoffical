@@ -2480,3 +2480,22 @@ lifecycle presentation the source of truth.
   selection retains text and clears prior thread attachments. History
   ownership and working-set limits stay in the existing controllers.
   [F29 evidence](RESEARCH.md#f29-responsive-conversation-continuity-and-saved-queue-readback)
+
+## ADR-056 — Keep independent ecosystem list state
+
+- **Status:** Accepted.
+- **Context:** Skills, Plugins, Apps and MCP can have different
+  availability on the same local runtime. A single waiting or failed
+  list previously hid independent healthy sources.
+- **Decision:** Keep each list's loading, error and visible snapshot
+  independent. Reuse an in-flight list request for that source.
+  Keep plugin mutations exclusive through catalog readback, and keep
+  MCP config reload exclusive with its status read. A refresh started
+  from another section must respect those same ownership checks.
+  Expanded plugin detail refresh remains inside one bounded flight.
+- **Consequences:** Healthy sections stay usable while other requests
+  wait. A failed plugin list retains previous rows when available.
+  A successful empty catalog, an RPC failure, and partial marketplace
+  results are different outcomes. Stock may include marketplace
+  errors inside a successful response, so the last outcome needs a
+  separate typed projection. [F30 evidence](RESEARCH.md#f30-independent-ecosystem-loads-and-plugin-catalog-truth)
