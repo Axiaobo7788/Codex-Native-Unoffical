@@ -128,6 +128,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
   var _showChanges = false;
+  String? _goalEditorThreadId;
+  final _goalEditorKey = GlobalKey();
+  var _usingGoalEditorSidePane = false;
   bool? _usingChangesSidePane;
   var _searchOpen = false;
   var _checkingColdResume = false;
@@ -613,6 +616,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
     }
     if (oldWidget.hasDesktopShell && !widget.hasDesktopShell) {
+      _goalEditorThreadId = null;
       _clearCommandOutputPreview();
       _timelineDetailsPopoverController.hide();
     }
@@ -771,8 +775,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _pendingThreadRestore = false;
     _preLoadOlderAnchor = null;
     _pendingStreamAnchor = null;
-    if (_showChanges) {
-      setState(() => _showChanges = false);
+    if (_showChanges || _goalEditorThreadId != null) {
+      setState(() {
+        _showChanges = false;
+        _goalEditorThreadId = null;
+      });
     }
     _schedulePostLoadAnchorAlignment(
       _VisibleAnchor(
@@ -796,6 +803,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         const SingleActivator(LogicalKeyboardKey.escape): () {
           if (_searchOpen) {
             _closeConversationSearch();
+          } else if (_goalEditorThreadId != null) {
+            _closeGoalEditor();
           }
         },
       },
@@ -916,10 +925,49 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         final canSplit = widget.hasDesktopShell && constraints.maxWidth > 960;
         final showingChanges = _showChanges && changes != null;
         final sidePane = showingChanges && canSplit;
-        if (sidePane && _usingChangesSidePane == false) {
-          _restoreChangesReadingPosition();
+        final goalEditor =
+            widget.hasDesktopShell &&
+                threadId != null &&
+                threadId == _goalEditorThreadId &&
+                threadController != null &&
+                goal != null &&
+                goal.status != ThreadGoalStatus.complete
+            ? _DesktopGoalEditor(
+                key: _goalEditorKey,
+                goal: goal,
+                saving: threadController.mutating,
+                onClose: _closeGoalEditor,
+                onSave: (objective) async {
+                  await _applyThreadGoalChange(
+                    context,
+                    threadController,
+                    threadId,
+                    goal,
+                    (objective: objective, status: null, clear: false),
+                    canContinue: () =>
+                        controller.thread?.id == threadId &&
+                        _goalEditorThreadId == threadId &&
+                        threadController.canManageGoal(threadId),
+                  );
+                },
+              )
+            : null;
+        // The right task panel reserves 320 px for itself and 352 px for chat.
+        final splitGoalEditor =
+            goalEditor != null && constraints.maxWidth >= 672;
+        final sidePaneWidth = math.max(
+          320.0,
+          math.max(
+            math.min(1.6 * constraints.maxHeight, constraints.maxWidth - 500),
+            math.min(640.0, constraints.maxWidth - 352),
+          ),
+        );
+        if ((sidePane && _usingChangesSidePane == false) ||
+            (splitGoalEditor && !_usingGoalEditorSidePane)) {
+          _restoreReadingPosition();
         }
         _usingChangesSidePane = showingChanges ? sidePane : null;
+        _usingGoalEditorSidePane = splitGoalEditor;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -945,6 +993,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   Expanded(
                     child: showingChanges && !sidePane
                         ? _DiffView(controller: widget.diffController)
+                        : goalEditor != null && !splitGoalEditor
+                        ? goalEditor
                         : _timeline(controller),
                   ),
                   if (widget.hasDesktopShell &&
@@ -954,7 +1004,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   if (widget.hasDesktopShell &&
                       threadId != null &&
                       threadController != null &&
-                      goal != null)
+                      goal != null &&
+                      goal.status != ThreadGoalStatus.complete)
                     _desktopGoalStrip(
                       goal,
                       threadController,
@@ -988,19 +1039,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             ),
             if (sidePane)
               _DesktopChangesPane(
-                width: math.max(
-                  320.0,
-                  math.max(
-                    math.min(
-                      1.6 * constraints.maxHeight,
-                      constraints.maxWidth - 500,
-                    ),
-                    math.min(640.0, constraints.maxWidth - 352),
-                  ),
-                ),
+                width: sidePaneWidth,
                 controller: widget.diffController,
                 onClose: () => _toggleChanges(keepsTimeline: true),
               ),
+            if (splitGoalEditor)
+              SizedBox(width: sidePaneWidth, child: goalEditor),
           ],
         );
       },
@@ -1942,13 +1986,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         !_pendingThreadRestore) {
       _captureThreadScrollBookmark(threadId);
     }
-    setState(() => _showChanges = !_showChanges);
+    setState(() {
+      _goalEditorThreadId = null;
+      _showChanges = !_showChanges;
+    });
     if (keepsTimeline || !_showChanges) {
-      _restoreChangesReadingPosition();
+      _restoreReadingPosition();
     }
   }
 
-  void _restoreChangesReadingPosition() {
+  void _restoreReadingPosition() {
     if (_activeThreadId == null) {
       return;
     }
@@ -1956,6 +2003,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _restorePagesLoaded = 0;
     _restoreAlignmentPasses = 0;
     _scheduleThreadScrollRestore();
+  }
+
+  void _openGoalEditor(String threadId) {
+    if (_activeThreadId != threadId) return;
+    if (_goalEditorThreadId == threadId) {
+      _closeGoalEditor();
+      return;
+    }
+    if (!_showChanges && !_pendingThreadRestore) {
+      _captureThreadScrollBookmark(threadId);
+    }
+    setState(() {
+      _showChanges = false;
+      _goalEditorThreadId = threadId;
+    });
+  }
+
+  void _closeGoalEditor() {
+    setState(() => _goalEditorThreadId = null);
+    _restoreReadingPosition();
   }
 
   Widget _desktopGoalStrip(
@@ -2100,15 +2167,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   key: const ValueKey('desktop-thread-goal-edit'),
                   tooltip: 'Edit goal',
                   onPressed: actionsEnabled
-                      ? () => unawaited(
-                          _showThreadGoalDialog(
-                            context,
-                            controller,
-                            threadId,
-                            isCurrent: isCurrent,
-                            editOnly: true,
-                          ),
-                        )
+                      ? () => _openGoalEditor(threadId)
                       : null,
                   size: 28,
                   icon: const Icon(Icons.open_in_full_rounded, size: 14),
@@ -4519,6 +4578,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (threadController == null) {
       return;
     }
+    if (_goalEditorThreadId case final id?) {
+      final goal = threadController.goalForThread(id);
+      if (goal == null || goal.status == ThreadGoalStatus.complete) {
+        _goalEditorThreadId = null;
+        _restoreReadingPosition();
+      }
+    }
     if (threadController.revertVersion != _lastHandledRevertVersion) {
       _lastHandledRevertVersion = threadController.revertVersion;
       final revertedId = threadController.lastRevertedThreadId;
@@ -4778,6 +4844,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _activeThreadId = nextThreadId;
     _clearCommandOutputPreview();
     _showChanges = false;
+    _goalEditorThreadId = null;
     _threadSelectionVersion += 1;
     _queuedLinkedPrThreadId = nextThreadId;
     _activeThreadLinkedPrs = null;

@@ -770,7 +770,10 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           thread: thread,
           selected: selected,
           hasNavigationRail: widget.hasNavigationRail,
-          showGoalBadge: !widget.hasNavigationRail || !selected,
+          showGoalBadge:
+              !widget.hasNavigationRail ||
+              !selected ||
+              thread.goal?.status == ThreadGoalStatus.complete,
           pinned: controller.isPinnedThread(thread),
           persistedPinned: thread.isPersistedPinned,
           sessionPinned: controller.isSessionPinnedThread(thread),
@@ -1014,20 +1017,16 @@ class _ThreadPanelState extends State<_ThreadPanel> {
 Future<void> _showThreadGoalDialog(
   BuildContext context,
   ThreadListController controller,
-  String threadId, {
-  bool Function()? isCurrent,
-  bool editOnly = false,
-}) async {
-  bool canContinue() =>
-      controller.canManageGoal(threadId) && (isCurrent?.call() ?? true);
+  String threadId,
+) async {
+  bool canContinue() => controller.canManageGoal(threadId);
 
   final loaded = await controller.loadGoal(threadId);
   if (!context.mounted || !canContinue() || loaded == null) return;
 
   final change = await showDialog<_GoalDialogResult>(
     context: context,
-    builder: (context) =>
-        _ThreadGoalDialog(goal: loaded.goal, editOnly: editOnly),
+    builder: (context) => _ThreadGoalDialog(goal: loaded.goal),
   );
   if (!context.mounted || !canContinue() || change == null) return;
 
@@ -1086,10 +1085,9 @@ typedef _GoalDialogResult = ({
 });
 
 class _ThreadGoalDialog extends StatefulWidget {
-  const _ThreadGoalDialog({required this.goal, required this.editOnly});
+  const _ThreadGoalDialog({required this.goal});
 
   final ThreadGoal? goal;
-  final bool editOnly;
 
   @override
   State<_ThreadGoalDialog> createState() => _ThreadGoalDialogState();
@@ -1132,11 +1130,7 @@ class _ThreadGoalDialogState extends State<_ThreadGoalDialog> {
         ),
       ),
       scrollable: true,
-      title: Text(
-        goal == null
-            ? 'New goal'
-            : (widget.editOnly ? 'Edit goal' : 'Thread goal'),
-      ),
+      title: Text(goal == null ? 'New goal' : 'Thread goal'),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -1162,7 +1156,7 @@ class _ThreadGoalDialogState extends State<_ThreadGoalDialog> {
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(labelText: 'Objective'),
             ),
-            if (goal != null && !widget.editOnly) ...[
+            if (goal != null) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,

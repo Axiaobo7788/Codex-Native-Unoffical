@@ -1,0 +1,176 @@
+part of '../codex_native_app.dart';
+
+class _DesktopGoalEditor extends StatefulWidget {
+  const _DesktopGoalEditor({
+    super.key,
+    required this.goal,
+    required this.saving,
+    required this.onClose,
+    required this.onSave,
+  });
+
+  final ThreadGoal goal;
+  final bool saving;
+  final VoidCallback onClose;
+  final Future<void> Function(String objective) onSave;
+
+  @override
+  State<_DesktopGoalEditor> createState() => _DesktopGoalEditorState();
+}
+
+class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
+  late String _sourceObjective = widget.goal.objective;
+  late final _draft = TextEditingController(text: _sourceObjective);
+  final _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(covariant _DesktopGoalEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final saved = widget.goal.objective;
+    if (saved != _sourceObjective &&
+        (_draft.text == _sourceObjective || _draft.text.trim() == saved)) {
+      _revert();
+    }
+  }
+
+  @override
+  void dispose() {
+    _draft.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _revert() {
+    _sourceObjective = widget.goal.objective;
+    _draft.text = _sourceObjective;
+  }
+
+  Future<void> _save(String objective) async {
+    await widget.onSave(objective);
+    if (mounted) {
+      _focus.requestFocus();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final objective = _draft.text.trim();
+    final changed = objective != widget.goal.objective;
+    final stale = _sourceObjective != widget.goal.objective;
+    final minutes = math.max(
+      0,
+      (DateTime.now().millisecondsSinceEpoch ~/ 1000 -
+              widget.goal.updatedAtSeconds) ~/
+          60,
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.workspaceBackground,
+        border: BorderDirectional(
+          start: BorderSide(
+            color: theme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 16, end: 12),
+            child: SizedBox(
+              height: OfficialCodexTheme.headerHeight,
+              child: Row(
+                children: [
+                  const Icon(Icons.track_changes_outlined, size: 16),
+                  const SizedBox(width: ThemeTokens.space2),
+                  Expanded(
+                    child: Text(
+                      'Edit goal',
+                      style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  CodexIconButton(
+                    tooltip: 'Close goal editor',
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 12, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    stale
+                        ? 'Goal changed. Revert to the latest objective.'
+                        : minutes == 0
+                        ? 'Updated just now'
+                        : 'Updated $minutes min ago',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: theme.textSecondary),
+                  ),
+                ),
+                CodexIconButton(
+                  tooltip: 'Revert goal draft',
+                  size: 28,
+                  onPressed: !widget.saving && (changed || stale)
+                      ? () => setState(_revert)
+                      : null,
+                  icon: const Icon(Icons.undo_rounded, size: 16),
+                ),
+                const SizedBox(width: ThemeTokens.space1),
+                CodexButton(
+                  label: 'Save',
+                  size: CodexButtonSize.sm,
+                  variant: CodexButtonVariant.primary,
+                  loading: widget.saving,
+                  onPressed:
+                      !widget.saving &&
+                          changed &&
+                          !stale &&
+                          objective.isNotEmpty &&
+                          objective.length <= ThreadGoal.maxObjectiveLength
+                      ? () => unawaited(_save(objective))
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: theme.hairlineBorder),
+          Expanded(
+            child: TextField(
+              key: const ValueKey('desktop-goal-editor-objective'),
+              controller: _draft,
+              focusNode: _focus,
+              onChanged: (_) => setState(() {}),
+              autofocus: true,
+              readOnly: widget.saving,
+              expands: true,
+              maxLines: null,
+              maxLength: ThreadGoal.maxObjectiveLength,
+              textAlignVertical: TextAlignVertical.top,
+              decoration: const InputDecoration(
+                hintText: 'Goal',
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                counterText: '',
+                contentPadding: EdgeInsets.all(16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
