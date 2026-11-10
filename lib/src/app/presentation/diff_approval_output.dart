@@ -268,7 +268,7 @@ class _DiffLines extends StatelessWidget {
 }
 
 class _ApprovalBanner extends StatelessWidget {
-  const _ApprovalBanner({required this.controller});
+  const _ApprovalBanner({super.key, required this.controller});
 
   final ApprovalController controller;
 

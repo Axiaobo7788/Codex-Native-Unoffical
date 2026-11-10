@@ -89,6 +89,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   late final TextEditingController _composerController;
   late final FocusNode _composerFocusNode;
   final _composerInputKey = GlobalKey();
+  final _approvalBannerKey = GlobalKey();
+  final _userInputBannerKey = GlobalKey();
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   final _conversationFocusNode = FocusNode();
@@ -881,6 +883,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             shortViewport &&
             (widget.userInputController.pending.isNotEmpty ||
                 widget.userInputController.pendingElicitations.isNotEmpty);
+        final approvalBanner = _ApprovalBanner(
+          key: _approvalBannerKey,
+          controller: widget.approvalController,
+        );
+        final userInputBanner = _UserInputBanner(
+          key: _userInputBannerKey,
+          controller: widget.userInputController,
+        );
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.
         final canSplit = widget.hasDesktopShell && constraints.maxWidth > 960;
@@ -921,18 +931,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       changes != null &&
                       (_showChanges || changes.files.isNotEmpty))
                     _desktopChangesSummary(changes, canSplit: canSplit),
-                  Flexible(
-                    flex: constrainApproval ? 5 : 0,
-                    child: _ApprovalBanner(
-                      controller: widget.approvalController,
+                  if (constrainApproval && constrainUserInput)
+                    Flexible(
+                      flex: 5,
+                      child: SingleChildScrollView(
+                        key: const ValueKey('conversation-request-scroll'),
+                        child: Column(
+                          children: [approvalBanner, userInputBanner],
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Flexible(
+                      flex: constrainApproval ? 5 : 0,
+                      child: approvalBanner,
                     ),
-                  ),
-                  Flexible(
-                    flex: constrainUserInput ? 5 : 0,
-                    child: _UserInputBanner(
-                      controller: widget.userInputController,
+                    Flexible(
+                      flex: constrainUserInput ? 5 : 0,
+                      child: userInputBanner,
                     ),
-                  ),
+                  ],
                   _composer(controller),
                 ],
               ),
