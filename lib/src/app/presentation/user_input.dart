@@ -557,6 +557,10 @@ class _UserInputCardState extends State<_UserInputCard> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final submitting = widget.controller.isSubmitting(widget.request.requestId);
+    // Leave room for the window header, composer and request actions when the
+    // window is short. The question content remains independently scrollable.
+    final questionViewportHeight = (MediaQuery.sizeOf(context).height - 320)
+        .clamp(64.0, 320.0);
     return Center(
       child: Container(
         key: const ValueKey('user-input-card'),
@@ -600,7 +604,7 @@ class _UserInputCardState extends State<_UserInputCard> {
             ),
             const SizedBox(height: ThemeTokens.space2),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
+              constraints: BoxConstraints(maxHeight: questionViewportHeight),
               child: SingleChildScrollView(
                 key: const ValueKey('user-input-question-scroll'),
                 child: Column(

@@ -493,6 +493,69 @@ void main() {
   });
 
   testWidgets(
+    'a pending question keeps its controls reachable in a short Desktop window',
+    (tester) async {
+      tester.view.physicalSize = const Size(820, 420);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController();
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+
+      runtime.emitUserInput(
+        UserInputRequest(
+          requestId: 'short-input',
+          threadId: runtime.thread.id,
+          turnId: 'turn-1',
+          itemId: 'item-1',
+          isBlocking: true,
+          questions: [
+            UserInputQuestion(
+              id: 'approach',
+              header: 'Approach',
+              question: 'Which implementation should be used?',
+              options: [
+                for (var i = 1; i <= 8; i++)
+                  UserInputOption(
+                    label: 'Option $i',
+                    description: 'A distinct implementation option.',
+                  ),
+              ],
+              allowsOther: false,
+              isSecret: false,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scroll = find.byKey(const ValueKey('user-input-question-scroll'));
+      final submit = find.byKey(const ValueKey('user-input-submit'));
+      final last = find.byKey(const ValueKey('user-input-approach-Option 8'));
+      expect(tester.getBottomLeft(submit).dy, lessThan(420));
+      await tester.scrollUntilVisible(
+        last,
+        70,
+        scrollable: find.descendant(
+          of: scroll,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(last);
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(runtime.userInputSubmissions.single.$2.values, {
+        'approach': ['Option 8'],
+      });
+    },
+  );
+
+  testWidgets(
     'large diff view is truncated, virtualized, and file-selectable',
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
