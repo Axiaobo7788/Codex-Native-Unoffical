@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/chat_conversation_dag.dart';
@@ -12,6 +13,134 @@ import 'package:codex_native_unofficial/src/protocol/protocol_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'projects only eligible saved MCP text and requests local deferral',
+    () async {
+      final adapter = HistoryProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          expect(method, 'thread/items/list');
+          expect(params['deferOutput'], {
+            'commandExecution': true,
+            'mcpToolCall': true,
+          });
+          return {
+            'data': [
+              _mcpTextEntry('inline', [_textBlock('plain text')]),
+              _mcpTextEntry('deferred', [], deferred: true),
+              _mcpTextEntry('missing', []),
+              _mcpTextEntry('envelope', [_textBlock(' \uFEFF{"content":[]}')]),
+              _mcpTextEntry('array', [_textBlock('  [1,2]')]),
+              _mcpTextEntry('fenced', [_textBlock('  ~~~\ntext\n~~~')]),
+              _mcpTextEntry('media', [
+                {'type': 'image', 'data': 'synthetic'},
+              ]),
+              _mcpTextEntry('annotated', [
+                {
+                  ..._textBlock('annotated'),
+                  'annotations': <String, Object?>{},
+                },
+              ]),
+              _mcpTextEntry(
+                'structured',
+                [_textBlock('plain')],
+                resultFields: {
+                  'structuredContent': {'value': 'opaque'},
+                },
+              ),
+              _mcpTextEntry(
+                'app',
+                [_textBlock('plain')],
+                itemFields: {
+                  'appContext': {'resourceUri': 'ui://test/widget'},
+                },
+              ),
+              _mcpTextEntry(
+                'failed',
+                [_textBlock('plain')],
+                itemFields: {'status': 'failed'},
+              ),
+            ],
+          };
+        },
+      );
+      final page = await adapter.listItems(
+        const HistoryItemQuery(threadId: 'thread-1', turnId: 'turn-1'),
+        deferMcpText: true,
+      );
+      expect(
+        page.items.where((item) => item.canReadMcpText).map((item) => item.id),
+        ['inline', 'deferred'],
+      );
+      expect(page.items.map((item) => item.text).toSet(), {
+        'MCP: fixture/tool',
+      });
+    },
+  );
+
+  test(
+    'reads one saved MCP item and truncates at a UTF-8 scalar boundary',
+    () async {
+      var response = _mcpTextEntry('mcp-1', [
+        _textBlock('a' * 32764),
+        _textBlock('😀'),
+      ]);
+      final adapter = HistoryProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          expect(method, 'thread/items/read');
+          expect(params, {
+            'threadId': 'thread-1',
+            'turnId': 'turn-1',
+            'itemIds': ['mcp-1'],
+          });
+          return {
+            'data': [response],
+          };
+        },
+      );
+      Future<SavedMcpTextResult?> read() => adapter.readSavedMcpText(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId: 'mcp-1',
+      );
+      final truncated = (await read())!;
+      expect(truncated.truncated, isTrue);
+      expect(utf8.encode(truncated.text).length, 32765);
+      expect(truncated.text, '${'a' * 32764}\n');
+      response = _mcpTextEntry('mcp-1', [_textBlock('a' * 32764 + '😀')]);
+      final exact = (await read())!;
+      expect(exact.truncated, isFalse);
+      expect(utf8.encode(exact.text).length, 32768);
+      response = _mcpTextEntry('wrong-item', [_textBlock('unrelated')]);
+      await expectLater(read(), throwsA(isA<ProtocolViolation>()));
+      response = _mcpTextEntry('mcp-1', [], deferred: true);
+      expect(await read(), isNull);
+    },
+  );
+
+  test(
+    'classifies only method-specific RPC unavailability as unsupported',
+    () async {
+      var error = const JsonRpcException(
+        code: -32600,
+        message: 'thread/items/read requires experimentalApi capability',
+      );
+      final adapter = HistoryProtocolAdapter(
+        request: (method, [params = const {}]) async => throw error,
+      );
+      Future<SavedMcpTextResult?> read() => adapter.readSavedMcpText(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId: 'mcp-1',
+      );
+      await expectLater(read(), throwsUnsupportedError);
+      error = const JsonRpcException(
+        code: -32600,
+        message: 'Invalid saved thread',
+      );
+      await expectLater(read(), throwsA(same(error)));
+    },
+  );
+
   test(
     'requests a bounded saved occurrence page and keeps UTF-16 ranges',
     () async {
@@ -919,6 +1048,28 @@ Outer actual user request after envelope.
     expect(chatCaps.supportsBranchNavigation, isTrue);
   });
 }
+
+Map<String, Object?> _textBlock(String text) => {'type': 'text', 'text': text};
+
+Map<String, Object?> _mcpTextEntry(
+  String id,
+  List<Object?> blocks, {
+  bool deferred = false,
+  Map<String, Object?> itemFields = const {},
+  Map<String, Object?> resultFields = const {},
+}) => {
+  'turnId': 'turn-1',
+  if (deferred) 'outputDeferred': true,
+  'item': {
+    'id': id,
+    'type': 'mcpToolCall',
+    'status': 'completed',
+    'server': 'fixture',
+    'tool': 'tool',
+    'result': {'content': blocks, ...resultFields},
+    ...itemFields,
+  },
+};
 
 String _multiMegabyteOutput() {
   final kibibyte = List.filled(1024, 'x').join();

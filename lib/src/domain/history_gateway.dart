@@ -17,3 +17,13 @@ abstract interface class HistoryOccurrenceGateway {
     HistoryOccurrenceQuery query,
   );
 }
+
+/// Optional whole-item read from a local stock runtime.
+abstract interface class HistoryMcpTextGateway {
+  bool get supportsSavedMcpText;
+  Future<SavedMcpTextResult?> readSavedMcpText({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+  });
+}

@@ -424,7 +424,9 @@ class _HistoryEntryView extends StatelessWidget {
                     },
             )
           : null,
-      trailingAction: item.isCommand ? _commandOutputAction(context) : null,
+      trailingAction: item.isCommand
+          ? _commandOutputAction(context)
+          : _savedMcpTextAction(context),
     );
   }
 
@@ -473,7 +475,128 @@ class _HistoryEntryView extends StatelessWidget {
     }
     return null;
   }
+
+  Widget? _savedMcpTextAction(BuildContext context) {
+    if (!historyController.canReadSavedMcpText(item)) {
+      return null;
+    }
+    return CodexButton(
+      variant: CodexButtonVariant.ghost,
+      size: CodexButtonSize.sm,
+      label: 'View saved text',
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (context) => _SavedMcpTextDialog(
+          read: () => historyController.loadSavedMcpText(item),
+        ),
+      ),
+    );
+  }
 }
+
+class _SavedMcpTextDialog extends StatefulWidget {
+  const _SavedMcpTextDialog({required this.read});
+
+  final Future<SavedMcpTextResult?> Function() read;
+
+  @override
+  State<_SavedMcpTextDialog> createState() => _SavedMcpTextDialogState();
+}
+
+class _SavedMcpTextDialogState extends State<_SavedMcpTextDialog> {
+  SavedMcpTextResult? _result;
+  _SavedMcpTextFailure? _failure;
+  var _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_read());
+  }
+
+  Future<void> _read() async {
+    SavedMcpTextResult? result;
+    _SavedMcpTextFailure? failure;
+    try {
+      result = await widget.read().timeout(const Duration(seconds: 15));
+    } on UnsupportedError {
+      failure = _SavedMcpTextFailure.unsupported;
+    } catch (_) {
+      failure = _SavedMcpTextFailure.retryable;
+    }
+    if (mounted) {
+      setState(() {
+        _result = result;
+        _failure = failure;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Saved MCP text'),
+    scrollable: true,
+    content: SizedBox(width: 520, child: _content()),
+    actions: [
+      if (!_loading && _failure == _SavedMcpTextFailure.retryable)
+        CodexButton(
+          variant: CodexButtonVariant.ghost,
+          size: CodexButtonSize.sm,
+          label: 'Retry',
+          onPressed: () {
+            if (_loading) {
+              return;
+            }
+            setState(() => _loading = true);
+            unawaited(_read());
+          },
+        ),
+      CodexButton(
+        variant: CodexButtonVariant.ghost,
+        size: CodexButtonSize.sm,
+        label: 'Close',
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+    ],
+  );
+
+  Widget _content() {
+    if (_loading) {
+      return const LinearProgressIndicator(
+        semanticsLabel: 'Loading saved MCP text',
+      );
+    }
+    switch (_failure) {
+      case _SavedMcpTextFailure.unsupported:
+        return const Text(
+          'This local runtime does not support reading saved MCP text.',
+        );
+      case _SavedMcpTextFailure.retryable:
+        return const Text('Could not read the saved MCP text.');
+      case null:
+        break;
+    }
+    final result = _result;
+    if (result == null) {
+      return const Text('No saved plain-text result is available.');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (result.truncated)
+          const Padding(
+            padding: EdgeInsets.only(bottom: ThemeTokens.space2),
+            child: Text('Showing a bounded preview of the saved text.'),
+          ),
+        SelectableText(result.text),
+      ],
+    );
+  }
+}
+
+enum _SavedMcpTextFailure { unsupported, retryable }
 
 class _TurnWorkDivider extends StatelessWidget {
   const _TurnWorkDivider({
