@@ -493,9 +493,9 @@ void main() {
   });
 
   testWidgets(
-    'a pending question keeps its controls reachable in a short Desktop window',
+    'a pending question and warning fit after resizing a Desktop window',
     (tester) async {
-      tester.view.physicalSize = const Size(820, 420);
+      tester.view.physicalSize = const Size(820, 700);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -505,6 +505,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Controls thread'));
       await tester.pumpAndSettle();
+
+      await _send(tester, 'Start a fixture turn.');
+      await tester.pumpAndSettle();
+      runtime.emitWarning(
+        'Model metadata was unavailable and the runtime is using fallback '
+        'metadata for this disposable fixture.',
+      );
 
       runtime.emitUserInput(
         UserInputRequest(
@@ -536,7 +543,20 @@ void main() {
       final scroll = find.byKey(const ValueKey('user-input-question-scroll'));
       final submit = find.byKey(const ValueKey('user-input-submit'));
       final last = find.byKey(const ValueKey('user-input-approach-Option 8'));
+      await tester.tap(
+        find.byKey(const ValueKey('user-input-approach-Option 1')),
+      );
+      await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(820, 420);
+      await tester.pumpAndSettle();
       expect(tester.getBottomLeft(submit).dy, lessThan(420));
+      expect(tester.widget<CodexButton>(submit).isEnabled, isTrue);
+      expect(
+        tester
+            .getBottomLeft(find.byKey(const ValueKey('floating_composer')))
+            .dy,
+        lessThanOrEqualTo(420),
+      );
       await tester.scrollUntilVisible(
         last,
         70,
@@ -989,6 +1009,10 @@ class _ProductRuntimeController extends RuntimeController {
 
   void emitDiff(DiffSnapshot snapshot) {
     _turns.add(TurnDiffUpdatedEvent(snapshot: snapshot));
+  }
+
+  void emitWarning(String message) {
+    _turns.add(TurnWarningEvent(threadId: thread.id, message: message));
   }
 
   void emitApproval(ApprovalRequest request) {

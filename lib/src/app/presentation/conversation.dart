@@ -793,6 +793,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               if (widget.threadController != null) widget.threadController!,
               widget.diffController,
               widget.historyController,
+              widget.userInputController,
             ]),
             builder: (context, _) {
               final controller = widget.controller;
@@ -872,6 +873,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final changes = widget.diffController.snapshot;
     return LayoutBuilder(
       builder: (context, constraints) {
+        final constrainQuestion =
+            constraints.maxHeight < 560 &&
+            widget.userInputController.pending.isNotEmpty;
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.
         final canSplit = widget.hasDesktopShell && constraints.maxWidth > 960;
@@ -913,7 +917,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       (_showChanges || changes.files.isNotEmpty))
                     _desktopChangesSummary(changes, canSplit: canSplit),
                   _ApprovalBanner(controller: widget.approvalController),
-                  _UserInputBanner(controller: widget.userInputController),
+                  Flexible(
+                    flex: constrainQuestion ? 5 : 0,
+                    child: _UserInputBanner(
+                      controller: widget.userInputController,
+                    ),
+                  ),
                   _composer(controller),
                 ],
               ),
