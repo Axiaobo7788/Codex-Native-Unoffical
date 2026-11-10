@@ -977,6 +977,11 @@ class SimulatedRuntimeHarness extends RuntimeController {
   }
 
   @override
+  Future<PluginCatalogSnapshot> listPluginCatalog({
+    List<String> cwds = const [],
+  }) async => PluginCatalogSnapshot(plugins: await listPlugins(cwds: cwds));
+
+  @override
   Future<PluginDetailModel> readPlugin({
     required String pluginName,
     String? marketplacePath,

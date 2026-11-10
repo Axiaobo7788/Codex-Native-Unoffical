@@ -679,6 +679,11 @@ class RuntimeController extends ChangeNotifier
   }) => _connectedTransport().listPlugins(cwds: cwds);
 
   @override
+  Future<PluginCatalogSnapshot> listPluginCatalog({
+    List<String> cwds = const [],
+  }) => _connectedTransport().listPluginCatalog(cwds: cwds);
+
+  @override
   Future<PluginDetailModel> readPlugin({
     required String pluginName,
     String? marketplacePath,

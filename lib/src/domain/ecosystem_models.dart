@@ -24,6 +24,15 @@ class SkillSummary {
   );
 }
 
+final class PluginCatalogSnapshot {
+  const PluginCatalogSnapshot({required this.plugins, this.isPartial = false});
+
+  final List<PluginSummaryModel> plugins;
+
+  /// Stock reported a marketplace error or an unreadable error field.
+  final bool isPartial;
+}
+
 class PluginSummaryModel {
   const PluginSummaryModel({
     required this.id,

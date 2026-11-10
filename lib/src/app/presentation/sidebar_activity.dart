@@ -2272,6 +2272,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   String? _pluginActionNotice;
   List<SkillSummary> _skills = const [];
   List<PluginSummaryModel> _plugins = const [];
+  var _pluginCatalogIsPartial = false;
   List<InstalledAppSnapshotModel> _installedApps = const [];
   List<AppSummaryModel> _catalogApps = const [];
   String? _appsNextCursor;
@@ -2523,12 +2524,18 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       });
     }
     try {
-      final nextPlugins = await widget.gateway.listPlugins(cwds: cwds);
+      final snapshot = catalog != null
+          ? await catalog.listPluginCatalog(cwds: cwds)
+          : PluginCatalogSnapshot(
+              plugins: await widget.gateway.listPlugins(cwds: cwds),
+            );
       if (!mounted || generation != _pluginsRefreshGeneration) {
         return;
       }
+      final nextPlugins = snapshot.plugins;
       setState(() {
         _plugins = nextPlugins;
+        _pluginCatalogIsPartial = snapshot.isPartial;
         _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
         _pluginsLoadFailed = false;
         _pluginsError = null;
@@ -3340,6 +3347,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   ),
                 ),
               ),
+            if (_section == _EcosystemSection.plugins &&
+                _pluginCatalogIsPartial &&
+                !_pluginsLoadFailed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: KeyedSubtree(
+                  key: const ValueKey('ecosystem-plugins-partial'),
+                  child: _InlineNotice(
+                    icon: Icons.warning_amber_rounded,
+                    color: palette.warning,
+                    text: 'The plugin catalog may be incomplete.',
+                  ),
+                ),
+              ),
             if (_pluginActionNotice case final notice?
                 when _section == _EcosystemSection.plugins)
               Padding(
@@ -3568,6 +3589,12 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             Text(
               'Unable to load plugin catalog.',
               key: const ValueKey('ecosystem-plugins-unavailable'),
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else if (_pluginCatalogIsPartial)
+            Text(
+              'No plugin entries are available.',
+              key: const ValueKey('ecosystem-plugins-partial-empty'),
               style: Theme.of(context).textTheme.bodySmall,
             )
           else
