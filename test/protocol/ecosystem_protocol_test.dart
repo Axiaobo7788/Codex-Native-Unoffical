@@ -55,6 +55,62 @@ void main() {
     },
   );
 
+  test('distinguishes empty and partial plugin catalog results', () async {
+    const loadError = {
+      'marketplacePath': '/fixture-private/marketplace.json',
+      'message': 'Fixture parser details',
+    };
+    var result = <String, Object?>{};
+    final adapter = EcosystemProtocolAdapter(
+      request: (method, [params = const {}]) async {
+        expect(method, 'plugin/list');
+        expect(params, {
+          'cwds': ['/workspace'],
+        });
+        return result;
+      },
+    );
+
+    Future<PluginCatalogSnapshot> read() =>
+        adapter.listPluginCatalog(cwds: const [' /workspace ', '/workspace']);
+
+    expect((await read()).isPartial, isFalse);
+    result = {'marketplaces': [], 'marketplaceLoadErrors': []};
+    final empty = await read();
+    expect(empty.plugins, isEmpty);
+    expect(empty.isPartial, isFalse);
+
+    result = {
+      'marketplaces': [],
+      'marketplaceLoadErrors': [loadError],
+    };
+    final unavailable = await read();
+    expect(unavailable.plugins, isEmpty);
+    expect(unavailable.isPartial, isTrue);
+
+    final entries = [
+      for (var index = 0; index < maxBoundedEcosystemItems + 2; index++)
+        {'id': 'fixture-$index@local', 'installed': false, 'enabled': false},
+    ];
+    result['marketplaces'] = [
+      {'name': 'local', 'plugins': entries},
+    ];
+    final mixed = await read();
+    expect(mixed.plugins, hasLength(maxBoundedEcosystemItems));
+    expect(mixed.plugins.first.id, 'fixture-0@local');
+    expect(mixed.plugins.first.installed, isFalse);
+    expect(mixed.isPartial, isTrue);
+    expect(() => mixed.plugins.clear(), throwsUnsupportedError);
+
+    result['marketplaceLoadErrors'] = loadError;
+    final malformed = await read();
+    expect(malformed.plugins, hasLength(maxBoundedEcosystemItems));
+    expect(malformed.isPartial, isTrue);
+
+    final legacy = await adapter.listPlugins(cwds: const ['/workspace']);
+    expect(legacy.map((plugin) => plugin.id), mixed.plugins.map((p) => p.id));
+  });
+
   test(
     'parses plugin/list and mcpServerStatus/list with bounded items',
     () async {

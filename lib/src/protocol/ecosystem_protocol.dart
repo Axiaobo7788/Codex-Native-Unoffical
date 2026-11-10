@@ -240,6 +240,16 @@ class EcosystemProtocolAdapter {
     List<String> cwds = const [],
     bool forceRefetch = false,
     List<String> marketplaceKinds = const [],
+  }) async => (await listPluginCatalog(
+    cwds: cwds,
+    forceRefetch: forceRefetch,
+    marketplaceKinds: marketplaceKinds,
+  )).plugins;
+
+  Future<PluginCatalogSnapshot> listPluginCatalog({
+    List<String> cwds = const [],
+    bool forceRefetch = false,
+    List<String> marketplaceKinds = const [],
   }) async {
     final normalizedCwds = cwds
         .map((c) => c.trim())
@@ -308,7 +318,15 @@ class EcosystemProtocolAdapter {
         }
       }
     }
-    return List<PluginSummaryModel>.unmodifiable(plugins);
+    final errors = result['marketplaceLoadErrors'];
+    return PluginCatalogSnapshot(
+      plugins: List<PluginSummaryModel>.unmodifiable(plugins),
+      isPartial: switch (errors) {
+        null => false,
+        final List<Object?> entries => entries.isNotEmpty,
+        _ => true,
+      },
+    );
   }
 
   Future<PluginDetailModel> readPlugin({

@@ -32,6 +32,10 @@ abstract interface class EcosystemGateway {
 abstract interface class EcosystemCatalogGateway implements EcosystemGateway {
   bool get supportsEcosystemCatalog;
 
+  Future<PluginCatalogSnapshot> listPluginCatalog({
+    List<String> cwds = const [],
+  });
+
   Future<AppListPage> listApps([AppListQuery query = const AppListQuery()]);
 
   Future<List<InstalledAppSnapshotModel>> listInstalledApps({

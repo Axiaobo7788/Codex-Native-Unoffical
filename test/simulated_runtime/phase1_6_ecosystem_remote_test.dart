@@ -14,6 +14,7 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
     this.listSkillsOverride,
     this.setSkillEnabledOverride,
     this.listPluginsOverride,
+    this.listPluginCatalogOverride,
     this.readPluginOverride,
     this.installPluginOverride,
     this.listMcpServerStatusOverride,
@@ -24,6 +25,8 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
   Future<bool> Function(String path, bool enabled)? setSkillEnabledOverride;
   Future<List<PluginSummaryModel>> Function(List<String> cwds)?
   listPluginsOverride;
+  Future<PluginCatalogSnapshot> Function(List<String> cwds)?
+  listPluginCatalogOverride;
   Future<PluginDetailModel> Function(
     String pluginName,
     String? marketplacePath,
@@ -66,6 +69,17 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
       return override(cwds);
     }
     return super.listPlugins(cwds: cwds);
+  }
+
+  @override
+  Future<PluginCatalogSnapshot> listPluginCatalog({
+    List<String> cwds = const [],
+  }) {
+    final override = listPluginCatalogOverride;
+    if (override != null) {
+      return override(cwds);
+    }
+    return super.listPluginCatalog(cwds: cwds);
   }
 
   @override
@@ -1244,6 +1258,67 @@ void main() {
     );
 
     testWidgets(
+      'keeps mixed plugin rows actionable and distinguishes partial from clean empty',
+      (tester) async {
+        const fixture = PluginSummaryModel(
+          id: 'catalog-fixture@local',
+          name: 'Catalog fixture',
+          description: 'A usable marketplace entry',
+          enabled: false,
+          installed: false,
+          marketplaceName: 'local',
+          marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+        );
+        var snapshot = const PluginCatalogSnapshot(
+          plugins: [fixture],
+          isPartial: true,
+        );
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginCatalogOverride: (_) async => snapshot,
+        );
+        harness.plugins
+          ..clear()
+          ..add(fixture);
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        final warning = find.byKey(const ValueKey('ecosystem-plugins-partial'));
+        final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
+
+        expect(warning, findsNothing);
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(warning, findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('plugin-read-catalog-fixture@local')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-detail-catalog-fixture@local')),
+          findsOneWidget,
+        );
+
+        snapshot = const PluginCatalogSnapshot(plugins: [], isPartial: true);
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(warning, findsOneWidget);
+        expect(find.text('No plugin entries are available.'), findsOneWidget);
+        expect(find.text('No plugin entries returned.'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('plugin-row-catalog-fixture@local')),
+          findsNothing,
+        );
+
+        snapshot = const PluginCatalogSnapshot(plugins: []);
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(warning, findsNothing);
+        expect(find.text('No plugin entries are available.'), findsNothing);
+        expect(find.text('No plugin entries returned.'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       'fails closed visibly when backend does not support ecosystem catalog mutations',
       (tester) async {
         final harness = SimulatedRuntimeHarness()..catalogSupported = false;
@@ -1277,6 +1352,10 @@ void main() {
         final remoteController = RuntimeController(useRemote: true);
         addTearDown(remoteController.dispose);
         expect(remoteController.supportsEcosystemCatalog, isFalse);
+        expect(
+          () => remoteController.listPluginCatalog(),
+          throwsUnsupportedError,
+        );
         expect(() => remoteController.listApps(), throwsUnsupportedError);
         expect(
           () => remoteController.listInstalledApps(),
