@@ -862,6 +862,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 ),
                                 _UserInputBanner(
                                   controller: widget.userInputController,
+                                  desktop: widget.hasDesktopShell,
                                 ),
                                 _composer(controller, isHeroCentered: true),
                                 const SizedBox(height: 14),
@@ -919,6 +920,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         final userInputBanner = _UserInputBanner(
           key: _userInputBannerKey,
           controller: widget.userInputController,
+          desktop: widget.hasDesktopShell,
         );
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.

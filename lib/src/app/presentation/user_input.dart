@@ -1,9 +1,14 @@
 part of '../codex_native_app.dart';
 
 class _UserInputBanner extends StatelessWidget {
-  const _UserInputBanner({super.key, required this.controller});
+  const _UserInputBanner({
+    super.key,
+    required this.controller,
+    required this.desktop,
+  });
 
   final UserInputController controller;
+  final bool desktop;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +47,7 @@ class _UserInputBanner extends StatelessWidget {
           request: request,
           pendingCount: controller.pending.length,
           errorMessage: error,
+          desktop: desktop,
         );
       },
     );
@@ -520,12 +526,14 @@ class _UserInputCard extends StatefulWidget {
     required this.request,
     required this.pendingCount,
     required this.errorMessage,
+    required this.desktop,
   });
 
   final UserInputController controller;
   final UserInputRequest request;
   final int pendingCount;
   final String? errorMessage;
+  final bool desktop;
 
   @override
   State<_UserInputCard> createState() => _UserInputCardState();
@@ -535,6 +543,8 @@ class _UserInputCardState extends State<_UserInputCard> {
   late final Map<String, TextEditingController> _textControllers;
   final Map<String, String?> _selectedOptions = {};
   final Set<String> _otherSelections = {};
+  final _questionScroll = ScrollController();
+  var _questionIndex = 0;
 
   @override
   void initState() {
@@ -553,6 +563,7 @@ class _UserInputCardState extends State<_UserInputCard> {
 
   @override
   void dispose() {
+    _questionScroll.dispose();
     for (final controller in _textControllers.values) {
       controller
         ..removeListener(_handleAnswerChanged)
@@ -566,6 +577,15 @@ class _UserInputCardState extends State<_UserInputCard> {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
     final submitting = widget.controller.isSubmitting(widget.request.requestId);
+    final questions = widget.request.questions;
+    final stepped = widget.desktop && questions.length > 1;
+    final showHeader =
+        !widget.desktop || stepped || widget.pendingCount > 1 || submitting;
+    final visibleQuestions = stepped ? [questions[_questionIndex]] : questions;
+    final hasNext = stepped && _questionIndex < questions.length - 1;
+    final canContinue = hasNext
+        ? _answerFor(questions[_questionIndex]) != null
+        : _isComplete;
     return Center(
       heightFactor: 1,
       child: Container(
@@ -591,35 +611,47 @@ class _UserInputCardState extends State<_UserInputCard> {
                 constraints: const BoxConstraints(maxHeight: 320),
                 child: SingleChildScrollView(
                   key: const ValueKey('user-input-question-scroll'),
+                  controller: _questionScroll,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.live_help_outlined,
-                            size: 18,
-                            color: theme.textSecondary,
-                          ),
-                          const SizedBox(width: ThemeTokens.space2),
-                          Expanded(
-                            child: Text(
-                              'Codex needs your input'
-                              '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
-                              style: Theme.of(context).textTheme.titleMedium,
+                      if (showHeader) ...[
+                        Row(
+                          children: [
+                            if (!widget.desktop)
+                              Icon(
+                                Icons.live_help_outlined,
+                                size: 18,
+                                color: theme.textSecondary,
+                              ),
+                            if (!widget.desktop)
+                              const SizedBox(width: ThemeTokens.space2),
+                            Expanded(
+                              child: Text(
+                                stepped
+                                    ? 'Question ${_questionIndex + 1} of ${questions.length}'
+                                    : 'Codex needs your input'
+                                          '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
+                                style: widget.desktop
+                                    ? Theme.of(context).textTheme.bodySmall
+                                          ?.copyWith(color: theme.textSecondary)
+                                    : Theme.of(context).textTheme.titleMedium,
+                              ),
                             ),
-                          ),
-                          if (submitting)
-                            const SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: ThemeTokens.space2),
+                            if (submitting)
+                              const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: ThemeTokens.space2),
+                      ],
                       for (
                         var index = 0;
-                        index < widget.request.questions.length;
+                        index < visibleQuestions.length;
                         index++
                       ) ...[
                         if (index > 0)
@@ -629,7 +661,7 @@ class _UserInputCardState extends State<_UserInputCard> {
                             ),
                             child: Divider(height: 1, color: palette.border),
                           ),
-                        _question(widget.request.questions[index], submitting),
+                        _question(visibleQuestions[index], submitting),
                       ],
                     ],
                   ),
@@ -648,6 +680,20 @@ class _UserInputCardState extends State<_UserInputCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (stepped && _questionIndex > 0) ...[
+                  Flexible(
+                    child: CodexButton(
+                      key: const ValueKey('user-input-previous'),
+                      variant: CodexButtonVariant.ghost,
+                      size: CodexButtonSize.sm,
+                      label: 'Previous',
+                      onPressed: submitting
+                          ? null
+                          : () => _showQuestion(_questionIndex - 1),
+                    ),
+                  ),
+                  const SizedBox(width: ThemeTokens.space2),
+                ],
                 Flexible(
                   child: CodexButton(
                     key: const ValueKey('user-input-cancel'),
@@ -665,13 +711,22 @@ class _UserInputCardState extends State<_UserInputCard> {
                 const SizedBox(width: ThemeTokens.space2),
                 Flexible(
                   child: CodexButton(
-                    key: const ValueKey('user-input-submit'),
+                    key: ValueKey(
+                      hasNext ? 'user-input-next' : 'user-input-submit',
+                    ),
                     variant: CodexButtonVariant.primary,
                     size: CodexButtonSize.sm,
                     loading: submitting,
-                    onPressed: submitting || !_isComplete ? null : _submit,
-                    label: 'Submit answers',
-                    tooltip: 'Submit answers',
+                    onPressed: submitting || !canContinue
+                        ? null
+                        : hasNext
+                        ? () => _showQuestion(_questionIndex + 1)
+                        : _submit,
+                    label: hasNext
+                        ? 'Next'
+                        : widget.desktop
+                        ? 'Submit'
+                        : 'Submit answers',
                   ),
                 ),
               ],
@@ -689,12 +744,14 @@ class _UserInputCardState extends State<_UserInputCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          question.header,
-          style: Theme.of(context).textTheme.labelLarge
-              ?.copyWith(color: palette.textSecondary),
-        ),
-        const SizedBox(height: ThemeTokens.space1),
+        if (!widget.desktop) ...[
+          Text(
+            question.header,
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: palette.textSecondary),
+          ),
+          const SizedBox(height: ThemeTokens.space1),
+        ],
         Text(question.question, style: Theme.of(context).textTheme.bodyMedium),
         if (question.options.isNotEmpty) ...[
           const SizedBox(height: ThemeTokens.space2),
@@ -761,31 +818,34 @@ class _UserInputCardState extends State<_UserInputCard> {
     ),
   );
 
-  bool get _isComplete {
-    for (final question in widget.request.questions) {
-      if (question.options.isEmpty || _otherSelections.contains(question.id)) {
-        final value = _textControllers[question.id]!.text;
-        if ((question.isSecret ? value : value.trim()).isEmpty) {
-          return false;
-        }
-      } else if (_selectedOptions[question.id] == null) {
-        return false;
-      }
+  void _showQuestion(int index) {
+    if (index < 0 || index >= widget.request.questions.length) return;
+    if (_questionScroll.hasClients) {
+      _questionScroll.jumpTo(0);
     }
-    return true;
+    setState(() => _questionIndex = index);
   }
 
-  void _submit() {
-    final answers = <String, List<String>>{};
-    for (final question in widget.request.questions) {
-      final answer =
-          question.options.isEmpty || _otherSelections.contains(question.id)
-          ? question.isSecret
-                ? _textControllers[question.id]!.text
-                : _textControllers[question.id]!.text.trim()
-          : _selectedOptions[question.id]!;
-      answers[question.id] = [answer];
+  String? _answerFor(UserInputQuestion question) {
+    if (question.options.isNotEmpty &&
+        !_otherSelections.contains(question.id)) {
+      return _selectedOptions[question.id];
     }
+    final draft = _textControllers[question.id]!.text;
+    final answer = question.isSecret ? draft : draft.trim();
+    return answer.isEmpty ? null : answer;
+  }
+
+  bool get _isComplete => widget.request.questions.every(
+    (question) => _answerFor(question) != null,
+  );
+
+  void _submit() {
+    if (!_isComplete) return;
+    final answers = {
+      for (final question in widget.request.questions)
+        question.id: [_answerFor(question)!],
+    };
     unawaited(widget.controller.submit(widget.request.requestId, answers));
   }
 }

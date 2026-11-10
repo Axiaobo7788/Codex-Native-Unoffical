@@ -643,6 +643,75 @@ void main() {
     },
   );
 
+  testWidgets('wide stock questions keep answers when stepping back', (
+    tester,
+  ) async {
+    final runtime = await _pumpSelectedApp(tester);
+    runtime.emitUserInput(
+      UserInputRequest(
+        requestId: 'desktop-steps',
+        threadId: 'controls-thread',
+        turnId: 'turn-1',
+        itemId: 'item-1',
+        isBlocking: true,
+        questions: [
+          UserInputQuestion(
+            id: 'approach',
+            header: 'Approach',
+            question: 'Which approach?',
+            options: const [
+              UserInputOption(
+                label: 'Incremental',
+                description: 'Small changes',
+              ),
+            ],
+            allowsOther: false,
+            isSecret: false,
+          ),
+          UserInputQuestion(
+            id: 'note',
+            header: 'Private note',
+            question: 'Add a private note.',
+            options: [],
+            allowsOther: false,
+            isSecret: true,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    final next = find.byKey(const ValueKey('user-input-next'));
+    final submit = find.byKey(const ValueKey('user-input-submit'));
+    final field = find.byKey(const ValueKey('user-input-note-text'));
+    expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(field, findsNothing);
+    expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
+
+    await tester.tap(find.text('Incremental'));
+    await tester.pumpAndSettle();
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(find.text('Question 2 of 2'), findsOneWidget);
+    expect(tester.widget<TextField>(field).obscureText, isTrue);
+    await tester.enterText(field, '  Keep this private.  ');
+    await tester.tap(find.byKey(const ValueKey('user-input-previous')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CodexButton>(next).isEnabled, isTrue);
+
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      '  Keep this private.  ',
+    );
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(runtime.userInputSubmissions.single.$2.values, {
+      'approach': ['Incremental'],
+      'note': ['  Keep this private.  '],
+    });
+  });
+
   testWidgets(
     'a pending question and warning fit after resizing a Desktop window',
     (tester) async {
