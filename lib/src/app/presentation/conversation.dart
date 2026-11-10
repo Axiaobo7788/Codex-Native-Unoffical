@@ -4975,6 +4975,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return null;
     }
     final actions = <CommandActionKind>{};
+    var runCount = 0;
     for (var index = entries.lastIndexOf(latest); index >= 0; index--) {
       final entry = entries[index];
       if (entry.turnId != latest.turnId ||
@@ -4987,24 +4988,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         continue;
       }
       if (!entry.text.startsWith('Command: ')) break;
-      actions.addAll(
-        entry.commandActions.isEmpty
-            ? const {CommandActionKind.run}
-            : entry.commandActions,
-      );
+      final commandActions = entry.commandActions.isEmpty
+          ? const {CommandActionKind.run}
+          : entry.commandActions;
+      actions.addAll(commandActions);
+      if (commandActions.contains(CommandActionKind.run)) runCount += 1;
     }
     if (actions.length < 2) return null;
-    final labels = [
-      if (actions.contains(CommandActionKind.read)) 'read files',
-      if (actions.contains(CommandActionKind.listFiles)) 'listed files',
-      if (actions.contains(CommandActionKind.search)) 'searched files',
-      if (actions.contains(CommandActionKind.run)) 'ran commands',
-    ];
-    final first = labels.first;
-    labels[0] = first[0].toUpperCase() + first.substring(1);
-    return labels.length == 2
-        ? labels.join(' and ')
-        : '${labels.take(labels.length - 1).join(', ')}, and ${labels.last}';
+    // The desktop renderer groups read, search and list into one
+    // exploration segment and pluralizes the separate command segment.
+    return switch (runCount) {
+      0 => 'Read files',
+      1 => 'Read files and ran a command',
+      _ => 'Read files and ran commands',
+    };
   }
 
   void _reconcileLiveOutputPreview() {

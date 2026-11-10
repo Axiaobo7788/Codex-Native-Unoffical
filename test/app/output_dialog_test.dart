@@ -213,7 +213,11 @@ void main() {
           summary: 'Command: cat counter.txt',
           status: 'completed',
           completed: true,
-          commandActions: {CommandActionKind.read},
+          commandActions: {
+            CommandActionKind.read,
+            CommandActionKind.search,
+            CommandActionKind.listFiles,
+          },
         ),
       );
       runtime.emitTurnEvent(
@@ -257,7 +261,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(view, findsNothing);
       expect(show, findsOneWidget);
-      expect(find.text('Read files and ran commands'), findsNothing);
+      expect(find.text('Read files and ran a command'), findsNothing);
       runtime.emitTurnEvent(
         const ActivityEvent(
           threadId: 'output-thread',
@@ -269,20 +273,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Read files and ran commands'), findsOneWidget);
+      expect(find.text('Read files and ran a command'), findsOneWidget);
       final detail = find.byKey(const ValueKey('timeline-details-button'));
       await tester.tap(detail);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Execution'));
       await tester.pumpAndSettle();
-      expect(find.text('Read files and ran commands'), findsNothing);
+      expect(find.text('Read files and ran a command'), findsNothing);
       expect(find.text('Command: cat counter.txt'), findsOneWidget);
       expect(find.text('Command: fixture still running'), findsOneWidget);
       await tester.tap(detail);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Commands'));
       await tester.pumpAndSettle();
-      expect(find.text('Read files and ran commands'), findsOneWidget);
+      expect(find.text('Read files and ran a command'), findsOneWidget);
       expect(runtime.tailLengths, isEmpty);
       await tester.tap(show);
       await tester.pumpAndSettle();
