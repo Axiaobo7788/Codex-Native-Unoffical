@@ -4774,3 +4774,10 @@ zoom and saved panel width. The installed renderer `25894` supplies the
 logical dimensions and component variants. The exact source claims, paired
 Native evidence and remaining signed-in comparison gates are recorded in
 the [wide Desktop mapping](reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#wide-desktop-visual-parity-ranking).
+
+The [Golden State A contract](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) tracks
+current reconstruction. Its A11 evidence distinguishes the shipped model
+picker from stock model and reasoning overrides. A real Linux release
+round trip showed that the catalog default can differ from the model
+resolved by config, and clearing overrides lets an existing stock session
+retain its model and effort. The composer now discloses that inheritance.

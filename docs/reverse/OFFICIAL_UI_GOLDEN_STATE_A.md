@@ -42,7 +42,7 @@ got here.
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `Ceox` orders the actions. Its title and expand action open the same side editor. The `cI4i` rail applies a 13 px inset. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Active elapsed ticks only on the visible label. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4` | Native confirms clear and uses a full reading surface when both columns cannot fit. Matching signed-in editor and terminal status variants are still open. | PARTIAL | Compare editor toolbar, budget and terminal states with the current official tab when equivalent evidence is available. |
 | A10 Pending question/request | H1 Question, voice, Skip and Send are `qMAt` / `Ceox.t6` async input. For stock, `Ceox.iL → IpGh → vMUJ` displays individual questions and `381170.Qr2V` supplies 20 px choice markers. | The Linux release used numbered stock options, completed both steps and returned both answers. Widget tests cover arrows/Enter, back navigation and private-text whitespace. | `3899c23`, `515d283`, `5769e31`, `b32af57`, `2c290b1` | H1 async free text and voice require separate supported evidence. Native Cancel sends the existing cancellation response. The renderer also has a Skip branch that can send empty answers or interrupt, depending on request state. | PARTIAL | Trace the supported stock Skip/Continue interaction independently. Keep cancellation semantics explicit and track H1 async input separately. |
-| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.2d62107713.js` `LUWz` defines the anchored permission control and Full access warning glyph. | The Linux release opens supported stock Sandbox overrides above the shield and routes Advanced settings to the existing dialog. It displays Full access confirmation and restores defaults when dismissed. The advanced menu fits 1191×865 and 820×420. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1` | The stock menu preserves separate approval and sandbox settings. It does not claim the renderer’s profile or Auto-review contract. Model picker, focused/running toolbar and voice have separate gaps. | PARTIAL | Map the supported model/reasoning popover from `104066` and compare focused/running toolbar geometry. Track voice and unbacked permission profiles separately. |
+| A11 Composer/control grouping | H1 has add on the left and usage, model/reasoning, execution, microphone and Stop on the right. `309406` defines the ring. `341692.LUWz` defines the permission control. `104066.dig0 → 209288.vdOM` maps the end-aligned model list and effort slider. | The Linux release opens separate anchored model and Sandbox controls. Real stock requests verified an inherited model, a selected model with higher effort, and session inheritance after clearing the override. The advanced permissions remain reachable. | `d836c16`, `48b95f4`, `fd4ebe1`, `f8a4d99`, `cedb9e3`, `b14b5d1`, `6c9bc6c` | The stock picker exposes advertised model and effort values. Recommended model bundles, locked/account tiers, permission profiles, voice and focused/running toolbar geometry require separate evidence. | PARTIAL | Compare the active focused/running toolbar with the current official hierarchy. Preserve the stock inheritance distinction and track account-dependent picker variants separately. |
 
 `MATCH` requires current same-state evidence. `PARITY_ACCEPTABLE` records
 an evidenced equivalent with a bounded known delta. `PARTIAL`, `DIVERGED`
@@ -50,6 +50,34 @@ and `MISSING` retain the next concrete correction. `EVIDENCE_BLOCKED`
 names the evidence a specific state requires. `HUMAN_REVIEW_PENDING` applies
 to remaining subjective differences after machine-actionable discrepancies
 are addressed. Golden State A remains active in `SELF_ITERATION`.
+
+## A11 stock model and reasoning
+
+Build `25894` uses a 224 px end-aligned picker in `104066.dig0`.
+`209288.vdOM` selects the advanced model list when there is no resolved
+power selection. Its explicit-model view has a 24 px discrete track, a
+model-list switch and a 32 px clear action. The peer independently traced
+both views and their CSS in `0b2d31a9d760.css`. The Native release projects
+only the stock catalog and advertised reasoning efforts. Account-controlled
+model bundles, speed tiers and locked rows require separate evidence.
+
+The disposable config selected `gpt-5.4` while `model/list` marked
+`gpt-6.1-sol` as default. The first stock request used the configured
+model without an explicit effort. The explicit choice reached the loopback
+provider as `gpt-6-sol` / `high`. Clearing the client override retained
+that model and effort on the next turn in the same stock session. The
+interface labels the action and selection as clearing overrides and
+inheriting runtime settings. The simulated test confirms the next typed
+request omits both overrides. The first fixture exposed the stock warning
+for missing `gpt-5.4` metadata and retained it in the captures.
+
+The release walkthrough exercised both views at 1191×865 and verified
+process teardown. At 820×420 and 200% text scale, an early widget run
+reproduced a 6 px overflow in fixed-height menu rows. Rows now retain a
+32 px minimum and grow for their text. The full 520-case Flutter suite,
+five opt-in stock cases, ASCII-path analysis, Model smoke and Linux bundle
+closure passed. The signed-in official open picker is still unavailable
+for live comparison.
 
 ## A9 release evidence
 
