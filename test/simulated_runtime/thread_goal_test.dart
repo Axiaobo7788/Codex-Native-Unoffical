@@ -37,10 +37,11 @@ void main() {
     );
     expect(find.text('1h 1m 1s'), findsOneWidget);
     final composer = find.byKey(const ValueKey('floating_composer'));
-    expect(
-      tester.getRect(strip).bottom,
-      lessThan(tester.getRect(composer).top),
-    );
+    final stripRect = tester.getRect(strip);
+    final composerRect = tester.getRect(composer);
+    expect(stripRect.bottom, lessThan(composerRect.top));
+    expect(stripRect.left - composerRect.left, 13);
+    expect(composerRect.right - stripRect.right, 13);
   });
 
   testWidgets('manages a local goal and confirms clearing it', (tester) async {

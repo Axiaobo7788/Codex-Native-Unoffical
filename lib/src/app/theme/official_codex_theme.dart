@@ -31,6 +31,7 @@ abstract final class OfficialCodexTheme {
 
   /// Composer max width shares the reading column width.
   static const double composerMaxWidth = maxContentWidth;
+  static const double composerTrayInlineInset = 13.0;
 
   /// Floating composer corner radius (24px / 1.5rem).
   static const double composerRadius = 24.0;

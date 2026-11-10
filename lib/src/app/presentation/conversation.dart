@@ -2115,14 +2115,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ThreadGoalStatus.complete => 'Goal achieved',
       ThreadGoalStatus.unknown => 'Thread goal',
     };
+    const inlineInset = OfficialCodexTheme.composerTrayInlineInset;
     return Center(
       heightFactor: 1,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        padding: const EdgeInsets.fromLTRB(
+          16 + inlineInset,
+          4,
+          16 + inlineInset,
+          4,
+        ),
         child: Container(
           key: const ValueKey('desktop-thread-goal-strip'),
           constraints: const BoxConstraints(
-            maxWidth: OfficialCodexTheme.maxContentWidth,
+            maxWidth: OfficialCodexTheme.composerMaxWidth - 2 * inlineInset,
             minHeight: OfficialCodexTheme.navRowHeight,
           ),
           padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 4, 0),
