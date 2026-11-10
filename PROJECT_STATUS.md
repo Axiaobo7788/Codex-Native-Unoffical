@@ -108,7 +108,10 @@ The Linux release verified model/effort overrides and subsequent stock
 session inheritance. The current Goal draft survives a switch to Changes
 and header hide/reopen. Explicit close still returns to the saved objective,
 as verified during a real stock turn. Mouse Back/Forward use the same
-bounded Desktop thread history as the toolbar and keyboard. Home, open
+bounded Desktop thread history as the toolbar and keyboard. The Desktop
+strip includes backed Edit and Help menus. A Linux package selected,
+deleted and restored an unsent draft through Edit and handed the official
+documentation URI to the system handler. Home, open
 Changes, Review, expanded activity, compact and dark/focused states have
 separate evidence gates. [Hosted CI for `738e9b2`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42907568863)
 
