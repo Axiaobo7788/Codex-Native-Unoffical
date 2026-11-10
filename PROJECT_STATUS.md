@@ -55,8 +55,10 @@ Compare the largest remaining differences in the
 [wide Desktop ranking](docs/reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#wide-desktop-visual-parity-ranking).
 The ordinary project thread rows now retain their Git reference in the hover
 tooltip. A paired Linux release capture measures a 54 → 36 logical px thread
-pitch and shows Git context and row actions on hover. Next is the pending
-question card, using the neutral surface visible in H1.
+pitch and shows Git context and row actions on hover. The pending question
+now uses the neutral surface visible in H1. The release app submitted a
+choice through the bundled Host and stock app-server. Next, compare the
+expanded command surface and title/composer diagnostics using build `25894`.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

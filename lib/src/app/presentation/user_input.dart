@@ -564,6 +564,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final submitting = widget.controller.isSubmitting(widget.request.requestId);
     return Center(
       heightFactor: 1,
@@ -575,8 +576,8 @@ class _UserInputCardState extends State<_UserInputCard> {
         margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
         padding: const EdgeInsets.all(ThemeTokens.space3),
         decoration: BoxDecoration(
-          color: palette.accent.withValues(alpha: 0.07),
-          border: Border.all(color: palette.accent.withValues(alpha: 0.32)),
+          color: theme.modalSurface,
+          border: Border.all(color: theme.hairlineBorder),
           borderRadius: BorderRadius.circular(
             OfficialCodexTheme.mainSurfaceRadius,
           ),
@@ -596,9 +597,9 @@ class _UserInputCardState extends State<_UserInputCard> {
                       Row(
                         children: [
                           Icon(
-                            Icons.question_answer_outlined,
+                            Icons.live_help_outlined,
                             size: 18,
-                            color: palette.accent,
+                            color: theme.textSecondary,
                           ),
                           const SizedBox(width: ThemeTokens.space2),
                           Expanded(

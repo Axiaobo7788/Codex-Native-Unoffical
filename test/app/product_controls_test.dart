@@ -459,6 +459,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Codex needs your input'), findsOneWidget);
+    final questionCard = find.byKey(const ValueKey('user-input-card'));
+    final questionDecoration =
+        tester.widget<Container>(questionCard).decoration! as BoxDecoration;
+    final theme = OfficialCodexTheme.of(tester.element(questionCard));
+    expect(questionDecoration.color, theme.modalSurface);
+    expect(questionDecoration.border, Border.all(color: theme.hairlineBorder));
     expect(
       tester
           .getSize(find.byKey(const ValueKey('user-input-question-scroll')))

@@ -239,3 +239,12 @@ ordinary thread centers falling from 54 to 36 logical px. The second project
 is 36 px higher after its two predecessors lose their branch strips. Hovering
 the second thread in the release app displayed `Git · main` and kept its row
 actions visible. The branch search still uses the same thread metadata.
+
+The second pass gives the pending question the neutral theme surface and
+outline observed in H1, while keeping the existing response controls. The
+paired 1191×865 Linux release captures use the same choice request. The
+bundled Host and stock app-server presented the question, accepted the
+selected response, and returned the next assistant message. A separate
+empty-options fixture completed without showing a question, so it does not
+verify the H1 free-text workflow. Native free-text and private answers retain
+their simulated product coverage.
