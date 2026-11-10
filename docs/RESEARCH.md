@@ -4421,6 +4421,8 @@ probe before interpreting that result as a content-search limitation.
 
 ## F31 — Partial plugin catalogs and saved-thread provider scope
 
+[Hosted CI 42765092016](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42765092016) passed on `8c64783`.
+
 - F31A `e0e9f07` adds a local typed catalog snapshot. The adapter
   retains the existing bounded rows and one partial-state bit.
   A missing or empty stock error list preserves the previous
@@ -4488,3 +4490,59 @@ probe before interpreting that result as a content-search limitation.
   clean, invalid-only, repaired and mixed detail states at
   1280×720 and 720×800. The test-owned app, Host and stock trees
   exited. Subjective UI and physical Android remain separate.
+
+## F32 — Installed plugin scope and compact resume failure feedback
+
+- F32A `3d38a8b` measured stable catalog and installed
+  requests through the bundled Host on four stock builds.
+  A 131-row home and workspace catalog placed the workspace
+  installed plugin at offset 128. Native retained 100 rows on
+  installed stock and public alpha. Its Linux package displayed
+  that retained count at 1280×720 and 720×800.
+- Independent fresh profiles separated startup from query
+  effects. Each sampled default or explicit-local catalog
+  request materialized a configured local plugin cache even
+  with `forceRefetch` omitted. The first returned row still
+  said it was uninstalled. The isolated installed queries did
+  not change the sampled config or manifests. Public source
+  conditionally schedules authenticated bundle sync for both
+  routes. Those authenticated paths were outside the probe.
+- A distinct installed inventory stays `RESEARCH_MORE` for
+  its effects and lack of upstream pagination. Reporting the
+  existing bounded catalog's truncation can proceed separately.
+  [F32A installed inventory evidence](reverse/PLUGIN_INSTALLED_SCOPE_EVIDENCE.md)
+- Two independent simulated 720×800 cases used the actual
+  exception shape for an implicit cold resume and a pending
+  queue's explicit Resume action. Both retained the draft and
+  started zero turns. The failure was visible only after
+  opening Threads.
+- A separate normal-path Linux walkthrough opened a disposable
+  saved thread through the real bundled Host and installed
+  stock. Moving that test rollout aside caused stock to return
+  `-32600` on resume. The draft and loaded conversation stayed
+  visible. The failure appeared on compact Threads after
+  navigation. The original file was restored and the test
+  processes exited. This exercised a deliberately induced
+  missing-rollout failure. Provider-specific discovery and
+  resume remain distinct.
+- F32B `0b7a7f0` and `28e9566` mapped the measured Desktop's
+  reason-specific provider block, local stock resume and read
+  behavior, and Native error presentation. The audit separated
+  experimental queue RPCs, current configured-provider discovery,
+  specific loaded-thread policy checks, and local error transport.
+  A generic conversation-visible resume failure is independently
+  actionable. Provider-specific gating and broader discovery
+  remain separate.
+  [F32B provider resume presentation evidence](reverse/THREAD_PROVIDER_RESUME_PRESENTATION_EVIDENCE.md)
+- Official `agy` review approved `3d38a8b` with zero open P0,
+  P1 or P2 findings. The original B owner corrected its two P1
+  and two P2 evidence findings in an ordinary commit and released
+  its only document. Both histories were integrated at `6d96df3`.
+- Product, test, tool, Rust and workflow trees matched `8c64783`.
+  The identical source passed Dart format and analyze, the
+  65-root pure-Dart gate, 497 Flutter cases with five opt-in
+  skips, five isolated direct-stock cases, 100 Rust tests,
+  formatting and Clippy, and the bounded-history benchmark.
+  Linux bundle closure and license checks passed on the reused
+  exact product build. The two packaged research walkthroughs
+  and simulated failure probes were verified separately.
