@@ -190,9 +190,15 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('desktop-thread-goal-title')));
     await tester.pumpAndSettle();
     expect(editor, findsOneWidget);
+    await tester.enterText(editor, 'Discarded by the repeat action');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('desktop-thread-goal-edit')));
+    await tester.pumpAndSettle();
+    expect(editor, findsNothing);
     await tester.tap(find.byTooltip('Edit goal'));
     await tester.pumpAndSettle();
     expect(editor, findsOneWidget);
+    expect(tester.widget<TextField>(editor).controller!.text, 'Validated goal');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(editor, findsNothing);

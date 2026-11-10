@@ -2152,7 +2152,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ThreadGoalStatus.complete => 'Goal achieved',
       ThreadGoalStatus.unknown => 'Thread goal',
     };
-    final openEditor = actionsEnabled ? () => _openGoalEditor(threadId) : null;
+    final editorOpen = _goalEditorThreadId == threadId;
+    final toggleEditor = actionsEnabled
+        ? editorOpen
+              ? _closeGoalEditor
+              : () => _openGoalEditor(threadId)
+        : null;
     final title = Row(
       children: [
         Icon(Icons.track_changes_outlined, size: 16, color: theme.textMuted),
@@ -2198,7 +2203,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             minHeight: OfficialCodexTheme.navRowHeight,
           ),
           padding: EdgeInsetsDirectional.fromSTEB(
-            openEditor == null ? 12 : 4,
+            toggleEditor == null ? 12 : 4,
             0,
             4,
             0,
@@ -2213,14 +2218,16 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           child: Row(
             children: [
               Expanded(
-                child: openEditor == null
+                child: toggleEditor == null
                     ? title
                     : CodexButton(
                         key: const ValueKey('desktop-thread-goal-title'),
-                        tooltip: 'Open goal editor',
+                        tooltip: editorOpen
+                            ? 'Close goal editor from strip'
+                            : 'Open goal editor',
                         variant: CodexButtonVariant.ghost,
                         size: CodexButtonSize.sm,
-                        onPressed: openEditor,
+                        onPressed: toggleEditor,
                         child: title,
                       ),
               ),
@@ -2255,8 +2262,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                 CodexIconButton(
                   key: const ValueKey('desktop-thread-goal-edit'),
-                  tooltip: 'Edit goal',
-                  onPressed: openEditor,
+                  tooltip: editorOpen
+                      ? 'Close goal editor from strip'
+                      : 'Edit goal',
+                  onPressed: toggleEditor,
                   size: 28,
                   icon: const Icon(Icons.open_in_full_rounded, size: 14),
                 ),
