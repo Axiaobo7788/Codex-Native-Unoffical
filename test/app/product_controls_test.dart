@@ -1004,6 +1004,18 @@ void main() {
               ),
             ],
           ),
+          const HistoryTurn(
+            id: 'turn-history-older',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'hist-assistant-older',
+                turnId: 'turn-history-older',
+                kind: HistoryItemKind.assistant,
+                text: 'Earlier verification complete.',
+              ),
+            ],
+          ),
         ]
         ..expandedTurnItems = const [
           HistoryItem(
@@ -1056,6 +1068,18 @@ void main() {
       final actions = find.byKey(
         const ValueKey('desktop-user-message-actions'),
       );
+      final olderActions = find.byKey(
+        const ValueKey(
+          'desktop-assistant-message-actions-hist-assistant-older',
+        ),
+      );
+      expect(tester.widget<Opacity>(olderActions).opacity, 0);
+      expect(
+        find.byKey(
+          const ValueKey('desktop-assistant-message-actions-hist-assistant-1'),
+        ),
+        findsNothing,
+      );
       expect(tester.widget<Opacity>(actions).opacity, 0);
       final actionRect = tester.getRect(actions);
       final messageRect = tester.getRect(message);
@@ -1071,7 +1095,12 @@ void main() {
       await mouse.moveTo(const Offset(5, 90));
       await tester.pump();
       expect(tester.widget<Opacity>(actions).opacity, 0);
+      await mouse.moveTo(tester.getCenter(olderActions));
+      await tester.pump();
+      expect(tester.widget<Opacity>(olderActions).opacity, 1);
       await mouse.removePointer();
+      await tester.pump();
+      expect(tester.widget<Opacity>(olderActions).opacity, 0);
       final copyButton = find.byKey(const ValueKey('user-copy-hist-user-1'));
       final copyFocus = Focus.of(
         tester.element(

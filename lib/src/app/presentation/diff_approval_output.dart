@@ -418,6 +418,7 @@ class _HistoryEntryView extends StatelessWidget {
     required this.historyController,
     this.detailMode = PresentationDetailMode.commands,
     this.inlineActivity = false,
+    this.revealAssistantCopy = false,
     this.commandOutput,
     this.onForkFromTurn,
     this.onRevertFromTurn,
@@ -437,6 +438,7 @@ class _HistoryEntryView extends StatelessWidget {
   final HistoryController historyController;
   final PresentationDetailMode detailMode;
   final bool inlineActivity;
+  final bool revealAssistantCopy;
   final _CommandOutputPresentation? commandOutput;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
@@ -496,6 +498,7 @@ class _HistoryEntryView extends StatelessWidget {
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
       inlineActivity: inlineActivity,
+      revealAssistantCopy: revealAssistantCopy,
       activityDetail: commandOutput?.detail,
       leadingHeader: showDetails
           ? _TurnWorkDivider(

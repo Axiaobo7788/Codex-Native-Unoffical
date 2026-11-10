@@ -3245,6 +3245,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final rawHistoryItems = widget.historyController.timelineItems
         .where((item) => !liveIds.contains(item.id))
         .toList(growable: false);
+    final latestTurnId =
+        controller.activeTurnId ??
+        rawLiveEntries.lastOrNull?.turnId ??
+        rawHistoryItems.lastOrNull?.turnId;
     final historyItems = switch (_detailMode) {
       PresentationDetailMode.prose =>
         rawHistoryItems
@@ -3553,6 +3557,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         historyController: widget.historyController,
                         detailMode: _detailMode,
                         inlineActivity: widget.hasDesktopShell,
+                        revealAssistantCopy:
+                            !showLiveEntries || item.turnId != latestTurnId,
                         commandOutput: item.isCommand
                             ? _commandOutputFor(
                                 context,
@@ -3721,6 +3727,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
                       inlineActivity: widget.hasDesktopShell,
+                      revealAssistantCopy: liveTurnId != latestTurnId,
                       activitySummary: identical(entry, latestActivity)
                           ? collapsedActivitySummary
                           : null,
@@ -5508,6 +5515,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.isReasoning = false,
     this.isCommand = false,
     this.inlineActivity = false,
+    this.revealAssistantCopy = false,
     this.activitySummary,
     this.activityDetail,
     this.leadingHeader,
@@ -5530,6 +5538,7 @@ class _ConversationEntryView extends StatelessWidget {
   final bool isReasoning;
   final bool isCommand;
   final bool inlineActivity;
+  final bool revealAssistantCopy;
   final String? activitySummary;
   final Widget? activityDetail;
   final Widget? leadingHeader;
@@ -5602,6 +5611,18 @@ class _ConversationEntryView extends StatelessWidget {
         entry.kind == ConversationEntryKind.assistant &&
         entry.completed &&
         entry.text.trim().isNotEmpty;
+    final copyButton = showAssistantCopy
+        ? _MessageCopyButton(
+            key: ValueKey('assistant-copy-${entry.id}'),
+            text: entry.text,
+          )
+        : null;
+    final hideCopyAtRest =
+        inlineActivity &&
+        revealAssistantCopy &&
+        copyButton != null &&
+        onContinueTurn == null &&
+        onRetryTurn == null;
     final actionKeySuffix = (turnId != null && turnId!.isNotEmpty)
         ? turnId!
         : entry.id;
@@ -5673,11 +5694,9 @@ class _ConversationEntryView extends StatelessWidget {
                             const SizedBox(height: ThemeTokens.space1),
                           ],
                           if (entry.kind == ConversationEntryKind.assistant)
-                            AssistantMarkdown(
-                              data: entry.text,
-                              completed: entry.completed,
-                              proseLineHeight: inlineActivity
-                                  ? OfficialCodexTheme.assistantProseLineHeight
+                            _assistantProse(
+                              copyOnInteraction: hideCopyAtRest
+                                  ? copyButton
                                   : null,
                             )
                           else
@@ -5690,7 +5709,7 @@ class _ConversationEntryView extends StatelessWidget {
                                         : palette.textPrimary,
                                   ),
                             ),
-                          if (showAssistantCopy ||
+                          if (copyButton != null && !hideCopyAtRest ||
                               onContinueTurn != null ||
                               onRetryTurn != null) ...[
                             const SizedBox(height: 6),
@@ -5699,11 +5718,7 @@ class _ConversationEntryView extends StatelessWidget {
                               runSpacing: 6,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                if (showAssistantCopy)
-                                  _MessageCopyButton(
-                                    key: ValueKey('assistant-copy-${entry.id}'),
-                                    text: entry.text,
-                                  ),
+                                ?copyButton,
                                 if (onContinueTurn != null)
                                   CodexButton(
                                     key: ValueKey(
@@ -5752,6 +5767,28 @@ class _ConversationEntryView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _assistantProse({required Widget? copyOnInteraction}) {
+    final prose = AssistantMarkdown(
+      data: entry.text,
+      completed: entry.completed,
+      proseLineHeight: inlineActivity
+          ? OfficialCodexTheme.assistantProseLineHeight
+          : null,
+    );
+    if (copyOnInteraction == null) {
+      return prose;
+    }
+    return _HoverMessageActions(
+      content: prose,
+      actionsKey: ValueKey('desktop-assistant-message-actions-${entry.id}'),
+      alignment: CrossAxisAlignment.start,
+      actions: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: copyOnInteraction,
       ),
     );
   }
@@ -5948,8 +5985,10 @@ class _UserMessageEntryView extends StatelessWidget {
       child: actionButtons.isEmpty
           ? bubble
           : revealActions
-          ? _HoverUserMessageActions(
-              bubble: bubble,
+          ? _HoverMessageActions(
+              content: bubble,
+              actionsKey: const ValueKey('desktop-user-message-actions'),
+              alignment: CrossAxisAlignment.end,
               actions: Wrap(
                 alignment: WrapAlignment.end,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -5974,18 +6013,24 @@ class _UserMessageEntryView extends StatelessWidget {
   }
 }
 
-class _HoverUserMessageActions extends StatefulWidget {
-  const _HoverUserMessageActions({required this.bubble, required this.actions});
+class _HoverMessageActions extends StatefulWidget {
+  const _HoverMessageActions({
+    required this.content,
+    required this.actions,
+    required this.actionsKey,
+    required this.alignment,
+  });
 
-  final Widget bubble;
+  final Widget content;
   final Widget actions;
+  final Key actionsKey;
+  final CrossAxisAlignment alignment;
 
   @override
-  State<_HoverUserMessageActions> createState() =>
-      _HoverUserMessageActionsState();
+  State<_HoverMessageActions> createState() => _HoverMessageActionsState();
 }
 
-class _HoverUserMessageActionsState extends State<_HoverUserMessageActions> {
+class _HoverMessageActionsState extends State<_HoverMessageActions> {
   var _hovered = false;
   var _focused = false;
 
@@ -5997,11 +6042,11 @@ class _HoverUserMessageActionsState extends State<_HoverUserMessageActions> {
       canRequestFocus: false,
       onFocusChange: (focused) => setState(() => _focused = focused),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: widget.alignment,
         children: [
-          widget.bubble,
+          widget.content,
           Opacity(
-            key: const ValueKey('desktop-user-message-actions'),
+            key: widget.actionsKey,
             opacity: _hovered || _focused ? 1 : 0,
             alwaysIncludeSemantics: true,
             child: widget.actions,
