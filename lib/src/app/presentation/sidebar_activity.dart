@@ -2256,6 +2256,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   var _pluginsRefreshGeneration = 0;
   var _appsRefreshGeneration = 0;
   var _mcpRefreshGeneration = 0;
+  Future<void>? _skillsRefreshInFlight;
+  Future<void>? _pluginsRefreshInFlight;
+  Future<void>? _appsRefreshInFlight;
+  Future<void>? _mcpRefreshInFlight;
   var _skillsLoadFailed = false;
   var _pluginsLoadFailed = false;
   var _installedAppsLoadFailed = false;
@@ -2312,9 +2316,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   bool get _activeSectionLoading => switch (_section) {
     _EcosystemSection.skills => _skillsLoading,
-    _EcosystemSection.plugins => _pluginsLoading,
+    _EcosystemSection.plugins =>
+      _pluginsLoading || _mutatingPluginIds.isNotEmpty,
     _EcosystemSection.apps => _appsLoading,
-    _EcosystemSection.mcp => _mcpLoading,
+    _EcosystemSection.mcp => _mcpLoading || _reloadingMcp,
   };
 
   String? get _activeSectionError => switch (_section) {
@@ -2423,7 +2428,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     ]);
   }
 
-  Future<void> _refreshSkills({required List<String> cwds}) async {
+  Future<void> _refreshSkills({required List<String> cwds}) {
+    if (_skillsRefreshInFlight case final inFlight?) {
+      return inFlight;
+    }
+    final future = _runRefreshSkills(cwds: cwds);
+    _skillsRefreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_skillsRefreshInFlight, future)) {
+        _skillsRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _runRefreshSkills({required List<String> cwds}) async {
     final generation = ++_skillsRefreshGeneration;
     if (mounted) {
       setState(() {
@@ -2455,6 +2473,22 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   }
 
   Future<void> _refreshPlugins({
+    required List<String> cwds,
+    required bool forceRefetch,
+  }) {
+    if (_pluginsRefreshInFlight case final inFlight?) {
+      return inFlight;
+    }
+    final future = _runRefreshPlugins(cwds: cwds, forceRefetch: forceRefetch);
+    _pluginsRefreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_pluginsRefreshInFlight, future)) {
+        _pluginsRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _runRefreshPlugins({
     required List<String> cwds,
     required bool forceRefetch,
   }) async {
@@ -2515,7 +2549,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
-  Future<void> _refreshMcp({required bool forceRefetch}) async {
+  Future<void> _refreshMcp({required bool forceRefetch}) {
+    if (_mcpRefreshInFlight case final inFlight?) {
+      return inFlight;
+    }
+    final future = _runRefreshMcp(forceRefetch: forceRefetch);
+    _mcpRefreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_mcpRefreshInFlight, future)) {
+        _mcpRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _runRefreshMcp({required bool forceRefetch}) async {
     final generation = ++_mcpRefreshGeneration;
     if (mounted) {
       setState(() {
@@ -2547,7 +2594,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
-  Future<void> _refreshApps({required bool forceRefetch}) async {
+  Future<void> _refreshApps({required bool forceRefetch}) {
+    if (_appsRefreshInFlight case final inFlight?) {
+      return inFlight;
+    }
+    final future = _runRefreshApps(forceRefetch: forceRefetch);
+    _appsRefreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_appsRefreshInFlight, future)) {
+        _appsRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _runRefreshApps({required bool forceRefetch}) async {
     final generation = ++_appsRefreshGeneration;
     final catalog = _catalogGateway;
     if (catalog == null) {
@@ -2718,18 +2778,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _reloadMcpServers() async {
     final gateway = _mcpGateway;
-    if (gateway == null || _reloadingMcp) {
+    if (gateway == null ||
+        _reloadingMcp ||
+        _mcpLoading ||
+        _mcpRefreshInFlight != null) {
       return;
     }
-    final generation = ++_mcpRefreshGeneration;
     setState(() {
       _reloadingMcp = true;
       _mcpNotice = null;
-      _mcpLoadError = null;
       _mcpErrors.clear();
     });
     try {
       await gateway.reloadMcpServers();
+      final generation = ++_mcpRefreshGeneration;
       final servers = await widget.gateway.listMcpServerStatus();
       if (!mounted || generation != _mcpRefreshGeneration) {
         return;
@@ -2744,7 +2806,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       });
     } catch (error) {
       if (mounted) {
-        setState(() => _mcpNotice = 'Reload failed: $error');
+        setState(() {
+          _mcpLoading = false;
+          _mcpNotice = 'Reload failed: $error';
+        });
       }
     } finally {
       if (mounted) {
@@ -4161,7 +4226,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               variant: CodexButtonVariant.secondary,
               size: CodexButtonSize.sm,
               loading: _reloadingMcp,
-              onPressed: gateway == null || _reloadingMcp
+              onPressed: gateway == null || _reloadingMcp || _mcpLoading
                   ? null
                   : _reloadMcpServers,
               label: 'Reload config',

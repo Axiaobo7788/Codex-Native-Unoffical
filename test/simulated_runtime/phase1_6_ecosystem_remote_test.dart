@@ -14,12 +14,14 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
     this.listSkillsOverride,
     this.listPluginsOverride,
     this.listMcpServerStatusOverride,
+    this.reloadMcpServersOverride,
   });
 
   Future<List<SkillSummary>> Function(List<String> cwds)? listSkillsOverride;
   Future<List<PluginSummaryModel>> Function(List<String> cwds)?
   listPluginsOverride;
   Future<List<McpServerStatusModel>> Function()? listMcpServerStatusOverride;
+  Future<void> Function()? reloadMcpServersOverride;
 
   @override
   Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) {
@@ -46,6 +48,15 @@ class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
       return override();
     }
     return super.listMcpServerStatus();
+  }
+
+  @override
+  Future<void> reloadMcpServers() {
+    final override = reloadMcpServersOverride;
+    if (override != null) {
+      return override();
+    }
+    return super.reloadMcpServers();
   }
 }
 
@@ -1447,5 +1458,92 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'refreshing healthy Skills does not restart pending plugin reads',
+      (tester) async {
+        final pendingPlugins = Completer<List<PluginSummaryModel>>();
+        var pluginReads = 0;
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) {
+            pluginReads += 1;
+            return pendingPlugins.future;
+          },
+        );
+        harness.skills.add(
+          const SkillSummary(
+            name: 'fixture-skill',
+            description: 'Working skill list',
+            path: '/tmp/fixture-skill/SKILL.md',
+            enabled: true,
+          ),
+        );
+        addTearDown(() {
+          if (!pendingPlugins.isCompleted) {
+            pendingPlugins.complete(const <PluginSummaryModel>[]);
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+        expect(pluginReads, 1);
+
+        final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+
+        expect(pluginReads, 1);
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+      },
+    );
+
+    testWidgets('failed reload cannot strand an already pending MCP load', (
+      tester,
+    ) async {
+      final pendingMcp = Completer<List<McpServerStatusModel>>();
+      final harness = _ConfigurableEcosystemHarness(
+        listMcpServerStatusOverride: () => pendingMcp.future,
+        reloadMcpServersOverride: () async {
+          throw StateError('Synthetic reload failed');
+        },
+      );
+      addTearDown(() {
+        if (!pendingMcp.isCompleted) {
+          pendingMcp.complete(const <McpServerStatusModel>[]);
+        }
+      });
+
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
+      await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('MCP (0)'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final progress = find.byKey(const ValueKey('ecosystem-mcp-loading'));
+      expect(progress, findsOneWidget);
+
+      await tester.tap(find.text('Reload config'), warnIfMissed: false);
+      await tester.pump();
+
+      pendingMcp.complete(const [
+        McpServerStatusModel(
+          name: 'settled-mcp',
+          status: 'connected',
+          toolCount: 1,
+          resourceCount: 1,
+        ),
+      ]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(progress, findsNothing);
+      expect(find.text('settled-mcp'), findsOneWidget);
+    });
   });
 }
