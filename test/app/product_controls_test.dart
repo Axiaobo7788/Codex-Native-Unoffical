@@ -709,7 +709,7 @@ void main() {
                 description: 'Review the whole fixture',
               ),
             ],
-            allowsOther: false,
+            allowsOther: true,
             isSecret: false,
           ),
           UserInputQuestion(
@@ -748,6 +748,12 @@ void main() {
       ),
     );
     expect(tester.widget<Semantics>(defaultOption).properties.checked, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('user-input-approach-other')));
+    await tester.pumpAndSettle();
+    final other = find.byKey(const ValueKey('user-input-approach-text'));
+    expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
+    expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
 
     FocusNode optionFocus(String label) => Focus.of(
       tester.element(

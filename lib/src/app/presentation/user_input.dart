@@ -544,6 +544,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   final Map<String, String?> _selectedOptions = {};
   final Set<String> _otherSelections = {};
   final _questionScroll = ScrollController();
+  final _otherAnswerFocus = FocusNode();
   var _questionIndex = 0;
 
   @override
@@ -571,6 +572,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   @override
   void dispose() {
     _questionScroll.dispose();
+    _otherAnswerFocus.dispose();
     for (final controller in _textControllers.values) {
       controller
         ..removeListener(_handleAnswerChanged)
@@ -790,12 +792,7 @@ class _UserInputCardState extends State<_UserInputCard> {
               custom: true,
               selected: usesOther,
               enabled: !submitting,
-              onPressed: () {
-                setState(() {
-                  _selectedOptions[question.id] = null;
-                  _otherSelections.add(question.id);
-                });
-              },
+              onPressed: () => _selectOtherAnswer(question),
             ),
             if (usesOther) ...[
               const SizedBox(height: ThemeTokens.space2),
@@ -810,6 +807,23 @@ class _UserInputCardState extends State<_UserInputCard> {
     );
   }
 
+  void _selectOtherAnswer(UserInputQuestion question) {
+    setState(() {
+      _selectedOptions[question.id] = null;
+      _otherSelections.add(question.id);
+    });
+    if (widget.desktop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.request.questions[_questionIndex].id == question.id &&
+            _otherSelections.contains(question.id) &&
+            !widget.controller.isSubmitting(widget.request.requestId)) {
+          _otherAnswerFocus.requestFocus();
+        }
+      });
+    }
+  }
+
   Widget _answerField(
     UserInputQuestion question,
     TextEditingController controller,
@@ -817,6 +831,9 @@ class _UserInputCardState extends State<_UserInputCard> {
   ) => TextField(
     key: ValueKey('user-input-${question.id}-text'),
     controller: controller,
+    focusNode: widget.desktop && question.options.isNotEmpty
+        ? _otherAnswerFocus
+        : null,
     enabled: !submitting,
     obscureText: question.isSecret,
     maxLength: 4096,
