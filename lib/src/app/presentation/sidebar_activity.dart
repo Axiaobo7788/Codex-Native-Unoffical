@@ -2535,12 +2535,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         _pluginsLoading = false;
       });
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
-        unawaited(
-          _refreshExpandedPluginDetails(
-            catalog: catalog,
-            plugins: nextPlugins,
-            generation: generation,
-          ),
+        await _refreshExpandedPluginDetails(
+          catalog: catalog,
+          plugins: nextPlugins,
+          generation: generation,
         );
       }
     } catch (error) {
@@ -2564,6 +2562,12 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         .where((p) => _expandedPluginIds.contains(p.id))
         .toList(growable: false);
     for (final plugin in expandedPlugins) {
+      if (!mounted || generation != _pluginsRefreshGeneration) {
+        return;
+      }
+      if (!_expandedPluginIds.contains(plugin.id)) {
+        continue;
+      }
       try {
         final updatedDetail = await catalog.readPlugin(
           pluginName: plugin.effectivePluginName,
@@ -3052,7 +3056,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _togglePluginDetails(PluginSummaryModel plugin) async {
     final catalog = _catalogGateway;
-    if (catalog == null || _pluginsLoading) {
+    if (catalog == null || _pluginsLoading || _pluginsRefreshInFlight != null) {
       return;
     }
     if (_expandedPluginIds.contains(plugin.id)) {
@@ -3683,6 +3687,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                             loading: _readingPluginIds.contains(plugin.id),
                             onPressed:
                                 _pluginsLoading ||
+                                    _pluginsRefreshInFlight != null ||
                                     _readingPluginIds.contains(plugin.id)
                                 ? null
                                 : () => _togglePluginDetails(plugin),
