@@ -753,12 +753,58 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      final steer = find.byKey(const ValueKey('composer-send-button'));
+      expect(stop, findsNothing);
+      expect(
+        find.descendant(
+          of: steer,
+          matching: find.byIcon(Icons.arrow_upward_rounded),
+        ),
+        findsOneWidget,
+      );
+      final actionCenter = tester.getCenter(steer);
+      await tester.tap(steer);
       await tester.pumpAndSettle();
       expect(harness.steeredTurns.single.text, 'Keep the input readable.');
-      await tester.tap(stop);
+      expect(tester.getCenter(stop), actionCenter);
+
+      await tester.tap(composerField);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('Esc'), findsOneWidget);
+      harness.emitApproval(
+        const ApprovalRequest(
+          requestId: 'stop-approval',
+          kind: ApprovalKind.command,
+          threadId: 'stop-btn-thread',
+          turnId: 'turn-1',
+          itemId: 'stop-command',
+          summary: 'Inspect the fixture',
+          approveSupported: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Esc'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(harness.interruptedTurns, isEmpty);
+      expect(find.text('Approval required'), findsOneWidget);
+      await tester.tap(find.text('Reject'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(composerField, 'Keep this unsent draft.');
+      await tester.pump();
+      expect(stop, findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(harness.interruptedTurns, isEmpty);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(harness.interruptedTurns.single.threadId, 'stop-btn-thread');
+      expect(find.text('Keep this unsent draft.'), findsOneWidget);
       expect(stop, findsNothing);
     });
 

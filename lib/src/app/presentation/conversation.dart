@@ -96,6 +96,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   late final TextEditingController _composerController;
   late final FocusNode _composerFocusNode;
+  ({String threadId, String turnId})? _armedComposerStop;
+  Timer? _composerStopTimer;
   final _composerInputKey = GlobalKey();
   final _approvalBannerKey = GlobalKey();
   final _userInputBannerKey = GlobalKey();
@@ -252,6 +254,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
     _composerFocusNode.addListener(_handleComposerFocusChanged);
     widget.controller.addListener(_handleConversationChanged);
+    widget.approvalController.addListener(_handleComposerRequestsChanged);
+    widget.userInputController.addListener(_handleComposerRequestsChanged);
     widget.historyController.addListener(_handleHistoryChanged);
     widget.threadController?.addListener(_handleThreadListChanged);
     _bindAttachmentEvents();
@@ -610,6 +614,20 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
       widget.threadController?.addListener(_handleThreadListChanged);
     }
+    if (oldWidget.approvalController != widget.approvalController) {
+      oldWidget.approvalController.removeListener(
+        _handleComposerRequestsChanged,
+      );
+      widget.approvalController.addListener(_handleComposerRequestsChanged);
+      _clearComposerStop();
+    }
+    if (oldWidget.userInputController != widget.userInputController) {
+      oldWidget.userInputController.removeListener(
+        _handleComposerRequestsChanged,
+      );
+      widget.userInputController.addListener(_handleComposerRequestsChanged);
+      _clearComposerStop();
+    }
     if (!identical(oldWidget.outputGateway, widget.outputGateway)) {
       _clearCommandOutputPreview();
       _bindAttachmentEvents();
@@ -618,6 +636,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       }
     }
     if (oldWidget.hasDesktopShell && !widget.hasDesktopShell) {
+      _clearComposerStop();
       _goalEditorThreadId = null;
       _goalEditorDraft = null;
       _reopenGoalFromHeader = false;
@@ -625,6 +644,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _timelineDetailsPopoverController.hide();
     }
     if (!oldWidget.isOffstage && widget.isOffstage) {
+      _clearComposerStop();
       _threadActionsPopoverController.hide();
       _timelineDetailsPopoverController.hide();
       _composerAttachPopoverController.hide();
@@ -656,10 +676,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   @override
   void dispose() {
+    _clearComposerStop();
     _clearCommandOutputPreview();
     unawaited(_attachmentEventSubscription?.cancel());
     widget.threadController?.removeListener(_handleThreadListChanged);
     widget.controller.removeListener(_handleConversationChanged);
+    widget.approvalController.removeListener(_handleComposerRequestsChanged);
+    widget.userInputController.removeListener(_handleComposerRequestsChanged);
     widget.historyController.removeListener(_handleHistoryChanged);
     _scrollController
       ..removeListener(_handleScrollPositionChanged)
@@ -808,13 +831,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             _openConversationSearch,
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
             _openConversationSearch,
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (_searchOpen) {
-            _closeConversationSearch();
-          } else if (_goalEditorThreadId != null) {
-            _closeGoalEditor();
-          }
-        },
+        const SingleActivator(LogicalKeyboardKey.escape, includeRepeats: false):
+            _handleConversationEscape,
       },
       child: Focus(
         focusNode: _conversationFocusNode,
@@ -3978,6 +3996,72 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  ({String threadId, String turnId})? get _desktopStopTarget {
+    final controller = widget.controller;
+    final threadId = controller.thread?.id;
+    final turnId = controller.activeTurnId;
+    if (!widget.hasDesktopShell ||
+        widget.isOffstage ||
+        !controller.canInterrupt ||
+        threadId == null ||
+        turnId == null) {
+      return null;
+    }
+    return (threadId: threadId, turnId: turnId);
+  }
+
+  bool get _hasPendingComposerRequest =>
+      widget.approvalController.pending.isNotEmpty ||
+      widget.userInputController.pending.isNotEmpty ||
+      widget.userInputController.pendingElicitations.isNotEmpty;
+
+  void _handleComposerRequestsChanged() {
+    if (_armedComposerStop != null && _hasPendingComposerRequest) {
+      // The workspace already rebuilds when either request controller changes.
+      _clearComposerStop();
+    }
+  }
+
+  void _clearComposerStop() {
+    _composerStopTimer?.cancel();
+    _composerStopTimer = null;
+    _armedComposerStop = null;
+  }
+
+  void _stopComposerTurn() {
+    setState(_clearComposerStop);
+    unawaited(widget.controller.interrupt());
+  }
+
+  void _handleConversationEscape() {
+    if (_searchOpen) {
+      _clearComposerStop();
+      _closeConversationSearch();
+      return;
+    }
+    if (_goalEditorThreadId != null) {
+      _clearComposerStop();
+      _closeGoalEditor();
+      return;
+    }
+    final target = _desktopStopTarget;
+    if (target == null || _hasPendingComposerRequest) {
+      if (_armedComposerStop != null) {
+        setState(_clearComposerStop);
+      }
+      return;
+    }
+    if (_armedComposerStop == target) {
+      _stopComposerTurn();
+      return;
+    }
+    _clearComposerStop();
+    setState(() => _armedComposerStop = target);
+    _composerStopTimer = Timer(const Duration(seconds: 2), () {
+      setState(_clearComposerStop);
+    });
+  }
+
   Widget _composer(
     ConversationController controller, {
     bool isHeroCentered = false,
@@ -4090,11 +4174,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     MediaQuery.textScalerOf(context).scale(12) / 12,
                   );
                   final iconOnly = width < 320 * controlTextScale;
-                  // Reserve room for the input even when both Steer and Stop
-                  // are visible. The controls keep their own row below it.
-                  final inlineInput =
-                      desktopComposer && width >= (showStop ? 440 : 360);
-                  final busyReserve = controller.busy ? 76.0 : 0.0;
+                  // The Desktop primary action occupies the same slot during
+                  // a turn. Narrow workspaces put the input above the controls.
+                  final inlineInput = desktopComposer && width >= 360;
+                  final busyReserve = !desktopComposer && controller.busy
+                      ? 76.0
+                      : 0.0;
                   final maxModelLabelWidth =
                       (width - (compactComposer ? 260 : 455) - busyReserve)
                           .clamp(52.0, 148.0);
@@ -4244,40 +4329,48 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               canSteer &&
                               (draft.text.trim().isNotEmpty ||
                                   _composerAttachments.isNotEmpty);
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (!showStop || showSteer)
-                                CodexIconButton(
-                                  key: const ValueKey('composer-send-button'),
-                                  tooltip: canSteer
-                                      ? 'Steer turn (Enter)'
-                                      : 'Send (Enter)',
-                                  size: 34.0,
-                                  shape: BoxShape.circle,
-                                  variant: CodexButtonVariant.primary,
-                                  onPressed: enabled ? _send : null,
-                                  icon: Icon(
-                                    canSteer
-                                        ? Icons.subdirectory_arrow_right_rounded
-                                        : Icons.arrow_upward_rounded,
-                                    size: 18,
-                                  ),
-                                ),
-                              if (showStop)
-                                CodexIconButton(
-                                  key: const ValueKey('composer-stop-button'),
-                                  tooltip: 'Stop turn',
-                                  size: 34,
-                                  shape: BoxShape.circle,
-                                  variant: CodexButtonVariant.primary,
-                                  onPressed: controller.interrupt,
-                                  icon: const Icon(
-                                    Icons.stop_rounded,
-                                    size: 17,
-                                  ),
-                                ),
-                            ],
+                          if (showStop && !showSteer) {
+                            final armed =
+                                _armedComposerStop != null &&
+                                _armedComposerStop == _desktopStopTarget;
+                            return CodexIconButton(
+                              key: const ValueKey('composer-stop-button'),
+                              tooltip: armed
+                                  ? 'Press Esc again to stop'
+                                  : 'Stop turn',
+                              size: 34,
+                              shape: BoxShape.circle,
+                              variant: CodexButtonVariant.primary,
+                              onPressed: _stopComposerTurn,
+                              icon: armed
+                                  ? Builder(
+                                      builder: (context) => Text(
+                                        'Esc',
+                                        textScaler: TextScaler.noScaling,
+                                        style: TextStyle(
+                                          color: IconTheme.of(context).color,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    )
+                                  : const Icon(Icons.stop_rounded, size: 17),
+                            );
+                          }
+                          return CodexIconButton(
+                            key: const ValueKey('composer-send-button'),
+                            tooltip: canSteer
+                                ? 'Steer turn (Enter)'
+                                : 'Send (Enter)',
+                            size: 34,
+                            shape: BoxShape.circle,
+                            variant: CodexButtonVariant.primary,
+                            onPressed: enabled ? _send : null,
+                            icon: Icon(
+                              canSteer && !desktopComposer
+                                  ? Icons.subdirectory_arrow_right_rounded
+                                  : Icons.arrow_upward_rounded,
+                              size: 18,
+                            ),
                           );
                         },
                       ),
@@ -5200,6 +5293,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _handleConversationChanged() {
+    if (_armedComposerStop != null &&
+        _armedComposerStop != _desktopStopTarget) {
+      _clearComposerStop();
+    }
     final previousThreadId = _activeThreadId;
     _syncActiveThreadSelection();
     _reconcileLiveOutputPreview();
