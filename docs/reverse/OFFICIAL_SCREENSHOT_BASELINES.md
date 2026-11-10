@@ -12,9 +12,13 @@
 > **Implementation rule:** Do not design. Translate observable official
 > structure/geometry/states into the closest clean-room Flutter equivalent.
 
-> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.32239`)  
+> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`)  
 > **Target Verification**: Automated Multi-Viewport Geometry Test Suite (`test/app/official_convergence_geometry_test.dart`)  
-> **Evidence Grading**: `STATIC_BUNDLE`, `LIVE_OBSERVED`, `LOCAL_SCHEMA`
+> **Evidence Grading**: `STATIC_BUNDLE`, `HUMAN_REVIEWED` (`H1`), `LIVE_OBSERVED` (disposable sign-in boundary), `LOCAL_SCHEMA`  
+> **R0 Live vs Signed-In Screenshot Boundary & Remaining Gates**:
+> - **Disposable Live Launch (`LIVE_OBSERVED`)**: Unauthenticated launch of `/opt/codex-desktop/start.sh` at `1280×800` and `1090×760` (`DPR 1.0`) reaches only the ChatGPT sign-in screen (`36px` `h-toolbar-sm` drag strip + `340px` sign-in card; `[data-app-shell-frame]`, `[data-app-shell-workspace]`, and sidebar markers absent).
+> - **Signed-In Human Screenshot (`H1`, `1191×865 px`, `HUMAN_REVIEWED`)**: Confirms the signed-in `rail-with-contextual-sidebar` layout: full-width application menu/window strip (`y=0..50`), persistent left global icon rail (`x=0..60`), rounded inset `PageSurface-g2Llyi` card (`x≈61..1190`), contextual Codex sidebar (`x≈61..421`), and workspace (`x≈422..1190`).
+> - **Remaining Screenshot Gates (`HUMAN_REVIEW_REQUIRED`)**: `H1` has unknown logical DPR/zoom and a user-adjusted left-panel width (`x≈421` vs static default `340px` in `qbQ6`). Same-state authenticated official screenshots at known DPR (`1.0`/`2.0`) for Empty Home, Active Turn, Expanded Activity/Commands, Review/Diff, Collapsed Contextual Sidebar, and Compact (`<768px`) remain human-gated.
 
 ---
 
@@ -33,17 +37,19 @@ The automated geometry verification suite (`test/app/official_convergence_geomet
 
 ### 2.1 Viewport 1: Full HD Desktop (`1920×1080`, DPR `1.0`)
 
-| Structural Node | Official Target Dimension | Native Expected Box Constraint | Tolerated Delta | Asserted Property |
+| Structural Node | Official Target Dimension (`25894` `STATIC_BUNDLE` + `H1`) | Native Expected Box Constraint | Tolerated Delta | Asserted Property |
 |---|---|---|---|---|
 | **App Shell Frame** | `1920.0 × 1080.0` | `Size(1920.0, 1080.0)` | `0.0 px` | Exact match to window frame |
-| **Titlebar Drag Region** | `1920.0 × 46.0` | `Size(1920.0, 46.0)` | `0.0 px` | Full-width titlebar height |
-| **Expanded Sidebar Rail** | `260.0 × 1034.0` | `Size(260.0, 1034.0)` | `0.0 px` | 260px width; 1080 - 46 = 1034px |
-| **Collapsed Sidebar Rail**| `0.0 × 1034.0` | `Size(0.0, 1034.0)` | `0.0 px` | Zero width when collapsed |
-| **Inset Workspace Card** | `1654.0 × 1028.0` | `Size(1654.0, 1028.0)` | `±2.0 px` | 1920 - 260 - 6 = 1654px; top-left radius 12px |
-| **Thread Header Bar** | `1654.0 × 46.0` | `Size(1654.0, 46.0)` | `0.0 px` | Inset workspace header height |
-| **Conversation Column** | `704.0 × 982.0` (max) | `width <= 704.0`, centered | `0.0 px` | Centered reading column (dx = (1654 - 704)/2 = 475px) |
-| **User Message Bubble** | `width <= 528.0` (75%) | `width <= 528.0`, right-aligned | `0.0 px` | User prompt bubble clamped to 75% column width |
-| **Floating Composer** | `704.0 × height` | `width == 704.0`, centered | `0.0 px` | Composer width matches conversation column |
+| **Application Menu Toolbar** | `1920.0 × 36.0` (`--height-toolbar-sm`; `+8px` titlebar offset in Electron) | `Size(1920.0, 36.0)` | `0.0 px` | Full-width top toolbar above rail and page surface |
+| **Persistent Navigation Rail** | `52.0 × 1044.0` (`w-13` / `X1CL` fallback `52`) | `Size(52.0, 1044.0)` | `0.0 px` | Left global icon rail (`Home`, `Plugins`, bottom settings); persists when sidebar collapses |
+| **Rounded Page Surface** | `1868.0 × 1036.0` (`inset-inline-start: 52px`, `+8px` top offset, radius `12px` `--radius-xl-base: .75rem`) | `Size(1868.0, 1036.0)` | `0.0 px` | Rounded card housing contextual sidebar (`52px` header) + workspace |
+| **Expanded Contextual Sidebar** | `288.0 × 1036.0` (`340.0` total left panel minus `52.0` rail) | `Size(288.0, 1036.0)` | `0.0 px` | Default `340px` total left panel (`qbQ6`); right hairline border |
+| **Collapsed Contextual Sidebar**| `0.0 × 1036.0` (`52.0` rail remains visible) | `Offstage` / `0.0 px` (`rail.width == 52.0`) | `0.0 px` | Contextual sidebar hidden; `closedLeftPanelWidth == 52.0` |
+| **Workspace Surface** | `1580.0 × 1036.0` (`1868.0` when sidebar collapsed) | `Size(1580.0, 1036.0)` | `±2.0 px` | `1920 - 340 = 1580px` |
+| **Thread Header Bar** | `1580.0 × 46.0` (`--height-toolbar: 46px` on `Toolbar-w4tLPD`) | `Size(1580.0, 46.0)` | `0.0 px` | Workspace header height (`46px` `--height-toolbar`) |
+| **Conversation Column** | `672.0` (`42rem` in `192774`; legacy `704.0` / `44rem`) | `width <= 704.0`, centered | `0.0 px` | Centered reading column |
+| **User Message Bubble** | `width <= 75%` of column | `width <= 528.0`, right-aligned | `0.0 px` | User prompt bubble clamped to 75% column width |
+| **Floating Composer** | Matches reading column width | `width <= 704.0`, centered | `0.0 px` | Composer width matches conversation column |
 | **Composer Bottom Inset**| `24.0 px` from bottom | `Offset(dx, 1080 - height - 24)` | `±2.0 px` | Floating clearance from bottom edge |
 
 ### 2.2 Viewport 2: Standard Laptop (`1440×900`, DPR `1.0`)

@@ -1,8 +1,8 @@
 # Official Component Matrix & Semantic Primitives Specification
 
-> **Audited Package**: ChatGPT / Codex Desktop Linux (`26.1103.32239`)  
+> **Audited Package**: ChatGPT / Codex Desktop Linux (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`)  
 > **Target Architecture**: Clean-Room Semantic Presentation Primitives (`lib/src/app/primitives/`) & `OfficialCodexTheme` (`lib/src/app/theme/`)  
-> **Evidence Grading**: `STATIC_BUNDLE`, `LIVE_OBSERVED`, `LOCAL_SCHEMA`, `PUBLIC_SOURCE`
+> **Evidence Grading**: `STATIC_BUNDLE`, `HUMAN_REVIEWED` (`H1`), `LIVE_OBSERVED` (disposable sign-in gate), `LOCAL_SCHEMA`, `PUBLIC_SOURCE`
 
 ---
 
@@ -54,9 +54,14 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
   - `medium` (default): Height `34px`, font `13px`, padding `0 12px`.
   - `large`: Height `40px`, font `14px`, padding `0 16px`.
 
-### 3.2 `CodexSidebarRow`
+### 3.2 `CodexSidebarRow` & `rail-with-contextual-sidebar` Shell Hierarchy
 
-- **Role**: Render thread entries, project nodes, and primary action buttons in the navigation rail.
+- **Shell Hierarchy (`STATIC_BUNDLE` + `H1` `HUMAN_REVIEWED`)**:
+  - **Top Application Menu Toolbar (`ApplicationMenuTopBar-SLuX8q`)**: Full-width `36px` (`--height-toolbar-sm`) strip above the rail and page card (`+8px` `--app-shell-titlebar-height` offset in `ApplicationMenuPageSurfaceLayout-yb71ay`), containing the sidebar toggle button (`tr.Q`, `28px`/`36px`) and application menubar (`File`, `Edit`, `View`, `Help`).
+  - **Persistent Left Global Icon Rail (`nav[data-app-navigation-rail="true"]`, `lp` / `u$`)**: `52px` (`w-13`: `px-2` + `36px` uniform `size="xl"` icon buttons in `gdzp`; fallback `52` in `X1CL`). Remains visible when the contextual sidebar collapses (`keepVisibleWhenCollapsed: true` -> `closedLeftPanelWidth = railWidth`). Identified destinations: `Home` (`builtin:home`), `Plugins` (`builtin:customize`), account/capability-gated destinations (`KEws`), and bottom Settings trigger (`lh`).
+  - **Rounded Inset Page Surface (`PageSurface-g2Llyi`)**: Starts at `inset-inline-start: var(--app-shell-navigation-rail-width)` (`52px` at 1x, `x≈61` in `H1`) and wraps both the contextual `ConversationSidebar-EDF_I4` (`288px` default = `340px` total left panel minus `52px` rail) and `MainContentSurface-EnuIYE` separated by `MainContentLeftBorder-IFAvO_`.
+  - **Contextual Sidebar Header & Top Actions (`sO.ic`)**: `52px` (`--sidebar-navigation-header-height`) header row with leading `Codex` dropdown (`vU`/`ht`) and trailing notifications/activity (`sz`), filter (`ut`), and search (`o_.V`), followed by `New chat` (`dE`) and `Your Dot` (`dF`) rows above `Projects` (`bj`).
+- **Role**: Render thread entries, project nodes, and primary action buttons in the contextual sidebar.
 - **Height**: Exactly `36px` (`--height-token-row`).
 - **Radius**: `10px` (`--radius-token-row`).
 - **Padding**: `0 10px` horizontal inset.
