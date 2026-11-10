@@ -1786,14 +1786,16 @@ class _ThreadRowState extends State<_ThreadRow> {
     final leadingColor = statusColor ?? (unread ? palette.accent : null);
 
     final pinBadge = _formatPinBadge();
-    final gitBadge = _formatGitBadge(thread.gitInfo);
+    final gitReference = _formatGitReference(thread.gitInfo);
     final goalBadge = _formatGoalBadge(thread.goal);
-    final hasMetadataBadges =
-        pinBadge != null || gitBadge != null || goalBadge != null;
+    final hasMetadataBadges = pinBadge != null || goalBadge != null;
 
     final rowWidget = CodexSidebarRow(
       containerKey: ValueKey('thread-row-${thread.id}'),
       title: thread.displayTitle,
+      tooltip: gitReference == null
+          ? null
+          : '${thread.displayTitle}\nGit · $gitReference',
       selected: widget.selected,
       onTap: widget.enabled ? widget.onSelect : null,
       padding: EdgeInsets.only(left: leadingColor != null ? 8 : 10, right: 8),
@@ -1973,7 +1975,6 @@ class _ThreadRowState extends State<_ThreadRow> {
                   threadId: thread.id,
                   pinBadge: pinBadge,
                   persistedPinned: widget.persistedPinned,
-                  gitBadge: gitBadge,
                   goalBadge: goalBadge,
                 ),
               ],
@@ -1982,7 +1983,7 @@ class _ThreadRowState extends State<_ThreadRow> {
     );
   }
 
-  static String? _formatGitBadge(ThreadGitInfo? gitInfo) {
+  static String? _formatGitReference(ThreadGitInfo? gitInfo) {
     if (gitInfo == null) {
       return null;
     }
@@ -2032,14 +2033,12 @@ class _ThreadMetadataStrip extends StatelessWidget {
     required this.threadId,
     this.pinBadge,
     this.persistedPinned = false,
-    required this.gitBadge,
     required this.goalBadge,
   });
 
   final String threadId;
   final String? pinBadge;
   final bool persistedPinned;
-  final String? gitBadge;
   final String? goalBadge;
 
   @override
@@ -2078,37 +2077,6 @@ class _ThreadMetadataStrip extends StatelessWidget {
                     Flexible(
                       child: Text(
                         pinBadge!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: labelStyle,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (gitBadge != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 180),
-              child: Container(
-                key: ValueKey('thread-git-badge-$threadId'),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: palette.surfaceRaised,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.account_tree_outlined,
-                      size: 10,
-                      color: palette.textMuted,
-                    ),
-                    const SizedBox(width: 3),
-                    Flexible(
-                      child: Text(
-                        gitBadge!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: labelStyle,

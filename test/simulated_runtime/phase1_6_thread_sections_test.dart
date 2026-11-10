@@ -84,7 +84,7 @@ void main() {
     );
 
     testWidgets(
-      'creates, renames, moves, and deletes thread sections and renders bounded git/goal badges',
+      'manages thread sections and retains Git context and goal metadata',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -140,17 +140,16 @@ void main() {
         await tester.pumpWidget(CodexNativeApp(runtimeController: harness));
         await tester.pumpAndSettle();
 
-        // Verify initial section heading and bounded git/goal badges
         expect(
           find.byKey(const ValueKey('thread-section-heading-sec-initial')),
           findsOneWidget,
         );
         expect(find.text('In Progress'), findsOneWidget);
         expect(
-          find.byKey(const ValueKey('thread-git-badge-thread-alpha')),
+          find.byTooltip('Alpha Thread\nGit · feat/thread-sections'),
           findsOneWidget,
         );
-        expect(find.text('feat/thread-sections'), findsOneWidget);
+        expect(find.text('feat/thread-sections'), findsNothing);
         expect(
           find.byKey(const ValueKey('thread-goal-badge-thread-alpha')),
           findsOneWidget,

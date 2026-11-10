@@ -214,3 +214,28 @@ empty Home, expanded activity, open review/diff, model and execution popovers,
 questions and approvals, compact navigation, and dark mode. The user has
 supplied a wide official reference. Human evaluation of the new Native window
 remains open.
+
+## Wide Desktop visual parity ranking
+
+This pass compares H1 with Native at 1191×865 and DPR 1, with build `25894`
+used for logical dimensions and component roles. The captures use different
+thread content and H1 has unknown zoom and sidebar preference. The comparison
+uses aligned regions and states where observable. A physical-pixel overlay or
+matching empty Home, expanded activity and open Changes comparison remains
+unverified.
+
+| Rank | Official evidence | Native at `6b6ea9f` | Difference and impact | Measured or observed basis | Likely Native files |
+| --- | --- | --- | --- | --- | --- |
+| 1. Project thread density | H1 shows indented, single-line threads with a right-side spinner and a branch-shaped indicator on different rows. Build `25894` defines a 36 logical px navigation row. | The 36 px thread rows add a separate strip whenever Git metadata is present. | A repeated `main` label gives routine rows a second line and separates threads from their project headings. This changes the density of the entire panel. | The wide Native fixture shows Git strips on all three ordinary threads across two projects. H1 shows no separate strip on its visible threads. | `sidebar_activity.dart`, `codex_sidebar_row.dart` |
+| 2. Pending question surface | H1 shows a neutral outlined card above the composer, a muted question glyph and a distinct reply area. | The equivalent pending request uses an accent-tinted surface and border. It also supports typed choices, as seen in the stock fixture. | The tint makes the question dominate the workspace as a colored notification. The pending request should read as an interactive part of the conversation stack. | Compare H1 and the Native wide pending stock request. H1 shows a free-text question, so option geometry and action semantics cannot be inferred from it. | `user_input.dart`, `conversation.dart` |
+| 3. Workspace title and actions | H1 shows a folder and thread title on the left and a separate right action group. | Native places an empty `Linked PRs` pill beside the title and may show a token usage pill there when an update arrives. | Persistent secondary chrome competes with the thread title and reduces its available width. | Native active and restored captures show the empty PR pill. The running fixture also shows usage. H1 does not establish the official states with an actual linked PR. | `conversation.dart` |
+| 4. Inline activity grouping | H1 shows a compact read/run summary with a leading glyph and a quiet live thought. | Native has inline live commands and bounded disclosure, with saved work headed by a generic `Worked for …` line. | The live and saved summaries use different visual groupings, so a command-heavy conversation is harder to scan as one timeline. | Native live command and saved history captures establish both variants. H1 shows a collapsed running summary. Expanded and completed official variants still need matching evidence. | `conversation.dart`, `diff_approval_output.dart` |
+| 5. Home hero and project selector | S3 separates Codex Home from the new-thread placeholder and places the project control within the selected-project heading. | Native's connected Home has a mark, a standalone heading and a separate project-selector row over its composer. | The additional row changes the primary Home hierarchy before the user types. | The Native Home capture and S3 show different component placement. H1 is an active thread. Signed-in Home spacing and gating remain open. | `conversation.dart` |
+
+The first pass moves Git context to the existing row tooltip. Pin and goal
+indicators, unread states and row actions retain their existing behavior.
+Packaged Linux captures of the same sidebar fixture show the gap between
+ordinary thread centers falling from 54 to 36 logical px. The second project
+is 36 px higher after its two predecessors lose their branch strips. Hovering
+the second thread in the release app displayed `Git · main` and kept its row
+actions visible. The branch search still uses the same thread metadata.

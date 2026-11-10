@@ -51,9 +51,12 @@ Tests remain mandatory gates. They are not the default source of new UI slices.
 Speculative extreme-size combinations and test-only follow-ups should be recorded
 and deferred unless they expose a material defect.
 
-Immediate objective: return to the official agy peer loop, obtain or refresh
-comparable signed-in official states, capture the current Native states, rank the
-largest remaining divergences, and fix those in descending visual/product impact.
+Compare the largest remaining differences in the
+[wide Desktop ranking](docs/reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#wide-desktop-visual-parity-ranking).
+The ordinary project thread rows now retain their Git reference in the hover
+tooltip. A paired Linux release capture measures a 54 → 36 logical px thread
+pitch and shows Git context and row actions on hover. Next is the pending
+question card, using the neutral surface visible in H1.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint
