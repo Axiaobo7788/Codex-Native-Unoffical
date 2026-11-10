@@ -618,142 +618,231 @@ class _UserInputCardState extends State<_UserInputCard> {
             OfficialCodexTheme.mainSurfaceRadius,
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 320),
-                child: SingleChildScrollView(
-                  key: const ValueKey('user-input-question-scroll'),
-                  controller: _questionScroll,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (showHeader) ...[
-                        Row(
-                          children: [
-                            if (!widget.desktop)
-                              Icon(
-                                Icons.live_help_outlined,
-                                size: 18,
-                                color: theme.textSecondary,
-                              ),
-                            if (!widget.desktop)
-                              const SizedBox(width: ThemeTokens.space2),
-                            Expanded(
-                              child: Text(
-                                stepped
-                                    ? 'Question ${_questionIndex + 1} of ${questions.length}'
-                                    : 'Codex needs your input'
-                                          '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
-                                style: widget.desktop
-                                    ? Theme.of(context).textTheme.bodySmall
-                                          ?.copyWith(color: theme.textSecondary)
-                                    : Theme.of(context).textTheme.titleMedium,
-                              ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final current = visibleQuestions.firstOrNull;
+            final textScale = MediaQuery.textScalerOf(context).scale(12) / 12;
+            final inlineQuestion =
+                widget.desktop &&
+                    current != null &&
+                    current.options.isNotEmpty &&
+                    current.allowsOther &&
+                    constraints.maxWidth >= 440 * textScale
+                ? current
+                : null;
+            final actions = _requestActions(
+              stepped: stepped,
+              hasNext: hasNext,
+              submitting: submitting,
+              canContinue: canContinue,
+            );
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: SingleChildScrollView(
+                      key: const ValueKey('user-input-question-scroll'),
+                      controller: _questionScroll,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showHeader) ...[
+                            Row(
+                              children: [
+                                if (!widget.desktop)
+                                  Icon(
+                                    Icons.live_help_outlined,
+                                    size: 18,
+                                    color: theme.textSecondary,
+                                  ),
+                                if (!widget.desktop)
+                                  const SizedBox(width: ThemeTokens.space2),
+                                Expanded(
+                                  child: Text(
+                                    stepped
+                                        ? 'Question ${_questionIndex + 1} of ${questions.length}'
+                                        : 'Codex needs your input'
+                                              '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
+                                    style: widget.desktop
+                                        ? Theme.of(context).textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: theme.textSecondary,
+                                              )
+                                        : Theme.of(context)
+                                              .textTheme
+                                              .titleMedium,
+                                  ),
+                                ),
+                                if (submitting)
+                                  const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                              ],
                             ),
-                            if (submitting)
-                              const SizedBox.square(
-                                dimension: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                            const SizedBox(height: ThemeTokens.space2),
+                          ],
+                          for (
+                            var index = 0;
+                            index < visibleQuestions.length;
+                            index++
+                          ) ...[
+                            if (index > 0)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: ThemeTokens.space3,
+                                ),
+                                child: Divider(
+                                  height: 1,
+                                  color: palette.border,
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: ThemeTokens.space2),
-                      ],
-                      for (
-                        var index = 0;
-                        index < visibleQuestions.length;
-                        index++
-                      ) ...[
-                        if (index > 0)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: ThemeTokens.space3,
+                            _question(
+                              visibleQuestions[index],
+                              submitting,
+                              inlineOther: inlineQuestion != null,
                             ),
-                            child: Divider(height: 1, color: palette.border),
-                          ),
-                        _question(visibleQuestions[index], submitting),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (widget.errorMessage case final error?) ...[
-              const SizedBox(height: ThemeTokens.space2),
-              SelectableText(
-                error,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.danger),
-              ),
-            ],
-            const SizedBox(height: ThemeTokens.space3),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (stepped && _questionIndex > 0) ...[
-                  Flexible(
-                    child: CodexButton(
-                      key: const ValueKey('user-input-previous'),
-                      variant: CodexButtonVariant.ghost,
-                      size: CodexButtonSize.sm,
-                      label: 'Previous',
-                      onPressed: submitting
-                          ? null
-                          : () => _showQuestion(_questionIndex - 1),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(width: ThemeTokens.space2),
+                ),
+                if (widget.errorMessage case final error?) ...[
+                  const SizedBox(height: ThemeTokens.space2),
+                  SelectableText(
+                    error,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.danger),
+                  ),
                 ],
-                Flexible(
-                  child: CodexButton(
-                    key: const ValueKey('user-input-cancel'),
-                    variant: CodexButtonVariant.ghost,
-                    size: CodexButtonSize.sm,
-                    onPressed: submitting
-                        ? null
-                        : () => widget.controller.cancel(
-                            widget.request.requestId,
-                          ),
-                    label: 'Cancel request',
-                    tooltip: 'Cancel request',
-                  ),
-                ),
-                const SizedBox(width: ThemeTokens.space2),
-                Flexible(
-                  child: CodexButton(
-                    key: ValueKey(
-                      hasNext ? 'user-input-next' : 'user-input-submit',
-                    ),
-                    variant: CodexButtonVariant.primary,
-                    size: CodexButtonSize.sm,
-                    loading: submitting,
-                    onPressed: submitting || !canContinue
-                        ? null
-                        : hasNext
-                        ? () => _showQuestion(_questionIndex + 1)
-                        : _submit,
-                    label: hasNext
-                        ? 'Continue'
-                        : widget.desktop
-                        ? 'Submit'
-                        : 'Submit answers',
-                  ),
-                ),
+                const SizedBox(height: ThemeTokens.space3),
+                if (inlineQuestion != null)
+                  _inlineOtherFooter(inlineQuestion, submitting, actions)
+                else
+                  actions,
               ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _requestActions({
+    required bool stepped,
+    required bool hasNext,
+    required bool submitting,
+    required bool canContinue,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    mainAxisAlignment: MainAxisAlignment.end,
+    children: [
+      if (stepped && _questionIndex > 0) ...[
+        Flexible(
+          child: CodexButton(
+            key: const ValueKey('user-input-previous'),
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
+            label: 'Previous',
+            onPressed: submitting
+                ? null
+                : () => _showQuestion(_questionIndex - 1),
+          ),
+        ),
+        const SizedBox(width: ThemeTokens.space2),
+      ],
+      Flexible(
+        child: CodexButton(
+          key: const ValueKey('user-input-cancel'),
+          variant: CodexButtonVariant.ghost,
+          size: CodexButtonSize.sm,
+          onPressed: submitting
+              ? null
+              : () => widget.controller.cancel(widget.request.requestId),
+          label: 'Cancel request',
+          tooltip: 'Cancel request',
+        ),
+      ),
+      const SizedBox(width: ThemeTokens.space2),
+      Flexible(
+        child: CodexButton(
+          key: ValueKey(hasNext ? 'user-input-next' : 'user-input-submit'),
+          variant: CodexButtonVariant.primary,
+          size: CodexButtonSize.sm,
+          loading: submitting,
+          onPressed: submitting || !canContinue
+              ? null
+              : hasNext
+              ? () => _showQuestion(_questionIndex + 1)
+              : _submit,
+          label: hasNext
+              ? 'Continue'
+              : widget.desktop
+              ? 'Submit'
+              : 'Submit answers',
+        ),
+      ),
+    ],
+  );
+
+  Widget _inlineOtherFooter(
+    UserInputQuestion question,
+    bool submitting,
+    Widget actions,
+  ) {
+    final focus = _otherAnswerFocusNodes[question.id]!;
+    final theme = OfficialCodexTheme.of(context);
+    return AnimatedBuilder(
+      animation: focus,
+      builder: (context, child) => DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(OfficialCodexTheme.buttonRadius),
+          border: Border.all(
+            color: focus.hasFocus ? theme.focusRing : Colors.transparent,
+          ),
+        ),
+        child: child,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          key: const ValueKey('desktop-question-other-footer'),
+          children: [
+            Expanded(
+              child: Focus(
+                canRequestFocus: false,
+                onFocusChange: (focused) {
+                  if (focused) {
+                    _selectOtherAnswer(question, moveFocus: false);
+                  }
+                },
+                child: _answerField(
+                  question,
+                  _textControllers[question.id]!,
+                  submitting,
+                  inline: true,
+                ),
+              ),
             ),
+            const SizedBox(width: ThemeTokens.space2),
+            actions,
           ],
         ),
       ),
     );
   }
 
-  Widget _question(UserInputQuestion question, bool submitting) {
+  Widget _question(
+    UserInputQuestion question,
+    bool submitting, {
+    required bool inlineOther,
+  }) {
     final palette = ThemeTokens.of(context);
     final textController = _textControllers[question.id]!;
     final usesOther = _otherSelections.contains(question.id);
@@ -782,6 +871,7 @@ class _UserInputCardState extends State<_UserInputCard> {
                   !usesOther && _selectedOptions[question.id] == option.label,
               enabled: !submitting,
               onPressed: () {
+                _otherAnswerFocusNodes[question.id]?.unfocus();
                 setState(() {
                   _otherSelections.remove(question.id);
                   _selectedOptions[question.id] = option.label;
@@ -790,7 +880,7 @@ class _UserInputCardState extends State<_UserInputCard> {
             ),
             const SizedBox(height: ThemeTokens.space1),
           ],
-          if (question.allowsOther) ...[
+          if (question.allowsOther && !inlineOther) ...[
             _UserInputOptionTile(
               key: ValueKey('user-input-${question.id}-other'),
               label: 'Other',
@@ -814,12 +904,14 @@ class _UserInputCardState extends State<_UserInputCard> {
     );
   }
 
-  void _selectOtherAnswer(UserInputQuestion question) {
-    setState(() {
-      _selectedOptions[question.id] = null;
-      _otherSelections.add(question.id);
-    });
-    if (widget.desktop) {
+  void _selectOtherAnswer(UserInputQuestion question, {bool moveFocus = true}) {
+    if (!_otherSelections.contains(question.id)) {
+      setState(() {
+        _selectedOptions[question.id] = null;
+        _otherSelections.add(question.id);
+      });
+    }
+    if (widget.desktop && moveFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted &&
             widget.request.questions[_questionIndex].id == question.id &&
@@ -834,11 +926,15 @@ class _UserInputCardState extends State<_UserInputCard> {
   Widget _answerField(
     UserInputQuestion question,
     TextEditingController controller,
-    bool submitting,
-  ) => TextField(
+    bool submitting, {
+    bool inline = false,
+  }) => TextField(
     key: ValueKey('user-input-${question.id}-text'),
     controller: controller,
     focusNode: widget.desktop ? _otherAnswerFocusNodes[question.id] : null,
+    onChanged: inline
+        ? (_) => _selectOtherAnswer(question, moveFocus: false)
+        : null,
     enabled: !submitting,
     obscureText: question.isSecret,
     maxLength: 4096,
@@ -847,7 +943,23 @@ class _UserInputCardState extends State<_UserInputCard> {
     decoration: InputDecoration(
       isDense: true,
       counterText: '',
-      hintText: question.isSecret ? 'Enter a private answer' : 'Type an answer',
+      filled: inline ? false : null,
+      border: inline ? InputBorder.none : null,
+      enabledBorder: inline ? InputBorder.none : null,
+      focusedBorder: inline ? InputBorder.none : null,
+      disabledBorder: inline ? InputBorder.none : null,
+      prefixIcon: inline ? const Icon(Icons.edit_outlined, size: 14) : null,
+      prefixIconConstraints: inline
+          ? const BoxConstraints(minWidth: 20, minHeight: 20)
+          : null,
+      contentPadding: inline
+          ? const EdgeInsetsDirectional.only(start: ThemeTokens.space2)
+          : null,
+      hintText: question.isSecret
+          ? 'Enter a private answer'
+          : inline
+          ? 'Type a different answer'
+          : 'Type an answer',
     ),
   );
 

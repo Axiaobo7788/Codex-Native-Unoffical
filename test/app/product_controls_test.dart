@@ -713,7 +713,7 @@ void main() {
 
     Finder field(String id) => find.byKey(ValueKey('user-input-$id-text'));
     Future<void> chooseOther(String id, String text) async {
-      await tester.tap(find.byKey(ValueKey('user-input-$id-other')));
+      await tester.tap(field(id));
       await tester.pumpAndSettle();
       expect(tester.widget<TextField>(field(id)).focusNode!.hasFocus, isTrue);
       await tester.enterText(field(id), text);
@@ -736,6 +736,22 @@ void main() {
     final second = tester.widget<TextField>(field('second'));
     expect(second.controller!.text, 'Second custom draft');
     expect(second.focusNode!.hasFocus, isFalse);
+
+    tester.view.physicalSize = const Size(820, 420);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('desktop-question-other-footer')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('user-input-second-other')),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<TextField>(field('second')).controller!.text,
+      'Second custom draft',
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('wide stock questions keep answers when stepping back', (
@@ -804,9 +820,14 @@ void main() {
     );
     expect(tester.widget<Semantics>(defaultOption).properties.checked, isTrue);
 
-    await tester.tap(find.byKey(const ValueKey('user-input-approach-other')));
-    await tester.pumpAndSettle();
     final other = find.byKey(const ValueKey('user-input-approach-text'));
+    final footer = find.byKey(const ValueKey('desktop-question-other-footer'));
+    expect(find.descendant(of: footer, matching: other), findsOneWidget);
+    expect(find.descendant(of: footer, matching: next), findsOneWidget);
+    expect(tester.getCenter(other).dy, closeTo(tester.getCenter(next).dy, 1));
+    expect(tester.getTopRight(other).dx, lessThan(tester.getTopLeft(next).dx));
+    await tester.tap(other);
+    await tester.pumpAndSettle();
     expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
     expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
 
@@ -823,6 +844,12 @@ void main() {
 
     final incremental = optionFocus('Incremental');
     final fullPass = optionFocus('Full pass');
+    fullPass.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
+
     incremental.requestFocus();
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
