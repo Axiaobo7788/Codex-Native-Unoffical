@@ -5670,6 +5670,9 @@ class _ConversationEntryView extends StatelessWidget {
                             AssistantMarkdown(
                               data: entry.text,
                               completed: entry.completed,
+                              proseLineHeight: inlineActivity
+                                  ? OfficialCodexTheme.assistantProseLineHeight
+                                  : null,
                             )
                           else
                             SelectableText(

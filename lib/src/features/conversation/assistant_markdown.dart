@@ -17,6 +17,7 @@ class AssistantMarkdown extends StatelessWidget {
     super.key,
     required this.data,
     required this.completed,
+    this.proseLineHeight,
     ExternalLinkLauncher? externalLinkLauncher,
   }) : externalLinkLauncher = externalLinkLauncher ?? _launchExternal;
 
@@ -37,25 +38,28 @@ class AssistantMarkdown extends StatelessWidget {
 
   final String data;
   final bool completed;
+  final double? proseLineHeight;
   final ExternalLinkLauncher externalLinkLauncher;
 
   @override
   Widget build(BuildContext context) {
     final source = _boundedSource(data);
+    final theme = Theme.of(context);
+    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
+      height: proseLineHeight ?? 1.55,
+    );
     if (!completed || data.length > maxSourceCharacters) {
       return SelectableText(
         source,
         key: ValueKey(
           completed ? 'assistant-bounded-text' : 'assistant-streaming-text',
         ),
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.55),
+        style: bodyStyle,
       );
     }
 
     final presentation = parseAssistantContentPresentation(source);
-    final theme = Theme.of(context);
     final palette = ThemeTokens.of(context);
-    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(height: 1.55);
     final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
       a: bodyStyle?.copyWith(
         color: theme.colorScheme.primary,

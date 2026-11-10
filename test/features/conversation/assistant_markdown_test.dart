@@ -1,3 +1,4 @@
+import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,13 +82,18 @@ Raw <em>inline</em> HTML.
   ) async {
     await tester.pumpWidget(
       _app(
-        const AssistantMarkdown(data: '**partial response', completed: false),
+        const AssistantMarkdown(
+          data: '**partial response',
+          completed: false,
+          proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+        ),
       ),
     );
 
+    final streaming = find.byKey(const ValueKey('assistant-streaming-text'));
     expect(
-      find.byKey(const ValueKey('assistant-streaming-text')),
-      findsOneWidget,
+      tester.widget<SelectableText>(streaming).style?.height,
+      OfficialCodexTheme.assistantProseLineHeight,
     );
     expect(find.text('**partial response'), findsOneWidget);
     expect(find.byKey(const ValueKey('assistant-markdown')), findsNothing);

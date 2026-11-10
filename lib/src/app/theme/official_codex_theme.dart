@@ -122,6 +122,9 @@ abstract final class OfficialCodexTheme {
   /// Thread reading canvas horizontal gutters (24px).
   static const double threadBodyInlinePadding = 24.0;
 
+  /// Current Desktop Markdown's relaxed prose line-height multiplier.
+  static const double assistantProseLineHeight = 1.625;
+
   // --- Palette Definitions ---
 
   // Opaque control roles for the Flutter adapter. Semantic primitives use
