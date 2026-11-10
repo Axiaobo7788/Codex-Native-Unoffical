@@ -269,6 +269,28 @@ void main() {
         expect(find.text('OpenAI/Codex#412'), findsOneWidget);
         expect(find.text('+1+'), findsOneWidget);
 
+        // The tightest split keeps the linked requests reachable without
+        // competing with the title and the trailing action buttons.
+        tester.view.physicalSize = const Size(760, 800);
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byKey(const ValueKey('sidebar-resize-handle')),
+          const Offset(310, 0),
+        );
+        await tester.pumpAndSettle();
+        final pill = find.byKey(const ValueKey('thread-linked-pr-pill'));
+        final popover = find.byKey(const ValueKey('thread-linked-pr-popover'));
+        expect(pill, findsOneWidget);
+        expect(find.text('+1+'), findsNothing);
+        await tester.tap(pill);
+        await tester.pumpAndSettle();
+        expect(tester.getRect(popover).left, greaterThanOrEqualTo(0));
+        expect(tester.getRect(popover).right, lessThanOrEqualTo(760));
+        await tester.tapAt(const Offset(30, 400));
+        await tester.pumpAndSettle();
+        tester.view.physicalSize = const Size(1400, 900);
+        await tester.pumpAndSettle();
+
         // Open the linked PR popover to inspect sanitized URLs, branch, and scan-limit notice.
         await tester.tap(find.byKey(const ValueKey('thread-linked-pr-pill')));
         await tester.pumpAndSettle();

@@ -883,7 +883,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   Expanded(child: timelineChild),
                   if (widget.hasDesktopShell &&
                       changes != null &&
-                      changes.files.isNotEmpty)
+                      (_showChanges || changes.files.isNotEmpty))
                     _desktopChangesSummary(changes),
                   _ApprovalBanner(controller: widget.approvalController),
                   _UserInputBanner(controller: widget.userInputController),
@@ -1384,6 +1384,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final theme = OfficialCodexTheme.of(context);
     final thread = controller.thread;
     final threadController = widget.threadController;
+    final changes = widget.diffController.snapshot;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
     final hasProject =
         projectCwd.isNotEmpty &&
@@ -1415,6 +1416,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
               thread != null &&
               _activeCapabilities.supportsInConversationSearch &&
               constraints.maxWidth >= 520;
+          final compactLinkedPrs =
+              widget.hasDesktopShell && constraints.maxWidth < 360;
           return Row(
             children: [
               Expanded(
@@ -1460,6 +1463,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 _activeThreadLinkedPrs?.threadId == thread.id
                                     ? _activeThreadLinkedPrs
                                     : null,
+                                compact: compactLinkedPrs,
                               ),
                             ),
                           ],
@@ -1554,8 +1558,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       ),
               ),
               if (!widget.hasDesktopShell &&
-                  (widget.diffController.snapshot?.files.isNotEmpty ??
-                      false)) ...[
+                  changes != null &&
+                  (_showChanges || changes.files.isNotEmpty)) ...[
                 CodexButton(
                   key: const ValueKey('changes-view-button'),
                   size: CodexButtonSize.sm,
@@ -1569,7 +1573,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                   label: _showChanges
                       ? 'Conversation'
-                      : 'Changes ${widget.diffController.snapshot!.files.length}',
+                      : 'Changes ${changes.files.length}',
                 ),
                 const SizedBox(width: ThemeTokens.space2),
               ],
@@ -1804,21 +1808,39 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             variant: CodexButtonVariant.ghost,
             onPressed: () => setState(() => _showChanges = !_showChanges),
             label: _showChanges ? 'Conversation' : null,
+            tooltip: _showChanges
+                ? 'Return to conversation'
+                : '$label, +${snapshot.additions} −${snapshot.deletions}',
             child: _showChanges
                 ? null
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(label),
+                      Flexible(
+                        flex: 2,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       const SizedBox(width: ThemeTokens.space2),
-                      Text(
-                        '+${snapshot.additions}',
-                        style: TextStyle(color: theme.diffAddedText),
+                      Flexible(
+                        child: Text(
+                          '+${snapshot.additions}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: theme.diffAddedText),
+                        ),
                       ),
                       const SizedBox(width: ThemeTokens.space1),
-                      Text(
-                        '-${snapshot.deletions}',
-                        style: TextStyle(color: theme.diffRemovedText),
+                      Flexible(
+                        child: Text(
+                          '-${snapshot.deletions}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: theme.diffRemovedText),
+                        ),
                       ),
                     ],
                   ),
@@ -1862,8 +1884,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   Widget _buildLinkedPrHeaderPill(
     BuildContext context,
     String threadId,
-    ThreadLinkedPullRequestsSnapshot? linkedPrs,
-  ) {
+    ThreadLinkedPullRequestsSnapshot? linkedPrs, {
+    required bool compact,
+  }) {
     final palette = ThemeTokens.of(context);
     final hasPrs = linkedPrs != null && linkedPrs.isNotEmpty;
     final firstPr = hasPrs ? linkedPrs.pullRequests.first : null;
@@ -1890,8 +1913,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
     return CodexPopoverAnchor(
       controller: _linkedPrsPopoverController,
-      targetAnchor: Alignment.bottomLeft,
-      followerAnchor: Alignment.topLeft,
+      targetAnchor: compact ? Alignment.bottomRight : Alignment.bottomLeft,
+      followerAnchor: compact ? Alignment.topRight : Alignment.topLeft,
       width: 360,
       popoverBuilder: (context, close) => ValueListenableBuilder<int>(
         valueListenable: _linkedPrViewNotifier,
@@ -1930,34 +1953,36 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           size: 12,
           color: _linkedPrLoadError != null ? palette.danger : palette.accent,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                pillLabel,
-                key: const ValueKey('thread-linked-pr-pill-label'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: _linkedPrLoadError != null
-                      ? palette.danger
-                      : palette.textSecondary,
-                  fontSize: 11.5,
-                ),
+        child: compact
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      pillLabel,
+                      key: const ValueKey('thread-linked-pr-pill-label'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: _linkedPrLoadError != null
+                            ? palette.danger
+                            : palette.textSecondary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                  if (countSuffix != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      countSuffix,
+                      key: const ValueKey('thread-linked-pr-pill-count'),
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: palette.textMuted, fontSize: 11),
+                    ),
+                  ],
+                ],
               ),
-            ),
-            if (countSuffix != null) ...[
-              const SizedBox(width: 4),
-              Text(
-                countSuffix,
-                key: const ValueKey('thread-linked-pr-pill-count'),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: palette.textMuted, fontSize: 11),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -4156,6 +4181,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(previousThreadId);
     }
     _activeThreadId = nextThreadId;
+    _showChanges = false;
     _threadSelectionVersion += 1;
     _queuedLinkedPrThreadId = nextThreadId;
     _activeThreadLinkedPrs = null;

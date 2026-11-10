@@ -820,6 +820,14 @@ void main() {
         await tester.tap(find.text('Diff viewer thread'));
         await tester.pumpAndSettle();
 
+        tester.view.physicalSize = const Size(760, 800);
+        await tester.pumpAndSettle();
+        await tester.drag(
+          find.byKey(const ValueKey('sidebar-resize-handle')),
+          const Offset(310, 0),
+        );
+        await tester.pumpAndSettle();
+
         final snapshot = DiffSnapshot(
           threadId: 'diff-thread',
           turnId: 'turn-1',
@@ -846,6 +854,24 @@ void main() {
 
         expect(find.textContaining('lib/main.dart'), findsWidgets);
         expect(find.textContaining('runApp(New());'), findsOneWidget);
+
+        harness.emitDiff(
+          const DiffSnapshot(
+            threadId: 'diff-thread',
+            turnId: 'turn-1',
+            additions: 0,
+            deletions: 0,
+            truncated: false,
+            files: [],
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('No file changes for this turn.'), findsOneWidget);
+        expect(changesBtn, findsOneWidget);
+        await tester.tap(changesBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('No file changes for this turn.'), findsNothing);
+        expect(changesBtn, findsNothing);
       },
     );
 
