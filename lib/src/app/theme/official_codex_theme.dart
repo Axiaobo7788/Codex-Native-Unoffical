@@ -37,6 +37,7 @@ abstract final class OfficialCodexTheme {
 
   /// Floating composer pill corner radius (28px).
   static const double composerRadiusPill = 28.0;
+  static const double changesSummaryRadius = 20.0;
 
   /// User message corner radius (18px / 1.125rem).
   static const double userMessageRadius = 18.0;
@@ -164,6 +165,7 @@ abstract final class OfficialCodexTheme {
   static const Color darkDiffAddedText = Color(0xFF4ADE80);
   static const Color darkDiffRemovedFill = Color(0xFF5A1E1E);
   static const Color darkDiffRemovedText = Color(0xFFF87171);
+  static const Color darkChangesSummarySurface = Color(0xFF414141);
 
   // Light Mode Surface Hierarchy
   static const Color lightShellBackground = Color(0xFFF9F9F9); // Tier 0

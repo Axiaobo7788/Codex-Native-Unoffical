@@ -2198,8 +2198,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       child: Center(
         child: DecoratedBox(
           decoration: BoxDecoration(
+            color: theme.isDark
+                ? OfficialCodexTheme.darkChangesSummarySurface
+                : OfficialCodexTheme.lightShellBackground,
             borderRadius: BorderRadius.circular(
-              OfficialCodexTheme.composerRadiusPill,
+              OfficialCodexTheme.changesSummaryRadius,
             ),
             border: Border.all(
               color: theme.hairlineBorder,
@@ -2227,6 +2230,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: theme.textSecondary),
                         ),
                       ),
                       const SizedBox(width: ThemeTokens.space2),
