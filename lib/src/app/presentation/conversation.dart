@@ -2458,7 +2458,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         !await _confirmColdResume(threads, thread.id, forReview: true)) {
       return;
     }
-    if (_threadSelectionVersion != selectionVersion ||
+    if (!mounted ||
+        _threadSelectionVersion != selectionVersion ||
         !_canStartThreadReview(thread.id)) {
       return;
     }
