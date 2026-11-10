@@ -116,11 +116,21 @@ stock exploration and counts command runs. The saved disclosure uses the
 stock elapsed milliseconds when present and still reads command details on
 open. Expanded saved stock exploration has bounded read, search and list
 captions in Commands. The Linux package opened real output and switched
-to raw Execution. Home, open
+to raw Execution. Clicking the visible Goal strip again closes the editor
+and discards its local draft. The Linux release submitted both stock
+question steps through Continue and Submit. The saved Markdown list text
+is inset two body em, verified on a paired stock capture. Home, open
 Changes, Review, expanded activity, compact and dark/focused states have
 separate evidence gates. [Hosted CI for `4d8b1fa`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42915018905)
 
 ## Current checkpoint
+
+- `3505385`, `39bd7ea` and `67b85ca` translate the Goal repeat toggle,
+  stock question step label and desktop Markdown list inset. A Linux
+  release exercised each path with the bundled Host and stock app-server.
+  Format, ASCII-path analysis, 526 default Flutter cases, five opt-in
+  stock cases, bundle closure and the bounded-history benchmark passed.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - The empty Home workspace supports keyboard project selection and retains
   the draft across directory changes. A 760 px viewport at 200% text scale
