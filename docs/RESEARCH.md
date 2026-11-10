@@ -4577,3 +4577,33 @@ probe before interpreting that result as a content-search limitation.
   linked PRs could overflow the header. `73f48f3` retains the return action,
   bounds the change summary and keeps linked PRs reachable via an icon and a
   bounded popover. Both paths passed simulated runtime regression coverage.
+
+## Desktop interaction follow-up
+
+- A 760 px split with a 520 px left area previously hid the composer model
+  and reasoning entry point. `fd4ebe1` keeps an icon trigger at tight widths,
+  separates the draft from the controls where necessary, and retains the
+  input field across layout changes. The regression exercises focus, draft,
+  model settings, steer and Stop. The Linux bundle opened model and reasoning
+  settings at the tight split, retained the draft and interrupted a turn
+  through the bundled Host and stock with a local model fixture.
+- The existing menu primitives handled activation keys but Arrow Up and Arrow
+  Down selected no item. `8b6c617` scopes traversal to the opened menu, skips
+  disabled items and wraps. The packaged Linux View menu hid the sidebar and
+  then opened focused thread search using arrow keys and Enter.
+- Opening Changes unmounted the timeline and returning started at the newest
+  content. `0023e11` records the existing bounded history bookmark before the
+  switch and restores it by content identity on return. The regression
+  reproduces the missing older row, then verifies position recovery without
+  an additional history page request.
+- Official `agy` peer inspection identified two current build `25894` shell
+  contracts. The independent readback confirmed the resize coordinator in
+  `961657.97fdcc5e7d.js` around memo entries `tl[98]–tl[104]`. It checks
+  workspace widths at 960 and 720 and a window width at 720, then changes
+  the pane state under several conditions. Module `DUYS` in
+  `182735.5b42af8792.js` bounds the right pane to a 320 px minimum and
+  leaves a 352 px chat reserve in its regular split mode. It uses a 600 px
+  fallback and separately adjusts the default against main width and shell
+  height. Those are static shell contracts. The measured values alone do not
+  establish the diff tab registration or the state used by the signed-in
+  Codex window.

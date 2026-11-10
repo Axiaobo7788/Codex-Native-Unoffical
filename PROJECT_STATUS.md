@@ -31,6 +31,12 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Current checkpoint
 
+- Desktop remains in `SELF_ITERATION` while signed-in visual comparison is
+  slice-scoped. `fd4ebe1` retains model and reasoning controls in a 240 px
+  workspace and gives the draft its own row when the active controls need
+  room. `8b6c617` enables arrow-key navigation in Desktop menus. `0023e11`
+  restores the bounded history position after returning from Changes.
+  [Interaction evidence](docs/RESEARCH.md#desktop-interaction-follow-up)
 - The Desktop structural checkpoint translates the current wide Codex shell,
   contextual sidebar, workspace header, inline activity, change disclosure,
   and active composer. R0 ties the changes to installed renderer build
@@ -67,6 +73,10 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 
 ## Verification and pending gates
 
+- The Desktop interaction follow-up passed 504 Flutter cases with five opt-in
+  skips, five separately enabled direct-stock cases, Dart format and analysis,
+  the 65-root pure-Dart gate, the history benchmark, Linux bundle checks, and
+  six bundled Host smoke paths. [Interaction evidence](docs/RESEARCH.md#desktop-interaction-follow-up)
 - Desktop translation through `73f48f3` passed Dart format and analysis,
   the 65-root pure-Dart boundary, 502 Flutter cases with five opt-in skips,
   five separately enabled direct-stock cases, and the bounded-history
@@ -79,4 +89,7 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 - F28 passed 484 Flutter cases with five opt-in skips, 5/5 isolated direct-stock cases, 100 Rust tests, the 65-root pure-Dart gate, the history benchmark, Linux packaging, and Host MCP, Turn and Review smoke. Four stock versions read the saved fixture. Packaged walkthroughs verified inline and deferred results, including a long preview at 720×800. See [F28 evidence](docs/RESEARCH.md#f28-bounded-saved-mcp-text-and-workspace-index-evidence).
 - `HUMAN_REVIEW_PENDING`: desktop visual fidelity and interaction feel, including responsive navigation, sections, composer, approval/diff/output/review interactions, the saved MCP text viewer, and ecosystem loading, partial-state and retry presentation. Physical Android TLS/Keystore, camera and cross-network pairing remain separate device gates.
 - Account security notice presentation remains unavailable. A disposable probe showed that experimental cached account routing can match an already stale notice. A future presentation requires a verified public stock identity contract.
-- The remaining Desktop structural comparison requires comparable signed-in official captures or Human feedback on the new Native window. The living queue and F33 candidate branches remain deferred by the UI priority override. [Living queue](docs/reverse/OFFICIAL_FEATURE_MATRIX.md#36-active-queue-after-consolidation)
+- Signed-in official comparisons remain open for compact and secondary
+  surfaces. Continue independent Desktop research and machine-verifiable
+  corrections during `SELF_ITERATION`. F33 feature expansion remains deferred
+  under the Desktop priority override. [Living queue](docs/reverse/OFFICIAL_FEATURE_MATRIX.md#36-active-queue-after-consolidation)
