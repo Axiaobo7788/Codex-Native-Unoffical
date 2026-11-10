@@ -2447,16 +2447,30 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _activeCapabilities.supportsGitDiff;
 
   Future<void> _startThreadReviewDialog(ThreadSummary thread) async {
-    if (!_canStartThreadReview(thread.id)) {
+    final threads = widget.threadController;
+    if (threads == null ||
+        _checkingColdResume ||
+        !_canStartThreadReview(thread.id)) {
+      return;
+    }
+    final selectionVersion = _threadSelectionVersion;
+    if (threads.selectedThreadNeedsResume(thread.id) &&
+        !await _confirmColdResume(threads, thread.id, forReview: true)) {
+      return;
+    }
+    if (_threadSelectionVersion != selectionVersion ||
+        !_canStartThreadReview(thread.id)) {
       return;
     }
     final target = await showDialog<ReviewTarget>(
       context: context,
       builder: (context) => _StartReviewDialog(thread: thread),
     );
-    if (target == null) {
+    if (target == null || _threadSelectionVersion != selectionVersion) {
       return;
     }
+    // The queue can change while the chooser is open. Review admission
+    // checks it again before loading a cold thread.
     await _startThreadReview(thread.id, target);
   }
 
