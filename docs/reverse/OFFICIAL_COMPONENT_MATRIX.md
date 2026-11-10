@@ -1,7 +1,9 @@
 # Official Component Matrix & Semantic Primitives Specification
 
-> **Audited Package**: ChatGPT / Codex Desktop Linux (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`)  
-> **Target Architecture**: Clean-Room Semantic Presentation Primitives (`lib/src/app/primitives/`) & `OfficialCodexTheme` (`lib/src/app/theme/`)  
+> **Audited Package**: ChatGPT / Codex Desktop Linux (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`)
+>
+> **Target Architecture**: Clean-Room Semantic Presentation Primitives (`lib/src/app/primitives/`) & `OfficialCodexTheme` (`lib/src/app/theme/`)
+>
 > **Evidence Grading**: `STATIC_BUNDLE`, `HUMAN_REVIEWED` (`H1`), `LIVE_OBSERVED` (disposable sign-in gate), `LOCAL_SCHEMA`, `PUBLIC_SOURCE`
 
 ---

@@ -11,13 +11,18 @@
 > **Implementation rule:** Do not design. Translate observable official
 > structure/geometry/states into the closest clean-room Flutter equivalent.
 
-> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`, `app.asar` SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)  
-> **Bundled Engine**: `codex app-server` (`codex-cli 0.167.0-alpha.3.2`)  
-> **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/f7b86f5422b9.css`, `webview/assets/async/e77f816560c6.css`, `182735.5b42af8792.js`, `499225.36a7812ae9.js`, `961657.97fdcc5e7d.js`, `192774.5ab6c36839.js`)  
-> **Evidence Grading Standards**: `PUBLIC_DOC`, `PUBLIC_SOURCE`, `HUMAN_REVIEWED`, `LIVE_OBSERVED`, `LIVE_CALLED`, `STATIC_BUNDLE`, `STATIC_APK`, `STATIC_DEX`, `LOCAL_SCHEMA`, `INFERRED`  
+> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`, `app.asar` SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)
+>
+> **Bundled Engine**: `codex app-server` (`codex-cli 0.167.0-alpha.3.2`)
+>
+> **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/f7b86f5422b9.css`, `webview/assets/async/e77f816560c6.css`, `182735.5b42af8792.js`, `499225.36a7812ae9.js`, `961657.97fdcc5e7d.js`, `192774.5ab6c36839.js`)
+>
+> **Evidence Grading Standards**: `PUBLIC_DOC`, `PUBLIC_SOURCE`, `HUMAN_REVIEWED`, `LIVE_OBSERVED`, `LIVE_CALLED`, `STATIC_BUNDLE`, `STATIC_APK`, `STATIC_DEX`, `LOCAL_SCHEMA`, `INFERRED`
+>
 > **Live Boundary vs Signed-In Evidence (`R0`)**:
 > - **Disposable Live Launch (`LIVE_OBSERVED`)**: Launching `/opt/codex-desktop/start.sh` in an unauthenticated disposable home reaches the sign-in gate (`36px` `h-toolbar-sm` top drag strip + `340px` centered sign-in column); `[data-app-shell-frame]`, `[data-app-shell-workspace]`, and sidebar markers do not mount without ChatGPT authentication.
-> - **Signed-In Human Visual Observation (`H1`, `HUMAN_REVIEWED`)**: User-supplied current signed-in official screenshot (`1191×865 px`, logical scale/DPR unknown) establishes that the signed-in shell uses the **`rail-with-contextual-sidebar`** layout branch (`d1ji` in `182735.5b42af8792.js`): full-width application menu/window strip (`y=0..50`), independent persistent left global icon rail (`x=0..60`), rounded inset `PageSurface-g2Llyi` card starting at `x≈61`, contextual `ConversationSidebar-EDF_I4` (`x≈61..421`), and workspace (`x≈422..1190`).  
+> - **Signed-In Human Visual Observation (`H1`, `HUMAN_REVIEWED`)**: User-supplied current signed-in official screenshot (`1191×865 px`, logical scale/DPR unknown) establishes that the signed-in shell uses the **`rail-with-contextual-sidebar`** layout branch (`d1ji` in `182735.5b42af8792.js`): full-width application menu/window strip (`y=0..50`), independent persistent left global icon rail (`x=0..60`), rounded inset `PageSurface-g2Llyi` card starting at `x≈61`, contextual `ConversationSidebar-EDF_I4` (`x≈61..421`), and workspace (`x≈422..1190`).
+>
 > **Target Convergence Contract**: `OfficialCodexTheme` & `Codex*` semantic primitives (`lib/src/app/theme/`, `lib/src/app/primitives/`)
 
 ---

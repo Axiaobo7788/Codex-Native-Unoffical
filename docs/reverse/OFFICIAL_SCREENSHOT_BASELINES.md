@@ -12,9 +12,12 @@
 > **Implementation rule:** Do not design. Translate observable official
 > structure/geometry/states into the closest clean-room Flutter equivalent.
 
-> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`)  
-> **Target Verification**: Automated Multi-Viewport Geometry Test Suite (`test/app/official_convergence_geometry_test.dart`)  
-> **Evidence Grading**: `STATIC_BUNDLE`, `HUMAN_REVIEWED` (`H1`), `LIVE_OBSERVED` (disposable sign-in boundary), `LOCAL_SCHEMA`  
+> **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`)
+>
+> **Target Verification**: Automated Multi-Viewport Geometry Test Suite (`test/app/official_convergence_geometry_test.dart`)
+>
+> **Evidence Grading**: `STATIC_BUNDLE`, `HUMAN_REVIEWED` (`H1`), `LIVE_OBSERVED` (disposable sign-in boundary), `LOCAL_SCHEMA`
+>
 > **R0 Live vs Signed-In Screenshot Boundary & Remaining Gates**:
 > - **Disposable Live Launch (`LIVE_OBSERVED`)**: Unauthenticated launch of `/opt/codex-desktop/start.sh` at `1280×800` and `1090×760` (`DPR 1.0`) reaches only the ChatGPT sign-in screen (`36px` `h-toolbar-sm` drag strip + `340px` sign-in card; `[data-app-shell-frame]`, `[data-app-shell-workspace]`, and sidebar markers absent).
 > - **Signed-In Human Screenshot (`H1`, `1191×865 px`, `HUMAN_REVIEWED`)**: Confirms the signed-in `rail-with-contextual-sidebar` layout: full-width application menu/window strip (`y=0..50`), persistent left global icon rail (`x=0..60`), rounded inset `PageSurface-g2Llyi` card (`x≈61..1190`), contextual Codex sidebar (`x≈61..421`), and workspace (`x≈422..1190`).
