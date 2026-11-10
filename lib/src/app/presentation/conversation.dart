@@ -1565,7 +1565,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   key: const ValueKey('changes-view-button'),
                   size: CodexButtonSize.sm,
                   variant: CodexButtonVariant.ghost,
-                  onPressed: () => setState(() => _showChanges = !_showChanges),
+                  onPressed: _toggleChanges,
                   icon: Icon(
                     _showChanges
                         ? Icons.chat_bubble_outline_rounded
@@ -1781,6 +1781,24 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     );
   }
 
+  void _toggleChanges() {
+    final threadId = _activeThreadId;
+    if (!_showChanges && threadId != null && !_pendingThreadRestore) {
+      _captureThreadScrollBookmark(threadId);
+    }
+    setState(() {
+      _showChanges = !_showChanges;
+      if (!_showChanges && threadId != null) {
+        _pendingThreadRestore = true;
+        _restorePagesLoaded = 0;
+        _restoreAlignmentPasses = 0;
+      }
+    });
+    if (!_showChanges && _pendingThreadRestore) {
+      _scheduleThreadScrollRestore();
+    }
+  }
+
   Widget _desktopChangesSummary(DiffSnapshot snapshot) {
     final theme = OfficialCodexTheme.of(context);
     final count = snapshot.files.length;
@@ -1807,7 +1825,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           child: CodexButton(
             key: const ValueKey('changes-view-button'),
             variant: CodexButtonVariant.ghost,
-            onPressed: () => setState(() => _showChanges = !_showChanges),
+            onPressed: _toggleChanges,
             label: _showChanges ? 'Conversation' : null,
             tooltip: _showChanges
                 ? 'Return to conversation'
