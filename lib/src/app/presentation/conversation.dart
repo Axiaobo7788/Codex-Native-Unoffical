@@ -4121,6 +4121,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         _ExecutionSettingsButton(
                           controller: widget.settingsController,
                           iconOnly: desktopComposer || iconOnly,
+                          useSandboxMenu: desktopComposer,
                         ),
                       if (!desktopComposer &&
                           projectCwd.isNotEmpty &&
@@ -6896,32 +6897,65 @@ class _ConversationErrorState extends StatelessWidget {
   }
 }
 
-class _ExecutionSettingsButton extends StatelessWidget {
+class _ExecutionSettingsButton extends StatefulWidget {
   const _ExecutionSettingsButton({
     required this.controller,
     this.iconOnly = false,
+    this.useSandboxMenu = false,
   });
 
   final ExecutionSettingsController controller;
   final bool iconOnly;
+  final bool useSandboxMenu;
+
+  @override
+  State<_ExecutionSettingsButton> createState() =>
+      _ExecutionSettingsButtonState();
+}
+
+class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
+  final _menu = CodexPopoverController();
+
+  @override
+  void didUpdateWidget(covariant _ExecutionSettingsButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((oldWidget.useSandboxMenu && !widget.useSandboxMenu) ||
+        oldWidget.controller != widget.controller) {
+      _menu.hide();
+    }
+  }
+
+  @override
+  void dispose() {
+    _menu.dispose();
+    super.dispose();
+  }
+
+  void _showAdvancedSettings() {
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (_) => _ExecutionSettingsDialog(controller: widget.controller),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final palette = ThemeTokens.of(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        final fullAccess =
-            controller.sandbox == SandboxModeOverride.dangerFullAccess;
-        final label = fullAccess ? 'Full access' : 'Defaults';
+        final sandbox = controller.sandbox;
+        final fullAccess = sandbox == SandboxModeOverride.dangerFullAccess;
+        final label = _sandboxLabel(sandbox);
         final color = fullAccess ? palette.warning : palette.textSecondary;
         final onPressed = controller.loading
             ? null
-            : () => showDialog<void>(
-                context: context,
-                builder: (_) =>
-                    _ExecutionSettingsDialog(controller: controller),
-              );
+            : widget.useSandboxMenu
+            ? _menu.toggle
+            : _showAdvancedSettings;
         final icon = controller.loading
             ? const SizedBox.square(
                 dimension: 14,
@@ -6930,19 +6964,73 @@ class _ExecutionSettingsButton extends StatelessWidget {
             : Icon(
                 fullAccess
                     ? Icons.gpp_maybe_outlined
-                    : iconOnly
+                    : widget.iconOnly
                     ? Icons.shield_outlined
                     : Icons.tune_rounded,
                 size: 15,
                 color: color,
               );
-        if (iconOnly) {
-          return CodexIconButton(
+        if (widget.iconOnly) {
+          final button = CodexIconButton(
             key: const ValueKey('execution-settings-button'),
             tooltip: 'Execution settings: $label',
             size: 28,
             onPressed: onPressed,
             icon: icon,
+          );
+          if (!widget.useSandboxMenu) return button;
+          return CodexPopoverAnchor(
+            controller: _menu,
+            width: 228,
+            targetAnchor: Alignment.topRight,
+            followerAnchor: Alignment.bottomRight,
+            offset: const Offset(0, -6),
+            popoverBuilder: (menuContext, close) =>
+                CodexMenu<({SandboxModeOverride? mode, bool advanced})>(
+                  header: Text(
+                    'Sandbox',
+                    style: Theme.of(menuContext).textTheme.labelMedium,
+                  ),
+                  selectedValue: (mode: sandbox, advanced: false),
+                  items: [
+                    for (final mode in [null, ...SandboxModeOverride.values])
+                      CodexMenuItem(
+                        value: (mode: mode, advanced: false),
+                        label: _sandboxLabel(mode),
+                        icon: Icon(
+                          mode == SandboxModeOverride.dangerFullAccess
+                              ? Icons.gpp_maybe_outlined
+                              : Icons.shield_outlined,
+                          color: mode == SandboxModeOverride.dangerFullAccess
+                              ? palette.warning
+                              : null,
+                        ),
+                      ),
+                    CodexMenuItem(
+                      value: (mode: null, advanced: true),
+                      label: 'Advanced settings…',
+                      icon: const Icon(Icons.tune_rounded),
+                    ),
+                  ],
+                  onSelected: (option) {
+                    close();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted || controller != widget.controller) return;
+                      if (option.advanced) {
+                        _showAdvancedSettings();
+                      } else if (option.mode != sandbox) {
+                        unawaited(
+                          _applySandboxOverride(
+                            this.context,
+                            controller,
+                            option.mode,
+                          ),
+                        );
+                      }
+                    });
+                  },
+                ),
+            child: button,
           );
         }
         return CodexButton(
@@ -6951,11 +7039,23 @@ class _ExecutionSettingsButton extends StatelessWidget {
           size: CodexButtonSize.sm,
           onPressed: onPressed,
           icon: icon,
-          label: label,
+          tooltip: 'Execution settings: $label',
+          label: switch (sandbox) {
+            null => 'Defaults',
+            SandboxModeOverride.workspaceWrite => 'Workspace',
+            _ => label,
+          },
         );
       },
     );
   }
+
+  String _sandboxLabel(SandboxModeOverride? sandbox) => switch (sandbox) {
+    null => 'Codex default',
+    SandboxModeOverride.readOnly => 'Read only',
+    SandboxModeOverride.workspaceWrite => 'Workspace write',
+    SandboxModeOverride.dangerFullAccess => 'Full access',
+  };
 }
 
 class _ComposerModelSummaryButton extends StatelessWidget {
@@ -7437,18 +7537,7 @@ class _ExecutionSettingsDialog extends StatelessWidget {
       'danger-full-access' => SandboxModeOverride.dangerFullAccess,
       _ => null,
     };
-    if (sandbox == SandboxModeOverride.dangerFullAccess &&
-        !await _confirmDesktopAction(
-          context,
-          title: 'Allow full filesystem access?',
-          message:
-              'Commands will not be restricted by the Codex sandbox. Use this '
-              'only for a workspace you trust.',
-          confirmLabel: 'Allow full access',
-        )) {
-      return;
-    }
-    controller.selectSandbox(sandbox);
+    await _applySandboxOverride(context, controller, sandbox);
   }
 
   static String _approvalValue(ApprovalPolicyOverride? policy) =>
@@ -7466,6 +7555,27 @@ class _ExecutionSettingsDialog extends StatelessWidget {
         SandboxModeOverride.dangerFullAccess => 'danger-full-access',
         null => _inherit,
       };
+}
+
+Future<void> _applySandboxOverride(
+  BuildContext context,
+  ExecutionSettingsController controller,
+  SandboxModeOverride? sandbox,
+) async {
+  if (sandbox == SandboxModeOverride.dangerFullAccess &&
+      !await _confirmDesktopAction(
+        context,
+        title: 'Allow full filesystem access?',
+        message:
+            'Commands will not be restricted by the Codex sandbox. Use this '
+            'only for a workspace you trust.',
+        confirmLabel: 'Allow full access',
+      )) {
+    return;
+  }
+  if (context.mounted) {
+    controller.selectSandbox(sandbox);
+  }
 }
 
 Future<bool> _confirmDesktopAction(

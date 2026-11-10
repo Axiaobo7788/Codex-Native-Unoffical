@@ -288,9 +288,30 @@ void main() {
     'dangerous execution overrides require affirmative confirmation',
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
+      final execution = find.byKey(const ValueKey('execution-settings-button'));
 
-      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
+      await tester.tap(execution);
       await tester.pumpAndSettle();
+      final fullAccess = find.text('Full access');
+      expect(
+        tester.getRect(fullAccess).bottom,
+        lessThan(tester.getRect(execution).top),
+      );
+      await tester.tap(fullAccess);
+      await tester.pumpAndSettle();
+      expect(find.text('Allow full filesystem access?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(CodexButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.gpp_maybe_outlined), findsNothing);
+
+      Future<void> openAdvancedSettings() async {
+        await tester.tap(execution);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Advanced settings…'));
+        await tester.pumpAndSettle();
+      }
+
+      await openAdvancedSettings();
 
       await _chooseDropdown(
         tester,
@@ -321,8 +342,7 @@ void main() {
 
       tester.view.physicalSize = const Size(820, 420);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
-      await tester.pumpAndSettle();
+      await openAdvancedSettings();
       await _chooseDropdown(
         tester,
         key: 'execution-Approval mode',
@@ -339,7 +359,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(CodexButton, 'Done'));
       await tester.pumpAndSettle();
-      final execution = find.byKey(const ValueKey('execution-settings-button'));
       final fullAccessIcon = tester.widget<Icon>(
         find.descendant(
           of: execution,
