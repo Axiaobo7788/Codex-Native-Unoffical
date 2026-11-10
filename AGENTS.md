@@ -306,6 +306,48 @@ For reconstruction, work in this order unless evidence proves otherwise:
 7. compact/responsive behavior;
 8. screenshot/overlay comparison and Human acceptance.
 
+### UI reconvergence work-selection rule
+
+During Desktop UI Structural/Visual Reconvergence, **tests are validation gates,
+not an autonomous backlog generator**.
+
+Select the next UI task in this order:
+
+1. a measured same-state difference between the current official Codex Desktop
+   and Native;
+2. explicit Human visual/interaction feedback;
+3. a correctness, accessibility, security, data-loss, or state-regression defect
+   exposed by the translation;
+4. only then a bounded hardening item that materially blocks the next official
+   comparison.
+
+Do not recursively turn every newly imagined edge case, extreme viewport, or
+test-only scenario into the next priority. A passing test may close a risk; it
+does not by itself create another slice.
+
+After the primary shell/navigation/workspace/composer structure is translated,
+the default loop becomes:
+
+official same-state capture -> Native same-state capture -> compare/overlay ->
+rank the largest visible or behavioral divergences -> fix the highest-impact
+divergence -> run targeted regression gates -> repeat.
+
+Rules:
+
+- Prefer a short targeted test for the changed surface plus the normal shared
+  checkpoint gate. Do not expand the test matrix merely because another extreme
+  dimension can be imagined.
+- Fix P0/P1 correctness/security/data-loss/accessibility regressions immediately.
+  Record lower-priority speculative hardening as deferred when it does not block
+  official parity or normal product use.
+- Accessibility is a product requirement, but accessibility work should be tied
+  to the translated surface or an observed regression; do not let arbitrary
+  stress combinations displace the current visual-parity loop.
+- During this phase, the largest measured official-vs-Native divergence outranks
+  unrelated polish and feature-long-tail work.
+- A green CI checkpoint is a gate, not evidence that the next task should be
+  another test-only hardening slice.
+
 ### Evidence labels and completion claims
 
 Keep these evidence classes distinct:

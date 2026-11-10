@@ -1,7 +1,7 @@
 # Project Status
 
 **Program mode: `SELF_ITERATION`**
-**Current phase: Desktop UI Structural Reconvergence (priority override within Official Client Convergence).**
+**Current phase: Desktop UI Visual Parity Loop (post-structural priority override within Official Client Convergence).**
 **Program objective: reach 0.x pre-release/RC readiness.**
 
 The Desktop priority governs slice selection. Phase checkpoints and
@@ -32,6 +32,29 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 - Resume F33+ feature-long-tail priority only after shell, sidebar hierarchy,
   workspace header, timeline/activity structure, composer, and responsive
   composition have current official evidence and translated Native structure.
+
+## Current work selector
+
+The structural translation checkpoint is established. The next UI work is chosen
+by **current official-vs-Native visual/behavioral divergence**, not by recursively
+expanding edge-case tests.
+
+Priority order:
+
+1. same-state official/Native screenshot or live-behavior divergence;
+2. explicit Human feedback;
+3. correctness/accessibility/security/data-loss/state regression caused or
+   exposed by the translated UI;
+4. bounded hardening only when it blocks the next comparison or normal use.
+
+Tests remain mandatory gates. They are not the default source of new UI slices.
+Speculative extreme-size combinations and test-only follow-ups should be recorded
+and deferred unless they expose a material defect.
+
+Immediate objective: return to the official agy peer loop, obtain or refresh
+comparable signed-in official states, capture the current Native states, rank the
+largest remaining divergences, and fix those in descending visual/product impact.
+F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint
 

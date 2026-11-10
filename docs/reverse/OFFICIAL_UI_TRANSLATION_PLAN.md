@@ -92,6 +92,40 @@ Verify at the same states and viewports as official evidence. Use screenshot
 comparison/overlay plus machine geometry and interaction tests. Human visual
 acceptance remains distinct from machine verification.
 
+## Post-structural visual parity loop
+
+Once the primary shell/navigation/workspace/composer structure is translated,
+do not continue by inventing additional hardening work.
+
+The default selector is now:
+
+```text
+official same-state screen/behavior
+-> Native same-state screen/behavior
+-> side-by-side / overlay
+-> rank visible or interaction divergences
+-> fix the highest-impact divergence
+-> targeted regression tests
+-> shared checkpoint gate
+-> repeat
+```
+
+A test failure can create immediate work when it proves a material correctness,
+accessibility, security, data-loss, or state regression. A passing test does not
+create another slice merely because a more extreme viewport or concurrency
+combination can be imagined.
+
+Use a bounded hardening budget:
+
+- protect normal desktop, compact, keyboard/focus and accessibility behavior;
+- fix regressions caused by current translation;
+- defer speculative stress combinations that neither match observed official
+  behavior nor block normal product use;
+- return to screenshot/live comparison after each bounded correction cluster.
+
+The purpose of R6 is to verify translated behavior, not to turn UI convergence
+into an unbounded test-exploration program.
+
 ## Scope guard
 
 During this priority phase:
