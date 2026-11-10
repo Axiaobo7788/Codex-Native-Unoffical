@@ -26,9 +26,10 @@ and is not affiliated with or endorsed by OpenAI.
   explicitly add GitHub and GitLab review links on supported local runtimes.
 - **Runtime tools:** discover Skills, Plugins, installed Apps and MCP servers.
   Read local MCP resources and call tools, including forms from the running
-  operation. Resume a cold thread explicitly before running thread-scoped MCP
-  actions. Available actions and catalogs depend on the installed runtime and
-  configuration.
+  operation. Commands and Execution offer a bounded preview of eligible
+  saved local MCP text. Resume a cold thread explicitly before running
+  thread-scoped MCP actions. Available actions and catalogs depend on the
+  installed runtime and configuration.
 - **Android and Direct Host Remote:** pair by QR or invitation, reconnect, and
   inspect bounded model/thread metadata on Android. The authenticated transport
   also supports bounded history reads and sequenced lifecycle updates. Remote

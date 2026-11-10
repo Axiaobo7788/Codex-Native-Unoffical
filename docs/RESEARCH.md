@@ -4228,3 +4228,62 @@ probe before interpreting that result as a content-search limitation.
   with repeated spool identity and bounded range reads. At 300 MiB,
   the sampled Host RSS increase was 806,912 B and Dart was 102,400 B.
   Human visual review and physical Android remain separate.
+
+## F28 — Bounded saved MCP text and workspace index evidence
+
+- F28A uses the local experimental `thread/items/read` route for one
+  selected item in Commands or Execution. Expanded history retains the
+  MCP label and one eligibility flag. The local process requests the
+  stock `deferOutput.mcpToolCall` option. The modal accepts completed
+  plain text with the stock content shape, verifies the returned turn
+  and item identity, and limits the preview to 32 KiB of UTF-8 at a
+  scalar boundary and 64 blocks. Structured, annotated, media, fenced,
+  app UI, and older JSON-envelope shapes stay outside that viewer.
+  The active history window permits one pending read and discards
+  results for a superseded turn. The modal can close or show a retry
+  state after a 15-second display deadline.
+- Through the bundled Host, installed stock `0.167.0-alpha.3.2`,
+  public stable `0.167.0`, Desktop-train `0.167.0-alpha.4.1`, and
+  public alpha `0.169.0-alpha.7` each returned the same 14-byte saved
+  fixture result. Installed stock had one inline block in the list
+  response. Higher alpha returned `outputDeferred: true` with an empty
+  list body and yielded the matching whole stored item after the click.
+  The UTF-8 limit is a projection bound. Older inline responses and a
+  selected whole-item read retain stock's transient serialization costs.
+  [F26B result disclosure evidence](reverse/MCP_RESULT_DISCLOSURE_EVIDENCE.md)
+- The packaged Linux UI displayed the fixture through the installed
+  runtime at 1280×720 and 720×800 in Commands and Execution. Prose
+  retained its filtered view. The higher alpha package displayed the
+  deferred result through the same action. Both package walkthroughs
+  used disposable profiles and verified app, Host and stock shutdown.
+- Failure testing found a pre-existing JSON-RPC race when a reply or
+  peer close arrived before a writer's flush completed. In a controlled
+  baseline run, the close escaped into the Dart zone and the caller
+  received a second-completion `StateError`. An early typed RPC error
+  also escaped before the caller could receive it. F28A exposes the
+  pending result immediately and only lets a write failure settle a
+  still-registered ID. Both regression tests failed on the parent.
+- A longer result produced through real alpha and the bundled Host
+  yielded exactly 32,768 preview bytes. The Linux package displayed the
+  truncation notice and kept scroll and Close usable at 720×800.
+- A controlled child-process check through ProcessTransport delivered
+  a method error and a process-exit error while the corresponding
+  writer futures were held. The caller received the expected error in
+  both cases and a later failed write produced no unhandled error.
+- F28B measured Git listing and an app-owned directory walk on this
+  repository and disposable trees. The peer correction separated
+  observed exclusion on fixed trees from concurrent path safety,
+  caller-side limits from child process work, and Git rules for
+  tracked and untracked entries. The wide-directory fixture
+  materialized 30,000 entries before the synchronous guard. A streamed
+  check cancelled at 25,000 visited entries. Hard containment and
+  pathological workspace resource bounds remain `RESEARCH_MORE`.
+  [F28B workspace index evidence](reverse/LOCAL_WORKSPACE_INDEX_EVIDENCE.md)
+- The official `agy` review cleared F28A `4b2f661` with zero open
+  P0, P1 or P2 findings. The F28B owner released `b028adc` after
+  correcting the evidence. Both branches were integrated with their
+  original commits. The A branch passed 484 Flutter cases with five
+  opt-in skips, 5/5 direct-stock cases, the 65-root pure-Dart gate,
+  the bounded-history benchmark, Linux packaging, and Host-backed
+  MCP, Turn and Review smoke. Rust formatting, Clippy and 100 tests
+  passed on the unchanged Rust tree.

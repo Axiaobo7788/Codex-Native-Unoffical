@@ -2436,3 +2436,25 @@ lifecycle presentation the source of truth.
   and Remote byte accounting. A large opaque response still follows the
   existing Remote size limit.
   [F27 evidence](RESEARCH.md#f27-scoped-host-command-output-and-account-identity-evidence)
+
+---
+
+## ADR-054 — Inspect saved local MCP plain text on demand
+
+**Status:** Accepted
+
+**Date:** 2026-11-10
+
+- Saved local history exposes a text action on eligible completed MCP
+  items. History keeps a label and an eligibility flag. The viewer owns
+  one 32 KiB UTF-8 plain-text preview for the lifetime of its modal.
+- Use the experimental stock `thread/items/read` route for exactly one
+  selected item. Verify the item and turn IDs. Ignore late responses
+  for a superseded history window. Keep one outstanding read per history
+  controller and give the viewer a finite display deadline.
+- Request stock deferral in local item pages. Older stock may return
+  inline results. The read returns a whole stored item and the Dart
+  bound applies after decoding. The viewer handles the plain stock
+  text subset. Structured, rich and live result presentation remain
+  separate evidence surfaces.
+  [F28 evidence](RESEARCH.md#f28-bounded-saved-mcp-text-and-workspace-index-evidence)
