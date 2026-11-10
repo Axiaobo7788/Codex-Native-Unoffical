@@ -135,9 +135,11 @@ evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-N
 
 - `9402faa` and `8b9fe5c` translate the stock question default and
   custom-answer focus. Linux release runs sent both default selections
-  and the typed Other answer through stock. The installed binary rejected
-  no-options requests in both sampled shapes. The official inline Other
-  placement and numbered shortcuts remain machine work in A10.
+  and the typed Other answer through stock. `44100f2` isolates focus per
+  question. A packaged two-step walkthrough returned both typed drafts
+  after moving back and forward. The installed binary rejected both
+  sampled no-options shapes. Inline Other placement and the official
+  numbered/direct-choice transition remain machine work in A10.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `80d318d` translates the Desktop assistant heading proportions.
