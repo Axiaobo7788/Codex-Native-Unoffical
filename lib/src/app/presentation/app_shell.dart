@@ -100,8 +100,91 @@ class _ConnectedWorkspace extends StatefulWidget {
 }
 
 class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
+  static const _maxThreadVisits = 32;
   final _conversationKey = GlobalKey<_ConversationPanelState>();
+  final _threadVisits = <String>[];
+  var _threadVisitIndex = -1;
+  String? _pendingThreadVisit;
   var _desktopLeftPanelWidth = OfficialCodexTheme.desktopLeftPanelWidth;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindThreadVisits();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConnectedWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.threadController != widget.threadController) {
+      oldWidget.threadController.removeListener(_recordThreadVisit);
+      _bindThreadVisits();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.threadController.removeListener(_recordThreadVisit);
+    super.dispose();
+  }
+
+  void _bindThreadVisits() {
+    _threadVisits.clear();
+    _pendingThreadVisit = null;
+    if (widget.threadController.selectedThread?.id case final threadId?) {
+      _threadVisits.add(threadId);
+    }
+    _threadVisitIndex = _threadVisits.length - 1;
+    widget.threadController.addListener(_recordThreadVisit);
+  }
+
+  void _recordThreadVisit() {
+    final threadId = widget.threadController.selectedThread?.id;
+    final current = _threadVisitIndex < 0
+        ? null
+        : _threadVisits[_threadVisitIndex];
+    if (threadId == current ||
+        (threadId != null && threadId == _pendingThreadVisit)) {
+      return;
+    }
+    setState(() {
+      if (threadId == null) {
+        _threadVisits.clear();
+      } else {
+        _threadVisits.removeRange(_threadVisitIndex + 1, _threadVisits.length);
+        _threadVisits.add(threadId);
+        if (_threadVisits.length > _maxThreadVisits) {
+          _threadVisits.removeAt(0);
+        }
+      }
+      _threadVisitIndex = _threadVisits.length - 1;
+    });
+  }
+
+  Future<void> _moveThreadVisit(int delta) async {
+    final controller = widget.threadController;
+    final index = _threadVisitIndex + delta;
+    if (_pendingThreadVisit != null ||
+        controller.mutating ||
+        index < 0 ||
+        index >= _threadVisits.length) {
+      return;
+    }
+    final threadId = _threadVisits[index];
+    setState(() => _pendingThreadVisit = threadId);
+    try {
+      await controller.selectThread(threadId);
+    } finally {
+      if (mounted && identical(controller, widget.threadController)) {
+        setState(() {
+          if (controller.selectedThread?.id == threadId) {
+            _threadVisitIndex = index;
+          }
+          _pendingThreadVisit = null;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +235,14 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
         return _DesktopSplitWorkspace(
           key: const ValueKey('desktop-split-workspace'),
           conversationKey: _conversationKey,
+          onBack: _pendingThreadVisit == null && _threadVisitIndex > 0
+              ? () => unawaited(_moveThreadVisit(-1))
+              : null,
+          onForward:
+              _pendingThreadVisit == null &&
+                  _threadVisitIndex < _threadVisits.length - 1
+              ? () => unawaited(_moveThreadVisit(1))
+              : null,
           sidebarWidth: leftWidth - OfficialCodexTheme.navigationRailWidth,
           onSidebarResize: (delta) {
             final visibleWidth = _desktopLeftPanelWidth.clamp(
@@ -186,6 +277,8 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   const _DesktopSplitWorkspace({
     super.key,
     required this.conversationKey,
+    required this.onBack,
+    required this.onForward,
     required this.sidebarWidth,
     required this.onSidebarResize,
     required this.runtimeController,
@@ -200,6 +293,8 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   });
 
   final GlobalKey<_ConversationPanelState> conversationKey;
+  final VoidCallback? onBack;
+  final VoidCallback? onForward;
   final double sidebarWidth;
   final ValueChanged<double> onSidebarResize;
   final RuntimeController runtimeController;
@@ -255,6 +350,18 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
 
     return CallbackShortcuts(
       bindings: {
+        if (widget.onBack case final back?) ...{
+          const SingleActivator(LogicalKeyboardKey.bracketLeft, control: true):
+              back,
+          const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true):
+              back,
+        },
+        if (widget.onForward case final forward?) ...{
+          const SingleActivator(LogicalKeyboardKey.bracketRight, control: true):
+              forward,
+          const SingleActivator(LogicalKeyboardKey.bracketRight, meta: true):
+              forward,
+        },
         const SingleActivator(LogicalKeyboardKey.keyB, control: true):
             _toggleSidebar,
         const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
@@ -421,6 +528,32 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
       child: Row(
         children: [
           const SizedBox(width: ThemeTokens.space2),
+          ListenableBuilder(
+            listenable: widget.threadController,
+            builder: (context, _) {
+              final busy = widget.threadController.mutating;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CodexIconButton(
+                    key: const ValueKey('app-shell-back-button'),
+                    tooltip: 'Back',
+                    size: 28,
+                    onPressed: busy ? null : widget.onBack,
+                    icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                  ),
+                  CodexIconButton(
+                    key: const ValueKey('app-shell-forward-button'),
+                    tooltip: 'Forward',
+                    size: 28,
+                    onPressed: busy ? null : widget.onForward,
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(width: ThemeTokens.space1),
           CodexIconButton(
             key: ValueKey(
               _sidebarCollapsed
