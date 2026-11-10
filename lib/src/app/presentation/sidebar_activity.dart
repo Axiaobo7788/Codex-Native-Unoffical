@@ -400,7 +400,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                     ),
                   ),
                 Expanded(child: _threadList(controller)),
-                _sidebarFooter(context),
+                if (!widget.hasNavigationRail) _compactSidebarFooter(context),
               ],
             );
           },
@@ -812,7 +812,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     );
   }
 
-  Widget _sidebarFooter(BuildContext context) {
+  Widget _compactSidebarFooter(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 8, 8),
@@ -829,16 +829,14 @@ class _ThreadPanelState extends State<_ThreadPanel> {
           Expanded(
             child: _RuntimeStatusPill(controller: widget.runtimeController),
           ),
-          if (!widget.hasNavigationRail) ...[
-            const SizedBox(width: ThemeTokens.space1),
-            CodexIconButton(
-              key: const ValueKey('remote-setup-button'),
-              tooltip: 'Remote & host settings',
-              size: 28,
-              onPressed: _openRemoteSetup,
-              icon: const Icon(Icons.devices_outlined, size: 17),
-            ),
-          ],
+          const SizedBox(width: ThemeTokens.space1),
+          CodexIconButton(
+            key: const ValueKey('remote-setup-button'),
+            tooltip: 'Remote & host settings',
+            size: 28,
+            onPressed: _openRemoteSetup,
+            icon: const Icon(Icons.devices_outlined, size: 17),
+          ),
         ],
       ),
     );

@@ -64,13 +64,15 @@ same live spool. A fresh wide capture shows the real Changes pane beside the
 timeline. The wide composer shows stock context usage in a ring with a
 detailed tooltip, freeing the title from its numeric badge. The Home project
 selector now sits inside the heading and keeps its keyboard and draft
-behavior. The complete Flutter suite passed 515 cases with five opt-in
+behavior. The complete Flutter suite passed 515 cases. All five opt-in
 stock cases passed in a separate isolated run. Desktop user message actions
 now reveal below the right-aligned bubble on hover or focus. The release app
 opened and dismissed the existing Edit confirmation. The workspace title
 stands apart from the trailing Linked PR control, which remains actionable
-with an empty scan. Next, compare the connected sidebar's lower controls
-with H1 and recalibrate the remaining activity and Changes gaps.
+with an empty scan. Runtime details open from the lower rail in the wide
+shell. The next supported translation target is the collapsed read/run
+activity group. Signed-in Home and open Changes still need comparable
+reference captures for direct visual validation.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

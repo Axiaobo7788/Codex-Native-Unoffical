@@ -519,6 +519,10 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
             icon: const Icon(Icons.devices_outlined, size: 19),
             onPressed: () => _threadPanelKey.currentState?._openRemoteSetup(),
           ),
+          _RuntimeStatusPill(
+            controller: widget.runtimeController,
+            compact: true,
+          ),
           const SizedBox(height: ThemeTokens.space2),
         ],
       ),

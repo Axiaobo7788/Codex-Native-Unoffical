@@ -313,3 +313,34 @@ error states keep their labels when there is room. The packaged app opened
 its empty state from the new position. Simulated integration also covers
 populated links, overflow reporting, retry, and the tight split. H1 shows the
 title and action groups but does not establish the official linked-PR states.
+
+The eighth pass removes the persistent Connected strip from the wide
+contextual sidebar. The same Native diagnostic action now sits with the
+lower global rail controls. Compact navigation retains its footer. The
+Linux release opened Runtime details from the new rail indicator and showed
+the connected stock process. The fixture is unauthenticated and the rate
+limit card reported that account authentication was required.
+
+### Remaining evidence-led work
+
+- **Collapsed activity.** H1 shows an aggregate read/run sentence and a quiet
+  thought line. Native retains the compact neutral preview but still shows
+  raw command labels in inline rows and a generic `Worked for …` or
+  `Turn details` disclosure for saved work. The official bundle has separate
+  active, completed and grouped summary paths. The next translation should
+  establish which typed stock activity inputs drive the visible group before
+  changing which rows are available to open.
+- **Changes.** The exact 1191×865 H1 image shows a centered compact closed
+  control around x705–911. It does not show an open pane. The packaged Native
+  split shows file selection and a real Git patch with the conversation still
+  visible. Open-pane file/hunk presentation needs a matching official capture
+  or exact active-variant evidence before changing the bounded file viewer.
+- **Composer and question variants.** H1 shows free text and the optional
+  voice control. The stock fixture exercises a choice request and Native
+  preserves its focus ring and existing model/execution controls. A matching
+  focused or free-text official capture is still needed to compare those
+  states directly. The current rail carries only wired Native destinations.
+- **Home and responsive states.** Home heading and project-control placement
+  come from the current bundle. Signed-in Home, dark mode, and the current
+  narrow transition remain open for direct comparison. The H1 physical left
+  divider alone cannot identify an official default width or zoom setting.

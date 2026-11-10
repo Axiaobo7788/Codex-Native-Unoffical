@@ -95,8 +95,12 @@ void main() {
 
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
-        // Open Runtime details from the sidebar footer status button.
-        await tester.tap(find.text('Connected'));
+        final status = find.descendant(
+          of: find.byKey(const ValueKey('app-shell-navigation-rail')),
+          matching: find.byTooltip('Connected — runtime details'),
+        );
+        expect(status, findsOneWidget);
+        await tester.tap(status);
         await tester.pumpAndSettle();
 
         expect(
@@ -238,7 +242,7 @@ void main() {
 
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
-        await tester.tap(find.text('Connected'));
+        await tester.tap(find.byTooltip('Connected — runtime details'));
         await tester.pumpAndSettle();
 
         final errorFinder = find.byKey(
