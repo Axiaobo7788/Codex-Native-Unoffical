@@ -78,12 +78,12 @@ void main() {
         );
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
-        expect(find.text('Let’s build'), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-hero-heading')), findsOneWidget);
 
         await tester.tap(find.text('Interactive coding session'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Let’s build'), findsNothing);
+        expect(find.byKey(const ValueKey('home-hero-heading')), findsNothing);
         expect(find.text('Interactive coding session'), findsWidgets);
         expect(find.text('active-engine'), findsWidgets);
 
@@ -101,7 +101,7 @@ void main() {
         final harness = SimulatedRuntimeHarness(initialThreads: const []);
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
-        expect(find.text('Let’s build'), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-hero-heading')), findsOneWidget);
 
         final composerField = find.byKey(
           const ValueKey('conversation-composer'),

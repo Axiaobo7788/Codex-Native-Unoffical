@@ -17,7 +17,7 @@ void main() {
       await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       // 1. Landing view is visible
-      expect(find.text('Let’s build'), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-hero-heading')), findsOneWidget);
 
       // 2. User enters coding prompt
       final composer = find.byKey(const ValueKey('conversation-composer'));

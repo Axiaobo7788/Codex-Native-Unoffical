@@ -62,8 +62,10 @@ groups the neutral output surface and full-output action in one card. The
 Linux release opened the 4 KiB preview and the first and last pages of the
 same live spool. A fresh wide capture shows the real Changes pane beside the
 timeline. The wide composer shows stock context usage in a ring with a
-detailed tooltip, freeing the title from its numeric badge. Next, compare
-the Home project control and the placement of user message actions.
+detailed tooltip, freeing the title from its numeric badge. The Home project
+selector now sits inside the heading and keeps its keyboard and draft
+behavior. The complete Flutter suite passed 515 cases with five opt-in
+stock cases skipped. Next, compare the placement of user message actions.
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

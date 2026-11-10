@@ -6137,21 +6137,13 @@ class _ConversationEmptyState extends StatelessWidget {
     final projectLabel = workingDirectory.trim().isEmpty
         ? null
         : _projectName(workingDirectory);
-    final projectText = projectLabel == null
-        ? null
-        : Text(
-            projectLabel,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: theme.textMuted,
-              fontSize: 22,
-              fontWeight: FontWeight.w400,
-              letterSpacing: -0.4,
-              height: 1.25,
-            ),
-          );
+    final headingStyle = TextStyle(
+      color: theme.textPrimary,
+      fontSize: 28,
+      fontWeight: FontWeight.w400,
+      letterSpacing: -0.6,
+      height: 1.2,
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -6160,63 +6152,71 @@ class _ConversationEmptyState extends StatelessWidget {
           size: 40,
           color: theme.textPrimary.withValues(alpha: 0.78),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Let’s build',
-          style: TextStyle(
-            color: theme.textPrimary,
-            fontSize: 28,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.6,
-            height: 1.2,
-          ),
-        ),
-        if (projectText != null) ...[
-          const SizedBox(height: 2),
-          if (onChooseDirectory != null)
-            CodexTooltip(
-              message: 'Select project directory',
-              child: TextButton(
-                key: const ValueKey('home-project-selector'),
-                onPressed: onChooseDirectory,
-                style:
-                    TextButton.styleFrom(
-                      foregroundColor: theme.textMuted,
-                      minimumSize: const Size(0, 34),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          OfficialCodexTheme.buttonRadius,
+        const SizedBox(height: ThemeTokens.space6),
+        Text.rich(
+          key: const ValueKey('home-hero-heading'),
+          TextSpan(
+            text: projectLabel == null
+                ? 'What should we build?'
+                : 'What should we build in ',
+            children: [
+              if (projectLabel != null)
+                if (onChooseDirectory == null)
+                  TextSpan(text: '$projectLabel?')
+                else
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.baseline,
+                    baseline: TextBaseline.alphabetic,
+                    child: CodexTooltip(
+                      message: 'Select project directory',
+                      child: TextButton(
+                        key: const ValueKey('home-project-selector'),
+                        onPressed: onChooseDirectory,
+                        style:
+                            TextButton.styleFrom(
+                              foregroundColor: theme.textPrimary,
+                              minimumSize: const Size(0, 34),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  OfficialCodexTheme.buttonRadius,
+                                ),
+                              ),
+                            ).copyWith(
+                              splashFactory: NoSplash.splashFactory,
+                              side: WidgetStateProperty.resolveWith(
+                                (states) => states.contains(WidgetState.focused)
+                                    ? BorderSide(
+                                        color: theme.focusRing,
+                                        width: 1.5,
+                                      )
+                                    : BorderSide.none,
+                              ),
+                            ),
+                        child: Text(
+                          '$projectLabel?',
+                          // The enclosing WidgetSpan scales this label.
+                          textScaler: TextScaler.noScaling,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: headingStyle.copyWith(
+                            decoration: TextDecoration.underline,
+                            decorationColor: theme.textMuted,
+                            decorationStyle: TextDecorationStyle.dotted,
+                          ),
                         ),
                       ),
-                    ).copyWith(
-                      splashFactory: NoSplash.splashFactory,
-                      side: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.focused)
-                            ? BorderSide(color: theme.focusRing, width: 1.5)
-                            : BorderSide.none,
-                      ),
                     ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(child: projectText),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
-                  ],
-                ),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: projectText,
-            ),
-        ],
+                  ),
+            ],
+          ),
+          style: headingStyle,
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }

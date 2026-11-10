@@ -279,3 +279,16 @@ change and a composer ring with its 10% tooltip after it. The percentage
 differs between the captures because the second fixture turn adds tokens.
 Narrow composer controls keep their existing width budget. The separate
 Linked PRs entry in the title area remains visible.
+
+The fifth pass uses `ZlsN/tH` and its `tW` trigger to move the project chooser
+into the Home heading. Native uses one selected-directory phrase and retains
+its own mark and existing directory dialog. The paired Native releases show
+the separate project row before and the inline dotted control after. At
+1191×865, Shift+Tab and Space opened the chooser, and confirming a different
+directory retained the draft. The first Return sent to the focused button
+in the isolated X11 walkthrough did not open it. The existing Flutter
+keyboard test exercises Enter and the real dialog accepted Return to submit.
+The initial inline implementation scaled the project label twice and pushed
+the model control out of the visible 760 px viewport at 200% text size. Using
+the inline span's own scaling preserves the effective hit target. The fixed
+760×800 release capture shows the model and execution controls.

@@ -21,7 +21,7 @@ void main() {
       await pumpSimulatedRuntimeApp(tester, harness: harness);
 
       expect(find.text('No threads yet'), findsOneWidget);
-      expect(find.text('Let’s build'), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-hero-heading')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

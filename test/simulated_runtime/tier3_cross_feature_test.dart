@@ -17,7 +17,7 @@ void main() {
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
         // Landing view
-        expect(find.text('Let’s build'), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-hero-heading')), findsOneWidget);
 
         final composerField = find.byKey(
           const ValueKey('conversation-composer'),
@@ -40,7 +40,7 @@ void main() {
           'Initialize native flutter pipeline',
         );
         // Landing state transitioned to conversation
-        expect(find.text('Let’s build'), findsNothing);
+        expect(find.byKey(const ValueKey('home-hero-heading')), findsNothing);
       },
     );
 

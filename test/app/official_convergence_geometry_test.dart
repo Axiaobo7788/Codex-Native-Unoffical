@@ -141,9 +141,15 @@ void main() {
           isNull,
         );
         expect(find.text('Prose'), findsNothing);
-        final heroTitleBottom = tester
-            .getBottomLeft(find.text('Let’s build'))
-            .dy;
+        final heroHeading = find.byKey(const ValueKey('home-hero-heading'));
+        expect(
+          find.descendant(
+            of: heroHeading,
+            matching: find.byKey(const ValueKey('home-project-selector')),
+          ),
+          findsOneWidget,
+        );
+        final heroTitleBottom = tester.getBottomLeft(heroHeading).dy;
         final heroComposerTop = tester
             .getTopLeft(find.byKey(const ValueKey('floating_composer')))
             .dy;
@@ -335,7 +341,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(find.text('Select project directory'), findsNothing);
-      expect(find.text('chosen-project'), findsOneWidget);
+      expect(find.text('chosen-project?'), findsOneWidget);
       expect(find.text('Draft for the next project'), findsOneWidget);
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -343,7 +349,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .getSize(find.byKey(const ValueKey('home-project-selector')))
+            .getRect(find.byKey(const ValueKey('home-project-selector')))
             .height,
         greaterThan(44),
       );
