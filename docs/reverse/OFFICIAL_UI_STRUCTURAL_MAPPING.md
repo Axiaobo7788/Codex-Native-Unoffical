@@ -130,13 +130,14 @@ Resume. This reproduces the [cold RPC contract](THREAD_PROVIDER_RESUME_PRESENTAT
 in the packaged UI. Keep the failure separate from the structural comparison.
 Any correction must preserve the existing queue admission rule before resume.
 
-## R0 translation table
+## R0 baseline translation table
 
-Status describes the stated evidence and Native structure. Rows with only
-static or public evidence still require the named live verification before
-their final placement can be accepted.
+The Native column describes the pre-translation `9db67e5` baseline. The
+[implementation checkpoint](#native-implementation-checkpoint) records the
+translated surfaces and remaining comparisons. Rows with only static or
+public evidence still need live verification.
 
-| Surface | Official evidence | Current Native and status | Translation and files | Verification |
+| Surface | Official evidence | Native baseline and status | Translation and files | Verification |
 | --- | --- | --- | --- | --- |
 | App/window shell | H1 top controls precede rail and shared page. S1/S2 separate application menu, workspace row and surface. | **DIVERGED**. GTK owns window chrome. Flutter starts with sidebar plus inset conversation, and puts its titlebar key in the sidebar. | Put app actions above the page at the shell level. Give sidebar and workspace a shared page boundary. Keep platform window ownership. `app_shell.dart`, `sidebar_activity.dart`, geometry test. | Compare client and decorated window regions separately at one scale. |
 | Global navigation | H1 independent rail and selected Home. S1 supports rail with contextual sidebar. | **MISSING**. One Thread panel carries all navigation. | Give supported destinations a persistent rail. Translate selection and focus from observed behavior. `app_shell.dart`, `sidebar_activity.dart`. | Compare rail and sidebar, collapse/expand and keyboard focus. |
