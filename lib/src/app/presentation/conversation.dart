@@ -88,6 +88,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   late final TextEditingController _composerController;
   late final FocusNode _composerFocusNode;
+  final _composerInputKey = GlobalKey();
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   final _conversationFocusNode = FocusNode();
@@ -3341,9 +3342,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final canSteer = controller.canSteer;
     final enabled =
         (thread != null || canCreateOnSend) && (!controller.busy || canSteer);
-    final inlineControls = widget.hasDesktopShell && !isHeroCentered;
-    final showStop = inlineControls && controller.canInterrupt;
+    final desktopComposer = widget.hasDesktopShell && !isHeroCentered;
+    final showStop = desktopComposer && controller.canInterrupt;
     final input = CallbackShortcuts(
+      key: _composerInputKey,
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): () {
           if (enabled) {
@@ -3386,13 +3388,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           key: const ValueKey('floating_composer'),
           surfaceKey: const ValueKey('composer-surface'),
           isFocused: _composerFocusNode.hasFocus,
-          radius: inlineControls
+          radius: desktopComposer
               ? OfficialCodexTheme.composerRadiusPill
               : OfficialCodexTheme.composerRadius,
-          padding: inlineControls
+          padding: desktopComposer
               ? const EdgeInsets.all(8)
               : const EdgeInsets.fromLTRB(14, 10, 8, 8),
-          backgroundColor: inlineControls
+          backgroundColor: desktopComposer
               ? OfficialCodexTheme.of(context).workspaceBackground
               : null,
           child: Column(
@@ -3427,18 +3429,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   ),
                 ),
               ],
-              if (!inlineControls) input,
               LayoutBuilder(
                 builder: (context, rowConstraints) {
-                  final compactComposer = rowConstraints.maxWidth < 560;
-                  final showModelPill = rowConstraints.maxWidth >= 320;
+                  final width = rowConstraints.maxWidth;
+                  final compactComposer = width < 560;
+                  final iconOnly = width < 320;
+                  // Reserve room for the input even when both Steer and Stop
+                  // are visible. The controls keep their own row below it.
+                  final inlineInput =
+                      desktopComposer && width >= (showStop ? 440 : 360);
                   final busyReserve = controller.busy ? 76.0 : 0.0;
                   final maxModelLabelWidth =
-                      (rowConstraints.maxWidth -
-                              (compactComposer ? 260 : 455) -
-                              busyReserve)
+                      (width - (compactComposer ? 260 : 455) - busyReserve)
                           .clamp(52.0, 148.0);
-                  return Row(
+                  final controls = Row(
+                    crossAxisAlignment: inlineInput
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.center,
                     children: [
                       CodexPopoverAnchor(
                         controller: _composerAttachPopoverController,
@@ -3487,18 +3494,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ),
                       ),
                       const SizedBox(width: 2),
-                      if (inlineControls) Expanded(child: input),
-                      if (showModelPill)
-                        _ComposerModelSummaryButton(
-                          controller: widget.settingsController,
-                          maxLabelWidth: maxModelLabelWidth,
-                        ),
+                      if (inlineInput) Expanded(child: input),
+                      if (!inlineInput && desktopComposer) const Spacer(),
+                      _ComposerModelSummaryButton(
+                        controller: widget.settingsController,
+                        maxLabelWidth: maxModelLabelWidth,
+                        iconOnly: iconOnly,
+                      ),
                       if (capabilities.supportsSandboxConfiguration)
                         _ExecutionSettingsButton(
                           controller: widget.settingsController,
-                          iconOnly: inlineControls,
+                          iconOnly: desktopComposer || iconOnly,
                         ),
-                      if (!inlineControls &&
+                      if (!desktopComposer &&
                           projectCwd.isNotEmpty &&
                           !isHeroCentered &&
                           !compactComposer &&
@@ -3555,8 +3563,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           ),
                         ),
                       ],
-                      if (!inlineControls) const Spacer(),
-                      if (controller.busy && !showStop)
+                      if (!desktopComposer) const Spacer(),
+                      if (controller.busy && !showStop && width >= 240)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
@@ -3609,6 +3617,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         },
                       ),
                     ],
+                  );
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [if (!inlineInput) input, controls],
                   );
                 },
               ),
@@ -6082,10 +6095,12 @@ class _ComposerModelSummaryButton extends StatelessWidget {
   const _ComposerModelSummaryButton({
     required this.controller,
     this.maxLabelWidth = 190,
+    this.iconOnly = false,
   });
 
   final ExecutionSettingsController controller;
   final double maxLabelWidth;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -6106,19 +6121,33 @@ class _ComposerModelSummaryButton extends StatelessWidget {
               ? model.displayName
               : '${model.displayName} · $effortLabel';
         }
+        void showSettings() {
+          unawaited(
+            showDialog<void>(
+              context: context,
+              builder: (_) => _ExecutionSettingsDialog(controller: controller),
+            ),
+          );
+        }
+
+        final tooltip = 'Model and reasoning ($summary)';
+        if (iconOnly) {
+          return CodexIconButton(
+            key: const ValueKey('composer-model-pill'),
+            tooltip: tooltip,
+            size: 28,
+            onPressed: controller.loading ? null : showSettings,
+            icon: const Icon(Icons.tune_rounded, size: 16),
+          );
+        }
         return Padding(
           padding: const EdgeInsets.only(right: 4),
           child: CodexButton(
             key: const ValueKey('composer-model-pill'),
             variant: CodexButtonVariant.ghost,
             size: CodexButtonSize.sm,
-            onPressed: controller.loading
-                ? null
-                : () => showDialog<void>(
-                    context: context,
-                    builder: (_) =>
-                        _ExecutionSettingsDialog(controller: controller),
-                  ),
+            onPressed: controller.loading ? null : showSettings,
+            tooltip: tooltip,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
