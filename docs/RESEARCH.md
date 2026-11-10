@@ -4022,3 +4022,64 @@ probe before interpreting that result as a content-search limitation.
   two local inputs. Cold selection and expansion made no model calls.
   App, Host, and stock shut down. Human visual and physical Android
   checks remain separate.
+
+## F25 bounded saved-turn details and provider diagnostics evidence
+
+- On base `be1f39e`, saved subsecond turns on installed stock and public
+  alpha contained command items, but their summaries contained only user
+  and assistant rows. A formatted elapsed time was required for the
+  disclosure. The longer fixture appeared expanded in Execution while
+  its item page was still unopened. A first-page failure left the
+  summary visible without an explicit retry state.
+- F25A (`8e5e0d8`) reuses one disclosure in Commands and Execution.
+  It anchors to the first non-user item, or the last user item when
+  the summary has no other row. A formatted duration remains visible
+  when present. Selection controls expansion and a failed first
+  page offers explicit retry. Display-mode changes leave item loading
+  user-initiated and retain the existing 25-item page and 100-item cap.
+- Four new simulated-runtime regressions failed on the base and
+  passed after the fix. They cover short history, Execution, a failed
+  first page and a user-only summary. Existing output and history
+  controller checks also passed.
+- The packaged Linux branch opened the existing 221 ms fixture on
+  installed stock and displayed the saved 29-byte output. Resizing
+  the output dialog to 720×800 retained the viewport and controls.
+  The 2,594 ms public-alpha fixture opened and collapsed in Execution.
+  The temporary Host cache had no output payload before Fetch and
+  exactly one matching spool file afterward. View output displayed the
+  fixture marker. The first synthetic click on the alpha case preceded
+  catalog readiness and was repeated once the row could be selected.
+- The packaged branch also exercised the 206 ms public-alpha fixture in
+  Execution, including a single matching spool file after Fetch and the
+  visible marker. The first automated click on the output viewer did not
+  open it after Fetch. The subsequent click opened it, and no cause was
+  established for the first click.
+- F25B published the reviewed evidence blob from Gemini's `cdd228e` as
+  `f838e91`. On two public preview binaries `modelProvider/list` returned
+  typed summaries. Installed `0.167.0-alpha.3.2` and stable `0.167.0`
+  returned method-specific unknown-variant errors. A separate alpha
+  supplied `account/securitySetup/read`, and a disposable loopback probe
+  observed unvalidated notice copy and action URLs. Stable snapshots
+  lack both identity fields together. Experimental workspace routing is
+  a follow-up candidate for selected saved workspaces. Provider writes
+  were inspected only through source and schema.
+  [Provider and account evidence](reverse/PROVIDER_ACCOUNT_DIAGNOSTICS_EVIDENCE.md)
+- The official `agy` TUI peer audit cleared F25A at `8e5e0d8` without
+  P0, P1 or P2 findings. F25B's owner corrected the unsupported-method
+  scope, privacy bounds and experimental identity distinction. The
+  original B commits remain on the peer branch.
+- Shared `f838e91` passed Dart format and analyze, 471 Flutter cases
+  with five opt-in skips, 5/5 isolated direct-stock cases, 98 Rust
+  tests with Clippy, and the 65-root pure-Dart gate. The history
+  benchmark retained 100 of 1,000 turns and exercised ten 3 MiB command
+  outputs. The Linux bundle and license checks, bundled Host MCP
+  smoke, and loopback-backed Turn and uncommitted Review smoke passed.
+  Turn smoke verified interruption. Review smoke verified both
+  lifecycle markers.
+- The integrated Linux package exercised the 221 ms installed-stock
+  case at 720×800 and the 206 ms and 2,594 ms alpha cases in
+  Execution. Both alpha cases had no matching Host spool file before
+  Fetch and one afterward. The 29-byte marker was visible in each
+  viewer, and both alpha detail pages collapsed. All three test app,
+  Host and stock process trees shut down. Human visual review and
+  physical Android remain separate.
