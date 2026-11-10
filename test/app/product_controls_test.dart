@@ -496,6 +496,8 @@ void main() {
     'large diff view is truncated, virtualized, and file-selectable',
     (tester) async {
       final runtime = await _pumpSelectedApp(tester);
+      await _send(tester, 'Fixture conversation remains available.');
+      await tester.pumpAndSettle();
       runtime.emitDiff(
         DiffSnapshot(
           threadId: runtime.thread.id,
@@ -528,6 +530,15 @@ void main() {
       expect(find.text('2 files shown'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('changes-view-button')));
       await tester.pumpAndSettle();
+      final changesPane = find.byKey(const ValueKey('desktop-changes-pane'));
+      final timeline = find.byKey(const ValueKey('conversation-timeline'));
+      expect(changesPane, findsOneWidget);
+      expect(timeline, findsOneWidget);
+      expect(
+        tester.getRect(timeline).right,
+        lessThanOrEqualTo(tester.getRect(changesPane).left),
+      );
+      expect(tester.getSize(changesPane).width, greaterThanOrEqualTo(320));
       expect(
         find.text('Large diff truncated to the bounded presentation limit.'),
         findsOneWidget,
@@ -550,6 +561,20 @@ void main() {
       expect(addedText.style?.color, expectedTheme.diffAddedText);
       expect(removedText.style?.color, expectedTheme.diffRemovedText);
       expect(find.text('+line-0'), findsNothing);
+
+      tester.view.physicalSize = const Size(1191, 865);
+      await tester.pumpAndSettle();
+      expect(changesPane, findsNothing);
+      expect(find.text('+second'), findsOneWidget);
+
+      tester.view.physicalSize = const Size(1600, 1000);
+      await tester.pumpAndSettle();
+      expect(changesPane, findsOneWidget);
+      expect(find.text('+second'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close Changes pane'));
+      await tester.pumpAndSettle();
+      expect(changesPane, findsNothing);
+      expect(timeline, findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

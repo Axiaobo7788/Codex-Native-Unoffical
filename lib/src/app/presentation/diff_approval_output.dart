@@ -30,6 +30,9 @@ class _DiffFilePickerState extends State<_DiffFilePicker> {
 
     return CodexPopoverAnchor(
       controller: _popoverController,
+      targetAnchor: Alignment.bottomRight,
+      followerAnchor: Alignment.topRight,
+      width: 320,
       popoverBuilder: (context, close) => CodexMenu<String>(
         items: [
           for (final file in widget.files)
@@ -87,6 +90,68 @@ class _DiffFilePickerState extends State<_DiffFilePicker> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DesktopChangesPane extends StatelessWidget {
+  const _DesktopChangesPane({
+    required this.width,
+    required this.controller,
+    required this.onClose,
+  });
+
+  final double width;
+  final DiffController controller;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    return Container(
+      key: const ValueKey('desktop-changes-pane'),
+      width: width,
+      decoration: BoxDecoration(
+        color: theme.workspaceBackground,
+        border: BorderDirectional(
+          start: BorderSide(
+            color: theme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 16, end: 12),
+            child: SizedBox(
+              height: OfficialCodexTheme.headerHeight,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Changes',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  CodexIconButton(
+                    tooltip: 'Close Changes pane',
+                    onPressed: onClose,
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Divider(
+            height: 1,
+            thickness: OfficialCodexTheme.hairlineBorderWidth,
+            color: theme.hairlineBorder,
+          ),
+          Expanded(child: _DiffView(controller: controller)),
+        ],
       ),
     );
   }
