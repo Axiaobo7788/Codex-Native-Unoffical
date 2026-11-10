@@ -9,6 +9,125 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'simulated_runtime_harness.dart';
 
+class _ConfigurableEcosystemHarness extends SimulatedRuntimeHarness {
+  _ConfigurableEcosystemHarness({
+    this.listSkillsOverride,
+    this.setSkillEnabledOverride,
+    this.listPluginsOverride,
+    this.readPluginOverride,
+    this.installPluginOverride,
+    this.listMcpServerStatusOverride,
+    this.reloadMcpServersOverride,
+  });
+
+  Future<List<SkillSummary>> Function(List<String> cwds)? listSkillsOverride;
+  Future<bool> Function(String path, bool enabled)? setSkillEnabledOverride;
+  Future<List<PluginSummaryModel>> Function(List<String> cwds)?
+  listPluginsOverride;
+  Future<PluginDetailModel> Function(
+    String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  )?
+  readPluginOverride;
+  Future<PluginInstallResultModel> Function(
+    String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  )?
+  installPluginOverride;
+  Future<List<McpServerStatusModel>> Function()? listMcpServerStatusOverride;
+  Future<void> Function()? reloadMcpServersOverride;
+
+  @override
+  Future<List<SkillSummary>> listSkills({List<String> cwds = const []}) {
+    final override = listSkillsOverride;
+    if (override != null) {
+      return override(cwds);
+    }
+    return super.listSkills(cwds: cwds);
+  }
+
+  @override
+  Future<bool> setSkillEnabled({required String path, required bool enabled}) {
+    final override = setSkillEnabledOverride;
+    if (override != null) {
+      toggledSkills.add((path: path, enabled: enabled));
+      return override(path, enabled);
+    }
+    return super.setSkillEnabled(path: path, enabled: enabled);
+  }
+
+  @override
+  Future<List<PluginSummaryModel>> listPlugins({List<String> cwds = const []}) {
+    final override = listPluginsOverride;
+    if (override != null) {
+      return override(cwds);
+    }
+    return super.listPlugins(cwds: cwds);
+  }
+
+  @override
+  Future<PluginDetailModel> readPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+  }) {
+    final override = readPluginOverride;
+    if (override != null) {
+      return override(pluginName, marketplacePath, remoteMarketplaceName);
+    }
+    return super.readPlugin(
+      pluginName: pluginName,
+      marketplacePath: marketplacePath,
+      remoteMarketplaceName: remoteMarketplaceName,
+    );
+  }
+
+  @override
+  Future<PluginInstallResultModel> installPlugin({
+    required String pluginName,
+    String? marketplacePath,
+    String? remoteMarketplaceName,
+    String? installAttemptId,
+  }) {
+    final override = installPluginOverride;
+    if (override != null) {
+      return override(
+        pluginName,
+        marketplacePath,
+        remoteMarketplaceName,
+        installAttemptId,
+      );
+    }
+    return super.installPlugin(
+      pluginName: pluginName,
+      marketplacePath: marketplacePath,
+      remoteMarketplaceName: remoteMarketplaceName,
+      installAttemptId: installAttemptId,
+    );
+  }
+
+  @override
+  Future<List<McpServerStatusModel>> listMcpServerStatus() {
+    final override = listMcpServerStatusOverride;
+    if (override != null) {
+      return override();
+    }
+    return super.listMcpServerStatus();
+  }
+
+  @override
+  Future<void> reloadMcpServers() {
+    final override = reloadMcpServersOverride;
+    if (override != null) {
+      return override();
+    }
+    return super.reloadMcpServers();
+  }
+}
+
 void main() {
   group('F8 Stable MCP Capabilities simulated runtime', () {
     testWidgets(
@@ -1179,6 +1298,718 @@ void main() {
           () => remoteController.uninstallPlugin(pluginId: 'documents'),
           throwsUnsupportedError,
         );
+      },
+    );
+
+    testWidgets(
+      'keeps healthy Skills and MCP visible when plugin list fails and distinguishes failed from empty plugin catalog',
+      (tester) async {
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) async {
+            throw StateError('Synthetic plugin catalog unavailable');
+          },
+        );
+        harness.skills.add(
+          const SkillSummary(
+            name: 'fixture-skill',
+            description: 'Working skill list',
+            path: '/tmp/fixture-skill/SKILL.md',
+            enabled: true,
+          ),
+        );
+        harness.mcpServers.add(
+          const McpServerStatusModel(
+            name: 'fixture-mcp',
+            status: 'connected',
+            toolCount: 1,
+            resourceCount: 1,
+          ),
+        );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        // Healthy Skills section renders without being suppressed or polluted by plugin error.
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-error')),
+          findsNothing,
+        );
+
+        // Healthy MCP section also loads and renders its servers.
+        await tester.tap(find.text('MCP (2)'));
+        await tester.pumpAndSettle();
+        expect(find.text('fixture-mcp'), findsOneWidget);
+
+        // Failed Plugins section reports catalog failure rather than claiming 'No plugins installed.'
+        await tester.tap(find.text('Plugins (0)'));
+        await tester.pumpAndSettle();
+        expect(find.text('No plugins installed.'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-empty')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-unavailable')),
+          findsOneWidget,
+        );
+        expect(find.text('Unable to load plugin catalog.'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-error')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Synthetic plugin catalog unavailable'),
+          findsOneWidget,
+        );
+
+        // Recovering with a zero-row plugin catalog projection transitions to truthful 'No plugin entries returned.'
+        harness.listPluginsOverride = (_) async => const <PluginSummaryModel>[];
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-error')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-unavailable')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-empty')),
+          findsOneWidget,
+        );
+        expect(find.text('No plugin entries returned.'), findsOneWidget);
+        expect(find.text('No plugins installed.'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'pending plugin list leaves healthy Skills and MCP actionable and shows section-scoped loading',
+      (tester) async {
+        final pendingPlugins = Completer<List<PluginSummaryModel>>();
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) => pendingPlugins.future,
+        );
+        harness.skills.add(
+          const SkillSummary(
+            name: 'fixture-skill',
+            description: 'Working skill list',
+            path: '/tmp/fixture-skill/SKILL.md',
+            enabled: true,
+          ),
+        );
+        harness.mcpServers.add(
+          const McpServerStatusModel(
+            name: 'fixture-mcp',
+            status: 'connected',
+            toolCount: 1,
+            resourceCount: 1,
+          ),
+        );
+        addTearDown(() {
+          if (!pendingPlugins.isCompleted) {
+            pendingPlugins.complete(const <PluginSummaryModel>[]);
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+
+        // Toggling a skill works while plugin/list is still pending.
+        await tester.tap(
+          find.byKey(const ValueKey('skill-toggle-fixture-skill')),
+        );
+        await tester.pump();
+        expect(harness.toggledSkills, [
+          (path: '/tmp/fixture-skill/SKILL.md', enabled: false),
+        ]);
+
+        // Switching to Plugins while still in flight shows loading copy rather than empty copy.
+        await tester.tap(find.text('Plugins (0)'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-loading')),
+          findsOneWidget,
+        );
+        expect(find.text('Loading plugin catalog...'), findsOneWidget);
+        expect(find.text('No plugins installed.'), findsNothing);
+
+        // Fulfilling the pending plugin list updates the Plugins section cleanly.
+        pendingPlugins.complete(const [
+          PluginSummaryModel(
+            id: 'late-plugin@local',
+            name: 'Late Plugin',
+            pluginName: 'late-plugin',
+            description: 'Arrived after initial skills load',
+            enabled: true,
+            installed: true,
+            marketplaceName: 'local',
+            marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+          ),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-loading')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('plugin-row-late-plugin@local')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'distinguishes failed Skills and MCP loads from genuinely empty workspace lists',
+      (tester) async {
+        final harness = _ConfigurableEcosystemHarness(
+          listSkillsOverride: (_) async {
+            throw StateError('Synthetic skills index unavailable');
+          },
+          listMcpServerStatusOverride: () async {
+            throw StateError('Synthetic MCP status unavailable');
+          },
+        );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-unavailable')),
+          findsOneWidget,
+        );
+        expect(find.text('Unable to load workspace skills.'), findsOneWidget);
+        expect(
+          find.text('No skills discovered in this workspace.'),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-error')),
+          findsOneWidget,
+        );
+
+        // Healthy Plugins tab remains unaffected by Skills/MCP failures.
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-error')),
+          findsNothing,
+        );
+
+        // Failed MCP tab reports unavailable status rather than 'No MCP servers configured.'
+        await tester.tap(find.text('MCP (0)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('ecosystem-mcp-unavailable')),
+          findsOneWidget,
+        );
+        expect(find.text('Unable to load MCP server status.'), findsOneWidget);
+        expect(find.text('No MCP servers configured.'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('ecosystem-mcp-error')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'refreshing healthy Skills does not restart pending plugin reads',
+      (tester) async {
+        final pendingPlugins = Completer<List<PluginSummaryModel>>();
+        var pluginReads = 0;
+        final harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) {
+            pluginReads += 1;
+            return pendingPlugins.future;
+          },
+        );
+        harness.skills.add(
+          const SkillSummary(
+            name: 'fixture-skill',
+            description: 'Working skill list',
+            path: '/tmp/fixture-skill/SKILL.md',
+            enabled: true,
+          ),
+        );
+        addTearDown(() {
+          if (!pendingPlugins.isCompleted) {
+            pendingPlugins.complete(const <PluginSummaryModel>[]);
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+        expect(pluginReads, 1);
+
+        final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+
+        expect(pluginReads, 1);
+        expect(find.text(r'$fixture-skill'), findsOneWidget);
+      },
+    );
+
+    testWidgets('failed reload cannot strand an already pending MCP load', (
+      tester,
+    ) async {
+      final pendingMcp = Completer<List<McpServerStatusModel>>();
+      final harness = _ConfigurableEcosystemHarness(
+        listMcpServerStatusOverride: () => pendingMcp.future,
+        reloadMcpServersOverride: () async {
+          throw StateError('Synthetic reload failed');
+        },
+      );
+      addTearDown(() {
+        if (!pendingMcp.isCompleted) {
+          pendingMcp.complete(const <McpServerStatusModel>[]);
+        }
+      });
+
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
+      await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('MCP (0)'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final progress = find.byKey(const ValueKey('ecosystem-mcp-loading'));
+      expect(progress, findsOneWidget);
+
+      await tester.tap(find.text('Reload config'), warnIfMissed: false);
+      await tester.pump();
+
+      pendingMcp.complete(const [
+        McpServerStatusModel(
+          name: 'settled-mcp',
+          status: 'connected',
+          toolCount: 1,
+          resourceCount: 1,
+        ),
+      ]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(progress, findsNothing);
+      expect(find.text('settled-mcp'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a pending skills refresh cannot overwrite a successful toggle',
+      (tester) async {
+        const fixture = SkillSummary(
+          name: 'fixture-skill',
+          description: 'Fixture',
+          path: '/tmp/fixture-skill/SKILL.md',
+          enabled: true,
+        );
+        final pendingRefresh = Completer<List<SkillSummary>>();
+        var reads = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listSkillsOverride: (_) {
+            reads += 1;
+            return reads == 1
+                ? Future<List<SkillSummary>>.value(
+                    List<SkillSummary>.unmodifiable(harness.skills),
+                  )
+                : pendingRefresh.future;
+          },
+        );
+        harness.skills
+          ..clear()
+          ..add(fixture);
+        addTearDown(() {
+          if (!pendingRefresh.isCompleted) {
+            pendingRefresh.complete(const <SkillSummary>[]);
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(reads, 2);
+
+        final toggle = find.byKey(const ValueKey('skill-toggle-fixture-skill'));
+        expect(toggle, findsOneWidget);
+        await tester.tap(toggle, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        pendingRefresh.complete(const [fixture]);
+        await tester.pumpAndSettle();
+
+        if (harness.toggledSkills.isNotEmpty) {
+          expect(harness.toggledSkills.single.enabled, isFalse);
+          expect(find.text('Disabled'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'refreshing Skills does not read MCP status before reload finishes',
+      (tester) async {
+        final pendingReload = Completer<void>();
+        var statusReads = 0;
+        var reloadCalls = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listMcpServerStatusOverride: () async {
+            statusReads += 1;
+            return List<McpServerStatusModel>.unmodifiable(harness.mcpServers);
+          },
+          reloadMcpServersOverride: () {
+            reloadCalls += 1;
+            return pendingReload.future;
+          },
+        );
+        harness.mcpServers.add(
+          const McpServerStatusModel(
+            name: 'fixture-mcp',
+            status: 'connected',
+            toolCount: 1,
+            resourceCount: 1,
+          ),
+        );
+        addTearDown(() {
+          if (!pendingReload.isCompleted) {
+            pendingReload.complete();
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        final before = statusReads;
+
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey('ecosystem-section-selector')),
+            matching: find.textContaining('MCP'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Reload config'));
+        await tester.pump();
+        expect(reloadCalls, 1);
+
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey('ecosystem-section-selector')),
+            matching: find.textContaining('Skills'),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(statusReads, before);
+
+        pendingReload.complete();
+        await tester.pumpAndSettle();
+        expect(statusReads, before + 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'refreshing another section during a skill toggle cannot strand Skills',
+      (tester) async {
+        const fixture = SkillSummary(
+          name: 'fixture-skill',
+          description: 'Fixture',
+          path: '/tmp/fixture-skill/SKILL.md',
+          enabled: true,
+        );
+        final pendingRead = Completer<List<SkillSummary>>();
+        final pendingToggle = Completer<bool>();
+        var reads = 0;
+        var mutations = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listSkillsOverride: (_) {
+            reads += 1;
+            return reads == 1
+                ? Future<List<SkillSummary>>.value(
+                    List<SkillSummary>.unmodifiable(harness.skills),
+                  )
+                : pendingRead.future;
+          },
+          setSkillEnabledOverride: (_, enabled) {
+            mutations += 1;
+            if (mutations == 1) {
+              return pendingToggle.future;
+            }
+            return Future<bool>.value(enabled);
+          },
+        );
+        harness.skills
+          ..clear()
+          ..add(fixture);
+        addTearDown(() {
+          if (!pendingRead.isCompleted) {
+            pendingRead.complete(const <SkillSummary>[]);
+          }
+          if (!pendingToggle.isCompleted) {
+            pendingToggle.complete(false);
+          }
+        });
+
+        Finder tab(String label) => find.descendant(
+          of: find.byKey(const ValueKey('ecosystem-section-selector')),
+          matching: find.textContaining(label),
+        );
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        final toggle = find.byKey(const ValueKey('skill-toggle-fixture-skill'));
+        await tester.tap(toggle);
+        await tester.pump();
+        expect(mutations, 1);
+
+        await tester.tap(tab('Plugins'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('ecosystem-refresh-button')),
+        );
+        await tester.pumpAndSettle();
+
+        pendingToggle.complete(false);
+        await tester.pumpAndSettle();
+        pendingRead.complete(const [fixture]);
+        await tester.pumpAndSettle();
+
+        await tester.tap(tab('Skills'));
+        await tester.pumpAndSettle();
+        expect(find.text('Disabled'), findsOneWidget);
+
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(mutations, 2);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'second plugin write cannot reuse an earlier catalog snapshot',
+      (tester) async {
+        final firstWrite = Completer<void>();
+        final secondWrite = Completer<void>();
+        final firstReadback = Completer<void>();
+        var reads = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          listPluginsOverride: (_) async {
+            reads += 1;
+            final snapshot = List<PluginSummaryModel>.unmodifiable(
+              harness.plugins,
+            );
+            if (reads == 2) {
+              await firstReadback.future;
+            }
+            return snapshot;
+          },
+          installPluginOverride:
+              (
+                pluginName,
+                marketplacePath,
+                remoteMarketplaceName,
+                installAttemptId,
+              ) async {
+                await (pluginName == 'one' ? firstWrite : secondWrite).future;
+                harness.installedPluginRequests.add((
+                  pluginName: pluginName,
+                  marketplacePath: marketplacePath,
+                  remoteMarketplaceName: remoteMarketplaceName,
+                ));
+                for (var i = 0; i < harness.plugins.length; i++) {
+                  final current = harness.plugins[i];
+                  if (current.effectivePluginName == pluginName) {
+                    harness.plugins[i] = PluginSummaryModel(
+                      id: current.id,
+                      name: current.name,
+                      pluginName: current.pluginName,
+                      description: current.description,
+                      enabled: true,
+                      installed: true,
+                      version: current.version,
+                      marketplaceName: current.marketplaceName,
+                      marketplacePath: current.marketplacePath,
+                      sourceType: current.sourceType,
+                      authPolicy: current.authPolicy,
+                      installPolicy: current.installPolicy,
+                    );
+                  }
+                }
+                return const PluginInstallResultModel(authPolicy: 'ON_INSTALL');
+              },
+        );
+        harness.plugins
+          ..clear()
+          ..addAll([
+            const PluginSummaryModel(
+              id: 'one@fixture',
+              name: 'One',
+              pluginName: 'one',
+              description: '',
+              enabled: false,
+              installed: false,
+              marketplaceName: 'fixture',
+              sourceType: 'remote',
+            ),
+            const PluginSummaryModel(
+              id: 'two@fixture',
+              name: 'Two',
+              pluginName: 'two',
+              description: '',
+              enabled: false,
+              installed: false,
+              marketplaceName: 'fixture',
+              sourceType: 'remote',
+            ),
+          ]);
+        addTearDown(() {
+          for (final pending in [firstWrite, secondWrite, firstReadback]) {
+            if (!pending.isCompleted) {
+              pending.complete();
+            }
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Plugins (2)'));
+        await tester.pumpAndSettle();
+
+        final firstInstall = find.byKey(
+          const ValueKey('plugin-install-one@fixture'),
+        );
+        final secondInstall = find.byKey(
+          const ValueKey('plugin-install-two@fixture'),
+        );
+
+        await tester.tap(firstInstall);
+        await tester.pump();
+        await tester.tap(secondInstall, warnIfMissed: false);
+        await tester.pump();
+
+        firstWrite.complete();
+        await tester.pump();
+        expect(reads, 2);
+
+        secondWrite.complete();
+        await tester.pump();
+        firstReadback.complete();
+        await tester.pumpAndSettle();
+
+        final secondUninstall = find.byKey(
+          const ValueKey('plugin-uninstall-two@fixture'),
+        );
+        if (secondUninstall.evaluate().isEmpty &&
+            harness.installedPluginRequests.length == 1) {
+          await tester.tap(secondInstall);
+          await tester.pumpAndSettle();
+        }
+        expect(harness.installedPluginRequests.length, 2);
+        expect(secondUninstall, findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'expanded catalog detail refresh is bounded during a delayed read',
+      (tester) async {
+        final release = Completer<void>();
+        var detailReads = 0;
+        late final _ConfigurableEcosystemHarness harness;
+        harness = _ConfigurableEcosystemHarness(
+          readPluginOverride:
+              (pluginName, marketplacePath, remoteMarketplaceName) async {
+                detailReads += 1;
+                if (detailReads > 1) {
+                  await release.future;
+                }
+                final match = harness.plugins.firstWhere(
+                  (p) => p.effectivePluginName == pluginName,
+                );
+                return PluginDetailModel(
+                  summary: match,
+                  description: 'Full detail manifest for ${match.name}.',
+                  marketplaceName: match.marketplaceName ?? 'local',
+                  marketplacePath: match.marketplacePath,
+                );
+              },
+        );
+        harness.plugins
+          ..clear()
+          ..add(
+            const PluginSummaryModel(
+              id: 'one@fixture',
+              name: 'One',
+              pluginName: 'one',
+              description: '',
+              enabled: false,
+              installed: false,
+              marketplaceName: 'fixture',
+              sourceType: 'remote',
+            ),
+          );
+        addTearDown(() {
+          if (!release.isCompleted) {
+            release.complete();
+          }
+        });
+
+        await pumpSimulatedRuntimeApp(tester, harness: harness);
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('plugin-read-one@fixture')));
+        await tester.pumpAndSettle();
+        expect(detailReads, 1);
+
+        final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(detailReads, 2);
+
+        await tester.tap(refresh, warnIfMissed: false);
+        await tester.pumpAndSettle();
+        await tester.tap(refresh, warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(detailReads, 2);
+
+        release.complete();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
       },
     );
   });
