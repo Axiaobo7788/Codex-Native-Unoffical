@@ -209,6 +209,27 @@ void main() {
         const ActivityEvent(
           threadId: 'output-thread',
           turnId: 'active-turn',
+          itemId: 'file-read',
+          summary: 'Command: cat counter.txt',
+          status: 'completed',
+          completed: true,
+          commandActions: {CommandActionKind.read},
+        ),
+      );
+      runtime.emitTurnEvent(
+        const ActivityEvent(
+          threadId: 'output-thread',
+          turnId: 'active-turn',
+          itemId: 'thought',
+          summary: 'Reasoning',
+          status: 'inProgress',
+          completed: false,
+        ),
+      );
+      runtime.emitTurnEvent(
+        const ActivityEvent(
+          threadId: 'output-thread',
+          turnId: 'active-turn',
           itemId: 'active-command',
           summary: 'Command: fixture still running',
           status: 'inProgress',
@@ -229,12 +250,39 @@ void main() {
           summary: 'Command: fixture still running',
           status: 'completed',
           completed: true,
+          commandActions: {CommandActionKind.run},
           commandOutput: _OutputRuntimeController.descriptor,
         ),
       );
       await tester.pumpAndSettle();
       expect(view, findsNothing);
       expect(show, findsOneWidget);
+      expect(find.text('Read files and ran commands'), findsNothing);
+      runtime.emitTurnEvent(
+        const ActivityEvent(
+          threadId: 'output-thread',
+          turnId: 'active-turn',
+          itemId: 'thought',
+          summary: 'Reasoning',
+          status: 'completed',
+          completed: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Read files and ran commands'), findsOneWidget);
+      final detail = find.byKey(const ValueKey('timeline-details-button'));
+      await tester.tap(detail);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Execution'));
+      await tester.pumpAndSettle();
+      expect(find.text('Read files and ran commands'), findsNothing);
+      expect(find.text('Command: cat counter.txt'), findsOneWidget);
+      expect(find.text('Command: fixture still running'), findsOneWidget);
+      await tester.tap(detail);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Commands'));
+      await tester.pumpAndSettle();
+      expect(find.text('Read files and ran commands'), findsOneWidget);
       expect(runtime.tailLengths, isEmpty);
       await tester.tap(show);
       await tester.pumpAndSettle();

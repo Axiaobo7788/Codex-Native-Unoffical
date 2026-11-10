@@ -21,6 +21,7 @@ class ConversationEntry {
     this.turnId,
     this.stockItemId,
     this.status,
+    this.commandActions = const {},
     this.commandOutput,
     this.attachments = const [],
   });
@@ -32,6 +33,7 @@ class ConversationEntry {
   final String? turnId;
   final String? stockItemId;
   final String? status;
+  final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
   final List<UserAttachment> attachments;
 
@@ -50,6 +52,7 @@ class ConversationEntry {
     turnId: turnId ?? this.turnId,
     stockItemId: stockItemId ?? this.stockItemId,
     status: status ?? this.status,
+    commandActions: commandActions,
     commandOutput: commandOutput,
     attachments: attachments ?? this.attachments,
   );
@@ -657,6 +660,7 @@ class ConversationController extends ChangeNotifier {
             completed: event.completed,
             turnId: event.turnId,
             status: event.status,
+            commandActions: event.commandActions,
             commandOutput: event.commandOutput,
           ),
         );

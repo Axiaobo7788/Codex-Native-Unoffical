@@ -545,11 +545,32 @@ final class TurnProtocolAdapter {
       summary: _activitySummary(type, item),
       status: _activityStatus(item, completed),
       completed: completed,
+      commandActions: type == 'commandExecution'
+          ? _commandActions(item['commandActions'])
+          : const {},
       commandOutput:
           includeHostCommandOutput && completed && type == 'commandExecution'
           ? _commandOutput(item['_codexNativeOutput'])
           : null,
     );
+  }
+
+  static Set<CommandActionKind> _commandActions(Object? value) {
+    if (value is! List<Object?>) return const {};
+    final actions = <CommandActionKind>{};
+    for (final item in value) {
+      if (item is! Map<String, Object?>) continue;
+      final action = switch (item['type']) {
+        'read' => CommandActionKind.read,
+        'listFiles' => CommandActionKind.listFiles,
+        'search' => CommandActionKind.search,
+        'unknown' => CommandActionKind.run,
+        _ => null,
+      };
+      if (action != null) actions.add(action);
+      if (actions.length == CommandActionKind.values.length) break;
+    }
+    return Set.unmodifiable(actions);
   }
 
   static OutputDescriptor? _commandOutput(Object? value) {

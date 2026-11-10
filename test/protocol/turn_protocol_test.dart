@@ -433,6 +433,14 @@ void main() {
             'id': 'command-1',
             'command': 'flutter test',
             'status': 'completed',
+            'commandActions': [
+              {'type': 'read', 'path': '/fixture/first'},
+              {'type': 'read', 'path': '/fixture/second'},
+              {'type': 'listFiles'},
+              {'type': 'search'},
+              {'type': 'unknown'},
+              {'type': 'futureVariant'},
+            ],
             'aggregatedOutput': 'MULTI_MEGABYTE_OUTPUT_MUST_NOT_BE_RETAINED',
           },
         },
@@ -443,6 +451,7 @@ void main() {
     expect(event.summary, 'Command: flutter test');
     expect(event.summary, isNot(contains('MULTI_MEGABYTE')));
     expect(event.status, 'completed');
+    expect(event.commandActions, CommandActionKind.values.toSet());
   });
 
   test('projects completed command references only on the Host path', () async {

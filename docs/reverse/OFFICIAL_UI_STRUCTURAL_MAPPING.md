@@ -321,15 +321,29 @@ Linux release opened Runtime details from the new rail indicator and showed
 the connected stock process. The fixture is unauthenticated and the rate
 limit card reported that account authentication was required.
 
+The ninth pass translates the active collapsed read/run summary. Build
+`25894` module `NKAf` in `225284.63835849b6.js` distinguishes parsed read,
+search and listing activity from generic commands. The installed stock schema
+exposes `commandActions` and a real Host fixture emitted `read`, `search`,
+`listFiles` and `unknown`. Native retains only four distinct action kinds
+per live item. Desktop Commands summarizes the current completed mixed run
+on its existing latest row. A completed thought hidden by Commands may sit
+inside that run. A visible unfinished item, error, other tool or turn
+boundary ends it. The output key and live/saved read limits stay the same.
+Packaged Linux ran `cat` and `printf` with a thought between them, showed
+`Read files and ran commands` while waiting for an answer, and displayed the
+two raw commands and thought in Execution. The stock request accepted the
+answer. Older events without the action field keep the generic path.
+
 ### Remaining evidence-led work
 
-- **Collapsed activity.** H1 shows an aggregate read/run sentence and a quiet
-  thought line. Native retains the compact neutral preview but still shows
-  raw command labels in inline rows and a generic `Worked for …` or
-  `Turn details` disclosure for saved work. The official bundle has separate
-  active, completed and grouped summary paths. The next translation should
-  establish which typed stock activity inputs drive the visible group before
-  changing which rows are available to open.
+- **Goal strip.** H1 shows the current goal in the bottom stack. Native
+  currently projects existing stock goal state into the sidebar and its
+  management dialog. This is the next directly visible placement difference.
+- **Saved activity.** Active Commands now has the supported read/run summary.
+  Saved work retains a `Worked for …` or `Turn details` disclosure and lazy
+  item loading. The current official expanded-group state remains unobserved
+  in a signed-in window.
 - **Changes.** The exact 1191×865 H1 image shows a centered compact closed
   control around x705–911. It does not show an open pane. The packaged Native
   split shows file selection and a real Git patch with the conversation still

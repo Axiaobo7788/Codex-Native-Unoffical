@@ -181,6 +181,8 @@ class AssistantMessageEvent extends TurnEvent {
   final bool completed;
 }
 
+enum CommandActionKind { read, listFiles, search, run }
+
 class ActivityEvent extends TurnEvent {
   const ActivityEvent({
     required super.threadId,
@@ -189,6 +191,7 @@ class ActivityEvent extends TurnEvent {
     required this.summary,
     required this.status,
     required this.completed,
+    this.commandActions = const {},
     this.commandOutput,
   });
 
@@ -196,6 +199,7 @@ class ActivityEvent extends TurnEvent {
   final String summary;
   final String status;
   final bool completed;
+  final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
 }
 

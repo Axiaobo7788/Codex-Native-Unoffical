@@ -2934,6 +2934,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final latestActivity = _detailMode == PresentationDetailMode.commands
         ? _latestLiveActivity(rawLiveEntries)
         : null;
+    final collapsedActivitySummary = widget.hasDesktopShell && controller.busy
+        ? _collapsedLiveCommandSummary(rawLiveEntries, latestActivity)
+        : null;
     final liveEntries = switch (_detailMode) {
       PresentationDetailMode.prose =>
         rawLiveEntries
@@ -3074,6 +3077,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
 
     String effectiveLiveText(ConversationEntry entry) {
+      if (collapsedActivitySummary != null &&
+          identical(entry, latestActivity)) {
+        return '${entry.text}\n$collapsedActivitySummary';
+      }
       final liveTurnId = entry.turnId ?? '';
       if (!_activeCapabilities.supportsBranchNavigation ||
           liveTurnId.isEmpty ||
@@ -3437,6 +3444,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
                       inlineActivity: widget.hasDesktopShell,
+                      activitySummary: identical(entry, latestActivity)
+                          ? collapsedActivitySummary
+                          : null,
                       trailingAction: commandOutput?.action,
                       activityDetail: commandOutput?.detail,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
@@ -4507,6 +4517,49 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           .where((entry) => entry.kind == ConversationEntryKind.activity)
           .firstOrNull;
 
+  String? _collapsedLiveCommandSummary(
+    List<ConversationEntry> entries,
+    ConversationEntry? latest,
+  ) {
+    if (latest == null ||
+        !latest.completed ||
+        !latest.text.startsWith('Command: ') ||
+        _nonNominalStatus(latest.status) != null) {
+      return null;
+    }
+    final actions = <CommandActionKind>{};
+    for (var index = entries.lastIndexOf(latest); index >= 0; index--) {
+      final entry = entries[index];
+      if (entry.turnId != latest.turnId ||
+          entry.kind != ConversationEntryKind.activity ||
+          !entry.completed ||
+          _nonNominalStatus(entry.status) != null) {
+        break;
+      }
+      if (entry.text == 'Reasoning' || entry.text.startsWith('Reasoning: ')) {
+        continue;
+      }
+      if (!entry.text.startsWith('Command: ')) break;
+      actions.addAll(
+        entry.commandActions.isEmpty
+            ? const {CommandActionKind.run}
+            : entry.commandActions,
+      );
+    }
+    if (actions.length < 2) return null;
+    final labels = [
+      if (actions.contains(CommandActionKind.read)) 'read files',
+      if (actions.contains(CommandActionKind.listFiles)) 'listed files',
+      if (actions.contains(CommandActionKind.search)) 'searched files',
+      if (actions.contains(CommandActionKind.run)) 'ran commands',
+    ];
+    final first = labels.first;
+    labels[0] = first[0].toUpperCase() + first.substring(1);
+    return labels.length == 2
+        ? labels.join(' and ')
+        : '${labels.take(labels.length - 1).join(', ')}, and ${labels.last}';
+  }
+
   void _reconcileLiveOutputPreview() {
     final key = _commandOutputPreview?.key;
     if (key != null && !key.saved && !_keepsLiveOutputPreview(key)) {
@@ -5170,6 +5223,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.isReasoning = false,
     this.isCommand = false,
     this.inlineActivity = false,
+    this.activitySummary,
     this.activityDetail,
     this.leadingHeader,
     this.trailingAction,
@@ -5191,6 +5245,7 @@ class _ConversationEntryView extends StatelessWidget {
   final bool isReasoning;
   final bool isCommand;
   final bool inlineActivity;
+  final String? activitySummary;
   final Widget? activityDetail;
   final Widget? leadingHeader;
   final Widget? trailingAction;
@@ -5315,6 +5370,7 @@ class _ConversationEntryView extends StatelessWidget {
                             entry: entry,
                             isCommand: isCommand,
                             inline: !hasActivitySurface,
+                            collapsedSummary: activitySummary,
                             trailingAction: trailingAction,
                           ),
                           ?activityDetail,
@@ -6041,12 +6097,14 @@ class _ActivityContent extends StatelessWidget {
     required this.entry,
     this.isCommand = false,
     required this.inline,
+    this.collapsedSummary,
     this.trailingAction,
   });
 
   final ConversationEntry entry;
   final bool isCommand;
   final bool inline;
+  final String? collapsedSummary;
   final Widget? trailingAction;
 
   @override
@@ -6065,7 +6123,9 @@ class _ActivityContent extends StatelessWidget {
         entry.text.startsWith('Review started:') ||
         entry.text.startsWith('Review completed:');
     final statusBadge = _nonNominalStatus(entry.status);
-    final icon = !entry.completed
+    final icon = collapsedSummary != null
+        ? Icons.menu_book_outlined
+        : !entry.completed
         ? Icons.hourglass_top_rounded
         : effectiveCommand
         ? Icons.terminal_rounded
@@ -6096,17 +6156,18 @@ class _ActivityContent extends StatelessWidget {
         ? palette.textSecondary
         : palette.success;
 
+    final summary = collapsedSummary ?? entry.text;
     return CodexActivityRow(
-      summary: entry.text,
+      summary: summary,
       icon: Icon(icon, size: 14, color: iconColor),
       statusText: statusBadge,
       isRunning: !entry.completed,
       isError: statusBadge != null,
       trailingAction: trailingAction,
       inline: inline,
-      textWidget: inline && !effectiveCommand
+      textWidget: inline && (collapsedSummary != null || !effectiveCommand)
           ? Text(
-              entry.text,
+              summary,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall
