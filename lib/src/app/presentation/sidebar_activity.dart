@@ -764,10 +764,12 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         }
         final thread = row as ThreadSummary;
         final receipt = thread.readReceipt;
+        final selected = controller.selectedThread?.id == thread.id;
         return _ThreadRow(
           key: ValueKey(thread.id),
           thread: thread,
-          selected: controller.selectedThread?.id == thread.id,
+          selected: selected,
+          showGoalBadge: !widget.hasNavigationRail || !selected,
           pinned: controller.isPinnedThread(thread),
           persistedPinned: thread.isPersistedPinned,
           sessionPinned: controller.isSessionPinnedThread(thread),
@@ -970,49 +972,8 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     }
   }
 
-  Future<void> _manageThreadGoal(ThreadSummary thread) async {
-    final controller = widget.controller;
-    final loaded = await controller.loadGoal(thread.id);
-    if (!mounted || loaded == null || !controller.canManageGoal(thread.id)) {
-      return;
-    }
-    final change = await showDialog<_GoalDialogResult>(
-      context: context,
-      builder: (context) => _ThreadGoalDialog(goal: loaded.goal),
-    );
-    if (!mounted || change == null || !controller.canManageGoal(thread.id)) {
-      return;
-    }
-    if (change.clear) {
-      final confirmed = await _confirmDesktopAction(
-        context,
-        title: 'Clear this thread’s goal?',
-        message: 'Codex will stop using this saved objective for future turns.',
-        confirmLabel: 'Clear goal',
-      );
-      if (!confirmed || !mounted) {
-        return;
-      }
-    }
-    if (!controller.canManageGoal(thread.id) ||
-        !identical(controller.goalForThread(thread.id), loaded.goal)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The goal changed. Open it again to continue.'),
-        ),
-      );
-      return;
-    }
-    if (change.clear) {
-      await controller.clearGoal(thread.id);
-    } else {
-      await controller.saveGoal(
-        thread.id,
-        objective: change.objective,
-        status: change.status,
-      );
-    }
-  }
+  Future<void> _manageThreadGoal(ThreadSummary thread) =>
+      _showThreadGoalDialog(context, widget.controller, thread.id);
 
   Future<void> _renameSectionDialog(ThreadSection section) async {
     final name = await showDialog<String>(
@@ -1046,6 +1007,52 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         sectionId: created.id,
       );
     }
+  }
+}
+
+Future<void> _showThreadGoalDialog(
+  BuildContext context,
+  ThreadListController controller,
+  String threadId, {
+  bool Function()? isCurrent,
+}) async {
+  bool canContinue() =>
+      controller.canManageGoal(threadId) && (isCurrent?.call() ?? true);
+
+  final loaded = await controller.loadGoal(threadId);
+  if (!context.mounted || !canContinue() || loaded == null) return;
+
+  final change = await showDialog<_GoalDialogResult>(
+    context: context,
+    builder: (context) => _ThreadGoalDialog(goal: loaded.goal),
+  );
+  if (!context.mounted || !canContinue() || change == null) return;
+
+  if (change.clear) {
+    final confirmed = await _confirmDesktopAction(
+      context,
+      title: 'Clear this thread’s goal?',
+      message: 'Codex will stop using this saved objective for future turns.',
+      confirmLabel: 'Clear goal',
+    );
+    if (!confirmed || !context.mounted || !canContinue()) return;
+  }
+  if (!identical(controller.goalForThread(threadId), loaded.goal)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('The goal changed. Open it again to continue.'),
+      ),
+    );
+    return;
+  }
+  if (change.clear) {
+    await controller.clearGoal(threadId);
+  } else {
+    await controller.saveGoal(
+      threadId,
+      objective: change.objective,
+      status: change.status,
+    );
   }
 }
 
@@ -1641,6 +1648,7 @@ class _ThreadRow extends StatefulWidget {
     super.key,
     required this.thread,
     required this.selected,
+    required this.showGoalBadge,
     required this.pinned,
     this.persistedPinned = false,
     this.sessionPinned = false,
@@ -1665,6 +1673,7 @@ class _ThreadRow extends StatefulWidget {
 
   final ThreadSummary thread;
   final bool selected;
+  final bool showGoalBadge;
   final bool pinned;
   final bool persistedPinned;
   final bool sessionPinned;
@@ -1785,7 +1794,9 @@ class _ThreadRowState extends State<_ThreadRow> {
 
     final pinBadge = _formatPinBadge();
     final gitReference = _formatGitReference(thread.gitInfo);
-    final goalBadge = _formatGoalBadge(thread.goal);
+    final goalBadge = widget.showGoalBadge
+        ? _formatGoalBadge(thread.goal)
+        : null;
     final hasMetadataBadges = pinBadge != null || goalBadge != null;
 
     final rowWidget = CodexSidebarRow(

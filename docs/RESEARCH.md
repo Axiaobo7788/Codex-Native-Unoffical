@@ -4761,3 +4761,16 @@ probe before interpreting that result as a content-search limitation.
   with its label, and the composer switches to icon controls based on
   text scale as well as width. Both model and execution controls remain
   hit-testable in that fixture.
+
+## Desktop primary visual parity checkpoint
+
+The current comparison pairs the user-supplied 1191×865 signed-in official
+reference with a 1191×865 Native Linux release walkthrough. The Native
+walkthrough used the bundled Host and stock app-server with a disposable
+loopback model. It captured read/run activity, a paused stock goal and a
+pending request together, then opened goal management and submitted a
+choice. The official reference uses a free-text question and has unknown
+zoom and saved panel width. The installed renderer `25894` supplies the
+logical dimensions and component variants. The exact source claims, paired
+Native evidence and remaining signed-in comparison gates are recorded in
+the [wide Desktop mapping](reverse/OFFICIAL_UI_STRUCTURAL_MAPPING.md#wide-desktop-visual-parity-ranking).

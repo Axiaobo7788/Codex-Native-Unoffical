@@ -335,11 +335,22 @@ Packaged Linux ran `cat` and `printf` with a thought between them, showed
 two raw commands and thought in Execution. The stock request accepted the
 answer. Older events without the action field keep the generic path.
 
+The tenth pass moves the selected Desktop thread's existing goal state into
+the bottom stack. H1 and `309406.5b468e9851.js` place the goal summary above
+the composer. Native puts it above the pending request, shows recorded time
+when present, and uses the existing management dialog for actions. Only the
+duplicate badge on the selected wide thread is removed. The strip shares
+the existing selection hydration and adds no background goal read. The Linux
+release displayed a real paused goal, the read/run summary and a stock
+question together. It opened and dismissed goal management, then submitted
+the question. The paused goal remained in place. The closest H1 comparison
+uses different thread contents and an official free-text prompt.
+
 ### Remaining evidence-led work
 
-- **Goal strip.** H1 shows the current goal in the bottom stack. Native
-  currently projects existing stock goal state into the sidebar and its
-  management dialog. This is the next directly visible placement difference.
+- **Goal actions.** The current Native strip opens the existing goal dialog.
+  H1 shows separate quick actions. A Human comparison can evaluate the
+  management interaction while preserving the existing confirmation behavior.
 - **Saved activity.** Active Commands now has the supported read/run summary.
   Saved work retains a `Worked for …` or `Turn details` disclosure and lazy
   item loading. The current official expanded-group state remains unobserved

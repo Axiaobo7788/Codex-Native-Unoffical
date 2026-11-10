@@ -889,6 +889,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
   Widget _activeWorkspace(ConversationController controller) {
     final changes = widget.diffController.snapshot;
+    final threadId = controller.thread?.id;
+    final threadController = widget.threadController;
+    final goal = threadId == null
+        ? null
+        : threadController?.goalForThread(threadId);
     return LayoutBuilder(
       builder: (context, constraints) {
         final shortViewport = constraints.maxHeight < 560;
@@ -946,6 +951,24 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       changes != null &&
                       (_showChanges || changes.files.isNotEmpty))
                     _desktopChangesSummary(changes, canSplit: canSplit),
+                  if (widget.hasDesktopShell &&
+                      threadId != null &&
+                      threadController != null &&
+                      goal != null)
+                    _desktopGoalStrip(
+                      goal,
+                      onManage: threadController.canManageGoal(threadId)
+                          ? () => unawaited(
+                              _showThreadGoalDialog(
+                                context,
+                                threadController,
+                                threadId,
+                                isCurrent: () =>
+                                    controller.thread?.id == threadId,
+                              ),
+                            )
+                          : null,
+                    ),
                   if (constrainApproval && constrainUserInput)
                     Flexible(
                       flex: 5,
@@ -1940,6 +1963,104 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _restorePagesLoaded = 0;
     _restoreAlignmentPasses = 0;
     _scheduleThreadScrollRestore();
+  }
+
+  Widget _desktopGoalStrip(ThreadGoal goal, {VoidCallback? onManage}) {
+    final theme = OfficialCodexTheme.of(context);
+    final duration = Duration(seconds: goal.timeUsedSeconds);
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    final elapsed = [
+      if (duration.inHours > 0) '${duration.inHours}h',
+      if (minutes > 0) '${minutes}m',
+      if (seconds > 0) '${seconds}s',
+    ].join(' ');
+    final status = switch (goal.status) {
+      ThreadGoalStatus.active => 'Pursuing goal',
+      ThreadGoalStatus.paused => 'Paused goal',
+      ThreadGoalStatus.blocked => 'Goal blocked',
+      ThreadGoalStatus.usageLimited => 'Goal usage limited',
+      ThreadGoalStatus.budgetLimited => 'Goal limited',
+      ThreadGoalStatus.complete => 'Goal achieved',
+      ThreadGoalStatus.unknown => 'Thread goal',
+    };
+    return Center(
+      heightFactor: 1,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Container(
+          key: const ValueKey('desktop-thread-goal-strip'),
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+            minHeight: OfficialCodexTheme.navRowHeight,
+          ),
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 4, 0),
+          decoration: BoxDecoration(
+            color: theme.modalSurface,
+            border: Border.all(color: theme.hairlineBorder),
+            borderRadius: BorderRadius.circular(
+              OfficialCodexTheme.mainSurfaceRadius,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.track_changes_outlined,
+                size: 16,
+                color: theme.textMuted,
+              ),
+              const SizedBox(width: ThemeTokens.space2),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: status,
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '  ${goal.objective}',
+                        style: TextStyle(color: theme.textSecondary),
+                      ),
+                    ],
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (elapsed.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: ThemeTokens.space2,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 92),
+                    child: Text(
+                      elapsed,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: theme.textMuted),
+                    ),
+                  ),
+                ),
+              if (onManage != null)
+                CodexIconButton(
+                  key: const ValueKey('desktop-thread-goal-manage'),
+                  tooltip: 'Manage current goal',
+                  onPressed: onManage,
+                  size: 28,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 16),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _desktopChangesSummary(

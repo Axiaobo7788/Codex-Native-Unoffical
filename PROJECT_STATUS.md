@@ -72,9 +72,12 @@ stands apart from the trailing Linked PR control, which remains actionable
 with an empty scan. Runtime details open from the lower rail in the wide
 shell. Active Commands groups the stock read/run categories on the existing
 latest row. Execution and the bounded output preview remain available. The
-next visible placement gap is the existing thread goal, which H1 shows in
-the bottom stack. Signed-in Home and open Changes still need comparable
-reference captures. [Hosted CI for the rail checkpoint](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42825470672)
+selected goal now appears above the request and composer, using the existing
+goal management and a single hydration. The latest Linux bundle captured the
+wide pending goal/question stack, Home and the open Changes pane. The primary
+wide comparison is ready for Human review after the shared checkpoint gate.
+Signed-in Home, open Changes, expanded saved activity and matching focused,
+compact and dark states remain direct-comparison gates. [Hosted CI for the rail checkpoint](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42825470672)
 F33+ remains DEFERRED_BY_UI_PRIORITY.
 
 ## Current checkpoint

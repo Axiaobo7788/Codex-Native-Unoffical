@@ -15,15 +15,31 @@ void main() {
         createdAtSeconds: 1,
         updatedAtSeconds: 1,
         tokensUsed: 0,
-        timeUsedSeconds: 0,
+        timeUsedSeconds: 3661,
       );
     await pumpSimulatedRuntimeApp(tester, harness: harness);
     final badge = find.byKey(const ValueKey('thread-goal-badge-goal-thread'));
+    final strip = find.byKey(const ValueKey('desktop-thread-goal-strip'));
     expect(badge, findsNothing);
+    expect(strip, findsNothing);
+    expect(harness.goalReads, 0);
     await tester.tap(find.text('Goal thread'));
     await tester.pumpAndSettle();
-    expect(badge, findsOneWidget);
-    expect(find.text('Persisted objective'), findsOneWidget);
+    expect(badge, findsNothing);
+    expect(harness.goalReads, 1);
+    expect(
+      find.textContaining(
+        'Paused goal  Persisted objective',
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('1h 1m 1s'), findsOneWidget);
+    final composer = find.byKey(const ValueKey('floating_composer'));
+    expect(
+      tester.getRect(strip).bottom,
+      lessThan(tester.getRect(composer).top),
+    );
   });
 
   testWidgets('manages a local goal and confirms clearing it', (tester) async {
@@ -51,7 +67,8 @@ void main() {
     expect(harness.goal?.objective, 'Validate the feature');
     expect(harness.goal?.status, ThreadGoalStatus.paused);
 
-    await openGoal();
+    await tester.tap(find.byTooltip('Manage current goal'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Resume goal'));
     await tester.pumpAndSettle();
     expect(harness.goal?.status, ThreadGoalStatus.active);
@@ -74,6 +91,10 @@ void main() {
     await tester.tap(find.text('Clear goal'));
     await tester.pumpAndSettle();
     expect(harness.goal, isNull);
+    expect(
+      find.byKey(const ValueKey('desktop-thread-goal-strip')),
+      findsNothing,
+    );
   });
 }
 
@@ -86,12 +107,16 @@ class _GoalHarness extends SimulatedRuntimeHarness {
       );
 
   ThreadGoal? goal;
+  var goalReads = 0;
 
   @override
   bool get supportsThreadGoals => true;
 
   @override
-  Future<ThreadGoal?> readThreadGoal(String threadId) async => goal;
+  Future<ThreadGoal?> readThreadGoal(String threadId) async {
+    goalReads += 1;
+    return goal;
+  }
 
   @override
   Future<ThreadGoal> setThreadGoal(
