@@ -73,6 +73,33 @@ void main() {
     expect(harness.requests, hasLength(1));
   });
 
+  testWidgets('saved exploration captions retain the raw Execution command', (
+    tester,
+  ) async {
+    final harness = _TurnDetailsHarness(
+      commandAction: (
+        kind: CommandActionKind.read,
+        name: null,
+        path: '/workspace/fixture.txt',
+        query: null,
+      ),
+    );
+    await _open(tester, harness);
+    expect(find.text('Read /workspace/fixture.txt'), findsNothing);
+    expect(harness.requests, isEmpty);
+    await tester.tap(_divider);
+    await tester.pumpAndSettle();
+    expect(find.text('Read /workspace/fixture.txt'), findsOneWidget);
+    expect(find.text('Command: synthetic fixture'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Execution'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read /workspace/fixture.txt'), findsNothing);
+    expect(find.text('Command: synthetic fixture'), findsOneWidget);
+    expect(harness.requests, hasLength(1));
+  });
+
   testWidgets(
     'a failed item read leaves the summary visible and can be retried',
     (tester) async {
@@ -220,6 +247,7 @@ class _TurnDetailsHarness extends SimulatedRuntimeHarness {
   _TurnDetailsHarness({
     bool timed = false,
     bool userOnly = false,
+    HistoryCommandAction? commandAction,
     this.failFirst = false,
     this.readMcpText,
   }) : super(
@@ -246,7 +274,7 @@ class _TurnDetailsHarness extends SimulatedRuntimeHarness {
          ],
          initialHistoryItems: [
            _user,
-           _command,
+           _command(commandAction),
            if (readMcpText != null) _mcp,
            _assistant,
          ],
@@ -258,13 +286,14 @@ class _TurnDetailsHarness extends SimulatedRuntimeHarness {
     kind: HistoryItemKind.user,
     text: 'Fixture question',
   );
-  static const _command = HistoryItem(
+  static HistoryItem _command(HistoryCommandAction? action) => HistoryItem(
     id: 'saved-command',
     turnId: _turnId,
     kind: HistoryItemKind.activity,
     text: 'Command: synthetic fixture',
     status: 'completed',
     isCommand: true,
+    commandAction: action,
   );
   static const _assistant = HistoryItem(
     id: 'saved-assistant',

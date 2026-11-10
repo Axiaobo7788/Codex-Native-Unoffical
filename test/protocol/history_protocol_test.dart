@@ -14,6 +14,70 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'projects only bounded single-action captions from lazy saved items',
+    () async {
+      final longName = '😀' * 270;
+      final adapter = HistoryProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          final command = {
+            'id': 'saved-command',
+            'type': 'commandExecution',
+            'command': 'cat fixture.txt',
+            'status': 'completed',
+            'commandActions': [
+              {
+                'type': 'read',
+                'name': longName,
+                'path': '/workspace/fixture\nname.txt',
+              },
+            ],
+          };
+          return method == 'thread/turns/list'
+              ? {
+                  'data': [
+                    {
+                      'id': 'turn-1',
+                      'status': 'completed',
+                      'items': [command],
+                    },
+                  ],
+                }
+              : {
+                  'data': [
+                    {'turnId': 'turn-1', 'item': command},
+                    {
+                      'turnId': 'turn-1',
+                      'item': {
+                        ...command,
+                        'id': 'compound',
+                        'commandActions': [
+                          {'type': 'read', 'name': 'fixture.txt'},
+                          {'type': 'unknown'},
+                        ],
+                      },
+                    },
+                  ],
+                };
+        },
+      );
+      final summary = await adapter.listTurns(
+        const HistoryTurnQuery(threadId: 'thread-1'),
+      );
+      expect(summary.turns.single.items.single.commandAction, isNull);
+
+      final details = await adapter.listItems(
+        const HistoryItemQuery(threadId: 'thread-1', turnId: 'turn-1'),
+      );
+      final read = details.items.first;
+      expect(read.text, 'Command: cat fixture.txt');
+      expect(read.commandAction?.kind, CommandActionKind.read);
+      expect(read.commandAction?.name, '😀' * 240);
+      expect(read.commandAction?.path, '/workspace/fixture name.txt');
+      expect(details.items.last.commandAction, isNull);
+    },
+  );
+
+  test(
     'prefers stock elapsed milliseconds with a legacy timestamp fallback',
     () async {
       final adapter = HistoryProtocolAdapter(

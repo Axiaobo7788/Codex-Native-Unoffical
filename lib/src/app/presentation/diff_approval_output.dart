@@ -499,6 +499,7 @@ class _HistoryEntryView extends StatelessWidget {
       isCommand: item.isCommand,
       inlineActivity: inlineActivity,
       revealAssistantCopy: revealAssistantCopy,
+      activitySummary: _explorationCaption(),
       activityDetail: commandOutput?.detail,
       leadingHeader: showDetails
           ? _TurnWorkDivider(
@@ -524,6 +525,31 @@ class _HistoryEntryView extends StatelessWidget {
           ? commandOutput?.action ?? _commandOutputFallback(context)
           : _savedMcpTextAction(context),
     );
+  }
+
+  String? _explorationCaption() {
+    final action = item.commandAction;
+    if (action == null ||
+        !inlineActivity ||
+        detailMode != PresentationDetailMode.commands ||
+        item.status != 'completed') {
+      return null;
+    }
+    final (:kind, :name, :path, :query) = action;
+    return switch (kind) {
+      CommandActionKind.read => switch (name ?? path) {
+        final target? => 'Read $target',
+        null => null,
+      },
+      CommandActionKind.listFiles =>
+        path == null ? 'Listed files' : 'Listed files in $path',
+      CommandActionKind.search => switch ((query, path)) {
+        (final query?, final path?) => 'Searched for $query in $path',
+        (final query?, null) => 'Searched for $query',
+        _ => 'Searched for files',
+      },
+      CommandActionKind.run => null,
+    };
   }
 
   Widget? _commandOutputFallback(BuildContext context) {

@@ -6,6 +6,13 @@ export 'user_message_presentation.dart';
 
 enum HistoryItemKind { user, assistant, activity, reasoning, review, unknown }
 
+typedef HistoryCommandAction = ({
+  CommandActionKind kind,
+  String? name,
+  String? path,
+  String? query,
+});
+
 class HistoryItem {
   const HistoryItem({
     required this.id,
@@ -16,6 +23,7 @@ class HistoryItem {
     this.output,
     this.outputDeferred = false,
     this.isCommand = false,
+    this.commandAction,
     this.canReadMcpText = false,
     this.attachments = const [],
   });
@@ -28,6 +36,7 @@ class HistoryItem {
   final OutputDescriptor? output;
   final bool outputDeferred;
   final bool isCommand;
+  final HistoryCommandAction? commandAction;
   final bool canReadMcpText;
   final List<UserAttachment> attachments;
 }
@@ -57,7 +66,9 @@ class HistoryTurn {
   final Duration? reportedWorkDuration;
 
   Duration? get workDuration {
-    if (reportedWorkDuration case final reported?) return reported;
+    if (reportedWorkDuration case final reported? when !reported.isNegative) {
+      return reported;
+    }
     final start = startedAt;
     final end = completedAt;
     if (start == null || end == null || !end.isAfter(start)) {

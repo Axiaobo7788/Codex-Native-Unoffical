@@ -8,6 +8,14 @@ import 'thread_protocol.dart';
 import 'unified_diff_parser.dart';
 import 'user_message_protocol.dart';
 
+CommandActionKind? parseStockCommandActionKind(Object? type) => switch (type) {
+  'read' => CommandActionKind.read,
+  'listFiles' => CommandActionKind.listFiles,
+  'search' => CommandActionKind.search,
+  'unknown' => CommandActionKind.run,
+  _ => null,
+};
+
 final class TurnProtocolAdapter {
   static const _maxTurnPlanSteps = 50;
   static const _maxPlanStepLength = 240;
@@ -560,13 +568,7 @@ final class TurnProtocolAdapter {
     final actions = <CommandActionKind>{};
     for (final item in value) {
       if (item is! Map<String, Object?>) continue;
-      final action = switch (item['type']) {
-        'read' => CommandActionKind.read,
-        'listFiles' => CommandActionKind.listFiles,
-        'search' => CommandActionKind.search,
-        'unknown' => CommandActionKind.run,
-        _ => null,
-      };
+      final action = parseStockCommandActionKind(item['type']);
       if (action != null) actions.add(action);
       if (actions.length == CommandActionKind.values.length) break;
     }

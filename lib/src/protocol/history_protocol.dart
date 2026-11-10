@@ -5,6 +5,7 @@ import 'jsonl_decoder.dart';
 import 'output_protocol.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
+import 'turn_protocol.dart' show parseStockCommandActionKind;
 import 'user_message_protocol.dart';
 
 final class HistoryProtocolAdapter {
@@ -13,6 +14,7 @@ final class HistoryProtocolAdapter {
   static const _maxOccurrenceTokenLength = 4096;
   static const _maxMcpTextBlocks = 64;
   static const _maxMcpTextBytes = 32 * 1024;
+  static final _captionLineBreaks = RegExp(r'[\r\n\t\u2028\u2029]+');
   static final _richMcpTextStart = RegExp(
     r'^[\s\u0085\uFEFF]*(?:\{|\[|```|~~~)',
   );
@@ -332,13 +334,37 @@ final class HistoryProtocolAdapter {
       value['item'],
       _requiredString(value, 'turnId'),
       outputDeferred: value['outputDeferred'] == true,
+      includeCommandAction: true,
     );
+  }
+
+  static HistoryCommandAction? _parseExplorationAction(Object? value) {
+    if (value is! List<Object?> || value.length != 1) return null;
+    final action = value.single;
+    if (action is! Map<String, Object?>) return null;
+    final kind = parseStockCommandActionKind(action['type']);
+    if (kind == null || kind == CommandActionKind.run) return null;
+    return (
+      kind: kind,
+      name: _commandCaptionField(action['name']),
+      path: _commandCaptionField(action['path']),
+      query: _commandCaptionField(action['query']),
+    );
+  }
+
+  static String? _commandCaptionField(Object? value) {
+    if (value is! String) return null;
+    final bounded = String.fromCharCodes(value.runes.take(240))
+        .replaceAll(_captionLineBreaks, ' ')
+        .trim();
+    return bounded.isEmpty ? null : bounded;
   }
 
   HistoryItem _parseItem(
     Object? value,
     String turnId, {
     bool outputDeferred = false,
+    bool includeCommandAction = false,
   }) {
     if (value is! Map<String, Object?>) {
       throw const ProtocolViolation('History item must be an object.');
@@ -386,6 +412,9 @@ final class HistoryProtocolAdapter {
         // app-server builds that emitted the flag there.
         outputDeferred: outputDeferred || value['outputDeferred'] == true,
         isCommand: true,
+        commandAction: includeCommandAction
+            ? _parseExplorationAction(value['commandActions'])
+            : null,
       ),
       'fileChange' => HistoryItem(
         id: id,
