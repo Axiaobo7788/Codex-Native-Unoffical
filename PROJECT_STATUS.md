@@ -123,9 +123,15 @@ permission to lower the engineering or visual quality bar.
   ordinary cold-resume failure feedback, adapting existing peer source `aba5feb`
   through a provenance-preserving normal merge rather than duplicating it.
   The latest 42 targeted controller/Send/Review tests, strict analysis and
-  65-root pure-Dart gate pass. A fresh private real-stock baseline reproduces
-  the hidden sidebar-only failure at 720×800; patched packaged replay and the
-  combined F/U shared gate are still pending at this source checkpoint.
+  65-root pure-Dart gate pass. Source `a0d2a05` passed 570 default Flutter cases,
+  five enabled stock cases, history/output memory gate, Rust fmt/Clippy/100 tests,
+  two-job Linux release and MCP smoke. Fresh real-stock before/after replay at
+  720×800 and 1191×865 verifies visible errors, preserved draft/file, dismiss and
+  exactly one successful retry after fixture restoration. The frozen patched AOT
+  is `b396a6ab…`; all task app/Host/stock/model/Xvfb processes exited. See the
+  [audit evidence](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md#first-correction-checkpoint--cold-resume-feedback).
+  Track F next adapts existing `6c278c5` catalog-truncation source to the current
+  Customize controller; it does not raise the 100-entry cap or add a new query.
 - Gemini owns Track U1 initialized typography/foreground reconciliation in its
   separate worktree from `327ed90`: canonical theme, token adapter, activity and
   Markdown presentation plus three related tests. Codex owns functional audit
