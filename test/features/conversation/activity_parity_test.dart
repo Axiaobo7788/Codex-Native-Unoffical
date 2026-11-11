@@ -154,9 +154,7 @@ void main() {
   testWidgets(
     'A7 active streaming reasoning strips leading bold heading and heading-only completed reasoning stays non-expandable',
     (tester) async {
-      final harness = _A7ParityHarness(
-        reasoningText: '**Heading only**',
-      );
+      final harness = _A7ParityHarness(reasoningText: '**Heading only**');
       await pumpSimulatedRuntimeApp(
         tester,
         harness: harness,
@@ -190,7 +188,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<Text>(find.byKey(const ValueKey('conversation-search-count')))
+            .widget<Text>(
+              find.byKey(const ValueKey('conversation-search-count')),
+            )
             .data,
         startsWith('1 of 1'),
       );
@@ -210,10 +210,7 @@ void main() {
       // Emit active streaming turn with incomplete '**Plan' then '**Planning**\nStreaming body line'.
       harness.customTurnEvents
         ..add(
-          const TurnStartedEvent(
-            threadId: 'a7-thread',
-            turnId: 'a7-live-turn',
-          ),
+          const TurnStartedEvent(threadId: 'a7-thread', turnId: 'a7-live-turn'),
         )
         ..add(
           const ActivityEvent(
@@ -256,10 +253,7 @@ void main() {
 
       expect(find.text('Thinking'), findsOneWidget);
       expect(find.textContaining('Planning'), findsNothing);
-      expect(
-        find.text('Streaming active reasoning detail.'),
-        findsOneWidget,
-      );
+      expect(find.text('Streaming active reasoning detail.'), findsOneWidget);
 
       // Verify 2.0x text scaling produces zero overflow on divider, group, and inline activity rows.
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;

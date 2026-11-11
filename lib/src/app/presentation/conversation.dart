@@ -7008,12 +7008,12 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
       final summary = !hasSummary
           ? (entry.completed ? 'Thought' : 'Thinking…')
           : raw;
-      final summaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: palette.textSecondary,
-        height: 1.4,
-      );
+      final summaryStyle = Theme.of(context).textTheme.bodySmall
+          ?.copyWith(color: palette.textSecondary, height: 1.4);
       return Padding(
-        padding: EdgeInsets.only(bottom: widget.bottomGap ?? ThemeTokens.space2),
+        padding: EdgeInsets.only(
+          bottom: widget.bottomGap ?? ThemeTokens.space2,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

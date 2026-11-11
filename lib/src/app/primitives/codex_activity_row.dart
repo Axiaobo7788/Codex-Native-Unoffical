@@ -270,7 +270,8 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
         ? theme.textPrimary
         : baseIconColor;
 
-    final hasStatus = widget.statusText != null && widget.statusText!.isNotEmpty;
+    final hasStatus =
+        widget.statusText != null && widget.statusText!.isNotEmpty;
     final rowContent = Row(
       mainAxisSize: MainAxisSize.min,
       children: [

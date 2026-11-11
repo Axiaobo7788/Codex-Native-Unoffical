@@ -549,7 +549,8 @@ class _HistoryEntryView extends StatelessWidget {
       activityDetail: commandOutput?.detail,
       hasActivityDisclosure: useInlinePreviewDisclosure,
       activityExpanded:
-          useInlinePreviewDisclosure && (commandOutput?.previewExpanded ?? false),
+          useInlinePreviewDisclosure &&
+          (commandOutput?.previewExpanded ?? false),
       onToggleActivity: useInlinePreviewDisclosure
           ? commandOutput?.onTogglePreview
           : null,
