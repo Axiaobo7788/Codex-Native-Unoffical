@@ -2,8 +2,8 @@
 
 Current Track F work, based on `deb70761f3ebbe32de878b3cd7bc0ff5da400a5c`.
 Published Native access source `0cdf0e8` passes shared gates, peer correction
-and packaged replay. A subsequent default-timeout correction is authored but
-targeted-verified; combined release gates are pending. This document separates the supported stock
+and packaged replay. The subsequent name-only timeout correction passes targeted, shared and
+packaged verification at combined source `03b23c4`. This document separates the supported stock
 contract from the client projection and each validation level.
 
 ## Official and stock evidence
@@ -168,7 +168,7 @@ Its source manifest and per-file hashes bind the captures to this source.
   callback claim is made. Actual Chrome/external-provider/account and Human
   acceptance are not established.
 
-## Default-timeout correction — targeted verified, combined gates pending
+## Default-timeout correction — shared and packaged verified
 
 The final audit found a material configuration mismatch: Native forced 180
 seconds, whereas the inspected official manager sends only the server name.
@@ -186,8 +186,17 @@ omission too. An isolated `0cdf0e8` worktree reproduces both failures: forced `t
 real Host-backed OAuth smoke runs pass with timeout omitted. The first focused
 command accidentally named two nonexistent test files; it was corrected and
 rerun, not treated as a product failure. Logs are `mcp-timeout-*` under
-`/var/tmp/native-ui-r0.BbOvHT/`. Fresh combined release/shared gates remain
-pending; prior `0cdf0e8` CI/captures do not validate this new source.
+`/var/tmp/native-ui-r0.BbOvHT/`. Fresh combined `03b23c4` release/shared gates now pass: 607 default cases/five
+opt-in skips, five enabled actual-stock cases, format/analysis/pure-Dart/memory/
+Linux gates and both OAuth smokes. All 376 tracked files matched before/after.
+Fresh packaged public stock authentication and Reload config also pass, with one
+authorization/exchange and 18 authenticated MCP calls. Frozen AOT `85539d98…`
+and captures are in `/var/tmp/native-desktop-mcp-u3-03b23c4-r1/`. The earlier
+capture preceded async completion; later readback confirms success without a
+second Authenticate request. One accidental New chat created an unmaterialized
+private runtime thread (zero persisted threads) and exposed a separate history
+empty-state defect, retained in the audit. All owned workers exited. Earlier
+`0cdf0e8` CI/captures remain bound to that older source.
 
 Concurrent different-server authentication and custom scope/registration/thread
 overrides remain separate research. The first global path serializes one

@@ -4960,3 +4960,20 @@ Packaged replay and targeted peer review remain open. [Current evidence and
 limits](reverse/MCP_OAUTH_ACCESS_EVIDENCE.md) distinguish these checks from the
 earlier raw preflight and future external-provider/Human acceptance; ADR-059
 records lifecycle and credential ownership.
+
+
+## Desktop MCP/U3 checkpoint and live reasoning boundary
+
+Combined source `03b23c4` passes source-bound shared/release gates and a fresh
+public-stock packaged global OAuth/reload replay. The name-only request preserves
+the public stock 300-second default rather than imposing 180 seconds.
+[Detailed evidence](reverse/MCP_OAUTH_ACCESS_EVIDENCE.md) separates the controlled
+local URI handler from actual external-browser/account acceptance.
+
+Independent U3 review confirms saved reasoning Markdown and observed live elapsed
+headers, while actual live capture exposes upstream-to-UI projection flattening
+at 240 characters. A bounded protocol/controller correction is active; it does
+not change Gemini's presentation composition. The same packaged MCP walkthrough
+exposed premature history hydration for a newly created unmaterialized thread.
+Both remain explicit supported gaps in the [functional audit](reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md),
+not a generic Human review gate.

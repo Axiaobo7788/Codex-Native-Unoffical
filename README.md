@@ -28,8 +28,9 @@ and is not affiliated with or endorsed by OpenAI.
   instructions on an eligible thread. The conversation header can show and
   explicitly add GitHub and GitLab review links on supported local runtimes.
 - **Runtime tools:** discover Skills, Plugins, installed Apps and MCP servers.
-  Read local MCP resources and call tools, including forms from the running
-  operation. Commands and Execution offer a bounded preview of eligible
+  Authenticate eligible global MCP servers through stock-owned OAuth, with
+  bounded browser handoff and status readback. Read resources and call tools,
+  including forms from the running operation. Commands and Execution offer a bounded preview of eligible
   saved local MCP text. Resume a cold thread explicitly before running
   thread-scoped MCP actions. Available actions and catalogs depend on the
   installed runtime and configuration.
@@ -105,6 +106,7 @@ dart run tool/thread_smoke.dart
 dart run tool/model_smoke.dart
 dart run tool/review_smoke.dart
 dart run tool/mcp_smoke.dart
+dart run tool/mcp_oauth_smoke.dart
 flutter test tool/history_memory_benchmark.dart --reporter expanded
 ```
 

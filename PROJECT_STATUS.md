@@ -108,44 +108,49 @@ permission to lower the engineering or visual quality bar.
 
 - Codex and Gemini remain equal peers. Live coordination uses the official
   `agy` TUI, separate worktrees and one writer per overlapping surface.
-- **Track F / Codex:** `agent/codex-desktop-mcp-oauth`,
-  `/var/tmp/native-codex-desktop-mcp-oauth`, published source `0cdf0e8`.
-  Global stock-owned MCP authentication and U2 are integrated on this branch.
-  Actual PKCE, completion/readback, navigation/resize, config reload and stock
-  credential persistence after full process restart have been exercised.
-  [Detailed evidence](docs/reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
-- A final audit found Native's forced 180-second login timeout differs from the
-  official name-only request and public stock's 300-second default. The correction
-  preserves omission of optional `timeoutSecs` and uses a five-minute-plus-grace
-  client watchdog. Old-source red tests reproduce the mismatch. Corrected format, strict analysis,
-  68-root pure-Dart compilation, 43 focused cases and name-only installed/public
-  OAuth smoke pass. Fresh combined release/shared gates remain pending; prior
-  `0cdf0e8` captures do not prove the new source.
-- **Track U3 / Gemini:** branch
-  `agent/gemini-golden-ui-u3-a7-reasoning-markdown`, worktree
-  `/var/tmp/native-gemini-u3-a7-reasoning-markdown`, source `22bf94e` based on
-  `0ecb27d`. It translates remaining A7 reasoning Markdown and the observed live
-  elapsed header. The peer has released the six presentation/test surfaces for
-  review and integration: `conversation.dart`, `official_codex_theme.dart`,
-  `assistant_markdown.dart`, `desktop_markdown_body.dart`,
-  `activity_parity_test.dart`, and `assistant_markdown_test.dart`. Codex reviewed the actual diff and light/dark captures. The live reasoning
-  240-character flattening defect remains a separately owned systems correction;
-  U3 source verification/integration is pending.
-- Heavy validation is **Codex-owned** after Gemini's explicit U3 release and
-  owned runtime teardown. Gemini is light-only until the next lease handoff. Flutter tests use `--concurrency=1`, Cargo uses two jobs, and
-  Linux release uses `--config-only` then CMake `--parallel 2`. The earlier OOM
-  was compiler/test overlap; no Native heap-leak correction is claimed.
-- The next independently confirmed Track F gap is explicit local runtime
-  startup retry/crash recovery. Recovering must retire stale generations,
-  preserve thread/draft identity, and never implicitly run queued work.
+- **Track F / Codex:** combined source `03b23c4` integrates global stock-owned
+  MCP OAuth, default-timeout correction `0943cd9`, U2 `d725eba` and U3
+  `22bf94e` through normal merges. Shared gates and a fresh packaged public
+  stock authentication/reload replay pass. The supported global authentication
+  subset is MATCH; parallel/scoped/custom MCP workflows remain separate research.
+- **Active functional correction:**
+  `/var/tmp/native-codex-desktop-reasoning-stream`, branch
+  `agent/codex-desktop-reasoning-stream`, base `03b23c4`. The actual U3 replay
+  revealed live reasoning flattened to 240 characters before presentation.
+  Codex owns protocol/domain/controller and related tests; the authored 8 KiB,
+  32-part, coalesced projection passes 46 focused tests and strict analysis.
+  Three old-source red cases reproduce lost newlines, part ordering and missing
+  started/completed snapshots. Peer review found no P0/P1 and two P2s: UTF-16 clipping and saved multipart
+  paragraph parity. Corrections, real-stock replay and shared gates remain
+  pending; first-part emphasis stays in presentation rather than protocol. No presentation file is rewritten for this correction.
+- **Track U / Gemini:** U3 `22bf94e` released its six presentation/test surfaces
+  after official-TUI handoff. Codex independently reviewed the diff and light/dark
+  captures, then merged it. Reasoning Markdown uses the measured 14 px hierarchy,
+  4/8 px rhythm and 140 px scroll cap; live observed duration has a completed
+  header while saved items without stock duration remain simply Thought.
+  The live projection correction above and signed-in comparison remain open;
+  Golden State A7 is still PARTIAL. Next presentation ownership is being
+  negotiated through the same TUI; shared checkpoint docs remain Codex-owned.
+- Heavy validation is **Codex-owned** after Gemini's explicit release and owned
+  runtime teardown. Gemini stays light-only until handoff. Flutter tests use
+  `--concurrency=1`; Cargo uses two jobs; Linux release uses `--config-only`
+  then CMake `--parallel 2`. The earlier host OOM was compiler/test overlap;
+  no Native heap-leak fix is claimed.
+- Next independent functional gaps include explicit local runtime retry/crash
+  recovery and newly observed unmaterialized-new-thread history. Their evidence
+  and bounded correction requirements are recorded in the functional audit.
 
 ## Current checkpoints
 
-- **Published branch source `0cdf0e88acc4764ff9f520b1cc10a4720c9895d2`:**
-  normal merge `0ecb27d` preserves MCP `beac41f` and Gemini U2 `d725eba`;
-  `0cdf0e8` corrects two reproduced peer findings and modal focus ownership.
-  [Exact branch CI 43101623112](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43101623112)
-  passed Linux, Windows and macOS. Main has not integrated this branch yet.
+- **Published combined source `03b23c44206ef9d38a580af28ee8158cc9ad1e43`:**
+  preserves MCP `beac41f`, peer corrections `0cdf0e8`, timeout `0943cd9`,
+  Gemini U2 `d725eba` and U3 `22bf94e`. All 376 tracked files were hashed
+  before/after shared validation; 607 default Flutter cases plus five opt-in
+  skips and five enabled actual-stock cases pass. Exact branch CI
+  [43111251522](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43111251522)
+  is still in progress. Main integration is next; do not call this exact CI green.
+- Previous branch `0cdf0e8` passed all three hosted platforms at
+  [43101623112](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43101623112).
 - **Last hosted-verified main `deb70761f3ebbe32de878b3cd7bc0ff5da400a5c`:**
   [43092114873](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43092114873)
   passed all three platforms. It includes catalog truth and U1 typography,
@@ -184,34 +189,32 @@ permission to lower the engineering or visual quality bar.
 
 ## Verification and pending gates
 
-- Source `0cdf0e8`: all 376 tracked files were hashed before and after the
-  shared run. Format 203 files/0 changes, strict analysis, 68-root pure-Dart
-  boundary, 603 default Flutter cases (five opt-in skips), five separately
-  enabled real-stock cases, history 100/1,000 plus ten 3 MiB outputs, Rust
-  fmt/Clippy/100 tests, two-job Linux release/83-library closure, existing MCP
-  smoke and new installed/public OAuth smoke pass. Default unit/widget/typed
-  simulated-runtime counts are not full-process E2E. The Unicode-path LSP issue
-  is not claimed fixed by the ASCII worktree validation.
-- Frozen source-bound bundle and replay evidence:
-  `/var/tmp/native-desktop-mcp-u2-0cdf0e8-r1/`, AOT `b99abbd6…`, unchanged
-  Host `73218b92…`. Installed `0.167.0-alpha.3.2` and public `0.167.1` used
-  real App → Host → stock with only local OAuth/MCP and URI-handler fixtures.
-  Installed success survives Home/Customize navigation, compact close/reopen,
-  resize while modal is open, same-handoff retry and visible readback. Public
-  success survives Reload config and full App/Host/stock exit/relaunch with the
-  same private profile. Both have one authorization/PKCE exchange, zero threads
-  and no observed overflow/Unhandled failure. This does not implement in-app
-  runtime crash recovery or prove real external-browser/account acceptance.
-- The initial installed URI-handler setup was unsuccessful: launch API accepted
-  the URI, no callback occurred and stock later reported failure. Its negative
-  captures/counters remain. Actual successful replay used a task-owned GIO
-  `.desktop` URI handler, not the minimal portal (OpenURI count was zero).
-  Peer red tests, intermediate animation timeout and modal focus failure remain
-  preserved under `/var/tmp/native-ui-r0.BbOvHT/`.
-- U2 `d725eba` captures were independently inspected; its typed activity groups
-  and captions are in `0cdf0e8`. U3 `22bf94e` and the new timeout correction
-  require fresh combined source-bound validation. The timeout correction passes
-  targeted checks and real stock; heavy resource ownership is currently Codex's.
+- Source `03b23c4`: format 203 files/zero changes, strict analysis, 68-root
+  pure-Dart boundary, 607 default Flutter cases/five opt-in skips, five enabled
+  real-stock cases, history 100/1,000 plus ten 3 MiB outputs, two-job Linux
+  release/83-library closure, existing MCP and installed/public name-only OAuth
+  smoke pass. Rust is unchanged from `0cdf0e8`, whose fmt/Clippy/100 tests pass.
+  All 376 tracked files matched before/after gates. These counts mix unit,
+  widget and simulated integration; they are not full-process E2E. ASCII-path
+  validation does not establish a fix for the original Unicode-path LSP issue.
+- Frozen source-bound bundle: `/var/tmp/native-desktop-mcp-u3-03b23c4-r1/`,
+  AOT `85539d98…`, Host `73218b92…`. Fresh real App → Host → public stock
+  `0.167.1` authentication and Reload config pass, with one local authorization/
+  PKCE exchange and 18 authenticated MCP calls. One unmaterialized empty thread
+  was inadvertently created during compact navigation; persisted thread count
+  stays zero, and its actual history failure is preserved for correction.
+- Prior `0cdf0e8` bundle/replay at
+  `/var/tmp/native-desktop-mcp-u2-0cdf0e8-r1/` verifies installed/public login,
+  navigation/resize, compact close/reopen, same-handoff retry and credential
+  persistence after full process restart. Initial invalid URI-handler setup,
+  peer red tests, intermediate animation timeout and modal focus failure remain
+  preserved. Successful callback uses a controlled GIO `.desktop` URI handler;
+  portal OpenURI counters were zero. External browser/account acceptance and
+  in-app runtime crash recovery are not established by these checks.
+- U3 actual light/dark captures have been independently inspected, including the
+  live 240-character flattening that the next systems slice addresses. Owned
+  App/Host/stock/Xvfb/provider/portal/DBus workers exited after packaged replay.
+  Private driver/accessibility and fixture metadata warnings remain recorded.
 - **NOT YET HUMAN VERIFIED:** matched signed-in official live captures,
   subjective interaction/visual acceptance and unavailable physical-platform
   checks remain surface-scoped. Known machine-actionable Golden-State rows
