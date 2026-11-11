@@ -110,6 +110,15 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
   );
   final _focus = FocusNode();
 
+  String get sourceObjective => _sourceObjective;
+
+  void recordSavedObjective(String objective) {
+    _sourceObjective = objective;
+    if (_draft.text.trim() == objective && _draft.text != objective) {
+      _draft.text = objective;
+    }
+  }
+
   _GoalEditorDraft get draft => (
     sourceObjective: _sourceObjective,
     value: _draft.value.copyWith(composing: TextRange.empty),
@@ -217,9 +226,7 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
               children: [
                 Expanded(
                   child: Text(
-                    stale
-                        ? 'Goal changed. Revert to the latest objective.'
-                        : minutes == 0
+                    minutes == 0
                         ? 'Updated just now'
                         : 'Updated $minutes min ago',
                     maxLines: 1,
