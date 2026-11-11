@@ -722,7 +722,7 @@ void main() {
 
     final next = find.byKey(const ValueKey('user-input-next'));
     await chooseOther('first', 'First custom draft');
-    await tester.tap(next);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(field('first'), findsNothing);
     await chooseOther('second', 'Second custom draft');
@@ -865,6 +865,16 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(fullPass.hasFocus, isTrue);
+    final alternate = find.descendant(
+      of: find.byKey(const ValueKey('user-input-approach-Full pass')),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics && widget.properties.label == 'Full pass',
+      ),
+    );
+    expect(tester.widget<Semantics>(alternate).properties.checked, isTrue);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text('Question 1 of 2'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(incremental.hasFocus, isTrue);
@@ -1035,14 +1045,12 @@ void main() {
             .dy,
         lessThanOrEqualTo(420),
       );
-      await tester.scrollUntilVisible(
-        last,
-        70,
-        scrollable: find.descendant(
-          of: scroll,
-          matching: find.byType(Scrollable),
-        ),
-      );
+      for (var option = 1; option < 8; option++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+      }
+      expect(tester.getRect(scroll).contains(tester.getCenter(last)), isTrue);
+      expect(runtime.userInputSubmissions, isEmpty);
       await tester.tap(last);
       await tester.pump(const Duration(milliseconds: 179));
       expect(runtime.userInputSubmissions, isEmpty);

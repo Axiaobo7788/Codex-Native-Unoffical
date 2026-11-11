@@ -556,6 +556,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   final Set<String> _otherSelections = {};
   final _questionScroll = ScrollController();
   final _choiceNavigationFocus = FocusNode(skipTraversal: true);
+  final _optionFocusNodes = <({String questionId, String label}), FocusNode>{};
   late final Map<String, FocusNode> _otherAnswerFocusNodes;
   Timer? _choiceAdvanceTimer;
   var _questionIndex = 0;
@@ -630,21 +631,30 @@ class _UserInputCardState extends State<_UserInputCard> {
       return KeyEventResult.ignored;
     }
     final question = widget.request.questions.elementAtOrNull(_questionIndex);
-    if (question == null ||
-        question.options.isEmpty ||
-        _otherAnswerFocusNodes[question.id]?.hasFocus == true) {
+    if (question == null || question.options.isEmpty) {
       return KeyEventResult.ignored;
     }
-    if (node.hasPrimaryFocus &&
-        (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-      if (_answerFor(question) != null) {
-        if (_questionIndex + 1 < widget.request.questions.length) {
-          _showQuestion(_questionIndex + 1);
-        } else {
-          _submit();
-        }
+    final enter =
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (_otherAnswerFocusNodes[question.id]?.hasFocus == true) {
+      final composing = _textControllers[question.id]!.value.composing;
+      if (!enter || (composing.isValid && !composing.isCollapsed)) {
+        return KeyEventResult.ignored;
       }
+      _acceptCurrentChoice(question);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _moveChoiceFocus(
+        question,
+        event.logicalKey == LogicalKeyboardKey.arrowDown,
+      );
+      return KeyEventResult.handled;
+    }
+    if (node.hasPrimaryFocus && enter) {
+      _acceptCurrentChoice(question);
       return KeyEventResult.handled;
     }
     final digit = int.tryParse(event.character ?? event.logicalKey.keyLabel);
@@ -662,6 +672,51 @@ class _UserInputCardState extends State<_UserInputCard> {
     return KeyEventResult.ignored;
   }
 
+  FocusNode _optionFocus(UserInputQuestion question, String label) =>
+      _optionFocusNodes.putIfAbsent((
+        questionId: question.id,
+        label: label,
+      ), FocusNode.new);
+
+  void _moveChoiceFocus(UserInputQuestion question, bool down) {
+    final options = question.options;
+    var index = options.indexWhere(
+      (option) => _optionFocus(question, option.label).hasPrimaryFocus,
+    );
+    if (index < 0) {
+      index = options.indexWhere(
+        (option) => option.label == _selectedOptions[question.id],
+      );
+    }
+    if (down &&
+        (index < 0 || index == options.length - 1) &&
+        question.allowsOther) {
+      _selectOtherAnswer(question);
+      return;
+    }
+    final next = index < 0
+        ? (down ? 0 : options.length - 1)
+        : index + (down ? 1 : -1);
+    if (next < 0 || next >= options.length) {
+      return;
+    }
+    _cancelChoiceAdvance();
+    final label = options[next].label;
+    _setSelectedOption(question, label);
+    final focus = _optionFocus(question, label);
+    focus.requestFocus();
+    if (focus.context case final target?) {
+      unawaited(
+        Scrollable.ensureVisible(
+          target,
+          alignmentPolicy: down
+              ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+              : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        ),
+      );
+    }
+  }
+
   void _handleAnswerChanged() {
     if (mounted) {
       setState(() {});
@@ -672,6 +727,9 @@ class _UserInputCardState extends State<_UserInputCard> {
   void dispose() {
     _cancelChoiceAdvance();
     _choiceNavigationFocus.dispose();
+    for (final focus in _optionFocusNodes.values) {
+      focus.dispose();
+    }
     _questionScroll.dispose();
     for (final focus in _otherAnswerFocusNodes.values) {
       focus.dispose();
@@ -967,6 +1025,9 @@ class _UserInputCardState extends State<_UserInputCard> {
               label: option.label,
               description: option.description,
               desktop: widget.desktop,
+              focusNode: widget.desktop
+                  ? _optionFocus(question, option.label)
+                  : null,
               number: question.options.length > 1 ? index + 1 : null,
               selected:
                   !usesOther && _selectedOptions[question.id] == option.label,
@@ -1003,11 +1064,7 @@ class _UserInputCardState extends State<_UserInputCard> {
     if (_choiceAdvanceTimer != null) {
       return;
     }
-    _otherAnswerFocusNodes[question.id]?.unfocus();
-    setState(() {
-      _otherSelections.remove(question.id);
-      _selectedOptions[question.id] = label;
-    });
+    _setSelectedOption(question, label);
     if (!widget.autoAdvance) {
       return;
     }
@@ -1018,14 +1075,30 @@ class _UserInputCardState extends State<_UserInputCard> {
       if (!mounted ||
           !TickerMode.valuesOf(context).enabled ||
           _questionIndex != index ||
+          widget.request.questions.elementAtOrNull(index)?.id != question.id ||
           widget.controller.isSubmitting(widget.request.requestId)) {
         return;
       }
-      if (index + 1 < widget.request.questions.length) {
-        _showQuestion(index + 1);
-      } else {
-        _submit();
-      }
+      _acceptCurrentChoice(question);
+    });
+  }
+
+  void _acceptCurrentChoice(UserInputQuestion question) {
+    if (_answerFor(question) == null) {
+      return;
+    }
+    if (_questionIndex + 1 < widget.request.questions.length) {
+      _showQuestion(_questionIndex + 1);
+    } else {
+      _submit();
+    }
+  }
+
+  void _setSelectedOption(UserInputQuestion question, String label) {
+    _otherAnswerFocusNodes[question.id]?.unfocus();
+    setState(() {
+      _otherSelections.remove(question.id);
+      _selectedOptions[question.id] = label;
     });
   }
 
@@ -1141,6 +1214,7 @@ class _UserInputOptionTile extends StatefulWidget {
     required this.description,
     this.desktop = false,
     this.number,
+    this.focusNode,
     this.custom = false,
     required this.selected,
     required this.enabled,
@@ -1151,6 +1225,7 @@ class _UserInputOptionTile extends StatefulWidget {
   final String description;
   final bool desktop;
   final int? number;
+  final FocusNode? focusNode;
   final bool custom;
   final bool selected;
   final bool enabled;
@@ -1240,6 +1315,7 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
       enabled: widget.enabled,
       label: widget.label,
       child: FocusableActionDetector(
+        focusNode: widget.focusNode,
         enabled: widget.enabled,
         onShowHoverHighlight: (value) => setState(() => _hovered = value),
         onShowFocusHighlight: (value) => setState(() => _focused = value),
