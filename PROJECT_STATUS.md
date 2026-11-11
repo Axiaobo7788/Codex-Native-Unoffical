@@ -69,20 +69,22 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- A6 source through `40e8aaf`, with peer evidence through `48659f3`, is
-  integrated and published at `ea4eb1a71e8570002f3b995a6816b11193e280ec`.
-  The next peer round owns A7 activity/reasoning/completed-disclosure
-  presentation in an isolated Gemini worktree. Codex owns systems review,
-  independent runtime verification and integration memory. Controller,
-  protocol and history semantics remain outside the presentation write lock.
-  Heavy analysis/test/build/capture work is serialized between the peers.
-- The independent ASCII snapshot matches all 195 source/test/tool files.
-  Format, strict analysis, 65-root pure-Dart boundary, 555 default Flutter
+- Gemini's A7 source `ff931b9` and formatting-only child `7012dd3` are being
+  integrated normally onto the published documentation checkpoint `03ecc21`.
+  Codex independently reviewed the source and packaged behavior. Gemini has
+  released all seven file surfaces and the heavy slot, retaining ownership
+  for concrete presentation findings. No controller/protocol/history change
+  was needed. Golden State A and A7 remain `PARTIAL`, with machine work ahead.
+- The independent ASCII snapshot matches all 196 source/test/tool files.
+  Format, strict analysis, 65-root pure-Dart boundary, 561 default Flutter
   cases, five separately enabled direct-stock cases, the 100/1,000-turn history
   benchmark with ten 3 MiB outputs, and 100 Rust tests/fmt/Clippy passed.
   The clean two-job Linux release/83-library closure and pure-Dart MCP smoke
-  also passed. Independent packaged verification retained exact clipboard order,
-  ordinary and over-budget links, and zero tested image-sentinel GETs after exit.
+  also passed. The fresh release independently opened real saved file output,
+  retained its preview across Execution/Commands, exposed raw reasoning in
+  Execution, cleared the preview on group collapse, and exited App/Host/stock.
+  The A6 clipboard/link/image observations remain prior-checkpoint evidence;
+  they are not additional claims about this A7 walkthrough.
 - Previous published checkpoint `5e0996aee18363845b628b1e50ef5b3bb73c4b30` passed
   all three hosted jobs in [43007725868](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43007725868).
   Exact-HEAD run [43033221454](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43033221454)
@@ -93,8 +95,11 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   same DNS failure and was cancelled by the 20-minute job timeout, again
   before project checks.
   This is preserved external negative evidence, not a passing Linux gate or
-  a demonstrated UI regression. Isolated A7 work can proceed independently;
-  no workflow or package-source configuration was changed.
+  a demonstrated UI regression. Documentation checkpoint `03ecc21` has its
+  own run [43047223523](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43047223523):
+  Windows/macOS passed and Linux remains in dependency installation. The A7
+  integration's publication and exact-HEAD CI are pending. No workflow or
+  package-source configuration was changed in this slice.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak
@@ -107,6 +112,17 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Current checkpoints
 
+- `ff931b9` + `7012dd3` translate quiet inline activity and Thought disclosures,
+  grouped 4 px spacing, the 140 px reasoning viewport and completed-turn
+  divider rhythm. The saved group keeps its 224 px lazy list and existing
+  output controller; unknown/capped projections retain details. Search and
+  Execution expose raw reasoning when needed. Review reproduced duplicate
+  screen-reader labels and an Execution collapse regression, both corrected
+  by the owner with preserved negative evidence. Independent gates and the
+  same-history packaged replay passed; the initial strict-format failure and
+  recovered private-Xvfb graphics warnings remain recorded. See the
+  [A7 evidence](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) for source, captures,
+  limits and remaining machine-actionable caption/live-group gaps.
 - A6 sources through `40e8aaf` translate measured inline-code geometry,
   container-relative type and light/dark fills with at most 128 rich pills per
   message. Over-budget and internally wrapping tokens use styled, linked flat

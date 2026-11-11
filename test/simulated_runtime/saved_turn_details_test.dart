@@ -23,6 +23,17 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.descendant(
+              of: _divider,
+              matching: find.byType(AnimatedRotation),
+            ),
+          )
+          .turns,
+      0.0,
+    );
     expect(harness.requests, isEmpty);
 
     await tester.tap(_divider);
@@ -32,9 +43,20 @@ void main() {
     expect(
       find.descendant(
         of: _divider,
-        matching: find.byIcon(Icons.expand_more_rounded),
+        matching: find.byIcon(Icons.chevron_right_rounded),
       ),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.descendant(
+              of: _divider,
+              matching: find.byType(AnimatedRotation),
+            ),
+          )
+          .turns,
+      0.25,
     );
     final query = harness.requests.single;
     expect(query.threadId, 'details-thread');

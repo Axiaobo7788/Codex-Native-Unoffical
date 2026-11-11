@@ -103,7 +103,7 @@ abstract final class OfficialCodexTheme {
   /// Workspace header bar height (46px).
   static const double headerHeight = 46.0;
 
-  /// Activity / tool summary row height (34px).
+  /// Activity / tool summary row height (34px) in card/execution mode.
   static const double activityRowHeight = 34.0;
 
   /// Activity / tool card corner radius (8px).
@@ -112,8 +112,39 @@ abstract final class OfficialCodexTheme {
   /// Inline command output scroll region (9rem at the reference scale).
   static const double commandOutputPreviewHeight = 144.0;
 
-  /// Turn work divider pill height (26px).
+  /// Turn work divider pill height (26px) in compact/mobile mode.
   static const double workDividerHeight = 26.0;
+
+  /// Top-level conversation item vertical rhythm (`--conversation-item-gap`: `16px`).
+  static const double conversationItemGap = 16.0;
+
+  /// Grouped activity item vertical gap (`--conversation-grouped-item-gap`: `4px`).
+  static const double conversationGroupedItemGap = 4.0;
+
+  /// Inline activity leading icon and disclosure chevron size (`.icon-2xs`: `14px`).
+  static const double activityInlineIconSize = 14.0;
+
+  /// Inline activity leading icon-to-summary gap (`gap-1.5`: `6px`).
+  static const double activityInlineIconGap = 6.0;
+
+  /// Inline activity summary-to-chevron gap (`gap-1`: `4px`).
+  static const double activityInlineChevronGap = 4.0;
+
+  /// Inline activity chat typography size and line height: `.text-size-chat`
+  /// resolves `var(--codex-chat-font-size)` (fallback `var(--font-ui-size, 13px)`
+  /// in `e77f816560c6.css`); `13.5px` / `20px` matches Native's calibrated
+  /// chat `bodyMedium` scale.
+  static const double activityChatFontSize = 13.5;
+  static const double activityChatLineHeight = 20.0 / 13.5;
+
+  /// Top gap between inline `Worked for` trigger and hairline rule (`pt-1`: `4px`).
+  static const double workDividerRuleTopGap = 4.0;
+
+  /// Grouped activity scroll region maximum height (`max-h-56`: `224px`).
+  static const double activityGroupMaxHeight = 224.0;
+
+  /// Reasoning preview/expanded scroll body maximum height (`8.75rem`: `140px`).
+  static const double reasoningBodyMaxHeight = 140.0;
 
   /// Attachment chip height (28px).
   static const double attachmentChipHeight = 28.0;
@@ -198,6 +229,10 @@ abstract final class OfficialCodexTheme {
   static const Color darkTextPrimary = Color(0xFFECECEC);
   static const Color darkTextSecondary = Color(0xFFB4B4B4);
   static const Color darkTextMuted = Color(0xFF8E8E8E);
+  // `.summary-lK7Lpm` (`color-mix(in oklab, var(--color-text) 60%, transparent)`)
+  static const Color darkActivitySummaryText = Color(0x99ECECEC);
+  // `.execDescendants-CELqcM` / `text-text/30` (`color-mix(in oklab, var(--color-text) 30%, transparent)`)
+  static const Color darkActivityChildText = Color(0x4DECECEC);
 
   static const Color darkDiffAddedFill = Color(0xFF1E4620);
   static const Color darkDiffAddedText = Color(0xFF4ADE80);
@@ -231,6 +266,10 @@ abstract final class OfficialCodexTheme {
   static const Color lightTextPrimary = Color(0xFF0D0D0D);
   static const Color lightTextSecondary = Color(0xFF5D5D5D);
   static const Color lightTextMuted = Color(0xFF8F8F8F);
+  // `.summary-lK7Lpm` (`color-mix(in oklab, var(--color-text) 60%, transparent)`)
+  static const Color lightActivitySummaryText = Color(0x990D0D0D);
+  // `.execDescendants-CELqcM` / `text-text/30` (`color-mix(in oklab, var(--color-text) 30%, transparent)`)
+  static const Color lightActivityChildText = Color(0x4D0D0D0D);
 
   static const Color lightDiffAddedFill = Color(0xFFDCFCE7);
   static const Color lightDiffAddedText = Color(0xFF15803D);
@@ -268,6 +307,8 @@ final class OfficialCodexThemeData {
     required this.textPrimary,
     required this.textSecondary,
     required this.textMuted,
+    required this.activitySummaryText,
+    required this.activityChildText,
     required this.diffAddedFill,
     required this.diffAddedText,
     required this.diffRemovedFill,
@@ -293,6 +334,8 @@ final class OfficialCodexThemeData {
   final Color textPrimary;
   final Color textSecondary;
   final Color textMuted;
+  final Color activitySummaryText;
+  final Color activityChildText;
   final Color diffAddedFill;
   final Color diffAddedText;
   final Color diffRemovedFill;
@@ -320,6 +363,8 @@ final class OfficialCodexThemeData {
     textPrimary: OfficialCodexTheme.darkTextPrimary,
     textSecondary: OfficialCodexTheme.darkTextSecondary,
     textMuted: OfficialCodexTheme.darkTextMuted,
+    activitySummaryText: OfficialCodexTheme.darkActivitySummaryText,
+    activityChildText: OfficialCodexTheme.darkActivityChildText,
     diffAddedFill: OfficialCodexTheme.darkDiffAddedFill,
     diffAddedText: OfficialCodexTheme.darkDiffAddedText,
     diffRemovedFill: OfficialCodexTheme.darkDiffRemovedFill,
@@ -346,6 +391,8 @@ final class OfficialCodexThemeData {
     textPrimary: OfficialCodexTheme.lightTextPrimary,
     textSecondary: OfficialCodexTheme.lightTextSecondary,
     textMuted: OfficialCodexTheme.lightTextMuted,
+    activitySummaryText: OfficialCodexTheme.lightActivitySummaryText,
+    activityChildText: OfficialCodexTheme.lightActivityChildText,
     diffAddedFill: OfficialCodexTheme.lightDiffAddedFill,
     diffAddedText: OfficialCodexTheme.lightDiffAddedText,
     diffRemovedFill: OfficialCodexTheme.lightDiffRemovedFill,

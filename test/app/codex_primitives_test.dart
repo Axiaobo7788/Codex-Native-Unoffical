@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:codex_native_unofficial/src/app/primitives/codex_activity_row.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_composer.dart';
@@ -164,7 +166,9 @@ void main() {
   });
 
   group('CodexActivityRow and CodexActivityDivider', () {
-    testWidgets('renders activity row and divider correctly', (tester) async {
+    testWidgets('renders execution card row and divider correctly', (
+      tester,
+    ) async {
       var outputClicked = false;
       var toggled = false;
 
@@ -186,7 +190,11 @@ void main() {
         ),
       );
 
-      expect(find.text('git status -s'), findsOneWidget);
+      final cardRow = find.byType(CodexActivityRow);
+      expect(tester.getSize(cardRow).height, 40.0); // 34px + 2 * 3px margin
+      final monoText = tester.widget<Text>(find.text('git status -s'));
+      expect(monoText.style?.fontFamily, 'monospace');
+      expect(monoText.style?.fontSize, 12.5);
       expect(find.text('View output'), findsOneWidget);
       await tester.tap(find.text('View output'));
       await tester.pumpAndSettle();
@@ -197,6 +205,249 @@ void main() {
       await tester.pumpAndSettle();
       expect(toggled, isTrue);
     });
+
+    testWidgets(
+      'inline activity row uses natural chat height, 60% resting ink, and callback-only interactivity',
+      (tester) async {
+        var expanded = false;
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) => wrap(
+              brightness: Brightness.light,
+              SizedBox(
+                width: 640,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const CodexActivityRow(
+                      key: ValueKey('static-inline-row'),
+                      summary: 'Read README.md',
+                      inline: true,
+                    ),
+                    CodexActivityRow(
+                      key: const ValueKey('interactive-inline-row'),
+                      summary: 'Ran flutter test',
+                      inline: true,
+                      hasDisclosure: true,
+                      isExpanded: expanded,
+                      disclosureTooltip: expanded
+                          ? 'Hide output preview'
+                          : 'Show output preview',
+                      onToggle: () => setState(() => expanded = !expanded),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final staticRow = find.byKey(const ValueKey('static-inline-row'));
+        final interactiveRow = find.byKey(
+          const ValueKey('interactive-inline-row'),
+        );
+
+        // Natural chat line-height (~20px), not the 34px execution card box.
+        expect(tester.getSize(staticRow).height, lessThan(26.0));
+        expect(tester.getSize(interactiveRow).height, lessThan(26.0));
+
+        final staticText = tester.widget<Text>(find.text('Read README.md'));
+        expect(staticText.style?.fontFamily, isNull);
+        expect(staticText.style?.fontSize, 13.5);
+        expect(
+          staticText.style?.color,
+          OfficialCodexThemeData.light.activitySummaryText,
+        );
+        expect(
+          find.descendant(
+            of: staticRow,
+            matching: find.byIcon(Icons.chevron_right_rounded),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: staticRow,
+            matching: find.byType(FocusableActionDetector),
+          ),
+          findsNothing,
+        );
+
+        // Interactive row hides chevron at rest (opacity 0), promotes ink & reveals chevron on hover.
+        Opacity chevronOpacity() => tester.widget<Opacity>(
+          find.descendant(of: interactiveRow, matching: find.byType(Opacity)),
+        );
+        AnimatedRotation chevronRotation() => tester.widget<AnimatedRotation>(
+          find.descendant(
+            of: interactiveRow,
+            matching: find.byType(AnimatedRotation),
+          ),
+        );
+        expect(chevronOpacity().opacity, 0.0);
+        expect(chevronRotation().turns, 0.0);
+
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        addTearDown(gesture.removePointer);
+        await gesture.addPointer(
+          location: tester.getCenter(find.text('Ran flutter test')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(chevronOpacity().opacity, 1.0);
+        expect(
+          tester.widget<Text>(find.text('Ran flutter test')).style?.color,
+          OfficialCodexThemeData.light.textPrimary,
+        );
+
+        await tester.tap(find.text('Ran flutter test'));
+        await tester.pumpAndSettle();
+        expect(expanded, isTrue);
+        expect(chevronRotation().turns, 0.25);
+
+        // Chevron remains visible while expanded even after pointer leaves.
+        await gesture.moveTo(const Offset(600, 300));
+        await tester.pumpAndSettle();
+        expect(chevronOpacity().opacity, 1.0);
+      },
+    );
+
+    testWidgets(
+      'CodexInlineWorkDivider renders backgroundless trigger, 4px rule gap, and 16px bottom rhythm',
+      (tester) async {
+        var expanded = false;
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) => wrap(
+              brightness: Brightness.light,
+              SizedBox(
+                width: 640,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    CodexInlineWorkDivider(
+                      triggerKey: const ValueKey('work-trigger'),
+                      label: 'Worked for 7s',
+                      isExpanded: expanded,
+                      onToggle: () => setState(() => expanded = !expanded),
+                    ),
+                    const Text('Assistant answer'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final trigger = find.byKey(const ValueKey('work-trigger'));
+        final hairline = find.descendant(
+          of: find.byType(CodexInlineWorkDivider),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is SizedBox && widget.height == 1.0,
+          ),
+        );
+        expect(
+          tester.getTopLeft(hairline).dy - tester.getBottomLeft(trigger).dy,
+          4.0,
+        );
+        expect(
+          tester.getTopLeft(find.text('Assistant answer')).dy -
+              tester.getBottomLeft(hairline).dy,
+          16.0,
+        );
+        expect(
+          tester.widget<Text>(find.text('Worked for 7s')).style?.color,
+          OfficialCodexThemeData.light.textMuted,
+        );
+
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        addTearDown(gesture.removePointer);
+        await gesture.addPointer(
+          location: tester.getCenter(find.text('Worked for 7s')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<Text>(find.text('Worked for 7s')).style?.color,
+          OfficialCodexThemeData.light.textPrimary,
+        );
+
+        await tester.tap(trigger);
+        await tester.pumpAndSettle();
+        expect(expanded, isTrue);
+        expect(
+          tester
+              .widget<AnimatedRotation>(
+                find.descendant(
+                  of: trigger,
+                  matching: find.byType(AnimatedRotation),
+                ),
+              )
+              .turns,
+          0.25,
+        );
+      },
+    );
+
+    testWidgets(
+      'CodexInlineWorkDivider and CodexInlineActivityHeader announce single labels and expose screen-reader tap',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          var dividerActivations = 0;
+          var rowActivations = 0;
+
+          await tester.pumpWidget(
+            wrap(
+              brightness: Brightness.light,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CodexInlineWorkDivider(
+                    triggerKey: const ValueKey('work-trigger'),
+                    label: 'Worked for 7s',
+                    isExpanded: false,
+                    onToggle: () => dividerActivations += 1,
+                  ),
+                  CodexInlineActivityHeader(
+                    key: const ValueKey('row-trigger'),
+                    label: 'Read counter.txt',
+                    leadingIcon: const Icon(Icons.menu_book_outlined),
+                    hasDisclosure: true,
+                    isExpanded: false,
+                    onToggle: () => rowActivations += 1,
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          final workNode = tester.getSemantics(
+            find.byKey(const ValueKey('work-trigger')),
+          );
+          final workData = workNode.getSemanticsData();
+          expect(workData.label, 'Worked for 7s');
+          expect(workData.hasAction(SemanticsAction.tap), isTrue);
+          tester.semantics.tap(find.semantics.byLabel('Worked for 7s'));
+          await tester.pump();
+          expect(dividerActivations, 1);
+
+          final rowNode = tester.getSemantics(
+            find.byKey(const ValueKey('row-trigger')),
+          );
+          final rowData = rowNode.getSemanticsData();
+          expect(rowData.label, 'Read counter.txt');
+          expect(rowData.hasAction(SemanticsAction.tap), isTrue);
+          tester.semantics.tap(find.semantics.byLabel('Read counter.txt'));
+          await tester.pump();
+          expect(rowActivations, 1);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
   });
 
   group('CodexSegment', () {

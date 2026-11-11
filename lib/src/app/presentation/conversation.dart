@@ -8,7 +8,14 @@ typedef _CommandOutputPreviewKey = ({
   String reference,
   bool saved,
 });
-typedef _CommandOutputPresentation = ({Widget action, Widget? detail});
+typedef _CommandOutputPresentation = ({
+  Widget action,
+  Widget? detail,
+  bool hasInlinePreview,
+  bool previewExpanded,
+  VoidCallback? onTogglePreview,
+  String? previewTooltip,
+});
 
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
@@ -3914,6 +3921,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     output: entry.completed ? entry.commandOutput : null,
                     saved: false,
                   );
+                  final useInlinePreviewDisclosure =
+                      widget.hasDesktopShell &&
+                      (commandOutput?.hasInlinePreview ?? false);
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -3923,13 +3933,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     child: _ConversationEntryView(
                       key: ValueKey(entry.id),
                       entry: effectiveEntry,
+                      detailMode: _detailMode,
                       inlineActivity: widget.hasDesktopShell,
                       revealAssistantCopy: liveTurnId != latestTurnId,
                       activitySummary: identical(entry, latestActivity)
                           ? collapsedActivitySummary
                           : null,
-                      trailingAction: commandOutput?.action,
+                      trailingAction: useInlinePreviewDisclosure
+                          ? null
+                          : commandOutput?.action,
                       activityDetail: commandOutput?.detail,
+                      hasActivityDisclosure: useInlinePreviewDisclosure,
+                      activityExpanded:
+                          useInlinePreviewDisclosure &&
+                          (commandOutput?.previewExpanded ?? false),
+                      onToggleActivity: useInlinePreviewDisclosure
+                          ? commandOutput?.onTogglePreview
+                          : null,
+                      activityDisclosureTooltip: useInlinePreviewDisclosure
+                          ? commandOutput?.previewTooltip
+                          : null,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:
@@ -5109,7 +5132,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _detailMode == PresentationDetailMode.prose ||
         turnId.isEmpty ||
         (saved && turnId != widget.historyController.selectedTurnId)) {
-      return (action: fullOutput, detail: null);
+      return (
+        action: fullOutput,
+        detail: null,
+        hasInlinePreview: false,
+        previewExpanded: false,
+        onTogglePreview: null,
+        previewTooltip: null,
+      );
     }
     final key = (
       itemId: itemId,
@@ -5120,21 +5150,27 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final preview = _commandOutputPreview;
     final viewer = preview?.key == key ? preview?.viewer : null;
     final expanded = viewer != null;
+    final onToggle = _commandPreviewReading && !expanded
+        ? null
+        : () => unawaited(_toggleCommandOutputPreview(key, output));
+    final tooltip = expanded ? 'Hide output preview' : 'Show output preview';
     return (
       action: Semantics(
         expanded: expanded,
         child: CodexIconButton(
           size: 28,
-          onPressed: _commandPreviewReading && !expanded
-              ? null
-              : () => unawaited(_toggleCommandOutputPreview(key, output)),
+          onPressed: onToggle,
           icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-          tooltip: expanded ? 'Hide output preview' : 'Show output preview',
+          tooltip: tooltip,
         ),
       ),
       detail: viewer == null
           ? null
           : _InlineCommandOutput(viewer: viewer, openFullOutput: fullOutput),
+      hasInlinePreview: true,
+      previewExpanded: expanded,
+      onTogglePreview: onToggle,
+      previewTooltip: tooltip,
     );
   }
 
@@ -5256,6 +5292,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           historyController: widget.historyController,
           inlineActivity: true,
           showDetailsHeader: false,
+          bottomGap: index + 1 < items.length
+              ? OfficialCodexTheme.conversationGroupedItemGap
+              : 0.0,
           overrideEntryText:
               item.commandAction == null && command.startsWith('Command: ')
               ? 'Ran ${command.substring('Command: '.length)}'
@@ -5984,10 +6023,16 @@ class _ConversationEntryView extends StatelessWidget {
     this.attachments = const [],
     this.isReasoning = false,
     this.isCommand = false,
+    this.detailMode = PresentationDetailMode.commands,
     this.inlineActivity = false,
     this.revealAssistantCopy = false,
+    this.bottomGap,
     this.activitySummary,
     this.activityDetail,
+    this.hasActivityDisclosure = false,
+    this.activityExpanded = false,
+    this.onToggleActivity,
+    this.activityDisclosureTooltip,
     this.leadingHeader,
     this.trailingAction,
     this.onForkFromTurn,
@@ -6007,10 +6052,16 @@ class _ConversationEntryView extends StatelessWidget {
   final List<UserAttachment> attachments;
   final bool isReasoning;
   final bool isCommand;
+  final PresentationDetailMode detailMode;
   final bool inlineActivity;
   final bool revealAssistantCopy;
+  final double? bottomGap;
   final String? activitySummary;
   final Widget? activityDetail;
+  final bool hasActivityDisclosure;
+  final bool activityExpanded;
+  final VoidCallback? onToggleActivity;
+  final String? activityDisclosureTooltip;
   final Widget? leadingHeader;
   final Widget? trailingAction;
   final VoidCallback? onForkFromTurn;
@@ -6066,7 +6117,15 @@ class _ConversationEntryView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ?leadingHeader,
-              _ReasoningEntryView(entry: entry, inline: inlineActivity),
+              _ReasoningEntryView(
+                entry: entry,
+                inline: inlineActivity,
+                forceExpanded:
+                    isSearchMatch ||
+                    detailMode == PresentationDetailMode.execution,
+                isActiveSearchMatch: isActiveSearchMatch,
+                bottomGap: bottomGap,
+              ),
             ],
           ),
         ),
@@ -6113,7 +6172,13 @@ class _ConversationEntryView extends StatelessWidget {
                     : null,
                 width: double.infinity,
                 margin: EdgeInsets.only(
-                  bottom: isActivity ? ThemeTokens.space2 : ThemeTokens.space4,
+                  bottom:
+                      bottomGap ??
+                      (isActivity
+                          ? (!hasActivitySurface
+                                ? OfficialCodexTheme.conversationItemGap
+                                : ThemeTokens.space2)
+                          : ThemeTokens.space4),
                 ),
                 padding: hasActivitySurface || isError
                     ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
@@ -6148,6 +6213,10 @@ class _ConversationEntryView extends StatelessWidget {
                             inline: !hasActivitySurface,
                             collapsedSummary: activitySummary,
                             trailingAction: trailingAction,
+                            hasDisclosure: hasActivityDisclosure,
+                            isExpanded: activityExpanded,
+                            onToggle: onToggleActivity,
+                            disclosureTooltip: activityDisclosureTooltip,
                           ),
                           ?activityDetail,
                         ],
@@ -6851,48 +6920,103 @@ class _UserAttachmentChip extends StatelessWidget {
   }
 }
 
-class _ReasoningEntryView extends StatelessWidget {
-  const _ReasoningEntryView({required this.entry, required this.inline});
+class _ReasoningEntryView extends StatefulWidget {
+  const _ReasoningEntryView({
+    required this.entry,
+    required this.inline,
+    this.forceExpanded = false,
+    this.isActiveSearchMatch = false,
+    this.bottomGap,
+  });
 
   final ConversationEntry entry;
   final bool inline;
+  final bool forceExpanded;
+  final bool isActiveSearchMatch;
+  final double? bottomGap;
+
+  @override
+  State<_ReasoningEntryView> createState() => _ReasoningEntryViewState();
+}
+
+class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
+  bool _expanded = false;
+
+  @override
+  void didUpdateWidget(covariant _ReasoningEntryView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.entry.id != oldWidget.entry.id) {
+      _expanded = false;
+    }
+  }
+
+  static String _extractRawReasoningContent(String text) {
+    if (text == 'Reasoning') {
+      return '';
+    }
+    if (text.startsWith('Reasoning: ')) {
+      return text.substring('Reasoning: '.length);
+    }
+    return text;
+  }
+
+  /// Matches `225284.ak` active body `O`:
+  /// strips a leading `**heading**`, suppresses an incomplete leading `**`,
+  /// and trims leading whitespace while streaming.
+  static String _normalizeActiveReasoningBody(String content) {
+    final trimmedStart = content.trimLeft();
+    final boldMatch = RegExp(r'^\*\*([^\n]*?)\*\*').firstMatch(trimmedStart);
+    if (boldMatch != null) {
+      return trimmedStart.substring(boldMatch.end).trimLeft();
+    }
+    if (trimmedStart.startsWith('**')) {
+      return '';
+    }
+    return trimmedStart;
+  }
+
+  /// Matches `182735.Faus.k2` used by `225284.ak` completed body `P`:
+  /// strips a leading `**bold heading**\s*` or plain ATX `#`..`###` heading
+  /// line, returning the trimmed remaining body (or trimmed content when no
+  /// heading prefix exists).
+  static String _normalizeCompletedReasoningBody(String content) {
+    if (content.trim().isEmpty) {
+      return '';
+    }
+    final trimmedStart = content.trimLeft();
+    final boldMatch = RegExp(r'^\*\*[^\n]*?\*\*\s*').firstMatch(trimmedStart);
+    if (boldMatch != null) {
+      return trimmedStart.substring(boldMatch.end).trim();
+    }
+    final headingMatch = RegExp(
+      r'^#{1,3}[ \t]+([^#\\*_[\]`<>&\r\n]+)(?:\r?\n|$)',
+    ).firstMatch(content);
+    if (headingMatch != null &&
+        (headingMatch.group(1)?.trim().isNotEmpty ?? false)) {
+      return content.substring(headingMatch.end).trim();
+    }
+    return content.trim();
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final raw = inline && entry.text.startsWith('Reasoning: ')
-        ? entry.text.substring('Reasoning: '.length).trim()
-        : entry.text.trim();
-    final hasSummary = raw.isNotEmpty && raw != 'Reasoning';
-    final textTheme = Theme.of(context).textTheme;
-    final summaryStyle = textTheme.bodySmall?.copyWith(
-      color: palette.textSecondary,
-      height: 1.4,
-    );
-    if (inline && !entry.completed) {
+    final entry = widget.entry;
+    if (!widget.inline) {
+      final raw = entry.text.trim();
+      final hasSummary = raw.isNotEmpty && raw != 'Reasoning';
+      final summary = !hasSummary
+          ? (entry.completed ? 'Thought' : 'Thinking…')
+          : raw;
+      final summaryStyle = Theme.of(context).textTheme.bodySmall
+          ?.copyWith(color: palette.textSecondary, height: 1.4);
       return Padding(
-        padding: const EdgeInsets.only(bottom: ThemeTokens.space2),
-        child: Column(
+        padding: EdgeInsets.only(
+          bottom: widget.bottomGap ?? ThemeTokens.space2,
+        ),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Thinking',
-              style: textTheme.bodyMedium?.copyWith(color: palette.textMuted),
-            ),
-            if (hasSummary) SelectableText(raw, style: summaryStyle),
-          ],
-        ),
-      );
-    }
-    final summary = !hasSummary
-        ? (entry.completed ? 'Thought' : 'Thinking…')
-        : raw;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: ThemeTokens.space2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!inline) ...[
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Icon(
@@ -6902,8 +7026,78 @@ class _ReasoningEntryView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            Expanded(child: SelectableText(summary, style: summaryStyle)),
           ],
-          Expanded(child: SelectableText(summary, style: summaryStyle)),
+        ),
+      );
+    }
+
+    final theme = OfficialCodexTheme.of(context);
+    final rawContent = _extractRawReasoningContent(entry.text);
+    final activeStreaming = !entry.completed;
+    final normalizedBody = activeStreaming
+        ? _normalizeActiveReasoningBody(rawContent)
+        : _normalizeCompletedReasoningBody(rawContent);
+    final rawTrimmed = rawContent.trim();
+    // Preserve visible/copyable matched text when in-conversation search
+    // matches a stripped leading heading on raw reasoning content.
+    final bodyText = widget.forceExpanded && rawTrimmed.isNotEmpty
+        ? rawTrimmed
+        : normalizedBody;
+    final hasExpandableBody = !activeStreaming && bodyText.isNotEmpty;
+    final showBody = activeStreaming
+        ? bodyText.isNotEmpty
+        : hasExpandableBody && (_expanded || widget.forceExpanded);
+
+    return Container(
+      key: widget.isActiveSearchMatch
+          ? ValueKey('active-search-match-${entry.id}')
+          : null,
+      margin: EdgeInsets.only(
+        bottom: widget.bottomGap ?? OfficialCodexTheme.conversationItemGap,
+      ),
+      decoration: widget.isActiveSearchMatch
+          ? BoxDecoration(
+              color: palette.accent.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(ThemeTokens.radiusSmall),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CodexInlineActivityHeader(
+            label: activeStreaming ? 'Thinking' : 'Thought',
+            restingTextColor: theme.activityChildText,
+            hasDisclosure: hasExpandableBody,
+            isExpanded: showBody,
+            onToggle: hasExpandableBody
+                ? () => setState(() => _expanded = !_expanded)
+                : null,
+          ),
+          if (showBody) ...[
+            const SizedBox(
+              height: OfficialCodexTheme.conversationGroupedItemGap,
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxHeight: OfficialCodexTheme.reasoningBodyMaxHeight,
+              ),
+              child: SingleChildScrollView(
+                key: ValueKey('reasoning-body-scroll-${entry.id}'),
+                primary: false,
+                reverse: activeStreaming,
+                child: SelectableText(
+                  bodyText,
+                  style: TextStyle(
+                    fontSize: OfficialCodexTheme.activityChatFontSize,
+                    height: OfficialCodexTheme.activityChatLineHeight,
+                    color: theme.activitySummaryText,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -6917,6 +7111,10 @@ class _ActivityContent extends StatelessWidget {
     required this.inline,
     this.collapsedSummary,
     this.trailingAction,
+    this.hasDisclosure = false,
+    this.isExpanded = false,
+    this.onToggle,
+    this.disclosureTooltip,
   });
 
   final ConversationEntry entry;
@@ -6924,6 +7122,10 @@ class _ActivityContent extends StatelessWidget {
   final bool inline;
   final String? collapsedSummary;
   final Widget? trailingAction;
+  final bool hasDisclosure;
+  final bool isExpanded;
+  final VoidCallback? onToggle;
+  final String? disclosureTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -6941,11 +7143,7 @@ class _ActivityContent extends StatelessWidget {
         entry.text.startsWith('Review started:') ||
         entry.text.startsWith('Review completed:');
     final statusBadge = _nonNominalStatus(entry.status);
-    final icon = collapsedSummary != null
-        ? Icons.menu_book_outlined
-        : !entry.completed
-        ? Icons.hourglass_top_rounded
-        : effectiveCommand
+    final categoryIcon = effectiveCommand
         ? Icons.terminal_rounded
         : isFileChange
         ? Icons.difference_outlined
@@ -6959,7 +7157,14 @@ class _ActivityContent extends StatelessWidget {
         ? Icons.compress_rounded
         : isReview
         ? Icons.rate_review_outlined
+        : !entry.completed
+        ? Icons.terminal_rounded
         : Icons.check_circle_outline_rounded;
+    final icon = collapsedSummary != null
+        ? Icons.menu_book_outlined
+        : !entry.completed && !inline
+        ? Icons.hourglass_top_rounded
+        : categoryIcon;
     final iconColor = !entry.completed
         ? palette.accent
         : statusBadge != null
@@ -6983,15 +7188,10 @@ class _ActivityContent extends StatelessWidget {
       isError: statusBadge != null,
       trailingAction: trailingAction,
       inline: inline,
-      textWidget: inline && (collapsedSummary != null || !effectiveCommand)
-          ? Text(
-              summary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: palette.textSecondary),
-            )
-          : null,
+      hasDisclosure: hasDisclosure,
+      isExpanded: isExpanded,
+      onToggle: onToggle,
+      disclosureTooltip: disclosureTooltip,
     );
   }
 }

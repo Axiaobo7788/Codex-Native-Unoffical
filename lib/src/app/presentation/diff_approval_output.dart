@@ -422,6 +422,7 @@ class _HistoryEntryView extends StatelessWidget {
     this.commandOutput,
     this.groupedCommands,
     this.showDetailsHeader = true,
+    this.bottomGap,
     this.onForkFromTurn,
     this.onRevertFromTurn,
     this.onEditFromTurn,
@@ -444,6 +445,7 @@ class _HistoryEntryView extends StatelessWidget {
   final _CommandOutputPresentation? commandOutput;
   final Widget? groupedCommands;
   final bool showDetailsHeader;
+  final double? bottomGap;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
   final VoidCallback? onEditFromTurn;
@@ -499,12 +501,23 @@ class _HistoryEntryView extends StatelessWidget {
           )
         : null;
     if (groupedCommands case final group?) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [?detailsHeader, group],
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [?detailsHeader, group],
+          ),
+        ),
       );
     }
     final effectiveAttachments = overrideAttachments ?? item.attachments;
+    final useInlinePreviewDisclosure =
+        inlineActivity &&
+        item.isCommand &&
+        (commandOutput?.hasInlinePreview ?? false);
     return _ConversationEntryView(
       entry: ConversationEntry(
         id: item.id,
@@ -528,13 +541,27 @@ class _HistoryEntryView extends StatelessWidget {
       isActiveSearchMatch: isActiveSearchMatch,
       isReasoning: item.kind == HistoryItemKind.reasoning,
       isCommand: item.isCommand,
+      detailMode: detailMode,
       inlineActivity: inlineActivity,
       revealAssistantCopy: revealAssistantCopy,
+      bottomGap: bottomGap,
       activitySummary: _explorationCaption(),
       activityDetail: commandOutput?.detail,
+      hasActivityDisclosure: useInlinePreviewDisclosure,
+      activityExpanded:
+          useInlinePreviewDisclosure &&
+          (commandOutput?.previewExpanded ?? false),
+      onToggleActivity: useInlinePreviewDisclosure
+          ? commandOutput?.onTogglePreview
+          : null,
+      activityDisclosureTooltip: useInlinePreviewDisclosure
+          ? commandOutput?.previewTooltip
+          : null,
       leadingHeader: detailsHeader,
       trailingAction: item.isCommand
-          ? commandOutput?.action ?? _commandOutputFallback(context)
+          ? (useInlinePreviewDisclosure
+                ? null
+                : commandOutput?.action ?? _commandOutputFallback(context))
           : _savedMcpTextAction(context),
     );
   }
@@ -655,7 +682,12 @@ class _InlineCommandOutput extends StatelessWidget {
     final chunk = viewer.chunk;
     final output = viewer.text;
     return Padding(
-      padding: const EdgeInsetsDirectional.only(start: ThemeTokens.space4),
+      padding: const EdgeInsetsDirectional.only(
+        start:
+            OfficialCodexTheme.activityInlineIconSize +
+            OfficialCodexTheme.activityInlineIconGap,
+        top: OfficialCodexTheme.conversationGroupedItemGap,
+      ),
       child: Container(
         key: const ValueKey('command-output-preview-surface'),
         padding: const EdgeInsets.all(ThemeTokens.space2),
@@ -854,58 +886,44 @@ class _SavedCommandGroupState extends State<_SavedCommandGroup> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = OfficialCodexTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          expanded: _expanded,
-          child: CodexButton(
-            label: widget.label,
-            variant: CodexButtonVariant.ghost,
-            size: CodexButtonSize.sm,
-            icon: Icon(
-              widget.includesExploration
-                  ? Icons.menu_book_outlined
-                  : Icons.terminal_rounded,
-              color: theme.textSecondary,
-            ),
-            trailingIcon: Icon(
-              _expanded
-                  ? Icons.expand_more_rounded
-                  : Icons.chevron_right_rounded,
-              color: theme.textSecondary,
-            ),
-            child: Text(
-              widget.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            onPressed: () {
-              setState(() => _expanded = !_expanded);
-              if (!_expanded) {
-                widget.onCollapse();
-              }
-            },
+        CodexInlineActivityHeader(
+          label: widget.label,
+          leadingIcon: Icon(
+            widget.includesExploration
+                ? Icons.menu_book_outlined
+                : Icons.terminal_rounded,
+            size: OfficialCodexTheme.activityInlineIconSize,
           ),
+          hasDisclosure: true,
+          isExpanded: _expanded,
+          onToggle: () {
+            setState(() => _expanded = !_expanded);
+            if (!_expanded) {
+              widget.onCollapse();
+            }
+          },
         ),
-        if (_expanded)
+        if (_expanded) ...[
+          const SizedBox(height: OfficialCodexTheme.conversationGroupedItemGap),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 224),
+            constraints: const BoxConstraints(
+              maxHeight: OfficialCodexTheme.activityGroupMaxHeight,
+            ),
             child: ListView.builder(
               key: const ValueKey('saved-command-group-items'),
               primary: false,
               shrinkWrap: true,
               scrollCacheExtent: const ScrollCacheExtent.pixels(0),
-              padding: const EdgeInsetsDirectional.only(
-                start: ThemeTokens.space2,
-              ),
+              padding: EdgeInsets.zero,
               itemCount: widget.itemCount,
               itemBuilder: widget.itemBuilder,
             ),
           ),
-        const SizedBox(height: ThemeTokens.space2),
+        ],
+        const SizedBox(height: OfficialCodexTheme.conversationItemGap),
       ],
     );
   }
@@ -931,40 +949,12 @@ class _TurnWorkDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (inline) {
-      final theme = OfficialCodexTheme.of(context);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(
-            expanded: expanded,
-            child: CodexButton(
-              key: actionKey,
-              label: label,
-              variant: CodexButtonVariant.ghost,
-              size: CodexButtonSize.sm,
-              loading: loading,
-              onPressed: onTap,
-              trailingIcon: Icon(
-                expanded
-                    ? Icons.expand_more_rounded
-                    : Icons.chevron_right_rounded,
-                size: 15,
-                color: theme.textSecondary,
-              ),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: theme.textSecondary),
-              ),
-            ),
-          ),
-          const Divider(
-            height: 4,
-            thickness: OfficialCodexTheme.hairlineBorderWidth,
-          ),
-        ],
+      return CodexInlineWorkDivider(
+        triggerKey: actionKey,
+        label: label,
+        isExpanded: expanded,
+        isLoading: loading,
+        onToggle: onTap,
       );
     }
     return CodexActivityDivider(
