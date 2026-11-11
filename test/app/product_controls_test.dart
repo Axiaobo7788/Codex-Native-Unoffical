@@ -2219,6 +2219,179 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'externalizes user attachments above bubble with keyboard detail access and copies full text when collapsed or expanded',
+    (tester) async {
+      String? copiedText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final args = call.arguments as Map<Object?, Object?>;
+            copiedText = args['text'] as String?;
+          } else if (call.method == 'Clipboard.getData') {
+            return <String, Object?>{'text': copiedText};
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      final longPrompt = List.generate(
+        25,
+        (index) => 'User instruction line ${index + 1}',
+      ).join('\n');
+
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController()
+        ..historyTurns = [
+          HistoryTurn(
+            id: 'turn-a6-long',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'hist-user-long',
+                turnId: 'turn-a6-long',
+                kind: HistoryItemKind.user,
+                text: longPrompt,
+                attachments: const [
+                  UserAttachment(
+                    kind: UserAttachmentKind.mention,
+                    label: 'conversation.dart',
+                    path: 'lib/src/app/presentation/conversation.dart',
+                  ),
+                ],
+              ),
+              const HistoryItem(
+                id: 'hist-assistant-long',
+                turnId: 'turn-a6-long',
+                kind: HistoryItemKind.assistant,
+                text: 'Reviewed attachment and prompt.',
+              ),
+            ],
+          ),
+          const HistoryTurn(
+            id: 'turn-a6-attach-only',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'hist-user-attach-only',
+                turnId: 'turn-a6-attach-only',
+                kind: HistoryItemKind.user,
+                text: '',
+                attachments: [
+                  UserAttachment(
+                    kind: UserAttachmentKind.image,
+                    label: 'capture.png',
+                    path: '/tmp/capture.png',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ];
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+
+      // Attachment-only turn renders externalized pill without an empty bubble.
+      expect(
+        find.byKey(const ValueKey('user-attachment-hist-user-attach-only-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('user-message-bubble-hist-user-attach-only')),
+        findsNothing,
+      );
+
+      // Attachment + prompt turn renders pill externalized 8px above bubble, right-aligned.
+      final attachmentChip = find.byKey(
+        const ValueKey('user-attachment-hist-user-long-0'),
+      );
+      final bubble = find.byKey(
+        const ValueKey('user-message-bubble-hist-user-long'),
+      );
+      expect(attachmentChip, findsOneWidget);
+      expect(bubble, findsOneWidget);
+      expect(
+        find.descendant(of: bubble, matching: attachmentChip),
+        findsNothing,
+      );
+      final chipRect = tester.getRect(attachmentChip);
+      final bubbleRect = tester.getRect(bubble);
+      expect(bubbleRect.top - chipRect.bottom, 8.0);
+      expect(chipRect.right, bubbleRect.right);
+
+      // Keyboard focus + Enter opens attachment detail modal.
+      final chipFocus = Focus.of(
+        tester.element(
+          find.descendant(
+            of: attachmentChip,
+            matching: find.byType(GestureDetector),
+          ),
+        ),
+      );
+      chipFocus.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('lib/src/app/presentation/conversation.dart'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Long message starts collapsed (>20 lines): calibrated Flutter SelectableText
+      // holds the visible 19-line prefix (excluding '…' and 'Show more'), while
+      // 225284.y5H2 toolbar Copy message copies the full prompt in both states.
+      expect(find.text('Show more'), findsOneWidget);
+      expect(find.textContaining('User instruction line 25'), findsNothing);
+      final collapsedBubbleText = tester.widget<SelectableText>(
+        find.descendant(of: bubble, matching: find.byType(SelectableText)),
+      );
+      expect(
+        collapsedBubbleText.data,
+        List.generate(
+          19,
+          (index) => 'User instruction line ${index + 1}',
+        ).join('\n'),
+      );
+      await tester.tap(find.byKey(const ValueKey('user-copy-hist-user-long')));
+      await tester.pump();
+      expect(copiedText, longPrompt);
+
+      // Expand to full height: SelectableText now holds full text and Copy message still copies full text.
+      copiedText = null;
+      await tester.tap(
+        find.byKey(const ValueKey('user-expand-hist-user-long')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Show less'), findsOneWidget);
+      expect(find.textContaining('User instruction line 25'), findsOneWidget);
+      final expandedBubbleText = tester.widget<SelectableText>(
+        find.descendant(of: bubble, matching: find.byType(SelectableText)),
+      );
+      expect(expandedBubbleText.data, longPrompt);
+      await tester.tap(find.byKey(const ValueKey('user-copy-hist-user-long')));
+      await tester.pump();
+      expect(copiedText, longPrompt);
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<_ProductRuntimeController> _pumpSelectedApp(WidgetTester tester) async {

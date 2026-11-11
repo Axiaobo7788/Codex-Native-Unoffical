@@ -26,8 +26,9 @@ abstract final class OfficialCodexTheme {
   /// Compact reading column width for constrained viewports (40rem / 640px).
   static const double compactContentWidth = 640.0;
 
-  /// User message bubble max width factor within the reading column.
-  static const double maxUserBubbleWidthFactor = 0.75;
+  /// User message bubble max width factor within the reading column
+  /// (`.bubble-vBnidZ` `--user-chat-width: 70%`).
+  static const double maxUserBubbleWidthFactor = 0.70;
 
   /// Composer max width shares the reading column width.
   static const double composerMaxWidth = maxContentWidth;
@@ -40,8 +41,38 @@ abstract final class OfficialCodexTheme {
   static const double composerRadiusPill = 28.0;
   static const double changesSummaryRadius = 20.0;
 
-  /// User message corner radius (18px / 1.125rem).
-  static const double userMessageRadius = 18.0;
+  /// User message corner radius (`.bubble-vBnidZ` `--radius-2xl: calc(var(--spacing) * 5.5)` = `22px`).
+  static const double userMessageRadius = 22.0;
+
+  /// User message bubble padding (`.bubble-vBnidZ` `--thread-content-margin: 16px`, `py-2.5` = `10px`).
+  static const double userMessageHorizontalPadding = 16.0;
+  static const double userMessageVerticalPadding = 10.0;
+
+  /// User message typography size (`93122` `sansFontSize.default = 14` ->
+  /// `182735` `--font-ui-size: 14px` -> `e77f816560c6.css` `.text-size-chat` = `14px`).
+  static const double userMessageFontSize = 14.0;
+
+  /// User message relaxed line-height multiplier (`leading-relaxed`: `1.625`).
+  static const double userMessageLineHeight = 1.625;
+
+  /// Default collapsed line threshold for long user messages (`dKZq` `collapsedLineCount = 20`).
+  static const int userMessageCollapsedLines = 20;
+
+  /// Bounded collapsed measurement/render slice per collapsed line (`dKZq` `512 * D`).
+  static const int userMessageCollapsedCharsPerLine = 512;
+
+  /// Separation between collapsed user message text/ellipsis block and inline
+  /// disclosure button (`14353.dKZq` `flex-col gap-1` `4px` + `mt-1.5` `6px` = `10px`).
+  static const double userMessageExpandGap = 10.0;
+
+  /// Gap between externalized user attachment row and user bubble (`gap-2` = `8px`).
+  static const double userMessageAttachmentGap = 8.0;
+
+  /// Gap between user bubble and hover/focus turn action controls (`gap-1` = `4px`).
+  static const double userMessageActionGap = 4.0;
+
+  /// Maximum width of a thread attachment pill (`QAOE` `max-w-[320px]`).
+  static const double userAttachmentPillMaxWidth = 320.0;
 
   /// Inset workspace main panel top-left corner radius (12px).
   static const double mainSurfaceRadius = 12.0;
@@ -218,8 +249,9 @@ abstract final class OfficialCodexTheme {
   static const Color darkWorkspaceBackground = Color(0xFF212121); // Tier 1
   static const Color darkElevatedSurface = Color(0xFF2F2F2F); // Tier 2
   static const Color darkModalSurface = Color(0xFF2F2F2F); // Tier 3
-  static const Color darkUserBubbleBackground = Color(0xFF2F2F2F);
-  static const Color darkUserBubbleTranslucent = Color(0x14FFFFFF); // ~8% white
+  // `--color-background-user-message: color-mix(in oklab, var(--color-text) 5%, transparent)`
+  static const Color darkUserBubbleBackground = Color(0x0DECECEC);
+  static const Color darkUserBubbleTranslucent = Color(0x0DECECEC);
   static const Color darkHairlineBorder = Color(
     0x14FFFFFF,
   ); // rgba(255,255,255,0.08)
@@ -250,10 +282,9 @@ abstract final class OfficialCodexTheme {
   static const Color lightWorkspaceBackground = Color(0xFFFFFFFF); // Tier 1
   static const Color lightElevatedSurface = Color(0xFFF4F4F4); // Tier 2
   static const Color lightModalSurface = Color(0xFFFFFFFF); // Tier 3
-  static const Color lightUserBubbleBackground = Color(0xFFF4F4F4);
-  static const Color lightUserBubbleTranslucent = Color(
-    0x0D000000,
-  ); // ~5% black
+  // `--color-background-user-message: color-mix(in oklab, var(--color-text) 5%, transparent)`
+  static const Color lightUserBubbleBackground = Color(0x0D0D0D0D);
+  static const Color lightUserBubbleTranslucent = Color(0x0D0D0D0D);
   // `color-mix(in srgb, var(--color-background-primary-ghost-hover) 60%, var(--color-text) 6%)`
   // -> `color(srgb 0.101961 0.109804 0.121569 / 0.09)` in light mode.
   static const Color lightInlineCodeBackground = Color(0x171A1C1F);
