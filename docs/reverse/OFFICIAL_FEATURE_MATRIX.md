@@ -180,22 +180,32 @@ in the current `READY` queue.
 | **Physical Android Device TLS/Keystore & Camera QR Walkthrough** | No physical Android handset attached to this Linux session. | Blocks final physical-device sign-off for Phase 4, but does not block Desktop/Host or machine-testable functional slices. |
 | **Physical Intel macOS & Developer ID Notarization Gate** | Requires Apple Developer ID credentials and physical Intel hardware. | Hosted CI already verifies universal `arm64 + x86_64` binaries (`42129434391`); signing remains a release-only gate. |
 
-### UI priority override
+### Codex Desktop Completion priority override
 
-The capability classifications below remain valid, but the current program
-priority is **Desktop UI Structural Reconvergence**. Functional rows marked
-READY are temporarily DEFERRED_BY_UI_PRIORITY; do not auto-select them merely
-because they are the next machine-actionable feature. First refresh the current
-official Codex Desktop structure and translate the primary UI hierarchy into
-Flutter. This override ends only after the shell/sidebar/workspace/timeline/
-composer structural milestone is revalidated and recorded in PROJECT_STATUS.md.
-The [structural map](OFFICIAL_UI_STRUCTURAL_MAPPING.md) separates the translated
-Native checkpoint from the still-open signed-in reference and Human gates.
+The project is now narrowed to **Codex Desktop Completion**, with no reduction in
+quality. Functional parity and high-fidelity UI are parallel completion tracks.
+
+- Functional rows are no longer deferred merely because Golden-State UI work
+  exists.
+- Golden-State UI rows remain active and high-standard; they are not downgraded
+  to optional polish.
+- Codex should continuously refresh the supported functional matrix and close
+  real capability/workflow gaps.
+- Gemini should continuously close evidenced Codex Desktop visual/interaction
+  gaps in coherent Golden-State slices.
+- Chat/Work/Responses/mobile/Direct Host Remote expansion is deferred unless it
+  is necessary to verify a Codex Desktop path.
+- `PRIVATE_ONLY`, unavailable physical gates and unsupported proprietary
+  services remain excluded rather than bypassed.
+
+Completion requires both the functional matrix and Codex Desktop Golden-State
+matrix to have no remaining machine-actionable gap inside the narrowed scope.
 
 ### 3.6 Active queue after consolidation
 
 | State | Slice | Value, evidence and implementation boundary |
 |---|---|---|
+| `READY` | **Fresh Codex Desktop functional-parity audit** | Re-audit current Native HEAD against the current public/stable stock app-server schema, deliberately adopted public experimental stock surfaces, and reproducible official Codex Desktop workflows. Produce an explicit capability/workflow matrix with `MATCH`, `PARTIAL`, `MISSING`, `PRIVATE_ONLY`, `BLOCKED`, `NOT_APPLICABLE` and evidence grade. This audit runs in parallel with Golden-State UI work and is the authoritative source for the next functional slice. |
 | `HUMAN_REVIEW_PENDING` | Desktop primary structural translation | Current build and signed-in active capture ground the rail, contextual sidebar, header, inline activity and bottom composer. Native keeps one conversation through resize. Comparable signed-in compact, empty, dark, expanded activity and open secondary surfaces remain open. [Evidence and known differences](OFFICIAL_UI_STRUCTURAL_MAPPING.md) |
 | `HUMAN_REVIEW_PENDING` | F15 local Goal and Review target presentation | Both use the public stock schema. Objective copy, focus, dialog flow, and interaction feel need separate Human feedback. |
 | `HUMAN_REVIEW_PENDING` | F16 scoped Section browsing | Native browses one bounded section at a time in stock order. Direct stock and Host calls verified pagination. Subjective browse and filter interactions still need Human feedback. |

@@ -1,109 +1,128 @@
 # Project Status
 
 **Program mode: `SELF_ITERATION`**
-**Current phase: Desktop UI Visual Parity Loop (post-structural priority override within Official Client Convergence).**
-**Program objective: reach 0.x pre-release/RC readiness.**
+**Current phase: Codex Desktop Completion — Functional Parity + High-Fidelity UI.**
+**Program objective: finish the Codex Desktop product before expanding scope.**
 
-The Desktop priority governs slice selection. Phase checkpoints and
-slice-scoped Human review preserve the broader program objective.
+This phase deliberately narrows **scope**, not quality. The first major target is
+the Codex Desktop experience itself: supported Codex functionality should have no
+known material gap versus the legitimate current official/stock surface, and the
+Desktop UI should continue toward high-fidelity clean-room translation rather
+than settling for a merely usable approximation.
 
-Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md) for the living queue, [Architecture](docs/ARCHITECTURE.md) for system boundaries, and [Decisions](docs/DECISIONS.md) for ADRs. Historical checkpoints are in the [pre-consolidation archive](docs/history/PROJECT_STATUS_through_F14.md), the [F15–F23 record](docs/history/CONVERGENCE_F15_F23.md), and the [Desktop checkpoint history](docs/history/DESKTOP_UI_CHECKPOINTS_through_fe67973.md).
+Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md)
+for the living functional queue, [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+and later Golden States for the UI queue, [Architecture](docs/ARCHITECTURE.md) for
+system boundaries, and [Decisions](docs/DECISIONS.md) for ADRs.
 
-## Active priority override
+## Codex Desktop completion scope
 
-- Human side-by-side comparison of the current Native window with the current
-  official Codex Desktop rejected the prior structural-fidelity assumption:
-  correct individual tokens do not compensate for a divergent shell/component
-  hierarchy.
-- **UI reconstruction is now the highest-priority machine-actionable program.**
-  Existing functional READY items remain valid backlog entries but are
-  DEFERRED_BY_UI_PRIORITY until the core official Desktop shell is structurally
-  reconverged.
-- The implementation contract is **Do not design. Translate.** Refresh the
-  current official hierarchy first, then map it one-to-one into Flutter using
-  existing domain/controller behavior wherever possible.
-- Previous UI reverse documents remain useful token/component evidence, but
-  structural claims must be revalidated against the current official window.
-  Older geometry tests are regression evidence, not proof of current parity.
-- Codex and Gemini remain equal peers through the official agy TUI. During the
-  active Golden-State parity phase, **Gemini is the default presentation
-  writer**: it refreshes live/ASAR/visual evidence, owns the corresponding
-  Flutter presentation slice, captures Native, and iterates on measured visual
-  divergence. **Codex is the default systems-integrity owner and adversarial
-  reviewer**: it protects architecture/state/memory/protocol boundaries, adds
-  targeted regressions, exercises real stock/runtime paths, integrates, and
-  runs shared gates/CI. Codex should not take over a presentation slice unless
-  Gemini is blocked, the change is predominantly systems work, or ownership is
-  explicitly released. Prefer coherent Golden-State row-sized UI slices over
-  one remote push/full-CI cycle per micro-adjustment.
-- F33+ remains DEFERRED_BY_UI_PRIORITY while evidenced Golden-State work
-  can progress. Freeze only the state that lacks evidence. When no UI state
-  can progress, resume independent functional READY or RESEARCH_MORE work.
+Two first-class tracks run in parallel:
+
+### Track F — Codex functional parity
+
+- Re-audit current Native HEAD against the current public/stable stock app-server
+  schema, deliberately adopted public experimental stock surfaces, and
+  reproducible official Codex Desktop workflows.
+- Close every supported Native `MISSING` or material `PARTIAL` capability or
+  workflow gap.
+- Keep real-stock/runtime verification, lifecycle correctness, bounded memory,
+  state recovery, security and truthful unsupported/error behavior at the
+  existing high standard.
+- A green test suite is necessary but not sufficient; after the living queue
+  closes, perform another fresh parity audit.
+
+### Track U — Codex Desktop high-fidelity UI
+
+- Continue the Golden-State translation contract at high standard.
+- Do not downgrade to "good enough" visual approximation merely because the
+  feature is reachable.
+- Current official live behavior, screenshots, ASAR/CSS/component evidence and
+  same-state Native captures remain the translation specification.
+- Close machine-actionable `PARTIAL` / `DIVERGED` / `MISSING` Codex Desktop
+  presentation rows to `MATCH` / `PARITY_ACCEPTABLE`, or explicitly prove the
+  remaining state is evidence-blocked / Human-only.
+- Human visual acceptance remains distinct from machine verification.
+
+Neither track blocks the other from making independent progress. Functional work
+must not wait for cosmetic UI closure, and UI work must not stop merely because a
+functional slice is still open.
+
+## Deferred expansion while Codex Desktop is incomplete
+
+Preserve existing work, but do not let these areas steal program priority unless
+they are required to verify a Codex Desktop workflow:
+
+- independent ChatGPT Chat backend;
+- Work cloud orchestration;
+- Responses backend;
+- new Android / Direct Host Remote feature expansion beyond maintaining existing
+  correctness;
+- mobile-first presentation expansion;
+- public UI package extraction / MD3 alternative skin;
+- unrelated infrastructure or release polish not needed by the current Codex
+  Desktop completion gate.
+
+Existing supported Codex Desktop integrations such as Skills, Plugins, Apps,
+MCP, Review, Goals, local runtime diagnostics and any legitimate stock Desktop
+capability remain **inside** Track F even if they are optional or experimental.
+
+Private/internal first-party services remain `PRIVATE_ONLY`; high standards do
+not authorize adopting unsupported private APIs or credentials.
 
 ## Current work selector
 
-The structural translation checkpoint is established. [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
-is the current acceptance matrix for the signed-in wide active conversation.
-Use the current official-to-Native divergence to choose the next correction.
-The screen remains in machine-actionable reconstruction.
+Run both tracks with equal seriousness:
 
-Priority order:
+1. Codex/Codex-owned work: fresh functional-parity audit, then highest-value
+   supported `MISSING` / material `PARTIAL` / `READY` functional gap.
+2. Gemini/Gemini-owned work: highest-impact evidenced Golden-State UI row or
+   coherent row cluster.
+3. Use separate worktrees and one writer per overlapping file surface.
+4. Integrate coherent checkpoints, run targeted + shared gates, exercise real
+   stock paths where practical, update both matrices, then immediately select
+   the next pair.
+5. If one track becomes evidence-blocked, continue the other. Do not idle the
+   program while either track has machine-actionable work.
 
-1. same-state official/Native screenshot or live-behavior divergence;
-2. explicit Human feedback;
-3. correctness/accessibility/security/data-loss/state regression caused or
-   exposed by the translated UI;
-4. bounded hardening only when it blocks the next comparison or normal use.
+### Codex Desktop completion gate
 
-Tests remain mandatory gates. They are not the default source of new UI slices.
-Speculative extreme-size combinations and test-only follow-ups should be recorded
-and deferred unless they expose a material defect.
+Do not declare the Codex Desktop target complete until all are true:
 
-The wide shell, supported stock conversation controls, lazy activity/output,
-Goal side tab and question/composer stack have working source translations.
-Current deltas remain row-scoped in the Golden-State matrix. The rich-prose
-cluster, inline-code pills and ordinary composer action have current source
-translations. Routed Customize destination/sidebar/focus structure also has a
-source translation and packaged-stock replay.
-Home, open Changes, Review, compact and dark keep separate state gates.
+- Track F has no known supported Native `MISSING` or material `PARTIAL`
+  functional/workflow row after a fresh audit;
+- every supported capability has a reachable, truthful Desktop access path and
+  real-stock evidence where locally practical;
+- Track U's current Codex Desktop Golden States have no machine-actionable
+  `PARTIAL` / `DIVERGED` / `MISSING` row;
+- no known P0/P1 correctness, security, state-loss, lifecycle, bounded-memory,
+  accessibility or normal-use defect remains;
+- remaining differences are explicitly visual/Human-only, `EVIDENCE_BLOCKED`,
+  `BLOCKED`, `PRIVATE_ONLY`, `RESEARCH_EXHAUSTED`, or outside the narrowed
+  Codex Desktop scope.
+
+High fidelity remains a goal of this phase. Narrowing scope must never be used as
+permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Gemini completed the six-file A6 user-message slice at
-  `77d34019c7836cedd42155404e640ca0da2c8e4f`, based on `1ec254d`, and explicitly
-  released its write surfaces and heavy slot after packaged wide/narrow replay.
-  Codex owns independent serialized verification and integration; Gemini retains
-  presentation-fix ownership for concrete findings. No controller, protocol,
-  history or transport changes were needed. Golden State A remains `PARTIAL`.
-- The independent ASCII snapshot matches all 196 source/test/tool files and
-  package metadata. Format, strict analysis, the 65-root pure-Dart boundary,
-  565 default Flutter cases, five separately enabled direct-stock cases and the
-  100/1,000-turn history benchmark with ten 3 MiB outputs passed. A frozen prior
-  A7 release independently opened new real stock-persisted long user text and an
-  attachment, copied the full prompt exactly, and exited App/Host/stock. A fresh
-  source-77 release also passed Rust fmt/Clippy/100 tests, the clean two-job
-  Linux build/83-library closure and pure-Dart MCP smoke. Its independent AOT
-  `4b703ae5…` then opened the same stock history, copied full text exactly while
-  collapsed and expanded, opened/closed attachment details, resized to `820 px`,
-  switched threads and exited App/Host/stock. Startup resize/click observations
-  and expansion scroll-follow behavior remain calibrated evidence, not claims
-  of official interaction equivalence.
-- The published baseline `ca17d84e079bf07da51ed6f3d7b7dddf4880f853` passed all
-  three hosted jobs in [43060044321, attempt 2](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43060044321).
-  Linux and Windows passed on attempt 1; macOS executed no steps because hosted
-  arm64 capacity could not supply a runner. Its same-SHA job-only retry passed.
-  Earlier A6/A7 Linux attempts failed dependency downloads before project checks;
-  the bounded recovery and all negative evidence are in [Research](docs/RESEARCH.md#desktop-ui-verification--hosted-ubuntu-mirror-failures).
-  The new A6 integration will need its own exact-HEAD CI result.
-- The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
-  the kernel snapshot included two Flutter compiler pipelines and six test
-  runners. Those old workers are gone. This is not a Native memory-leak
-  diagnosis or fix. Peers now serialize heavy work, use Flutter test
-  `--concurrency=1`, and cap Cargo at two jobs. Installed Flutter invokes Ninja
-  directly, so builds use `--config-only` followed by `cmake --build … --target
-  install --parallel 2`; `ninja -j 2` was observed. No subsequent kernel OOM was
-  found during verification. User desktop applications, swap and account
-  settings were not changed.
+- Latest integrated UI checkpoint `11e2d3ab` preserves Gemini's A6
+  user-message/attachment translation and Codex's independent systems/runtime
+  validation. That work remains valid and Track U continues from it.
+- Under Codex Desktop Completion, Gemini remains the default presentation owner
+  for Track U coherent Golden-State slices. Codex remains the default systems /
+  protocol / functional-parity owner for Track F and adversarial reviewer of UI
+  changes. They are equal peers; ownership follows the current slice.
+- The immediate next Codex-owned action is a **fresh Codex Desktop functional
+  parity audit**, not merely consuming the old READY list. The immediate
+  Gemini-owned action is the highest-impact evidenced remaining Golden-State UI
+  row/cluster.
+- Live coordination continues only through the official `agy` TUI. Use separate
+  worktrees and avoid overlapping writes. Heavy Flutter/Cargo validation remains
+  serialized after the recorded host OOM.
+- Integration checkpoints must update both the functional matrix and UI
+  Golden-State evidence. Closing either one track alone is not permission to end
+  the program.
 
 ## Current checkpoints
 

@@ -139,11 +139,38 @@ Default specialization is a routing hint, not an exclusive boundary:
   other slice when it currently has the better context. Do not duplicate the
   same implementation merely to compare agents.
 
+#### Codex Desktop Completion dual-track override
+
+When `PROJECT_STATUS.md` names **Codex Desktop Completion**, scope is narrowed
+without lowering standards.
+
+- Run two first-class tracks in parallel:
+  - **Track F — functional parity:** close supported Codex Desktop
+    `MISSING` / material `PARTIAL` workflow and capability gaps.
+  - **Track U — high-fidelity UI:** continue Golden-State clean-room translation
+    until machine-actionable Codex Desktop presentation gaps are closed.
+- Track F and Track U are both completion requirements. Neither may be demoted to
+  "good enough" merely to ship sooner.
+- Codex preferentially owns functional/schema/protocol/state/runtime slices and
+  systems-integrity review. Gemini preferentially owns presentation/evidence/
+  same-state UI translation. Both remain equal peers.
+- Keep independent work moving in both tracks. One blocked Human/evidence gate
+  freezes only that slice, not the other track.
+- Defer new Chat/Work/Responses/mobile/Direct-Host-Remote expansion and unrelated
+  product scope until Codex Desktop completion, unless needed to verify or fix a
+  Codex Desktop path. Preserve existing code and correctness.
+- Private/internal services remain excluded even if first-party UI depends on
+  them. Functional-parity claims are scoped to legitimate supported/reproducible
+  Codex functionality.
+- After apparent closure, run a fresh functional audit and a fresh UI
+  Golden-State audit before declaring the narrowed target complete.
+
 #### Golden-State UI convergence ownership override
 
 While `PROJECT_STATUS.md` names an active Desktop UI Visual Parity / Golden-State
-phase, the peers remain equal but the default **write ownership** becomes
-intentionally asymmetric by surface:
+phase **or an active Track U inside Codex Desktop Completion**, the peers remain
+equal but the default **write ownership** becomes intentionally asymmetric by
+surface:
 
 - **Antigravity/Gemini is the default presentation owner** for visual/interaction
   translation slices whose main purpose is official Desktop fidelity. It should

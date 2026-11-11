@@ -16,6 +16,26 @@ Observable official hierarchy, geometry, state and interaction are the
 clean-room implementation specification. Existing Native domain/controller
 behavior should be retained and re-presented through the translated hierarchy.
 
+## Codex Desktop Completion role
+
+This UI plan remains a **completion requirement**, not optional polish, but it is
+no longer the only program scheduler. Codex Desktop Completion runs this
+high-fidelity UI track in parallel with a functional-parity track.
+
+The quality bar remains high:
+
+- do not replace evidenced translation with generic "usable enough" UI;
+- continue to close machine-actionable Golden-State `PARTIAL` /
+  `DIVERGED` / `MISSING` rows;
+- preserve same-state evidence, clean-room constraints and Human-review
+  separation;
+- allow independent functional work to progress concurrently instead of
+  deferring it behind visual-only slices.
+
+Scope, not fidelity, has been reduced: Chat, Work, broader mobile/Remote
+expansion and unrelated product directions wait until Codex Desktop itself is
+finished.
+
 ## Current acceptance contract
 
 The [Golden State A matrix](OFFICIAL_UI_GOLDEN_STATE_A.md) owns the wide

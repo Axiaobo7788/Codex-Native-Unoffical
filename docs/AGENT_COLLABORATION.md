@@ -235,6 +235,22 @@ When reviewing:
 - distinguish correctness issues from stylistic preference;
 - do not rewrite the slice merely to demonstrate another approach.
 
+### Codex Desktop Completion: parallel F/U tracks
+
+During the narrowed Codex Desktop Completion phase, use both peers concurrently
+where file surfaces permit:
+
+- **Codex / Track F:** fresh supported-feature audit, protocol/schema/runtime
+  integration, state machines, functional gaps, correctness and real-stock
+  workflow validation.
+- **Gemini / Track U:** official visual evidence, Golden-State mapping, Flutter
+  presentation implementation, same-state capture and visual correction.
+
+Neither track is subordinate and neither is optional. Integrate coherent
+checkpoints from both. If one track is evidence-blocked, continue the other.
+Do not let Chat/Work/mobile/Remote expansion consume the active pair while known
+Codex Desktop functional or UI gaps remain.
+
 ## 8. UI collaboration
 
 Gemini is the preferred first owner of UI fidelity work because it can spend
