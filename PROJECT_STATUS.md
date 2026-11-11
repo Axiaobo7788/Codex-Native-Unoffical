@@ -135,12 +135,20 @@ compact and dark variants have separate evidence gates.
 
 ## Current checkpoint
 
+- `f772470` translates the stock Other editor's ArrowUp behavior.
+  The packaged Linux run verified last-option selection, restoration
+  of the short draft and normal caret movement in the wrapped draft.
+  The 530 default Flutter tests and ASCII-path analysis passed.
+  A7's next implementation uses the peer-verified nested completed
+  activity contract and retains bounded item reads.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+
 - `0e7c46b` aligns the multi-question stock header with the current
   official title and trailing stepper. The packaged Linux walkthrough
   moved by chevrons and Left/Right and submitted both retained drafts
   under the correct stock question IDs. All 530 default Flutter cases,
-  five opt-in stock cases and ASCII-path analysis passed. ArrowUp from
-  Other and the ordinary interrupt route remain separate A10 work.
+  five opt-in stock cases and ASCII-path analysis passed. The ordinary
+  interrupt route remains separate A10 work.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `0c45b67` gives project New chat stable keyboard traversal. A Linux
