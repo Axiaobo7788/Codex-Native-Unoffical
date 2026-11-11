@@ -153,10 +153,20 @@ compact and dark variants have separate evidence gates.
   resolution. Four new typed controller regressions fail on the base. One
   bounded operation token and captured request identity protect submit,
   cancellation and MCP responses. Disposal invalidates pending operations.
-  Strict ASCII analysis, 29 controller/widget cases and 26 protocol/simulated
+  Strict ASCII analysis, 31 controller/widget cases and 26 protocol/simulated
   cross-feature cases passed. The specific delayed-completion race is typed
   test evidence. Real-stock walkthrough and shared gates belong to the
   integrated checkpoint.
+- Peer review accepted the typed operation-kind correction. An unrelated
+  resolved event cannot retire another request kind with the same ID. A typed
+  authoritative resolution still retires an active write after its row leaves
+  the bounded projection. The cross-kind regression fails at `c910a97` and
+  passes with the correction. The suggested retirement on arbitrary same-ID
+  replacement or projection eviction was reclassified NOT REPRODUCED for the
+  supported adapter. It suppresses in-flight duplicate IDs, emits typed
+  resolution on close and shares a 32-request upstream budget. Local row
+  eviction preserves write serialization. The operation record remains one
+  slot and compares its child Object token, preserving the public getters.
 
 ## Current checkpoint
 

@@ -183,6 +183,69 @@ void main() {
       expect(disposedController.errorMessage, isNull);
     },
   );
+  test('unrelated resolution cannot retire another request kind', () async {
+    final elicitationGate = Completer<void>();
+    gateway.responses[1] = elicitationGate;
+    gateway.elicitations.add(
+      McpElicitationRequestedEvent(
+        request: McpElicitationRequest(
+          requestId: 1,
+          serverName: 'fixture',
+          threadId: 'thread-1',
+          message: 'Provide fixture input',
+          mode: McpElicitationMode.form,
+        ),
+      ),
+    );
+    final elicitation = controller.respondToElicitation(
+      1,
+      McpElicitationAction.decline,
+    );
+    gateway.events.add(const UserInputResolvedEvent(requestId: 1));
+    expect(controller.isSubmitting(1), isTrue);
+    gateway.elicitations.add(const McpElicitationResolvedEvent(requestId: 1));
+    elicitationGate.complete();
+    await elicitation;
+
+    final inputGate = Completer<void>();
+    gateway.responses[1] = inputGate;
+    gateway.events.add(UserInputRequestedEvent(request: _request(1)));
+    final submit = controller.submit(1, const {});
+    gateway.elicitations.add(const McpElicitationResolvedEvent(requestId: 1));
+    expect(controller.isSubmitting(1), isTrue);
+    gateway.events.add(const UserInputResolvedEvent(requestId: 1));
+    inputGate.complete();
+    await submit;
+    expect(controller.submittingRequestId, isNull);
+  });
+
+  test(
+    'projection eviction preserves the write until typed resolution',
+    () async {
+      final bounded = UserInputController(gateway: gateway, maxPending: 1);
+      addTearDown(bounded.dispose);
+      final first = Completer<void>();
+      final second = Completer<void>();
+      gateway.responses.addAll({0: first, 1: second});
+      gateway.events.add(UserInputRequestedEvent(request: _request(0)));
+      final firstSubmit = bounded.submit(0, const {});
+      gateway.events.add(UserInputRequestedEvent(request: _request(1)));
+      expect(bounded.pending.single.requestId, 1);
+      expect(bounded.isSubmitting(0), isTrue);
+      await bounded.submit(1, const {});
+      expect(gateway.submissions, hasLength(1));
+
+      gateway.events.add(const UserInputResolvedEvent(requestId: 0));
+      expect(bounded.submittingRequestId, isNull);
+      final secondSubmit = bounded.submit(1, const {});
+      first.complete();
+      await firstSubmit;
+      expect(bounded.isSubmitting(1), isTrue);
+      second.complete();
+      await secondSubmit;
+      expect(bounded.pending, isEmpty);
+    },
+  );
 }
 
 UserInputRequest _request(Object requestId) => UserInputRequest(
