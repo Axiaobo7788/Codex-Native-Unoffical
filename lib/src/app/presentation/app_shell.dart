@@ -99,88 +99,334 @@ class _ConnectedWorkspace extends StatefulWidget {
   State<_ConnectedWorkspace> createState() => _ConnectedWorkspaceState();
 }
 
+enum _DesktopShellDestination { home, customize }
+
+typedef _DesktopNavigationEntry = ({
+  _DesktopShellDestination destination,
+  String? threadId,
+  _EcosystemSection customizeSection,
+});
+
+typedef _EcosystemContextKey = ({String cwd, String? threadId});
+
 class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
-  static const _maxThreadVisits = 32;
+  static const _maxNavigationEntries = 32;
   final _conversationKey = GlobalKey<_ConversationPanelState>();
-  final _threadVisits = <String>[];
-  var _threadVisitIndex = -1;
-  String? _pendingThreadVisit;
+  final _navigationEntries = <_DesktopNavigationEntry>[];
+  var _navigationIndex = -1;
+  var _navigationOperationEpoch = 0;
+  _DesktopNavigationEntry? _pendingNavigationEntry;
+  var _activeDestination = _DesktopShellDestination.home;
+  var _activeCustomizeSection = _EcosystemSection.plugins;
+  var _isCompactLayout = false;
   var _desktopLeftPanelWidth = OfficialCodexTheme.desktopLeftPanelWidth;
+  late String _workingDirectory;
+  _EcosystemController? _customizeController;
+  _EcosystemContextKey? _customizeControllerKey;
 
   @override
   void initState() {
     super.initState();
-    _bindThreadVisits();
+    _workingDirectory = widget.defaultWorkingDirectory;
+    _bindNavigationState();
   }
 
   @override
   void didUpdateWidget(covariant _ConnectedWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.threadController != widget.threadController) {
-      oldWidget.threadController.removeListener(_recordThreadVisit);
-      _bindThreadVisits();
+    if (oldWidget.defaultWorkingDirectory != widget.defaultWorkingDirectory &&
+        _workingDirectory == oldWidget.defaultWorkingDirectory) {
+      _workingDirectory = widget.defaultWorkingDirectory;
+    }
+    if (oldWidget.threadController != widget.threadController ||
+        oldWidget.runtimeController != widget.runtimeController ||
+        oldWidget.userInputController != widget.userInputController) {
+      oldWidget.threadController.removeListener(_handleThreadControllerChanged);
+      _disposeCustomizeController();
+      _bindNavigationState();
+    } else {
+      _syncCustomizeControllerContext();
     }
   }
 
   @override
   void dispose() {
-    widget.threadController.removeListener(_recordThreadVisit);
+    widget.threadController.removeListener(_handleThreadControllerChanged);
+    _disposeCustomizeController();
     super.dispose();
   }
 
-  void _bindThreadVisits() {
-    _threadVisits.clear();
-    _pendingThreadVisit = null;
-    if (widget.threadController.selectedThread?.id case final threadId?) {
-      _threadVisits.add(threadId);
-    }
-    _threadVisitIndex = _threadVisits.length - 1;
-    widget.threadController.addListener(_recordThreadVisit);
+  _EcosystemContextKey get _currentEcosystemContextKey => (
+    cwd: (widget.threadController.selectedThread?.cwd ?? _workingDirectory)
+        .trim(),
+    threadId: widget.threadController.selectedThread?.id,
+  );
+
+  void _disposeCustomizeController() {
+    _customizeController?.dispose();
+    _customizeController = null;
+    _customizeControllerKey = null;
   }
 
-  void _recordThreadVisit() {
-    final threadId = widget.threadController.selectedThread?.id;
-    final current = _threadVisitIndex < 0
-        ? null
-        : _threadVisits[_threadVisitIndex];
-    if (threadId == current ||
-        (threadId != null && threadId == _pendingThreadVisit)) {
+  _EcosystemController _ensureCustomizeController() {
+    final key = _currentEcosystemContextKey;
+    final existing = _customizeController;
+    if (existing != null && _customizeControllerKey == key) {
+      return existing;
+    }
+    existing?.dispose();
+    final created = _EcosystemController(
+      gateway: widget.runtimeController,
+      cwd: key.cwd,
+      threadId: key.threadId,
+      threadController: widget.threadController,
+      userInputController: widget.userInputController,
+      isModal: false,
+      initialSection: _activeCustomizeSection,
+    );
+    _customizeController = created;
+    _customizeControllerKey = key;
+    return created;
+  }
+
+  void _syncCustomizeControllerContext() {
+    final existing = _customizeController;
+    if (existing == null) {
+      if (_activeDestination == _DesktopShellDestination.customize) {
+        _ensureCustomizeController();
+      }
+      return;
+    }
+    final key = _currentEcosystemContextKey;
+    if (_customizeControllerKey == key) {
+      return;
+    }
+    existing.dispose();
+    _customizeController = null;
+    _customizeControllerKey = null;
+    if (_activeDestination == _DesktopShellDestination.customize) {
+      _ensureCustomizeController();
+    }
+  }
+
+  void _handleWorkingDirectoryChanged(String nextDirectory) {
+    final normalized = nextDirectory.trim();
+    if (normalized.isEmpty || normalized == _workingDirectory) {
       return;
     }
     setState(() {
-      if (threadId == null) {
-        _threadVisits.clear();
-      } else {
-        _threadVisits.removeRange(_threadVisitIndex + 1, _threadVisits.length);
-        _threadVisits.add(threadId);
-        if (_threadVisits.length > _maxThreadVisits) {
-          _threadVisits.removeAt(0);
-        }
-      }
-      _threadVisitIndex = _threadVisits.length - 1;
+      _workingDirectory = normalized;
+      _syncCustomizeControllerContext();
     });
   }
 
-  Future<void> _moveThreadVisit(int delta) async {
-    final controller = widget.threadController;
-    final index = _threadVisitIndex + delta;
-    if (_pendingThreadVisit != null ||
-        controller.mutating ||
-        index < 0 ||
-        index >= _threadVisits.length) {
+  void _bindNavigationState() {
+    ++_navigationOperationEpoch;
+    _navigationEntries.clear();
+    _pendingNavigationEntry = null;
+    if (widget.threadController.selectedThread?.id case final threadId?) {
+      _navigationEntries.add((
+        destination: _DesktopShellDestination.home,
+        threadId: threadId,
+        customizeSection: _activeCustomizeSection,
+      ));
+    }
+    _navigationIndex = _navigationEntries.length - 1;
+    widget.threadController.addListener(_handleThreadControllerChanged);
+    if (_activeDestination == _DesktopShellDestination.customize) {
+      _ensureCustomizeController();
+    }
+  }
+
+  void _pushNavigationEntry(_DesktopNavigationEntry entry) {
+    final current =
+        _navigationIndex >= 0 && _navigationIndex < _navigationEntries.length
+        ? _navigationEntries[_navigationIndex]
+        : null;
+    if (current == entry) {
       return;
     }
-    final threadId = _threadVisits[index];
-    setState(() => _pendingThreadVisit = threadId);
-    try {
-      await controller.selectThread(threadId);
-    } finally {
-      if (mounted && identical(controller, widget.threadController)) {
+    if (_navigationIndex < _navigationEntries.length - 1) {
+      _navigationEntries.removeRange(
+        _navigationIndex + 1,
+        _navigationEntries.length,
+      );
+    }
+    _navigationEntries.add(entry);
+    if (_navigationEntries.length > _maxNavigationEntries) {
+      _navigationEntries.removeAt(0);
+    }
+    _navigationIndex = _navigationEntries.length - 1;
+  }
+
+  void _handleThreadControllerChanged() {
+    final threadId = widget.threadController.selectedThread?.id;
+    final pending = _pendingNavigationEntry;
+    if (pending != null && threadId != null && threadId == pending.threadId) {
+      _syncCustomizeControllerContext();
+      return;
+    }
+    final current =
+        _navigationIndex >= 0 && _navigationIndex < _navigationEntries.length
+        ? _navigationEntries[_navigationIndex]
+        : null;
+    final previousContextKey = _customizeControllerKey;
+    final nextContextKey = _currentEcosystemContextKey;
+    final threadChanged = threadId != current?.threadId;
+    if (!threadChanged && previousContextKey == nextContextKey) {
+      return;
+    }
+    setState(() {
+      _syncCustomizeControllerContext();
+      if (!threadChanged) {
+        return;
+      }
+      if (!_isCompactLayout &&
+          _activeDestination == _DesktopShellDestination.customize) {
+        if (current != null &&
+            current.destination == _DesktopShellDestination.customize) {
+          _navigationEntries[_navigationIndex] = (
+            destination: _DesktopShellDestination.customize,
+            threadId: threadId,
+            customizeSection: current.customizeSection,
+          );
+        }
+        return;
+      }
+      if (threadId == null &&
+          _activeDestination == _DesktopShellDestination.home) {
+        _navigationEntries.clear();
+        _navigationIndex = -1;
+        return;
+      }
+      if (threadId != null) {
+        _activeDestination = _DesktopShellDestination.home;
+        _pushNavigationEntry((
+          destination: _DesktopShellDestination.home,
+          threadId: threadId,
+          customizeSection: _activeCustomizeSection,
+        ));
+      }
+    });
+  }
+
+  void _selectHomeDestination({bool requestConversationFocus = true}) {
+    if (_activeDestination == _DesktopShellDestination.home) {
+      if (_pendingNavigationEntry != null) {
         setState(() {
-          if (controller.selectedThread?.id == threadId) {
-            _threadVisitIndex = index;
+          ++_navigationOperationEpoch;
+          _pendingNavigationEntry = null;
+        });
+      }
+      if (requestConversationFocus) {
+        _conversationKey.currentState?._conversationFocusNode.requestFocus();
+      }
+      return;
+    }
+    setState(() {
+      ++_navigationOperationEpoch;
+      _pendingNavigationEntry = null;
+      _activeDestination = _DesktopShellDestination.home;
+      _pushNavigationEntry((
+        destination: _DesktopShellDestination.home,
+        threadId: widget.threadController.selectedThread?.id,
+        customizeSection: _activeCustomizeSection,
+      ));
+    });
+    if (requestConversationFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _activeDestination == _DesktopShellDestination.home) {
+          _conversationKey.currentState?._conversationFocusNode.requestFocus();
+        }
+      });
+    }
+  }
+
+  void _selectCustomizeDestination({_EcosystemSection? section}) {
+    final targetSection = section ?? _activeCustomizeSection;
+    final currentThreadId = widget.threadController.selectedThread?.id;
+    if (_activeDestination == _DesktopShellDestination.customize &&
+        _activeCustomizeSection == targetSection) {
+      if (_pendingNavigationEntry != null) {
+        setState(() {
+          ++_navigationOperationEpoch;
+          _pendingNavigationEntry = null;
+        });
+      }
+      return;
+    }
+    setState(() {
+      ++_navigationOperationEpoch;
+      _pendingNavigationEntry = null;
+      if (_navigationEntries.isEmpty &&
+          _activeDestination == _DesktopShellDestination.home) {
+        _pushNavigationEntry((
+          destination: _DesktopShellDestination.home,
+          threadId: currentThreadId,
+          customizeSection: _activeCustomizeSection,
+        ));
+      }
+      _activeDestination = _DesktopShellDestination.customize;
+      _activeCustomizeSection = targetSection;
+      final controller = _ensureCustomizeController();
+      controller.setSection(targetSection);
+      _pushNavigationEntry((
+        destination: _DesktopShellDestination.customize,
+        threadId: currentThreadId,
+        customizeSection: targetSection,
+      ));
+    });
+  }
+
+  Future<void> _moveNavigationVisit(int delta) async {
+    final controller = widget.threadController;
+    final index = _navigationIndex + delta;
+    if (_pendingNavigationEntry != null ||
+        controller.mutating ||
+        index < 0 ||
+        index >= _navigationEntries.length) {
+      return;
+    }
+    final operationEpoch = ++_navigationOperationEpoch;
+    final target = _navigationEntries[index];
+    final currentThreadId = controller.selectedThread?.id;
+    final needsThreadSelect =
+        target.threadId != null && target.threadId != currentThreadId;
+    if (!needsThreadSelect) {
+      setState(() {
+        _pendingNavigationEntry = null;
+        _navigationIndex = index;
+        _activeDestination = target.destination;
+        if (target.destination == _DesktopShellDestination.customize) {
+          _activeCustomizeSection = target.customizeSection;
+          final customize = _ensureCustomizeController();
+          customize.setSection(target.customizeSection);
+        } else {
+          _syncCustomizeControllerContext();
+        }
+      });
+      return;
+    }
+    setState(() => _pendingNavigationEntry = target);
+    try {
+      await controller.selectThread(target.threadId!);
+    } finally {
+      if (mounted &&
+          identical(controller, widget.threadController) &&
+          operationEpoch == _navigationOperationEpoch) {
+        setState(() {
+          if (controller.selectedThread?.id == target.threadId) {
+            _navigationIndex = index;
+            _activeDestination = target.destination;
+            if (target.destination == _DesktopShellDestination.customize) {
+              _activeCustomizeSection = target.customizeSection;
+              final customize = _ensureCustomizeController();
+              customize.setSection(target.customizeSection);
+            } else {
+              _syncCustomizeControllerContext();
+            }
           }
-          _pendingThreadVisit = null;
+          _pendingNavigationEntry = null;
         });
       }
     }
@@ -190,7 +436,9 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < _desktopSplitMinimumWidth) {
+        final compact = constraints.maxWidth < _desktopSplitMinimumWidth;
+        _isCompactLayout = compact;
+        if (compact) {
           final hasActiveConversation =
               widget.threadController.selectedThread != null ||
               (_conversationKey.currentState?.hasComposerDraft ?? false);
@@ -203,7 +451,8 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
               settingsController: widget.settingsController,
               runtimeController: widget.runtimeController,
               userInputController: widget.userInputController,
-              defaultWorkingDirectory: widget.defaultWorkingDirectory,
+              defaultWorkingDirectory: _workingDirectory,
+              onWorkingDirectoryChanged: _handleWorkingDirectoryChanged,
               onThreadSelected: onThreadSelected,
             ),
             conversationBuilder: (isOffstage) => _ConversationPanel(
@@ -217,7 +466,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
               diffController: widget.diffController,
               outputGateway: widget.runtimeController,
               transportCapabilities: widget.runtimeController.capabilities,
-              defaultWorkingDirectory: widget.defaultWorkingDirectory,
+              defaultWorkingDirectory: _workingDirectory,
               isOffstage: isOffstage,
             ),
           );
@@ -232,16 +481,25 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
           OfficialCodexTheme.desktopLeftPanelMinWidth,
           maximum,
         );
+        final customizeController =
+            _activeDestination == _DesktopShellDestination.customize
+            ? _ensureCustomizeController()
+            : _customizeController;
         final workspace = _DesktopSplitWorkspace(
           key: const ValueKey('desktop-split-workspace'),
           conversationKey: _conversationKey,
-          onBack: _pendingThreadVisit == null && _threadVisitIndex > 0
-              ? () => unawaited(_moveThreadVisit(-1))
+          destination: _activeDestination,
+          customizeSection: _activeCustomizeSection,
+          customizeController: customizeController,
+          onSelectHome: _selectHomeDestination,
+          onSelectCustomize: _selectCustomizeDestination,
+          onBack: _pendingNavigationEntry == null && _navigationIndex > 0
+              ? () => unawaited(_moveNavigationVisit(-1))
               : null,
           onForward:
-              _pendingThreadVisit == null &&
-                  _threadVisitIndex < _threadVisits.length - 1
-              ? () => unawaited(_moveThreadVisit(1))
+              _pendingNavigationEntry == null &&
+                  _navigationIndex < _navigationEntries.length - 1
+              ? () => unawaited(_moveNavigationVisit(1))
               : null,
           sidebarWidth: leftWidth - OfficialCodexTheme.navigationRailWidth,
           onSidebarResize: (delta) {
@@ -266,7 +524,8 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
           userInputController: widget.userInputController,
           settingsController: widget.settingsController,
           diffController: widget.diffController,
-          defaultWorkingDirectory: widget.defaultWorkingDirectory,
+          defaultWorkingDirectory: _workingDirectory,
+          onWorkingDirectoryChanged: _handleWorkingDirectoryChanged,
         );
         return Listener(
           onPointerDown: (event) {
@@ -289,6 +548,11 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   const _DesktopSplitWorkspace({
     super.key,
     required this.conversationKey,
+    required this.destination,
+    required this.customizeSection,
+    required this.customizeController,
+    required this.onSelectHome,
+    required this.onSelectCustomize,
     required this.onBack,
     required this.onForward,
     required this.sidebarWidth,
@@ -302,9 +566,15 @@ class _DesktopSplitWorkspace extends StatefulWidget {
     required this.settingsController,
     required this.diffController,
     required this.defaultWorkingDirectory,
+    required this.onWorkingDirectoryChanged,
   });
 
   final GlobalKey<_ConversationPanelState> conversationKey;
+  final _DesktopShellDestination destination;
+  final _EcosystemSection customizeSection;
+  final _EcosystemController? customizeController;
+  final void Function({bool requestConversationFocus}) onSelectHome;
+  final void Function({_EcosystemSection? section}) onSelectCustomize;
   final VoidCallback? onBack;
   final VoidCallback? onForward;
   final double sidebarWidth;
@@ -318,6 +588,7 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final String defaultWorkingDirectory;
+  final ValueChanged<String> onWorkingDirectoryChanged;
 
   @override
   State<_DesktopSplitWorkspace> createState() => _DesktopSplitWorkspaceState();
@@ -325,31 +596,33 @@ class _DesktopSplitWorkspace extends StatefulWidget {
 
 class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   final _threadPanelKey = GlobalKey<_ThreadPanelState>();
+  final _customizeFocusNode = FocusNode(debugLabel: 'customize-workspace');
   final _fileMenu = CodexPopoverController();
   final _editMenu = CodexPopoverController();
   final _viewMenu = CodexPopoverController();
   final _helpMenu = CodexPopoverController();
   FocusNode? _editMenuTarget;
   var _sidebarCollapsed = false;
-  var _ecosystemOpen = false;
+
+  bool get _isCustomize =>
+      widget.destination == _DesktopShellDestination.customize;
 
   void _toggleSidebar() {
+    Tooltip.dismissAllToolTips();
     setState(() => _sidebarCollapsed = !_sidebarCollapsed);
   }
 
-  Future<void> _openRailEcosystem() async {
-    final panel = _threadPanelKey.currentState;
-    if (panel == null || _ecosystemOpen) {
-      return;
-    }
-    setState(() => _ecosystemOpen = true);
-    try {
-      await panel._openEcosystem();
-    } finally {
-      if (mounted) {
-        setState(() => _ecosystemOpen = false);
+  void _dismissTransientShellOverlays() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
       }
-    }
+      Tooltip.dismissAllToolTips();
+      _fileMenu.hide();
+      _editMenu.hide();
+      _viewMenu.hide();
+      _helpMenu.hide();
+    });
   }
 
   @override
@@ -358,10 +631,50 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
     _editMenu.addListener(() {
       if (!_editMenu.isOpen) _editMenuTarget = null;
     });
+    if (_isCustomize) {
+      _requestCustomizeFocus();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopSplitWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.destination != widget.destination) {
+      _dismissTransientShellOverlays();
+      if (_isCustomize) {
+        _requestCustomizeFocus();
+      } else {
+        _restoreHomeFocusIfDetached();
+      }
+    }
+  }
+
+  void _requestCustomizeFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isCustomize && !_customizeFocusNode.hasFocus) {
+        _customizeFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _restoreHomeFocusIfDetached() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isCustomize) {
+        return;
+      }
+      final primary = FocusManager.instance.primaryFocus;
+      if (primary == null ||
+          primary is FocusScopeNode ||
+          primary.context == null) {
+        widget.conversationKey.currentState?._conversationFocusNode
+            .requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _customizeFocusNode.dispose();
     _fileMenu.dispose();
     _editMenu.dispose();
     _viewMenu.dispose();
@@ -372,6 +685,8 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
+    final isCustomize = _isCustomize;
+    final customizeController = widget.customizeController;
 
     return CallbackShortcuts(
       bindings: {
@@ -391,6 +706,13 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
             _toggleSidebar,
         const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
             _toggleSidebar,
+        if (isCustomize &&
+            !_fileMenu.isOpen &&
+            !_editMenu.isOpen &&
+            !_viewMenu.isOpen &&
+            !_helpMenu.isOpen)
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              widget.onSelectHome(),
       },
       child: ColoredBox(
         color: theme.isDark
@@ -421,48 +743,80 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                         children: [
                           Offstage(
                             offstage: _sidebarCollapsed,
-                            child: TickerMode(
-                              enabled: !_sidebarCollapsed,
-                              child: ExcludeFocus(
-                                excluding: _sidebarCollapsed,
-                                child: DecoratedBox(
-                                  position: DecorationPosition.foreground,
-                                  decoration: BoxDecoration(
-                                    border: BorderDirectional(
-                                      end: BorderSide(
-                                        color: theme.hairlineBorder,
-                                        width: OfficialCodexTheme
-                                            .hairlineBorderWidth,
+                            child: TooltipVisibility(
+                              visible: !_sidebarCollapsed,
+                              child: TickerMode(
+                                enabled: !_sidebarCollapsed,
+                                child: ExcludeFocus(
+                                  excluding: _sidebarCollapsed,
+                                  child: DecoratedBox(
+                                    position: DecorationPosition.foreground,
+                                    decoration: BoxDecoration(
+                                      border: BorderDirectional(
+                                        end: BorderSide(
+                                          color: theme.hairlineBorder,
+                                          width: OfficialCodexTheme
+                                              .hairlineBorderWidth,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  child: SizedBox(
-                                    key: const ValueKey('app_shell_sidebar'),
-                                    width: widget.sidebarWidth,
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        _ThreadPanel(
-                                          key: _threadPanelKey,
-                                          controller: widget.threadController,
-                                          settingsController:
-                                              widget.settingsController,
-                                          runtimeController:
-                                              widget.runtimeController,
-                                          userInputController:
-                                              widget.userInputController,
-                                          defaultWorkingDirectory:
-                                              widget.defaultWorkingDirectory,
-                                          hasNavigationRail: true,
-                                        ),
-                                        PositionedDirectional(
-                                          top: 0,
-                                          bottom: 0,
-                                          end: 0,
-                                          width: ThemeTokens.space2,
-                                          child: _sidebarResizeHandle(),
-                                        ),
-                                      ],
+                                    child: SizedBox(
+                                      key: const ValueKey('app_shell_sidebar'),
+                                      width: widget.sidebarWidth,
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          Offstage(
+                                            offstage: isCustomize,
+                                            child: TooltipVisibility(
+                                              visible:
+                                                  !isCustomize &&
+                                                  !_sidebarCollapsed,
+                                              child: TickerMode(
+                                                enabled: !isCustomize,
+                                                child: ExcludeFocus(
+                                                  excluding: isCustomize,
+                                                  child: _ThreadPanel(
+                                                    key: _threadPanelKey,
+                                                    controller:
+                                                        widget.threadController,
+                                                    settingsController: widget
+                                                        .settingsController,
+                                                    runtimeController: widget
+                                                        .runtimeController,
+                                                    userInputController: widget
+                                                        .userInputController,
+                                                    defaultWorkingDirectory: widget
+                                                        .defaultWorkingDirectory,
+                                                    onWorkingDirectoryChanged:
+                                                        widget
+                                                            .onWorkingDirectoryChanged,
+                                                    hasNavigationRail: true,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          if (isCustomize &&
+                                              customizeController != null)
+                                            _CustomizeSidebar(
+                                              controller: customizeController,
+                                              selectedSection:
+                                                  widget.customizeSection,
+                                              onSelectSection: (section) =>
+                                                  widget.onSelectCustomize(
+                                                    section: section,
+                                                  ),
+                                            ),
+                                          PositionedDirectional(
+                                            top: 0,
+                                            bottom: 0,
+                                            end: 0,
+                                            width: ThemeTokens.space2,
+                                            child: _sidebarResizeHandle(),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -472,21 +826,63 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                           Expanded(
                             child: KeyedSubtree(
                               key: const ValueKey('app-shell-workspace'),
-                              child: _ConversationPanel(
-                                key: widget.conversationKey,
-                                controller: widget.conversationController,
-                                threadController: widget.threadController,
-                                historyController: widget.historyController,
-                                approvalController: widget.approvalController,
-                                userInputController: widget.userInputController,
-                                settingsController: widget.settingsController,
-                                diffController: widget.diffController,
-                                outputGateway: widget.runtimeController,
-                                transportCapabilities:
-                                    widget.runtimeController.capabilities,
-                                defaultWorkingDirectory:
-                                    widget.defaultWorkingDirectory,
-                                hasDesktopShell: true,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Offstage(
+                                    offstage: isCustomize,
+                                    child: TooltipVisibility(
+                                      visible: !isCustomize,
+                                      child: TickerMode(
+                                        enabled: !isCustomize,
+                                        child: ExcludeFocus(
+                                          excluding: isCustomize,
+                                          child: _ConversationPanel(
+                                            key: widget.conversationKey,
+                                            controller:
+                                                widget.conversationController,
+                                            threadController:
+                                                widget.threadController,
+                                            historyController:
+                                                widget.historyController,
+                                            approvalController:
+                                                widget.approvalController,
+                                            userInputController:
+                                                widget.userInputController,
+                                            settingsController:
+                                                widget.settingsController,
+                                            diffController:
+                                                widget.diffController,
+                                            outputGateway:
+                                                widget.runtimeController,
+                                            transportCapabilities: widget
+                                                .runtimeController
+                                                .capabilities,
+                                            defaultWorkingDirectory:
+                                                widget.defaultWorkingDirectory,
+                                            hasDesktopShell: true,
+                                            isOffstage: isCustomize,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (isCustomize &&
+                                      customizeController != null)
+                                    Focus(
+                                      focusNode: _customizeFocusNode,
+                                      child: _CustomizeWorkspaceView(
+                                        controller: customizeController,
+                                        selectedSection:
+                                            widget.customizeSection,
+                                        sidebarCollapsed: _sidebarCollapsed,
+                                        onSelectSection: (section) =>
+                                            widget.onSelectCustomize(
+                                              section: section,
+                                            ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -601,6 +997,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
               CodexMenuItem(
                 value: () {
                   if (!widget.threadController.mutating) {
+                    widget.onSelectHome(requestConversationFocus: false);
                     unawaited(_threadPanelKey.currentState?._startThread());
                   }
                 },
@@ -636,6 +1033,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
               CodexMenuItem(value: _toggleSidebar, label: sidebarLabel),
               CodexMenuItem(
                 value: () {
+                  widget.onSelectHome(requestConversationFocus: false);
                   if (_sidebarCollapsed) {
                     _toggleSidebar();
                   }
@@ -646,6 +1044,7 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
               if (pinned != null && !threads.showArchived)
                 CodexMenuItem(
                   value: () {
+                    widget.onSelectHome(requestConversationFocus: false);
                     if (_sidebarCollapsed) {
                       _toggleSidebar();
                     }
@@ -751,60 +1150,69 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
     }
   }
 
-  Widget _navigationRail() => Semantics(
-    label: 'App navigation',
-    container: true,
-    child: SizedBox(
-      key: const ValueKey('app-shell-navigation-rail'),
-      width: OfficialCodexTheme.navigationRailWidth,
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: ThemeTokens.space2),
-              child: Column(
-                children: [
-                  CodexIconButton(
-                    key: const ValueKey('app-shell-home-button'),
-                    tooltip: 'Codex home',
-                    selected: !_ecosystemOpen,
-                    size: 36,
-                    icon: const Icon(Icons.home_rounded, size: 19),
-                    onPressed: () => widget
-                        .conversationKey
-                        .currentState
-                        ?._conversationFocusNode
-                        .requestFocus(),
-                  ),
-                  const SizedBox(height: ThemeTokens.space2),
-                  CodexIconButton(
-                    key: const ValueKey('ecosystem-button'),
-                    tooltip: 'Skills, Plugins & MCP',
-                    selected: _ecosystemOpen,
-                    size: 36,
-                    icon: const Icon(Icons.widgets_outlined, size: 20),
-                    onPressed: _openRailEcosystem,
-                  ),
-                ],
+  Widget _navigationRail() {
+    final isCustomize = _isCustomize;
+    return Semantics(
+      label: 'App navigation',
+      container: true,
+      child: SizedBox(
+        key: const ValueKey('app-shell-navigation-rail'),
+        width: OfficialCodexTheme.navigationRailWidth,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  vertical: ThemeTokens.space2,
+                ),
+                child: Column(
+                  children: [
+                    CodexIconButton(
+                      key: const ValueKey('app-shell-home-button'),
+                      tooltip: 'Home',
+                      selected: !isCustomize,
+                      size: 36,
+                      icon: Icon(
+                        !isCustomize ? Icons.home_rounded : Icons.home_outlined,
+                        size: 19,
+                      ),
+                      onPressed: widget.onSelectHome,
+                    ),
+                    const SizedBox(height: ThemeTokens.space2),
+                    CodexIconButton(
+                      key: const ValueKey('ecosystem-button'),
+                      tooltip: 'Plugins',
+                      selected: isCustomize,
+                      size: 36,
+                      icon: Icon(
+                        isCustomize
+                            ? Icons.widgets_rounded
+                            : Icons.widgets_outlined,
+                        size: 20,
+                      ),
+                      onPressed: () => widget.onSelectCustomize(),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          CodexIconButton(
-            key: const ValueKey('remote-setup-button'),
-            tooltip: 'Remote & host settings',
-            size: 36,
-            icon: const Icon(Icons.devices_outlined, size: 19),
-            onPressed: () => _threadPanelKey.currentState?._openRemoteSetup(),
-          ),
-          _RuntimeStatusPill(
-            controller: widget.runtimeController,
-            compact: true,
-          ),
-          const SizedBox(height: ThemeTokens.space2),
-        ],
+            CodexIconButton(
+              key: const ValueKey('remote-setup-button'),
+              tooltip: 'Remote & host settings',
+              size: 36,
+              icon: const Icon(Icons.devices_outlined, size: 19),
+              onPressed: () => _threadPanelKey.currentState?._openRemoteSetup(),
+            ),
+            _RuntimeStatusPill(
+              controller: widget.runtimeController,
+              compact: true,
+            ),
+            const SizedBox(height: ThemeTokens.space2),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _CompactWorkspace extends StatefulWidget {
@@ -937,21 +1345,27 @@ class _CompactWorkspaceState extends State<_CompactWorkspace> {
                 children: [
                   Offstage(
                     offstage: !_showSidebar,
-                    child: TickerMode(
-                      enabled: _showSidebar,
-                      child: ExcludeFocus(
-                        excluding: !_showSidebar,
-                        child: widget.sidebarBuilder(_closeSidebar),
+                    child: TooltipVisibility(
+                      visible: _showSidebar,
+                      child: TickerMode(
+                        enabled: _showSidebar,
+                        child: ExcludeFocus(
+                          excluding: !_showSidebar,
+                          child: widget.sidebarBuilder(_closeSidebar),
+                        ),
                       ),
                     ),
                   ),
                   Offstage(
                     offstage: _showSidebar,
-                    child: TickerMode(
-                      enabled: !_showSidebar,
-                      child: ExcludeFocus(
-                        excluding: _showSidebar,
-                        child: widget.conversationBuilder(_showSidebar),
+                    child: TooltipVisibility(
+                      visible: !_showSidebar,
+                      child: TickerMode(
+                        enabled: !_showSidebar,
+                        child: ExcludeFocus(
+                          excluding: _showSidebar,
+                          child: widget.conversationBuilder(_showSidebar),
+                        ),
                       ),
                     ),
                   ),

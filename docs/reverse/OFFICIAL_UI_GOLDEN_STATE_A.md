@@ -31,8 +31,8 @@ got here.
 
 | State | Official evidence | Native evidence | Native implementation | Known delta | Status | Next machine-actionable correction |
 | --- | --- | --- | --- | --- | --- | --- |
-| A0 Application/window strip | H1 y0–50 shows Back, Forward, sidebar toggle, File/Edit/View/Help and window controls. `499225.mJEk.z` uses the active destination router. `189497` registers keyboard and side buttons. `early-bootstrap-815` defines Edit and Help roles. | Linux release revisits stock threads from the toolbar, keyboard and X11 mouse buttons 8/9. Edit targeted the focused composer and Help handed the documentation URI to the platform handler. | `8ce73dd`, `5dc63ca`, `b6e2e1a`, `b10b27a`, `135e8fb`, `21f7525` | Native history contains thread visits. The Native menu has backed editing roles and four public links. OS frame placement, menu mnemonics and the official-only Help commands differ. | PARTIAL | Compare the decorated signed-in frame and open-menu keyboard/focus behavior across available Desktop platforms. |
-| A1 Global navigation rail | H1 x0–60 has selected Home and separated destination clusters. `499225.36a7812ae9.js` `lp/lu/lc` define the rail, scrolling group and footer. `890434.9dbaee449e.js` `GO7r.wdY` resolves to the 20 px Plugins asset. | The release uses the equivalent multi-tile glyph and transfers selection from Home to the existing ecosystem dialog. Escape returns selection to Home without leaving the thread. Remote and Runtime details remain in the lower cluster. | `8ce73dd`, `373305e`, `3a6e846` | Native uses a dialog for Skills, Plugins and MCP. The official destination, configurable ordering and account footer have distinct capabilities. | PARTIAL | Compare the signed-in supported destination and focus transitions. Keep the account and private-service roles separate from Native runtime status. |
+| A0 Application/window strip | H1 y0–50 shows Back, Forward, sidebar toggle, File/Edit/View/Help and window controls. `499225.mJEk.z` uses the active destination router. `189497` registers keyboard and side buttons. `early-bootstrap-815` defines Edit and Help roles. | Linux release revisits stock threads and wide routed `Customize` sections (`Plugins`, `Skills`, `Apps`, `MCP`) across toolbar Back/Forward, `Ctrl+[`/`Ctrl+]`, `Alt+Left`/`Alt+Right` and X11 buttons 8/9 (`32`-entry cap), guarded by `_navigationOperationEpoch` against delayed `thread/read` races and restoring conversation focus on `Customize` unmount. Edit targeted the focused composer and Help handed the documentation URI to the platform handler. | `8ce73dd`, `5dc63ca`, `b6e2e1a`, `b10b27a`, `135e8fb`, `21f7525`, `ea267d3` | Native history tracks bounded thread and wide Customize visits. The Native menu has backed editing roles and four public links. OS frame placement, menu mnemonics and the official-only Help commands differ. | PARTIAL | Compare the decorated signed-in frame and open-menu keyboard/focus behavior across available Desktop platforms. |
+| A1 Global navigation rail | H1 x0–60 has selected Home and separated destination clusters. `499225.36a7812ae9.js` `lp/lu/lc` define the rail, scrolling group and footer, and `499225` routes `Plugins` (`890434.9dbaee449e.js` `GO7r.wdY` -> `ws5U` `20 px` multi-tile glyph) to inline `Customize` (`sO.SQ` header, `customize-installed-search` with `Escape` trigger refocus, `Plugins` `aJkJ`/`ws5U` + `Skills` `VBV1`/`sLbn` rows, `sidebar.customize.installed`). | At `1191×865` (`/var/tmp/native-gemini-a1-customize-r3/`), the Linux release selects the `20 px` multi-tile `Plugins` rail glyph and swaps the left contextual panel (`x52–340`) and workspace (`x340–1191`) inline to `Customize` while keeping `Home` thread/conversation state mounted offstage under `TooltipVisibility(visible: false)`, qualifying partial/paginated/`100`-capped counts as `<N> loaded`, expanding installed `Alpha Helper` via stock `plugin/read`, closing sidebar search on `Escape` without leaving `Customize`, collapsing to an inline `CodexSegment` on `Ctrl+B`, and retaining `_EcosystemDialog` below `760 px`. Remote and Runtime details remain in the lower cluster. | `8ce73dd`, `373305e`, `3a6e846`, `ea267d3` | Native surfaces supported stock `Plugins`, `Skills`, `Apps` and `MCP` in `_CustomizeSidebar` and keeps Remote/Runtime status in the lower rail cluster. Official Automations, configurable rail ordering, account-backed Apps/Connectors pages and the account footer have distinct capabilities. | PARTIAL | Compare signed-in `Customize` card/detail density against a matched official capture while keeping Automations, configurable rail ordering and account/private-service roles separate from Native runtime status. |
 | A2 Contextual Codex sidebar | H1 starts with product, notifications, search, New chat, Dot and Projects. `499225.ZIk0/dR` guard the empty Pinned heading and show Projects actions on group hover/focus. `499225.tI/t_/eK`, `182735.b5fQ/V7pv/r6TF.eH`, `189497.rmk3` and `236683.V5ob.NF/c6` give `Projects` (`13 px` / `18 px`) and project rows `36 px` row boxes, open the local menu at pointer coordinates on right-click (`contextmenu`), at the focused row `bottomLeft` on `ContextMenu` / `Shift+F10`, or anchored to the trigger on ellipsis click while keeping the row highlighted, and show collapsed project status (`error > working > unread > null`) instead of a numeric count. | Wide Projects reveals actions on pointer or keyboard interaction, uses a 36 px `13/18 px` section row, and aligns `New chat` and project labels on a shared `x=95` vertical axis at 1191×865 while preserving compact State F geometry. Right-click opens the folder menu at pointer coordinates, `ContextMenu`/`Shift+F10` opens it at the row `bottomLeft`, and ellipsis opens it at the trigger anchor while keeping the 36 px project row highlighted; collapsed projects render the aggregated unread/running/error indicator instead of a raw thread count. | `fe31e9e`, `373305e`, `b6e2e1a`, `a3737b9`, `0c45b67`, `a8b2104`, `d74cb39`, `f1e2fbb` | Native groups its bounded loaded threads by directory and exposes only the local folder action in this menu. Official organize, project metadata and batch actions have distinct backing. Dot and notifications depend on account services. macOS/Windows launch was not exercised. | PARTIAL | Keep loaded-only operations explicit and track account entries, organize/remove project actions and the product selector separately. |
 | A3 Project/thread rows | H1 has full-width row pills (`x71–397`) with a `16 px` reserved leading slot (`927552.qK2L` `reserveLeadingSlot: isGrouped` -> `384375.cSic.y` `w-4 shrink-0`) so child thread titles start at the exact same horizontal coordinate (`x112`) as `New chat` and project titles, plus right-click pointer-coordinate and `ContextMenu` / `Shift+F10` row-`bottomLeft` context menu (`86296.oprL` + `189497.rmk3`) and trailing spinner, unread dot or merged-PR glyph. | Paired stock captures at 1191×865 verify 36 px full-width row pills (`x60–331`), exact parent-label horizontal alignment (`x95` across `New chat`, project titles and child thread titles), pointer-positioned right-click and row-`bottomLeft` `ContextMenu`/`Shift+F10` thread menu opening with persistent row highlight, running spinner and 8 px blue unread dot, with compact geometry preserved under `!hasNavigationRail`. | `fe31e9e`, `9bff30d`, `9785c1a`, `8ee189e`, `d74cb39`, `f1e2fbb` | `927552.2a3666383e.js` derives the purple glyph from an actual merged PR state. Native thread attachments carry link identity but lack provider merge state and stay on-demand. | PARTIAL | Verify the supported Git/PR indicators with comparable data. Keep the merged glyph evidence-blocked until reliable state is available. Do not scan attachments for every visible thread. |
 | A4 Shared page/surface geometry | H1 puts sidebar and workspace inside one rounded surface. S2 has a 340 logical px default left panel, 52 px rail fallback and 42 rem content cap. | N1 and geometry tests show a single page with 52 + 288 px default, a resizable sidebar and 672 px reading/composer cap. | `5dc63ca`, `d836c16`, `c3ac6f0` | H1 physical positions depend on zoom and sidebar preference. Native's supported wide geometry follows the same logical roles. | PARITY_ACCEPTABLE | Preserve the dimensions for this state. Measure official logical gutters and resize persistence when a matched signed-in window is available. |
@@ -996,3 +996,118 @@ portal/AT-SPI/PipeWire/DRI3 warnings and the recovered initial OpenGL resize
 timeout. Unicode-path analysis, signed-in official live
 comparison and Human acceptance have separate evidence limits. A6 inline
 pill rendering and A1 destination structure remain machine-actionable.
+
+## A0 and A1 routed Customize destination
+
+In build `25894`, `499225.36a7812ae9.js` binds the global navigation rail
+`Plugins` item (`railIcons: { default: nO.wdY, selected: aH }`, where
+`890434.9dbaee449e.js` `GO7r.wdY` imports `ws5U`, the `20 px` multi-tile glyph)
+to `isCurrentDestination: g.startsWith("/skills") || g === "/plugins" ||
+g.startsWith("/plugins/")`, while `499225.mJEk.z` drives `Back` and `Forward`
+from the active destination router. Inside that route, `499225` replaces the
+contextual thread sidebar with `Customize` (`sO.SQ` header, `Search installed
+plugins` icon button controlling `customize-installed-search` where `Escape`
+closes search and refocuses the trigger without leaving `Customize`, `Plugins`
+`aJkJ`/`ws5U` and `Skills` `VBV1`/`sLbn` navigation rows, and the `Installed`
+group `sidebar.customize.installed`).
+
+`ea267d3` translates this wide Desktop (`>= 760 px`) surface inline
+(`_CustomizeSidebar` at `x52–340` and `_CustomizeWorkspaceView` at
+`x340–1191`) while keeping `_EcosystemDialog` on compact viewports (`< 760
+px`). `_ConnectedWorkspace` keeps `_ThreadPanel` and `_ConversationPanel`
+mounted offstage across `Customize` visits so active turn state, scroll
+position and unsent composer drafts survive route switches and `< 760 px`
+resizes, while `_customizeController` is created lazily on first `Customize`
+visit and disposed whenever `(cwd, threadId)` changes off-screen (zero eager
+ecosystem RPCs on `Home`). Bounded `32`-entry `_DesktopNavigationEntry`
+history records `(destination, threadId, customizeSection)` across toolbar,
+keyboard (`Ctrl+[`/`Ctrl+]`, `Alt+Left`/`Alt+Right`) and X11 buttons `8`/`9`,
+guarded by `_navigationOperationEpoch` so a delayed `thread/read` completion
+during `Back` retargets bound project/history context without overwriting a
+newer `Customize` selection, and `_restoreHomeFocusIfDetached` restores
+conversation focus when `_CustomizeWorkspaceView` unmounts.
+
+Peer and visual review closed three concrete defects inside the slice:
+1. `_CustomizeSidebar` and `_EcosystemSectionBody` qualify partial
+   (`PluginCatalogSnapshot.isPartial`), paginated (`appsNextCursor != null`)
+   and `100`-entry-capped (`maxBoundedEcosystemItems`) counts and empty/search
+   copy (`<N> loaded`, `No installed plugins in incomplete catalog`, `No
+   installed plugins in loaded catalog`, `No matching loaded plugins`) instead
+   of claiming clean empty or total counts.
+2. Both Customize search pills (`customize-installed-search-field` and
+   `customize-workspace-search-field`) override `InputDecorationTheme` borders
+   and fill (`InputBorder.none`, `filled: false`) with focus-ring state on the
+   outer pill container, eliminating the nested inner box observed in `r1`
+   (`/var/tmp/native-gemini-a1-customize-r1/`).
+3. Hidden `Offstage` panes wrap their subtrees in `TooltipVisibility(visible:
+   ...)` with post-frame transient overlay cleanup, disposing `RawTooltip`
+   tickers and pending `< 300 ms` hover timers so a hovered `Home` tooltip
+   cannot freeze in `Overlay` over `Customize` as observed in `r2`
+   (`/var/tmp/native-gemini-a1-customize-r2/captures/10-forward-to-customize.png`).
+
+Serial `--concurrency=1` validation passed `70/70` widget/simulated cases
+(`desktop_thread_navigation_test`, `phase1_6_ecosystem_remote_test`,
+`tier1_feature_coverage_test`, `official_convergence_geometry_test`), `dart
+format`, `dart analyze --fatal-infos`, the `65`-root pure-Dart boundary and
+the `83`-library Linux bundle closure (`CARGO_BUILD_JOBS=2` `--config-only` +
+`cmake --build ... --parallel 2`; earlier `r1`/`r2` `flutter build linux` runs
+were not Ninja-job-capped). At `1191×865` (DPR 1), the packaged Linux replay
+(`/var/tmp/native-gemini-a1-customize-r3/captures/01..11.png`, helper
+`run_a1_customize_walkthrough.sh`, fixture `mcp_fixture.py`, and `SHA256SUMS`,
+exercising source diff `4cb5496d6a1a451d088cd009779ccb1a1ee1c725b1121dd11a2b6108d395890c`
+/ `libapp.so` `ca19d547f04759ef55187b2a67223ab302fe221b9d8d6fbe4f4eff21ffe5634d`)
+against bundled `codex-native-host` and stock `0.167.0-alpha.3.2` verified the
+`20 px` `Plugins` rail glyph, inline `Customize` sidebar/workspace, local
+marketplace install/read (`Alpha Helper` expanded from `Installed`, `Beta
+Linter` in catalog), sidebar search and `Escape` trigger refocus, `Skills`
+(`$alpha-workflow`, `$alpha-helper:helper`), `MCP` (`native_fixture` with
+`Auth: unsupported` separated from runtime status), `Ctrl+B` collapsed
+`CodexSegment`, `Ctrl+[`/`Ctrl+]` Back/Forward with unsent draft intact and
+zero leaked tooltip, and clean App/Host/stock/fixture exit. Native exposes
+supported `Apps` and `MCP` alongside `Plugins` and `Skills` in
+`_CustomizeSidebar`; configurable rail ordering, Automations, account footer,
+Xvfb portal/AT-SPI/DRI3/initial-resize warnings and matched signed-in official
+Customize captures remain recorded boundaries (`MACHINE VERIFIED` + `AGENT
+REAL-USE VERIFIED`, `NOT YET HUMAN VERIFIED`).
+
+### Independent A0/A1 integration verification
+
+Codex verified an exact 195-file `lib`/`test`/`tool` copy of `ea267d3` in
+an ASCII physical path. Format, strict analysis, the 65-root pure-Dart gate,
+553 default Flutter cases, five separately enabled direct-stock cases,
+bounded-history/output benchmark, Rust formatting/Clippy/100 tests, Linux
+release/83-library closure and pure-Dart MCP smoke passed. The doc-only
+`17d201c` correction records the actual unchanged 32-entry navigation cap.
+
+The independent packaged replay at
+`/var/tmp/native-integrated-a1-ea267d3-r2/` used the rebuilt Native binary,
+bundled Host, stock `0.167.0-alpha.3.2`, and disposable local model/MCP
+fixtures. It completed a stock turn before entering Customize. The MCP
+server's audit recorded exactly one `resources/read` for the fixture URI and
+one `tools/call` with the expected argument. Stock's tool metadata matched
+the selected saved thread. Captures show both returned values, preserved
+draft/navigation state and no leaked Home tooltip. App, Host, stock, MCP
+fixture and Xvfb exited. This is real-runtime evidence with local fixtures,
+separate from account-backed official service or Human acceptance.
+
+The initial independent run at `/var/tmp/native-integrated-a1-ea267d3/`
+failed its tool-call assertion: automated input omitted the final JSON
+brace, the form displayed its parse error, and no tool call reached the
+server. Its resource read succeeded. The run also exposed a stale cached
+icon font alongside newly compiled Dart code: newly used icon code points
+were absent and fell back to unrelated system glyphs. The stale font/cache
+metadata are retained at `/var/tmp/native-ui-r0.BbOvHT/a1-stale-font-negative/`.
+The failed run's screenshots, audit and logs remain intact; its initial
+helper was not frozen before the pacing edit and is not claimed as an
+unchanged preserved original.
+
+`flutter clean` in the isolated source copy followed by Flutter
+`--config-only` and `cmake --build … --parallel 2` rebuilt the font to the
+same SHA256 as the owner's valid r3 artifact. The rerun checks those missing
+code points before launch, paces the JSON input, and freezes its helper,
+MCP fixture and binary identities with SHA256 manifests. This corrects the
+local verification artifact; it does not establish an upstream incremental
+cache fix. Portal/AT-SPI/PipeWire/DRI3 warnings, a recovered initial OpenGL
+resize timeout and the warm-turn model-metadata fallback banner remain
+negative evidence. A0/A1 retain their row-scoped PARTIAL evidence boundaries;
+Golden State A remains active.

@@ -168,7 +168,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.widget<CodexIconButton>(home).selected, isFalse);
         expect(tester.widget<CodexIconButton>(ecosystem).selected, isTrue);
-        await tester.tap(find.text('MCP (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const ValueKey('mcp-read-resource-filesystem-mcp')),
@@ -198,7 +198,7 @@ void main() {
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('MCP (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const ValueKey('mcp-reload-button')));
@@ -229,7 +229,7 @@ void main() {
         );
         expect(
           find.text(
-            'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.',
+            'Resume the selected thread in the Conversations sidebar to run thread-scoped MCP actions.',
           ),
           findsOneWidget,
         );
@@ -249,12 +249,12 @@ void main() {
         expect(harness.mcpToolCallQueries, isEmpty);
         expect(
           find.text(
-            'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.',
+            'Resume the selected thread in the Conversations sidebar to run thread-scoped MCP actions.',
           ),
           findsOneWidget,
         );
 
-        // Explicitly resume the selected thread in the sidebar, then reopen the modal.
+        // Explicitly resume the selected thread in the Conversations sidebar, then return to Customize.
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pumpAndSettle();
         await tester.tap(find.byTooltip('Resume thread'));
@@ -275,7 +275,7 @@ void main() {
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('MCP (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
 
         final outboundReadGate = Completer<void>();
@@ -491,9 +491,12 @@ void main() {
           findsNothing,
         );
 
-        // Direct elicitation (turnId == null) renders inside the open modal
-        // scroll-bounded slot and is hit-testable above the modal barrier.
-        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        // Direct elicitation (turnId == null) renders inside the routed Customize
+        // workspace scroll-bounded slot and remains hit-testable across sections.
+        expect(
+          find.byKey(const ValueKey('customize-workspace-view')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const ValueKey('ecosystem-modal-elicitation-slot')),
           findsOneWidget,
@@ -518,15 +521,15 @@ void main() {
         );
         await tester.pump();
 
-        // Switching tabs mid-call keeps the active form reachable in the modal
-        // and preserves typed draft text in the single dialog-local slot.
-        await tester.tap(find.text('Skills (1)'));
+        // Switching Customize sections mid-call keeps the active form reachable
+        // and preserves typed draft text in the shared Customize notice slot.
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
         await tester.pump();
         expect(
           find.byKey(const ValueKey('mcp-elicitation-card')).hitTestable(),
           findsOneWidget,
         );
-        await tester.tap(find.text('MCP (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pump();
 
         await tester.tap(
@@ -551,8 +554,11 @@ void main() {
           find.byKey(const ValueKey('mcp-elicitation-card')),
           findsNothing,
         );
-        // Result renders directly inside the still-open modal dialog.
-        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        // Result renders directly inside the Customize workspace.
+        expect(
+          find.byKey(const ValueKey('customize-workspace-view')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const ValueKey('mcp-result-filesystem-mcp')),
           findsOneWidget,
@@ -563,7 +569,7 @@ void main() {
         );
 
         // Model-turn elicitations (turnId != null) continue routing to the
-        // conversation banner after closing the dialog.
+        // conversation banner after returning to Home.
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pumpAndSettle();
 
@@ -646,7 +652,7 @@ void main() {
 
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('MCP (2)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
 
         expect(find.text('unsupported'), findsNothing);
@@ -826,9 +832,10 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Plugins (2)'));
-        await tester.pumpAndSettle();
-
+        expect(
+          find.byKey(const ValueKey('customize-page-title')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(
             const ValueKey('plugin-row-documents@openai-primary-runtime'),
@@ -964,7 +971,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Apps (25)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-apps')));
         await tester.pumpAndSettle();
 
         expect(
@@ -1036,7 +1043,13 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        expect(find.text('Apps (100)'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('customize-nav-apps')),
+            matching: find.text('100 loaded'),
+          ),
+          findsOneWidget,
+        );
         await tester.scrollUntilVisible(
           find.byKey(const ValueKey('ecosystem-apps-bound-notice')),
           300,
@@ -1045,6 +1058,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('ecosystem-apps-bound-notice')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Showing first 100 loaded catalog apps.'),
           findsOneWidget,
         );
         expect(
@@ -1060,6 +1077,15 @@ void main() {
           find.byKey(const ValueKey('ecosystem-apps-load-more')),
           findsNothing,
         );
+
+        // At the 100-row cap, workspace search describes loaded catalog rows.
+        final workspaceSearch = find.byKey(
+          const ValueKey('customize-workspace-search-field'),
+        );
+        await tester.enterText(workspaceSearch, 'nomatch');
+        await tester.pumpAndSettle();
+        expect(find.text('App Catalog (100 loaded)'), findsOneWidget);
+        expect(find.text('No matching loaded catalog apps.'), findsOneWidget);
       },
     );
 
@@ -1075,25 +1101,25 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
-        // Skills, Plugins, and MCP render immediately while app/list is still pending.
-        expect(
-          find.byKey(const ValueKey('skill-row-frontend-design')),
-          findsOneWidget,
-        );
-
-        await tester.tap(find.text('Plugins (1)'));
-        await tester.pumpAndSettle();
+        // Plugins, Skills, and MCP render immediately while app/list is still pending.
         expect(
           find.byKey(const ValueKey('plugin-row-git-workflow')),
           findsOneWidget,
         );
 
-        await tester.tap(find.text('MCP (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('skill-row-frontend-design')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
         expect(find.text('filesystem-mcp'), findsOneWidget);
 
         // Switching to Apps shows already-loaded installed runtime apps plus non-blocking catalog loading.
-        await tester.tap(find.text('Apps (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-apps')));
         await tester.pump();
         expect(
           find.byKey(const ValueKey('installed-app-row-connector_github')),
@@ -1174,9 +1200,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
-        // Expand plugin_alpha details
-        await tester.tap(find.text('Plugins (1)'));
-        await tester.pumpAndSettle();
+        // Expand plugin_alpha details on default Plugins section
         await tester.tap(
           find.byKey(const ValueKey('plugin-read-plugin_alpha@local')),
         );
@@ -1187,7 +1211,7 @@ void main() {
         );
 
         // Expand catalog app connector_alpha details and missing installed app connector_missing_alpha
-        await tester.tap(find.text('Apps (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-apps')));
         await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const ValueKey('app-read-connector_alpha')),
@@ -1312,7 +1336,7 @@ void main() {
           findsNothing,
         );
 
-        await tester.tap(find.text('Plugins (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-plugins')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('plugin-detail-plugin_alpha@local')),
@@ -1349,8 +1373,48 @@ void main() {
         final warning = find.byKey(const ValueKey('ecosystem-plugins-partial'));
         final refresh = find.byKey(const ValueKey('ecosystem-refresh-button'));
 
+        expect(warning, findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('customize-nav-plugins')),
+            matching: find.text('1 loaded'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('No installed plugins in incomplete catalog'),
+          findsOneWidget,
+        );
+        expect(find.text('No installed plugins'), findsNothing);
+
+        // Installed search and workspace search both qualify empty results as loaded-only during partial catalogs.
+        await tester.tap(
+          find.byKey(const ValueKey('customize-installed-search-toggle')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('customize-installed-search-field')),
+          'nomatch',
+        );
+        await tester.pump();
+        expect(find.text('No matching loaded plugins'), findsOneWidget);
+        expect(find.text('No matching plugins'), findsNothing);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+
+        final workspaceSearch = find.byKey(
+          const ValueKey('customize-workspace-search-field'),
+        );
+        await tester.enterText(workspaceSearch, 'nomatch');
+        await tester.pump();
+        expect(find.text('No matching loaded plugins'), findsOneWidget);
+        await tester.enterText(workspaceSearch, '');
+        await tester.pump();
+
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pumpAndSettle();
         expect(warning, findsNothing);
-        await tester.tap(find.text('Plugins (1)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-plugins')));
         await tester.pumpAndSettle();
         expect(warning, findsOneWidget);
         await tester.tap(
@@ -1366,6 +1430,18 @@ void main() {
         await tester.tap(refresh);
         await tester.pumpAndSettle();
         expect(warning, findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('customize-nav-plugins')),
+            matching: find.text('0 loaded'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('No installed plugins in incomplete catalog'),
+          findsOneWidget,
+        );
+        expect(find.text('No installed plugins'), findsNothing);
         expect(find.text('No plugin entries are available.'), findsOneWidget);
         expect(find.text('No plugin entries returned.'), findsNothing);
         expect(
@@ -1373,10 +1449,52 @@ void main() {
           findsNothing,
         );
 
+        // At the 100-row cap, counts, installed empty text, search, and bound notice describe loaded rows.
+        snapshot = PluginCatalogSnapshot(
+          plugins: [
+            for (var i = 0; i < 100; i++)
+              PluginSummaryModel(
+                id: 'capped-plugin-$i@local',
+                name: 'Capped plugin $i',
+                description: 'Loaded entry $i',
+                enabled: false,
+                installed: false,
+                marketplaceName: 'local',
+                marketplacePath: '/workspace/.agents/plugins/marketplace.json',
+              ),
+          ],
+        );
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(warning, findsNothing);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('customize-nav-plugins')),
+            matching: find.text('100 loaded'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('No installed plugins in loaded catalog'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-bound-notice')),
+          findsOneWidget,
+        );
+
         snapshot = const PluginCatalogSnapshot(plugins: []);
         await tester.tap(refresh);
         await tester.pumpAndSettle();
         expect(warning, findsNothing);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('customize-nav-plugins')),
+            matching: find.text('0'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('No installed plugins'), findsOneWidget);
         expect(find.text('No plugin entries are available.'), findsNothing);
         expect(find.text('No plugin entries returned.'), findsOneWidget);
       },
@@ -1391,8 +1509,6 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Plugins (1)'));
-        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('ecosystem-plugins-lifecycle-unsupported')),
           findsOneWidget,
@@ -1406,7 +1522,7 @@ void main() {
           findsNothing,
         );
 
-        await tester.tap(find.text('Apps (0)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-apps')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('ecosystem-catalog-unsupported')),
@@ -1474,6 +1590,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Healthy Skills section renders without being suppressed or polluted by plugin error.
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pumpAndSettle();
         expect(find.text(r'$fixture-skill'), findsOneWidget);
         expect(
           find.byKey(const ValueKey('ecosystem-plugins-error')),
@@ -1481,12 +1599,12 @@ void main() {
         );
 
         // Healthy MCP section also loads and renders its servers.
-        await tester.tap(find.text('MCP (2)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
         expect(find.text('fixture-mcp'), findsOneWidget);
 
         // Failed Plugins section reports catalog failure rather than claiming 'No plugins installed.'
-        await tester.tap(find.text('Plugins (0)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-plugins')));
         await tester.pumpAndSettle();
         expect(find.text('No plugins installed.'), findsNothing);
         expect(
@@ -1564,7 +1682,17 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('customize-workspace-view')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-plugins-loading')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pump();
         expect(find.text(r'$fixture-skill'), findsOneWidget);
 
         // Toggling a skill works while plugin/list is still pending.
@@ -1577,7 +1705,7 @@ void main() {
         ]);
 
         // Switching to Plugins while still in flight shows loading copy rather than empty copy.
-        await tester.tap(find.text('Plugins (0)'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-plugins')));
         await tester.pump();
         expect(
           find.byKey(const ValueKey('ecosystem-plugins-loading')),
@@ -1628,6 +1756,18 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
+        // Healthy Plugins section remains unaffected by Skills/MCP failures.
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('ecosystem-skills-error')),
+          findsNothing,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('ecosystem-skills-unavailable')),
           findsOneWidget,
@@ -1642,20 +1782,8 @@ void main() {
           findsOneWidget,
         );
 
-        // Healthy Plugins tab remains unaffected by Skills/MCP failures.
-        await tester.tap(find.text('Plugins (1)'));
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('plugin-row-git-workflow')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey('ecosystem-skills-error')),
-          findsNothing,
-        );
-
-        // Failed MCP tab reports unavailable status rather than 'No MCP servers configured.'
-        await tester.tap(find.text('MCP (0)'));
+        // Failed MCP section reports unavailable status rather than 'No MCP servers configured.'
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('ecosystem-mcp-unavailable')),
@@ -1697,6 +1825,9 @@ void main() {
 
         await pumpSimulatedRuntimeApp(tester, harness: harness);
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
         await tester.pumpAndSettle();
 
         expect(find.text(r'$fixture-skill'), findsOneWidget);
@@ -1732,7 +1863,7 @@ void main() {
       await pumpSimulatedRuntimeApp(tester, harness: harness);
       await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('MCP (0)'));
+      await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
@@ -1791,16 +1922,19 @@ void main() {
         await pumpSimulatedRuntimeApp(tester, harness: harness);
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const ValueKey('ecosystem-refresh-button')),
         );
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
         expect(reads, 2);
 
         final toggle = find.byKey(const ValueKey('skill-toggle-fixture-skill'));
         expect(toggle, findsOneWidget);
         await tester.tap(toggle, warnIfMissed: false);
-        await tester.pumpAndSettle();
+        await tester.pump();
 
         pendingRefresh.complete(const [fixture]);
         await tester.pumpAndSettle();
@@ -1849,23 +1983,13 @@ void main() {
         await tester.pumpAndSettle();
         final before = statusReads;
 
-        await tester.tap(
-          find.descendant(
-            of: find.byKey(const ValueKey('ecosystem-section-selector')),
-            matching: find.textContaining('MCP'),
-          ),
-        );
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Reload config'));
         await tester.pump();
         expect(reloadCalls, 1);
 
-        await tester.tap(
-          find.descendant(
-            of: find.byKey(const ValueKey('ecosystem-section-selector')),
-            matching: find.textContaining('Skills'),
-          ),
-        );
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
         await tester.pump();
         await tester.tap(
           find.byKey(const ValueKey('ecosystem-refresh-button')),
@@ -1923,13 +2047,10 @@ void main() {
           }
         });
 
-        Finder tab(String label) => find.descendant(
-          of: find.byKey(const ValueKey('ecosystem-section-selector')),
-          matching: find.textContaining(label),
-        );
-
         await pumpSimulatedRuntimeApp(tester, harness: harness);
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
         await tester.pumpAndSettle();
 
         final toggle = find.byKey(const ValueKey('skill-toggle-fixture-skill'));
@@ -1937,7 +2058,7 @@ void main() {
         await tester.pump();
         expect(mutations, 1);
 
-        await tester.tap(tab('Plugins'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-plugins')));
         await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const ValueKey('ecosystem-refresh-button')),
@@ -1949,7 +2070,7 @@ void main() {
         pendingRead.complete(const [fixture]);
         await tester.pumpAndSettle();
 
-        await tester.tap(tab('Skills'));
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
         await tester.pumpAndSettle();
         expect(find.text('Disabled'), findsOneWidget);
 
@@ -2049,8 +2170,6 @@ void main() {
         await pumpSimulatedRuntimeApp(tester, harness: harness);
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Plugins (2)'));
-        await tester.pumpAndSettle();
 
         final firstInstall = find.byKey(
           const ValueKey('plugin-install-one@fixture'),
@@ -2133,8 +2252,6 @@ void main() {
         await pumpSimulatedRuntimeApp(tester, harness: harness);
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Plugins (1)'));
-        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('plugin-read-one@fixture')));
         await tester.pumpAndSettle();
         expect(detailReads, 1);
@@ -2153,6 +2270,42 @@ void main() {
         release.complete();
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'preserves compact modal Skills, Plugins & MCP dialog below desktop split width',
+      (tester) async {
+        final harness = SimulatedRuntimeHarness();
+        await pumpSimulatedRuntimeApp(
+          tester,
+          harness: harness,
+          size: const Size(680, 760),
+        );
+
+        await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('ecosystem-section-selector')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('skill-row-frontend-design')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Plugins (1)'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        expect(find.text('Skills, Plugins & MCP'), findsNothing);
       },
     );
   });

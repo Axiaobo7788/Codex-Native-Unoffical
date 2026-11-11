@@ -7,6 +7,7 @@ class _ThreadPanel extends StatefulWidget {
     required this.settingsController,
     required this.runtimeController,
     required this.defaultWorkingDirectory,
+    this.onWorkingDirectoryChanged,
     this.userInputController,
     this.hasNavigationRail = false,
     this.onThreadSelected,
@@ -16,6 +17,7 @@ class _ThreadPanel extends StatefulWidget {
   final ExecutionSettingsController settingsController;
   final RuntimeController runtimeController;
   final String defaultWorkingDirectory;
+  final ValueChanged<String>? onWorkingDirectoryChanged;
   final UserInputController? userInputController;
   final bool hasNavigationRail;
   final VoidCallback? onThreadSelected;
@@ -47,6 +49,15 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         }
       });
     _searchFocusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThreadPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.defaultWorkingDirectory != widget.defaultWorkingDirectory &&
+        _workingDirectory == oldWidget.defaultWorkingDirectory) {
+      _workingDirectory = widget.defaultWorkingDirectory;
+    }
   }
 
   @override
@@ -933,6 +944,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     }
     if (cwd != _workingDirectory && mounted) {
       setState(() => _workingDirectory = cwd);
+      widget.onWorkingDirectoryChanged?.call(cwd);
     }
     await widget.controller.startThread(
       widget.settingsController.threadOptions(cwd),
@@ -1004,7 +1016,9 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     );
     field.dispose();
     if (next != null && next.trim().isNotEmpty && mounted) {
-      setState(() => _workingDirectory = next.trim());
+      final normalized = next.trim();
+      setState(() => _workingDirectory = normalized);
+      widget.onWorkingDirectoryChanged?.call(normalized);
     }
   }
 
@@ -2625,30 +2639,32 @@ enum _EcosystemSection { skills, plugins, apps, mcp }
 
 enum _McpOperationKind { readResource, callTool }
 
-class _EcosystemDialog extends StatefulWidget {
-  const _EcosystemDialog({
+class _EcosystemController extends ChangeNotifier {
+  _EcosystemController({
     required this.gateway,
     required this.cwd,
     this.threadId,
     this.threadController,
     this.userInputController,
-  });
+    required this.isModal,
+    _EcosystemSection initialSection = _EcosystemSection.skills,
+  }) : _section = initialSection {
+    threadController?.addListener(_handleThreadControllerChanged);
+    unawaited(refresh());
+  }
+
+  static const _appsPageSize = 25;
+  static const _maxDisplayedAppTools = 20;
 
   final EcosystemGateway gateway;
   final String cwd;
   final String? threadId;
   final ThreadListController? threadController;
   final UserInputController? userInputController;
+  final bool isModal;
 
-  @override
-  State<_EcosystemDialog> createState() => _EcosystemDialogState();
-}
-
-class _EcosystemDialogState extends State<_EcosystemDialog> {
-  static const _appsPageSize = 25;
-  static const _maxDisplayedAppTools = 20;
-
-  var _section = _EcosystemSection.skills;
+  var _disposed = false;
+  _EcosystemSection _section;
   var _skillsLoading = true;
   var _pluginsLoading = true;
   var _appsLoading = false;
@@ -2701,24 +2717,102 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
   final Map<String, AppDetailModel> _appDetails = <String, AppDetailModel>{};
   final Set<String> _missingAppIds = <String>{};
 
-  EcosystemCatalogGateway? get _catalogGateway => switch (widget.gateway) {
+  _EcosystemSection get section => _section;
+  List<SkillSummary> get skills => _skills;
+  List<PluginSummaryModel> get plugins => _plugins;
+  List<PluginSummaryModel> get installedPlugins =>
+      _plugins.where((plugin) => plugin.installed).toList(growable: false);
+  List<InstalledAppSnapshotModel> get installedApps => _installedApps;
+  List<AppSummaryModel> get catalogApps => _catalogApps;
+  List<McpServerStatusModel> get mcpServers => _mcpServers;
+  bool get skillsLoading => _skillsLoading;
+  bool get pluginsLoading => _pluginsLoading;
+  bool get appsLoading => _appsLoading;
+  bool get mcpLoading => _mcpLoading;
+  bool get loadingMoreApps => _loadingMoreApps;
+  bool get skillsLoadFailed => _skillsLoadFailed;
+  bool get pluginsLoadFailed => _pluginsLoadFailed;
+  bool get installedAppsLoadFailed => _installedAppsLoadFailed;
+  bool get catalogAppsLoadFailed => _catalogAppsLoadFailed;
+  bool get mcpLoadFailed => _mcpLoadFailed;
+  bool get pluginCatalogIsPartial => _pluginCatalogIsPartial;
+  String? get appsError => _appsError;
+  String? get appsNextCursor => _appsNextCursor;
+  String? get pluginActionNotice => _pluginActionNotice;
+  String? get mcpNotice => _mcpNotice;
+  bool get reloadingMcp => _reloadingMcp;
+  String? get mcpBusyServer => _mcpBusyServer;
+  _McpOperationKind? get mcpBusyOperation => _mcpBusyOperation;
+
+  bool isSkillMutating(String path) => _mutatingSkillPaths.contains(path);
+  bool isPluginExpanded(String id) => _expandedPluginIds.contains(id);
+  bool isPluginReading(String id) => _readingPluginIds.contains(id);
+  bool isPluginMutating(String id) => _mutatingPluginIds.contains(id);
+  bool get hasMutatingPlugins => _mutatingPluginIds.isNotEmpty;
+  bool get hasPluginsRefreshInFlight => _pluginsRefreshInFlight != null;
+  PluginDetailModel? pluginDetail(String id) => _pluginDetails[id];
+
+  bool isInstalledAppExpanded(String id) =>
+      _expandedInstalledAppIds.contains(id);
+  bool isCatalogAppExpanded(String id) => _expandedCatalogAppIds.contains(id);
+  bool isAppReading(String id) => _readingAppIds.contains(id);
+  bool isAppMissing(String id) => _missingAppIds.contains(id);
+  AppDetailModel? appDetail(String id) => _appDetails[id];
+
+  String? mcpError(String serverName) => _mcpErrors[serverName];
+  Object? mcpResult(String serverName) => _mcpResults[serverName];
+
+  EcosystemCatalogGateway? get catalogGateway => switch (gateway) {
     final EcosystemCatalogGateway g when g.supportsEcosystemCatalog => g,
     _ => null,
   };
 
-  McpCapabilityGateway? get _mcpGateway => switch (widget.gateway) {
+  McpCapabilityGateway? get mcpGateway => switch (gateway) {
     final McpCapabilityGateway g when g.supportsMcpCapabilities => g,
     _ => null,
   };
 
-  int get _appsBadgeCount =>
+  int get appsBadgeCount =>
       _catalogApps.isNotEmpty ? _catalogApps.length : _installedApps.length;
 
-  List<String> get _normalizedCwds => widget.cwd.trim().isEmpty
-      ? const <String>[]
-      : <String>[widget.cwd.trim()];
+  bool get isSkillsAtCap => _skills.length >= maxBoundedEcosystemItems;
+  bool get isPluginsAtCap => _plugins.length >= maxBoundedEcosystemItems;
+  bool get isPluginsIncomplete => _pluginCatalogIsPartial || isPluginsAtCap;
+  bool get isInstalledAppsAtCap =>
+      _installedApps.length >= maxBoundedEcosystemItems;
+  bool get isCatalogAppsAtCap =>
+      _catalogApps.length >= maxBoundedEcosystemItems;
+  bool get isCatalogAppsIncomplete =>
+      isCatalogAppsAtCap || _appsNextCursor != null;
+  bool get isAppsBadgeLoadedOnly =>
+      _catalogApps.isNotEmpty ? isCatalogAppsIncomplete : isInstalledAppsAtCap;
+  bool get isMcpAtCap => _mcpServers.length >= maxBoundedEcosystemItems;
 
-  bool get _activeSectionLoading => switch (_section) {
+  String sectionCountText(_EcosystemSection target) => switch (target) {
+    _EcosystemSection.skills =>
+      isSkillsAtCap ? '${_skills.length} loaded' : '${_skills.length}',
+    _EcosystemSection.plugins =>
+      isPluginsIncomplete ? '${_plugins.length} loaded' : '${_plugins.length}',
+    _EcosystemSection.apps =>
+      isAppsBadgeLoadedOnly ? '$appsBadgeCount loaded' : '$appsBadgeCount',
+    _EcosystemSection.mcp =>
+      isMcpAtCap ? '${_mcpServers.length} loaded' : '${_mcpServers.length}',
+  };
+
+  String sectionSegmentLabel(_EcosystemSection target) {
+    final name = switch (target) {
+      _EcosystemSection.skills => 'Skills',
+      _EcosystemSection.plugins => 'Plugins',
+      _EcosystemSection.apps => 'Apps',
+      _EcosystemSection.mcp => 'MCP',
+    };
+    return '$name (${sectionCountText(target)})';
+  }
+
+  List<String> get _normalizedCwds =>
+      cwd.trim().isEmpty ? const <String>[] : <String>[cwd.trim()];
+
+  bool isSectionLoading(_EcosystemSection target) => switch (target) {
     _EcosystemSection.skills =>
       _skillsLoading ||
           _skillsRefreshInFlight != null ||
@@ -2732,37 +2826,71 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _mcpLoading || _mcpRefreshInFlight != null || _reloadingMcp,
   };
 
-  String? get _activeSectionError => switch (_section) {
+  String? sectionError(_EcosystemSection target) => switch (target) {
     _EcosystemSection.skills => _skillsError,
     _EcosystemSection.plugins => _pluginsError,
     _EcosystemSection.apps => null,
     _EcosystemSection.mcp => _mcpLoadError,
   };
 
-  ValueKey<String> get _activeSectionErrorKey => switch (_section) {
-    _EcosystemSection.skills => const ValueKey('ecosystem-skills-error'),
-    _EcosystemSection.plugins => const ValueKey('ecosystem-plugins-error'),
-    _EcosystemSection.apps => const ValueKey('ecosystem-apps-error'),
-    _EcosystemSection.mcp => const ValueKey('ecosystem-mcp-error'),
-  };
+  ValueKey<String> sectionErrorKey(_EcosystemSection target) =>
+      switch (target) {
+        _EcosystemSection.skills => const ValueKey('ecosystem-skills-error'),
+        _EcosystemSection.plugins => const ValueKey('ecosystem-plugins-error'),
+        _EcosystemSection.apps => const ValueKey('ecosystem-apps-error'),
+        _EcosystemSection.mcp => const ValueKey('ecosystem-mcp-error'),
+      };
 
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_refresh());
+  void setSection(_EcosystemSection next) {
+    if (_disposed || _section == next) {
+      return;
+    }
+    _section = next;
+    notifyListeners();
   }
 
-  List<McpElicitationRequest> _activeDirectMcpElicitations(
-    UserInputController? userInputController,
+  void _notify() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  void _handleThreadControllerChanged() {
+    if (_disposed) {
+      return;
+    }
+    final capturedId = threadId;
+    final selected = threadController?.selectedThread;
+    if (capturedId != null &&
+        selected != null &&
+        selected.id == capturedId &&
+        selected.status != ThreadRuntimeStatus.notLoaded &&
+        _mcpErrors.values.any(
+          (error) => error.contains('Resume the selected thread'),
+        )) {
+      _mcpErrors.removeWhere(
+        (_, error) => error.contains('Resume the selected thread'),
+      );
+      _notify();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    threadController?.removeListener(_handleThreadControllerChanged);
+    super.dispose();
+  }
+
+  List<McpElicitationRequest> activeDirectMcpElicitations(
+    UserInputController? controller,
   ) {
     final busyServer = _mcpBusyServer;
     final busyThreadId = _mcpBusyThreadId;
-    if (userInputController == null ||
-        busyServer == null ||
-        busyThreadId == null) {
+    if (controller == null || busyServer == null || busyThreadId == null) {
       return const <McpElicitationRequest>[];
     }
-    return userInputController.pendingElicitations
+    return controller.pendingElicitations
         .where(
           (request) =>
               !_mcpExcludedElicitationIds.contains(request.requestId) &&
@@ -2827,7 +2955,10 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     );
   }
 
-  Future<void> _refresh({bool forceRefetch = false}) async {
+  Future<void> refresh({bool forceRefetch = false}) async {
+    if (_disposed) {
+      return;
+    }
     final cwds = _normalizedCwds;
     unawaited(_refreshApps(forceRefetch: forceRefetch));
     await Future.wait<void>([
@@ -2836,6 +2967,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _refreshMcp(forceRefetch: forceRefetch),
     ]);
   }
+
+  Future<void> retryPlugins() =>
+      _refreshPlugins(cwds: _normalizedCwds, forceRefetch: true);
 
   Future<void> _refreshSkills({required List<String> cwds}) {
     if (_skillsRefreshInFlight case final inFlight?) {
@@ -2848,8 +2982,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     future = _runRefreshSkills(cwds: cwds).whenComplete(() {
       if (identical(_skillsRefreshInFlight, future)) {
         _skillsRefreshInFlight = null;
-        if (mounted && _skillsLoading) {
-          setState(() => _skillsLoading = false);
+        if (!_disposed && _skillsLoading) {
+          _skillsLoading = false;
+          _notify();
         }
       }
     });
@@ -2859,32 +2994,29 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _runRefreshSkills({required List<String> cwds}) async {
     final generation = ++_skillsRefreshGeneration;
-    if (mounted) {
-      setState(() {
-        _skillsLoading = true;
-        _skillsError = null;
-      });
+    if (!_disposed) {
+      _skillsLoading = true;
+      _skillsError = null;
+      _notify();
     }
     try {
-      final nextSkills = await widget.gateway.listSkills(cwds: cwds);
-      if (!mounted || generation != _skillsRefreshGeneration) {
+      final nextSkills = await gateway.listSkills(cwds: cwds);
+      if (_disposed || generation != _skillsRefreshGeneration) {
         return;
       }
-      setState(() {
-        _skills = nextSkills;
-        _skillsLoadFailed = false;
-        _skillsError = null;
-        _skillsLoading = false;
-      });
+      _skills = nextSkills;
+      _skillsLoadFailed = false;
+      _skillsError = null;
+      _skillsLoading = false;
+      _notify();
     } catch (error) {
-      if (!mounted || generation != _skillsRefreshGeneration) {
+      if (_disposed || generation != _skillsRefreshGeneration) {
         return;
       }
-      setState(() {
-        _skillsLoadFailed = true;
-        _skillsError = '$error';
-        _skillsLoading = false;
-      });
+      _skillsLoadFailed = true;
+      _skillsError = '$error';
+      _skillsLoading = false;
+      _notify();
     }
   }
 
@@ -2904,8 +3036,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         .whenComplete(() {
           if (identical(_pluginsRefreshInFlight, future)) {
             _pluginsRefreshInFlight = null;
-            if (mounted) {
-              setState(() => _pluginsLoading = false);
+            if (!_disposed) {
+              _pluginsLoading = false;
+              _notify();
             }
           }
         });
@@ -2918,31 +3051,29 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     required bool forceRefetch,
   }) async {
     final generation = ++_pluginsRefreshGeneration;
-    final catalog = _catalogGateway;
-    if (mounted) {
-      setState(() {
-        _pluginsLoading = true;
-        _pluginsError = null;
-      });
+    final catalog = catalogGateway;
+    if (!_disposed) {
+      _pluginsLoading = true;
+      _pluginsError = null;
+      _notify();
     }
     try {
       final snapshot = catalog != null
           ? await catalog.listPluginCatalog(cwds: cwds)
           : PluginCatalogSnapshot(
-              plugins: await widget.gateway.listPlugins(cwds: cwds),
+              plugins: await gateway.listPlugins(cwds: cwds),
             );
-      if (!mounted || generation != _pluginsRefreshGeneration) {
+      if (_disposed || generation != _pluginsRefreshGeneration) {
         return;
       }
       final nextPlugins = snapshot.plugins;
-      setState(() {
-        _plugins = nextPlugins;
-        _pluginCatalogIsPartial = snapshot.isPartial;
-        _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
-        _pluginsLoadFailed = false;
-        _pluginsError = null;
-        _pluginsLoading = false;
-      });
+      _plugins = nextPlugins;
+      _pluginCatalogIsPartial = snapshot.isPartial;
+      _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
+      _pluginsLoadFailed = false;
+      _pluginsError = null;
+      _pluginsLoading = false;
+      _notify();
       if (forceRefetch && catalog != null && _expandedPluginIds.isNotEmpty) {
         await _refreshExpandedPluginDetails(
           catalog: catalog,
@@ -2951,14 +3082,13 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         );
       }
     } catch (error) {
-      if (!mounted || generation != _pluginsRefreshGeneration) {
+      if (_disposed || generation != _pluginsRefreshGeneration) {
         return;
       }
-      setState(() {
-        _pluginsLoadFailed = true;
-        _pluginsError = '$error';
-        _pluginsLoading = false;
-      });
+      _pluginsLoadFailed = true;
+      _pluginsError = '$error';
+      _pluginsLoading = false;
+      _notify();
     }
   }
 
@@ -2971,7 +3101,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         .where((p) => _expandedPluginIds.contains(p.id))
         .toList(growable: false);
     for (final plugin in expandedPlugins) {
-      if (!mounted || generation != _pluginsRefreshGeneration) {
+      if (_disposed || generation != _pluginsRefreshGeneration) {
         return;
       }
       if (!_expandedPluginIds.contains(plugin.id)) {
@@ -2985,12 +3115,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               ? plugin.marketplaceName
               : null,
         );
-        if (mounted &&
+        if (!_disposed &&
             generation == _pluginsRefreshGeneration &&
             _expandedPluginIds.contains(plugin.id)) {
-          setState(() {
-            _pluginDetails[plugin.id] = updatedDetail;
-          });
+          _pluginDetails[plugin.id] = updatedDetail;
+          _notify();
         }
       } on Object {
         // Keep existing detail if refresh re-read fails.
@@ -3009,8 +3138,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     future = _runRefreshMcp(forceRefetch: forceRefetch).whenComplete(() {
       if (identical(_mcpRefreshInFlight, future)) {
         _mcpRefreshInFlight = null;
-        if (mounted && _mcpLoading) {
-          setState(() => _mcpLoading = false);
+        if (!_disposed && _mcpLoading) {
+          _mcpLoading = false;
+          _notify();
         }
       }
     });
@@ -3020,33 +3150,30 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _runRefreshMcp({required bool forceRefetch}) async {
     final generation = ++_mcpRefreshGeneration;
-    if (mounted) {
-      setState(() {
-        _mcpLoading = true;
-        _mcpLoadError = null;
-      });
+    if (!_disposed) {
+      _mcpLoading = true;
+      _mcpLoadError = null;
+      _notify();
     }
     try {
-      final nextMcpServers = await widget.gateway.listMcpServerStatus();
-      if (!mounted || generation != _mcpRefreshGeneration) {
+      final nextMcpServers = await gateway.listMcpServerStatus();
+      if (_disposed || generation != _mcpRefreshGeneration) {
         return;
       }
-      setState(() {
-        _mcpServers = nextMcpServers;
-        _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
-        _mcpLoadFailed = false;
-        _mcpLoadError = null;
-        _mcpLoading = false;
-      });
+      _mcpServers = nextMcpServers;
+      _pruneMcpCaches(nextMcpServers, forceRefetch: forceRefetch);
+      _mcpLoadFailed = false;
+      _mcpLoadError = null;
+      _mcpLoading = false;
+      _notify();
     } catch (error) {
-      if (!mounted || generation != _mcpRefreshGeneration) {
+      if (_disposed || generation != _mcpRefreshGeneration) {
         return;
       }
-      setState(() {
-        _mcpLoadFailed = true;
-        _mcpLoadError = '$error';
-        _mcpLoading = false;
-      });
+      _mcpLoadFailed = true;
+      _mcpLoadError = '$error';
+      _mcpLoading = false;
+      _notify();
     }
   }
 
@@ -3065,50 +3192,47 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Future<void> _runRefreshApps({required bool forceRefetch}) async {
     final generation = ++_appsRefreshGeneration;
-    final catalog = _catalogGateway;
+    final catalog = catalogGateway;
     if (catalog == null) {
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _installedApps = const [];
-        _catalogApps = const [];
-        _appsNextCursor = null;
-        _installedAppsLoadFailed = false;
-        _catalogAppsLoadFailed = false;
-        _appsError = null;
-        _appsLoading = false;
-        _loadingMoreApps = false;
-        _pruneAppCaches(const [], const [], forceRefetch: true);
-      });
+      _installedApps = const [];
+      _catalogApps = const [];
+      _appsNextCursor = null;
+      _installedAppsLoadFailed = false;
+      _catalogAppsLoadFailed = false;
+      _appsError = null;
+      _appsLoading = false;
+      _loadingMoreApps = false;
+      _pruneAppCaches(const [], const [], forceRefetch: true);
+      _notify();
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        _appsLoading = true;
-        _loadingMoreApps = false;
-        _appsError = null;
-      });
+    if (!_disposed) {
+      _appsLoading = true;
+      _loadingMoreApps = false;
+      _appsError = null;
+      _notify();
     }
 
-    var installedApps = _installedApps;
-    var catalogApps = _catalogApps;
+    var nextInstalledApps = _installedApps;
+    var nextCatalogApps = _catalogApps;
     var installedAppsLoadFailed = false;
     var catalogAppsLoadFailed = false;
     String? nextCursor = _appsNextCursor;
     String? appsError;
 
     try {
-      installedApps = await catalog.listInstalledApps(
-        threadId: widget.threadId,
+      nextInstalledApps = await catalog.listInstalledApps(
+        threadId: threadId,
         forceRefresh: forceRefetch,
       );
-      if (mounted && generation == _appsRefreshGeneration) {
-        setState(() {
-          _installedApps = installedApps;
-          _installedAppsLoadFailed = false;
-        });
+      if (!_disposed && generation == _appsRefreshGeneration) {
+        _installedApps = nextInstalledApps;
+        _installedAppsLoadFailed = false;
+        _notify();
       }
     } catch (error) {
       installedAppsLoadFailed = true;
@@ -3119,14 +3243,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       final page = await catalog.listApps(
         AppListQuery(
           limit: _appsPageSize,
-          threadId: widget.threadId,
+          threadId: threadId,
           forceRefetch: forceRefetch,
         ),
       );
-      catalogApps = page.apps
+      nextCatalogApps = page.apps
           .take(maxBoundedEcosystemItems)
           .toList(growable: false);
-      nextCursor = catalogApps.length >= maxBoundedEcosystemItems
+      nextCursor = nextCatalogApps.length >= maxBoundedEcosystemItems
           ? null
           : page.nextCursor;
     } catch (error) {
@@ -3134,19 +3258,22 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       appsError = appsError == null ? '$error' : '$appsError\n$error';
     }
 
-    if (!mounted || generation != _appsRefreshGeneration) {
+    if (_disposed || generation != _appsRefreshGeneration) {
       return;
     }
-    setState(() {
-      _installedApps = installedApps;
-      _catalogApps = catalogApps;
-      _installedAppsLoadFailed = installedAppsLoadFailed;
-      _catalogAppsLoadFailed = catalogAppsLoadFailed;
-      _appsNextCursor = nextCursor;
-      _appsError = appsError;
-      _appsLoading = false;
-      _pruneAppCaches(installedApps, catalogApps, forceRefetch: forceRefetch);
-    });
+    _installedApps = nextInstalledApps;
+    _catalogApps = nextCatalogApps;
+    _installedAppsLoadFailed = installedAppsLoadFailed;
+    _catalogAppsLoadFailed = catalogAppsLoadFailed;
+    _appsNextCursor = nextCursor;
+    _appsError = appsError;
+    _appsLoading = false;
+    _pruneAppCaches(
+      nextInstalledApps,
+      nextCatalogApps,
+      forceRefetch: forceRefetch,
+    );
+    _notify();
 
     if (forceRefetch) {
       final expandedIds = <String>{
@@ -3158,20 +3285,19 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           final result = await catalog.readApps(
             appIds: expandedIds.toList(growable: false),
             includeTools: true,
-            threadId: widget.threadId,
+            threadId: threadId,
           );
-          if (!mounted || generation != _appsRefreshGeneration) {
+          if (_disposed || generation != _appsRefreshGeneration) {
             return;
           }
-          setState(() {
-            for (final detail in result.apps) {
-              _appDetails[detail.id] = detail;
-              _missingAppIds.remove(detail.id);
-            }
-            for (final missing in result.missingAppIds) {
-              _missingAppIds.add(missing);
-            }
-          });
+          for (final detail in result.apps) {
+            _appDetails[detail.id] = detail;
+            _missingAppIds.remove(detail.id);
+          }
+          for (final missing in result.missingAppIds) {
+            _missingAppIds.add(missing);
+          }
+          _notify();
         } on Object {
           // Keep existing detail if refresh re-read fails.
         }
@@ -3179,29 +3305,29 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     }
   }
 
-  Future<void> _loadMoreApps() async {
-    final catalog = _catalogGateway;
+  Future<void> loadMoreApps() async {
+    final catalog = catalogGateway;
     final cursor = _appsNextCursor;
-    if (catalog == null ||
+    if (_disposed ||
+        catalog == null ||
         cursor == null ||
         _loadingMoreApps ||
         _catalogApps.length >= maxBoundedEcosystemItems) {
       return;
     }
-    setState(() {
-      _loadingMoreApps = true;
-      _appsError = null;
-    });
+    _loadingMoreApps = true;
+    _appsError = null;
+    _notify();
     try {
       final remaining = maxBoundedEcosystemItems - _catalogApps.length;
       final page = await catalog.listApps(
         AppListQuery(
           cursor: cursor,
           limit: remaining < _appsPageSize ? remaining : _appsPageSize,
-          threadId: widget.threadId,
+          threadId: threadId,
         ),
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
       final merged = <AppSummaryModel>[..._catalogApps];
@@ -3214,83 +3340,83 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           merged.add(app);
         }
       }
-      setState(() {
-        _catalogApps = List<AppSummaryModel>.unmodifiable(merged);
-        _appsNextCursor = merged.length >= maxBoundedEcosystemItems
-            ? null
-            : page.nextCursor;
-        _loadingMoreApps = false;
-      });
+      _catalogApps = List<AppSummaryModel>.unmodifiable(merged);
+      _appsNextCursor = merged.length >= maxBoundedEcosystemItems
+          ? null
+          : page.nextCursor;
+      _loadingMoreApps = false;
+      _notify();
     } catch (error) {
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _appsError = '$error';
-        _loadingMoreApps = false;
-      });
+      _appsError = '$error';
+      _loadingMoreApps = false;
+      _notify();
     }
   }
 
-  Future<void> _reloadMcpServers() async {
-    final gateway = _mcpGateway;
-    if (gateway == null ||
+  Future<void> reloadMcpServers() async {
+    final mcp = mcpGateway;
+    if (_disposed ||
+        mcp == null ||
         _reloadingMcp ||
         _mcpLoading ||
         _mcpRefreshInFlight != null) {
       return;
     }
-    setState(() {
-      _reloadingMcp = true;
-      _mcpNotice = null;
-      _mcpErrors.clear();
-    });
+    _reloadingMcp = true;
+    _mcpNotice = null;
+    _mcpErrors.clear();
+    _notify();
     try {
-      await gateway.reloadMcpServers();
-      final generation = ++_mcpRefreshGeneration;
-      final servers = await widget.gateway.listMcpServerStatus();
-      if (!mounted || generation != _mcpRefreshGeneration) {
+      await mcp.reloadMcpServers();
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _mcpServers = servers;
-        _pruneMcpCaches(servers, forceRefetch: true);
-        _mcpLoadFailed = false;
-        _mcpLoadError = null;
-        _mcpLoading = false;
-        _mcpNotice = 'MCP server configuration reloaded.';
-      });
+      final generation = ++_mcpRefreshGeneration;
+      final servers = await gateway.listMcpServerStatus();
+      if (_disposed || generation != _mcpRefreshGeneration) {
+        return;
+      }
+      _mcpServers = servers;
+      _pruneMcpCaches(servers, forceRefetch: true);
+      _mcpLoadFailed = false;
+      _mcpLoadError = null;
+      _mcpLoading = false;
+      _mcpNotice = 'MCP server configuration reloaded.';
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _mcpLoading = false;
-          _mcpNotice = 'Reload failed: $error';
-        });
+      if (!_disposed) {
+        _mcpLoading = false;
+        _mcpNotice = 'Reload failed: $error';
       }
     } finally {
-      if (mounted) {
-        setState(() => _reloadingMcp = false);
+      if (!_disposed) {
+        _reloadingMcp = false;
+        _notify();
       }
     }
   }
 
   bool _ensureCapturedThreadReady(String serverName, String capturedThreadId) {
-    final threadController = widget.threadController;
-    if (threadController == null) {
+    final threads = threadController;
+    if (threads == null) {
       return true;
     }
-    final selected = threadController.selectedThread;
+    final selected = threads.selectedThread;
     if (selected == null || selected.id != capturedThreadId) {
-      setState(() {
-        _mcpErrors[serverName] = 'Selected thread changed; reopen Skills, Plugins & MCP to continue.';
-      });
+      _mcpErrors[serverName] = isModal
+          ? 'Selected thread changed; reopen Skills, Plugins & MCP to continue.'
+          : 'Selected thread changed; refresh Customize to continue.';
+      _notify();
       return false;
     }
     if (selected.status == ThreadRuntimeStatus.notLoaded &&
-        threadController.isMaterialized(selected.id)) {
-      setState(() {
-        _mcpErrors[serverName] = 'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.';
-      });
+        threads.isMaterialized(selected.id)) {
+      _mcpErrors[serverName] = isModal
+          ? 'Resume the selected thread in the sidebar and reopen Skills, Plugins & MCP to run thread-scoped MCP actions.'
+          : 'Resume the selected thread in the Conversations sidebar to run thread-scoped MCP actions.';
+      _notify();
       return false;
     }
     return true;
@@ -3298,36 +3424,41 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   void _activateMcpOutboundOperation(
     String serverName,
-    String? threadId,
+    String? activeThreadId,
     _McpOperationKind kind,
   ) {
-    final existingIds = widget.userInputController?.pendingElicitations
+    final existingIds = userInputController?.pendingElicitations
         .map((request) => request.requestId)
         .toSet();
-    setState(() {
-      _mcpBusyServer = serverName;
-      _mcpBusyThreadId = threadId;
-      _mcpBusyOperation = kind;
-      _mcpExcludedElicitationIds = existingIds == null || existingIds.isEmpty
-          ? const <Object>{}
-          : Set<Object>.unmodifiable(existingIds);
-      _mcpErrors.remove(serverName);
-    });
+    _mcpBusyServer = serverName;
+    _mcpBusyThreadId = activeThreadId;
+    _mcpBusyOperation = kind;
+    _mcpExcludedElicitationIds = existingIds == null || existingIds.isEmpty
+        ? const <Object>{}
+        : Set<Object>.unmodifiable(existingIds);
+    _mcpErrors.remove(serverName);
+    _notify();
   }
 
-  Future<void> _readMcpResource(McpServerStatusModel server) async {
-    final gateway = _mcpGateway;
-    if (gateway == null || _mcpBusyServer != null) {
+  Future<void> readMcpResource(
+    BuildContext context,
+    McpServerStatusModel server,
+  ) async {
+    final mcp = mcpGateway;
+    if (_disposed ||
+        !context.mounted ||
+        mcp == null ||
+        _mcpBusyServer != null) {
       return;
     }
     final uri = await showDialog<String>(
       context: context,
       builder: (context) => _McpResourceReadDialog(serverName: server.name),
     );
-    if (uri == null || !mounted) {
+    if (uri == null || _disposed) {
       return;
     }
-    final normalizedThreadId = widget.threadId?.trim();
+    final normalizedThreadId = threadId?.trim();
     final activeThreadId =
         normalizedThreadId == null || normalizedThreadId.isEmpty
         ? null
@@ -3342,51 +3473,54 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _McpOperationKind.readResource,
     );
     try {
-      final result = await gateway.readMcpResource(
+      final result = await mcp.readMcpResource(
         McpResourceReadQuery(
           server: server.name,
           uri: uri,
           threadId: activeThreadId,
         ),
       );
-      if (mounted) {
-        setState(() => _mcpResults[server.name] = result);
+      if (!_disposed) {
+        _mcpResults[server.name] = result;
       }
     } catch (error) {
-      if (mounted) {
-        setState(() => _mcpErrors[server.name] = '$error');
+      if (!_disposed) {
+        _mcpErrors[server.name] = '$error';
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _mcpBusyServer = null;
-          _mcpBusyThreadId = null;
-          _mcpBusyOperation = null;
-          _mcpExcludedElicitationIds = const <Object>{};
-        });
+      if (!_disposed) {
+        _mcpBusyServer = null;
+        _mcpBusyThreadId = null;
+        _mcpBusyOperation = null;
+        _mcpExcludedElicitationIds = const <Object>{};
+        _notify();
       }
     }
   }
 
-  Future<void> _callMcpTool(McpServerStatusModel server) async {
-    final gateway = _mcpGateway;
-    final threadId = widget.threadId;
-    if (gateway == null || _mcpBusyServer != null) {
+  Future<void> callMcpTool(
+    BuildContext context,
+    McpServerStatusModel server,
+  ) async {
+    final mcp = mcpGateway;
+    if (_disposed ||
+        !context.mounted ||
+        mcp == null ||
+        _mcpBusyServer != null) {
       return;
     }
     final normalizedThreadId = threadId?.trim();
     if (normalizedThreadId == null || normalizedThreadId.isEmpty) {
-      setState(() {
-        _mcpErrors[server.name] =
-            'Select or create a thread before calling an MCP tool.';
-      });
+      _mcpErrors[server.name] =
+          'Select or create a thread before calling an MCP tool.';
+      _notify();
       return;
     }
     final input = await showDialog<({String tool, Map<String, Object?> args})>(
       context: context,
       builder: (context) => _McpToolCallDialog(serverName: server.name),
     );
-    if (input == null || !mounted) {
+    if (input == null || _disposed) {
       return;
     }
     if (!_ensureCapturedThreadReady(server.name, normalizedThreadId)) {
@@ -3398,7 +3532,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       _McpOperationKind.callTool,
     );
     try {
-      final result = await gateway.callMcpTool(
+      final result = await mcp.callMcpTool(
         McpToolCallQuery(
           server: server.name,
           threadId: normalizedThreadId,
@@ -3406,77 +3540,89 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           arguments: input.args,
         ),
       );
-      if (mounted) {
-        setState(() => _mcpResults[server.name] = result);
+      if (!_disposed) {
+        _mcpResults[server.name] = result;
       }
     } catch (error) {
-      if (mounted) {
-        setState(() => _mcpErrors[server.name] = '$error');
+      if (!_disposed) {
+        _mcpErrors[server.name] = '$error';
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _mcpBusyServer = null;
-          _mcpBusyThreadId = null;
-          _mcpBusyOperation = null;
-          _mcpExcludedElicitationIds = const <Object>{};
-        });
+      if (!_disposed) {
+        _mcpBusyServer = null;
+        _mcpBusyThreadId = null;
+        _mcpBusyOperation = null;
+        _mcpExcludedElicitationIds = const <Object>{};
+        _notify();
       }
     }
   }
 
-  Future<void> _toggleSkill(SkillSummary skill) async {
-    if (_skillsLoading || _mutatingSkillPaths.contains(skill.path)) {
+  Future<void> toggleSkill(SkillSummary skill) async {
+    if (_disposed ||
+        _skillsLoading ||
+        _mutatingSkillPaths.contains(skill.path)) {
       return;
     }
-    setState(() {
-      _mutatingSkillPaths.add(skill.path);
-      _skillsError = null;
-    });
+    _mutatingSkillPaths.add(skill.path);
+    _skillsError = null;
+    _notify();
     try {
-      final effective = await widget.gateway.setSkillEnabled(
+      final effective = await gateway.setSkillEnabled(
         path: skill.path,
         enabled: !skill.enabled,
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        ++_skillsRefreshGeneration;
-        _skills = [
-          for (final item in _skills)
-            if (item.path == skill.path)
-              item.copyWith(enabled: effective)
-            else
-              item,
-        ];
-      });
+      ++_skillsRefreshGeneration;
+      _skills = [
+        for (final item in _skills)
+          if (item.path == skill.path)
+            item.copyWith(enabled: effective)
+          else
+            item,
+      ];
     } catch (error) {
-      if (!mounted) {
-        return;
+      if (!_disposed) {
+        _skillsError = '$error';
       }
-      setState(() => _skillsError = '$error');
     } finally {
-      if (mounted) {
-        setState(() => _mutatingSkillPaths.remove(skill.path));
+      if (!_disposed) {
+        _mutatingSkillPaths.remove(skill.path);
+        _notify();
       }
     }
   }
 
-  Future<void> _togglePluginDetails(PluginSummaryModel plugin) async {
-    final catalog = _catalogGateway;
-    if (catalog == null || _pluginsLoading || _pluginsRefreshInFlight != null) {
+  Future<void> selectAndExpandPlugin(PluginSummaryModel plugin) async {
+    if (_disposed) {
+      return;
+    }
+    setSection(_EcosystemSection.plugins);
+    if (_expandedPluginIds.contains(plugin.id)) {
+      return;
+    }
+    await togglePluginDetails(plugin);
+  }
+
+  Future<void> togglePluginDetails(PluginSummaryModel plugin) async {
+    final catalog = catalogGateway;
+    if (_disposed ||
+        catalog == null ||
+        _pluginsLoading ||
+        _pluginsRefreshInFlight != null) {
       return;
     }
     if (_expandedPluginIds.contains(plugin.id)) {
-      setState(() => _expandedPluginIds.remove(plugin.id));
+      _expandedPluginIds.remove(plugin.id);
+      _notify();
       return;
     }
-    setState(() {
-      _expandedPluginIds.add(plugin.id);
-      _readingPluginIds.add(plugin.id);
-      _pluginsError = null;
-    });
+    _expandedPluginIds.add(plugin.id);
+    _readingPluginIds.add(plugin.id);
+    _pluginsError = null;
+    _notify();
     try {
       final detail = await catalog.readPlugin(
         pluginName: plugin.effectivePluginName,
@@ -3485,38 +3631,36 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             ? plugin.marketplaceName
             : null,
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _pluginDetails[plugin.id] = detail;
-        _readingPluginIds.remove(plugin.id);
-      });
+      _pluginDetails[plugin.id] = detail;
+      _readingPluginIds.remove(plugin.id);
+      _notify();
     } catch (error) {
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _readingPluginIds.remove(plugin.id);
-        _expandedPluginIds.remove(plugin.id);
-        _pluginsError = '$error';
-      });
+      _readingPluginIds.remove(plugin.id);
+      _expandedPluginIds.remove(plugin.id);
+      _pluginsError = '$error';
+      _notify();
     }
   }
 
-  Future<void> _installPlugin(PluginSummaryModel plugin) async {
-    final catalog = _catalogGateway;
-    if (catalog == null ||
+  Future<void> installPlugin(PluginSummaryModel plugin) async {
+    final catalog = catalogGateway;
+    if (_disposed ||
+        catalog == null ||
         _pluginsLoading ||
         _pluginsRefreshInFlight != null ||
         _mutatingPluginIds.isNotEmpty) {
       return;
     }
-    setState(() {
-      _mutatingPluginIds.add(plugin.id);
-      _pluginsError = null;
-      _pluginActionNotice = null;
-    });
+    _mutatingPluginIds.add(plugin.id);
+    _pluginsError = null;
+    _pluginActionNotice = null;
+    _notify();
     try {
       final result = await catalog.installPlugin(
         pluginName: plugin.effectivePluginName,
@@ -3525,7 +3669,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             ? plugin.marketplaceName
             : null,
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
       final authApps = result.appsNeedingAuth.map((a) => a.name).join(', ');
@@ -3541,40 +3685,38 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         forceRefetch: true,
         allowDuringMutation: true,
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _mutatingPluginIds.remove(plugin.id);
-        _pluginActionNotice = notice;
-      });
+      _mutatingPluginIds.remove(plugin.id);
+      _pluginActionNotice = notice;
+      _notify();
     } catch (error) {
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _mutatingPluginIds.remove(plugin.id);
-        _pluginsError = '$error';
-      });
+      _mutatingPluginIds.remove(plugin.id);
+      _pluginsError = '$error';
+      _notify();
     }
   }
 
-  Future<void> _uninstallPlugin(PluginSummaryModel plugin) async {
-    final catalog = _catalogGateway;
-    if (catalog == null ||
+  Future<void> uninstallPlugin(PluginSummaryModel plugin) async {
+    final catalog = catalogGateway;
+    if (_disposed ||
+        catalog == null ||
         _pluginsLoading ||
         _pluginsRefreshInFlight != null ||
         _mutatingPluginIds.isNotEmpty) {
       return;
     }
-    setState(() {
-      _mutatingPluginIds.add(plugin.id);
-      _pluginsError = null;
-      _pluginActionNotice = null;
-    });
+    _mutatingPluginIds.add(plugin.id);
+    _pluginsError = null;
+    _pluginActionNotice = null;
+    _notify();
     try {
       await catalog.uninstallPlugin(pluginId: plugin.id);
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
       final cwds = _normalizedCwds;
@@ -3586,79 +3728,943 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         forceRefetch: true,
         allowDuringMutation: true,
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _mutatingPluginIds.remove(plugin.id);
-        _pluginDetails.remove(plugin.id);
-        _expandedPluginIds.remove(plugin.id);
-        _pluginActionNotice = 'Uninstalled ${plugin.name}.';
-      });
+      _mutatingPluginIds.remove(plugin.id);
+      _pluginDetails.remove(plugin.id);
+      _expandedPluginIds.remove(plugin.id);
+      _pluginActionNotice = 'Uninstalled ${plugin.name}.';
+      _notify();
     } catch (error) {
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _mutatingPluginIds.remove(plugin.id);
-        _pluginsError = '$error';
-      });
+      _mutatingPluginIds.remove(plugin.id);
+      _pluginsError = '$error';
+      _notify();
     }
   }
 
-  Future<void> _toggleAppDetails(
+  Future<void> toggleAppDetails(
     String appId, {
     required bool installedSection,
   }) async {
-    final catalog = _catalogGateway;
-    if (catalog == null) {
+    final catalog = catalogGateway;
+    if (_disposed || catalog == null) {
       return;
     }
     final targetSet = installedSection
         ? _expandedInstalledAppIds
         : _expandedCatalogAppIds;
     if (targetSet.contains(appId)) {
-      setState(() => targetSet.remove(appId));
+      targetSet.remove(appId);
+      _notify();
       return;
     }
-    setState(() {
-      targetSet.add(appId);
-      _readingAppIds.add(appId);
-      _appsError = null;
-    });
+    targetSet.add(appId);
+    _readingAppIds.add(appId);
+    _appsError = null;
+    _notify();
     try {
       final result = await catalog.readApps(
         appIds: <String>[appId],
         includeTools: true,
-        threadId: widget.threadId,
+        threadId: threadId,
       );
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _readingAppIds.remove(appId);
-        for (final detail in result.apps) {
-          _appDetails[detail.id] = detail;
-          _missingAppIds.remove(detail.id);
-        }
-        for (final missing in result.missingAppIds) {
-          _missingAppIds.add(missing);
-        }
-        if (!_appDetails.containsKey(appId) &&
-            !result.missingAppIds.contains(appId)) {
-          _missingAppIds.add(appId);
-        }
-      });
+      _readingAppIds.remove(appId);
+      for (final detail in result.apps) {
+        _appDetails[detail.id] = detail;
+        _missingAppIds.remove(detail.id);
+      }
+      for (final missing in result.missingAppIds) {
+        _missingAppIds.add(missing);
+      }
+      if (!_appDetails.containsKey(appId) &&
+          !result.missingAppIds.contains(appId)) {
+        _missingAppIds.add(appId);
+      }
+      _notify();
     } catch (error) {
-      if (!mounted) {
+      if (_disposed) {
         return;
       }
-      setState(() {
-        _readingAppIds.remove(appId);
-        targetSet.remove(appId);
-        _appsError = '$error';
-      });
+      _readingAppIds.remove(appId);
+      targetSet.remove(appId);
+      _appsError = '$error';
+      _notify();
     }
+  }
+}
+
+class _CustomizeSidebar extends StatefulWidget {
+  const _CustomizeSidebar({
+    required this.controller,
+    required this.selectedSection,
+    required this.onSelectSection,
+  });
+
+  final _EcosystemController controller;
+  final _EcosystemSection selectedSection;
+  final ValueChanged<_EcosystemSection> onSelectSection;
+
+  @override
+  State<_CustomizeSidebar> createState() => _CustomizeSidebarState();
+}
+
+class _CustomizeSidebarState extends State<_CustomizeSidebar> {
+  final _installedSearchController = TextEditingController();
+  final _installedSearchFocusNode = FocusNode(
+    debugLabel: 'customize-installed-search',
+  );
+  final _searchToggleScopeNode = FocusNode(
+    debugLabel: 'customize-installed-search-toggle-scope',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+  var _showInstalledSearch = false;
+  var _installedSearchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _installedSearchController.addListener(_handleSearchChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CustomizeSidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _installedSearchController.clear();
+      _installedSearchQuery = '';
+      _showInstalledSearch = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _installedSearchController
+      ..removeListener(_handleSearchChanged)
+      ..dispose();
+    _installedSearchFocusNode.dispose();
+    _searchToggleScopeNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSearchChanged() {
+    final next = _installedSearchController.text.trim();
+    if (next != _installedSearchQuery && mounted) {
+      setState(() => _installedSearchQuery = next);
+    }
+  }
+
+  void _toggleInstalledSearch() {
+    if (_showInstalledSearch) {
+      _installedSearchController.clear();
+      setState(() {
+        _installedSearchQuery = '';
+        _showInstalledSearch = false;
+      });
+      return;
+    }
+    setState(() => _showInstalledSearch = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _showInstalledSearch) {
+        _installedSearchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _closeInstalledSearchAndRefocusTrigger() {
+    _installedSearchController.clear();
+    setState(() {
+      _installedSearchQuery = '';
+      _showInstalledSearch = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _searchToggleScopeNode.descendants
+            .where((node) => node.canRequestFocus)
+            .firstOrNull
+            ?.requestFocus();
+      }
+    });
+  }
+
+  Widget _buildCountBadge(OfficialCodexThemeData theme, String label) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 11.5,
+        fontWeight: FontWeight.w500,
+        color: theme.textMuted,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
+    final controller = widget.controller;
+
+    return ColoredBox(
+      key: const ValueKey('customize-sidebar'),
+      color: !theme.isDark
+          ? OfficialCodexTheme.lightContextualSidebarBackground
+          : palette.sidebar,
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final queryLower = _installedSearchQuery.toLowerCase();
+          final filteredInstalled = queryLower.isEmpty
+              ? controller.installedPlugins
+              : controller.installedPlugins
+                    .where(
+                      (plugin) =>
+                          plugin.name.toLowerCase().contains(queryLower) ||
+                          plugin.effectivePluginName.toLowerCase().contains(
+                            queryLower,
+                          ) ||
+                          plugin.description.toLowerCase().contains(queryLower),
+                    )
+                    .toList(growable: false);
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: OfficialCodexTheme.contextualSidebarHeaderHeight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 10, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Customize',
+                          key: const ValueKey('customize-sidebar-title'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: theme.textPrimary,
+                            letterSpacing: -0.15,
+                          ),
+                        ),
+                      ),
+                      Focus(
+                        focusNode: _searchToggleScopeNode,
+                        child: CodexIconButton(
+                          key: const ValueKey(
+                            'customize-installed-search-toggle',
+                          ),
+                          tooltip: 'Search installed plugins',
+                          selected: _showInstalledSearch,
+                          size: 28,
+                          onPressed: _toggleInstalledSearch,
+                          icon: const Icon(Icons.search_rounded, size: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_showInstalledSearch)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                  child: Focus(
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.escape) {
+                        _closeInstalledSearchAndRefocusTrigger();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: ListenableBuilder(
+                      listenable: _installedSearchFocusNode,
+                      builder: (context, _) {
+                        final focused = _installedSearchFocusNode.hasFocus;
+                        return Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: theme.hoverTint,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: focused
+                                  ? theme.focusRing
+                                  : theme.hairlineBorder,
+                              width: focused
+                                  ? 1.5
+                                  : OfficialCodexTheme.hairlineBorderWidth,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.search_rounded,
+                                size: 15,
+                                color: theme.textMuted,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  key: const ValueKey(
+                                    'customize-installed-search-field',
+                                  ),
+                                  controller: _installedSearchController,
+                                  focusNode: _installedSearchFocusNode,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: theme.textPrimary,
+                                  ),
+                                  decoration: InputDecoration(
+                                    isCollapsed: true,
+                                    filled: false,
+                                    contentPadding: EdgeInsets.zero,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    disabledBorder: InputBorder.none,
+                                    errorBorder: InputBorder.none,
+                                    focusedErrorBorder: InputBorder.none,
+                                    hintText: 'Search installed plugins',
+                                    hintStyle: TextStyle(
+                                      fontSize: 13,
+                                      color: theme.textMuted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (_installedSearchQuery.isNotEmpty)
+                                CodexIconButton(
+                                  tooltip: 'Clear search',
+                                  size: 22,
+                                  onPressed: _installedSearchController.clear,
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: ListView(
+                  key: const ValueKey('customize-sidebar-scroll'),
+                  padding: const EdgeInsets.fromLTRB(8, 2, 8, 12),
+                  children: [
+                    KeyedSubtree(
+                      key: const ValueKey('customize-section-nav'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          CodexSidebarRow(
+                            key: const ValueKey('customize-nav-plugins'),
+                            title: 'Plugins',
+                            leading: const Icon(Icons.widgets_outlined),
+                            trailing: _buildCountBadge(
+                              theme,
+                              controller.sectionCountText(
+                                _EcosystemSection.plugins,
+                              ),
+                            ),
+                            selected:
+                                widget.selectedSection ==
+                                _EcosystemSection.plugins,
+                            onTap: () => widget.onSelectSection(
+                              _EcosystemSection.plugins,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          CodexSidebarRow(
+                            key: const ValueKey('customize-nav-skills'),
+                            title: 'Skills',
+                            leading: const Icon(Icons.layers_outlined),
+                            trailing: _buildCountBadge(
+                              theme,
+                              controller.sectionCountText(
+                                _EcosystemSection.skills,
+                              ),
+                            ),
+                            selected:
+                                widget.selectedSection ==
+                                _EcosystemSection.skills,
+                            onTap: () => widget.onSelectSection(
+                              _EcosystemSection.skills,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          CodexSidebarRow(
+                            key: const ValueKey('customize-nav-apps'),
+                            title: 'Apps',
+                            leading: const Icon(Icons.apps_rounded),
+                            trailing: _buildCountBadge(
+                              theme,
+                              controller.sectionCountText(
+                                _EcosystemSection.apps,
+                              ),
+                            ),
+                            selected:
+                                widget.selectedSection ==
+                                _EcosystemSection.apps,
+                            onTap: () =>
+                                widget.onSelectSection(_EcosystemSection.apps),
+                          ),
+                          const SizedBox(height: 1),
+                          CodexSidebarRow(
+                            key: const ValueKey('customize-nav-mcp'),
+                            title: 'MCP',
+                            leading: const Icon(Icons.hub_outlined),
+                            trailing: _buildCountBadge(
+                              theme,
+                              controller.sectionCountText(
+                                _EcosystemSection.mcp,
+                              ),
+                            ),
+                            selected:
+                                widget.selectedSection == _EcosystemSection.mcp,
+                            onTap: () =>
+                                widget.onSelectSection(_EcosystemSection.mcp),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 14, 8, 4),
+                      child: Text(
+                        'Installed',
+                        key: const ValueKey('customize-installed-heading'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.textMuted,
+                        ),
+                      ),
+                    ),
+                    if (controller.pluginsLoadFailed)
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Failed to load plugins',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: theme.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            CodexButton(
+                              key: const ValueKey('customize-installed-retry'),
+                              size: CodexButtonSize.sm,
+                              variant: CodexButtonVariant.secondary,
+                              loading: controller.pluginsLoading,
+                              onPressed: controller.pluginsLoading
+                                  ? null
+                                  : controller.retryPlugins,
+                              label: 'Retry',
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (controller.pluginsLoading &&
+                        controller.plugins.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          'Loading plugins...',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: theme.textMuted,
+                          ),
+                        ),
+                      )
+                    else if (filteredInstalled.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          _installedSearchQuery.isNotEmpty
+                              ? (controller.isPluginsIncomplete
+                                    ? 'No matching loaded plugins'
+                                    : 'No matching plugins')
+                              : controller.pluginCatalogIsPartial
+                              ? 'No installed plugins in incomplete catalog'
+                              : controller.isPluginsAtCap
+                              ? 'No installed plugins in loaded catalog'
+                              : 'No installed plugins',
+                          key: const ValueKey('customize-installed-empty'),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: theme.textSecondary,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      for (final plugin in filteredInstalled) ...[
+                        CodexSidebarRow(
+                          key: ValueKey(
+                            'customize-installed-plugin-${plugin.id}',
+                          ),
+                          title: plugin.name,
+                          leading: const Icon(Icons.extension_outlined),
+                          selected:
+                              widget.selectedSection ==
+                                  _EcosystemSection.plugins &&
+                              controller.isPluginExpanded(plugin.id),
+                          onTap: () {
+                            widget.onSelectSection(_EcosystemSection.plugins);
+                            unawaited(controller.selectAndExpandPlugin(plugin));
+                          },
+                        ),
+                        const SizedBox(height: 1),
+                      ],
+                      if (controller.isPluginsIncomplete)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 6, 8, 4),
+                          child: Text(
+                            controller.pluginCatalogIsPartial
+                                ? 'Some plugin sources could not be loaded.'
+                                : 'Showing installed plugins from first $maxBoundedEcosystemItems loaded entries.',
+                            key: const ValueKey(
+                              'customize-installed-incomplete-note',
+                            ),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: theme.textMuted,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CustomizeWorkspaceView extends StatefulWidget {
+  const _CustomizeWorkspaceView({
+    required this.controller,
+    required this.selectedSection,
+    required this.sidebarCollapsed,
+    required this.onSelectSection,
+  });
+
+  final _EcosystemController controller;
+  final _EcosystemSection selectedSection;
+  final bool sidebarCollapsed;
+  final ValueChanged<_EcosystemSection> onSelectSection;
+
+  @override
+  State<_CustomizeWorkspaceView> createState() =>
+      _CustomizeWorkspaceViewState();
+}
+
+class _CustomizeWorkspaceViewState extends State<_CustomizeWorkspaceView> {
+  static const _maxPageContentWidth = 880.0;
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode(debugLabel: 'customize-workspace-search');
+  var _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_handleSearchChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CustomizeWorkspaceView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.selectedSection != widget.selectedSection) {
+      _searchController.clear();
+      _searchQuery = '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController
+      ..removeListener(_handleSearchChanged)
+      ..dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSearchChanged() {
+    final next = _searchController.text.trim();
+    if (next != _searchQuery && mounted) {
+      setState(() => _searchQuery = next);
+    }
+  }
+
+  (String, String, String) _sectionMetadata(_EcosystemSection section) =>
+      switch (section) {
+        _EcosystemSection.plugins => (
+          'Plugins',
+          'Connect plugins to let Codex work across your tools',
+          'Search plugins',
+        ),
+        _EcosystemSection.skills => (
+          'Skills',
+          'Extend Codex with task-specific skills',
+          'Search skills',
+        ),
+        _EcosystemSection.apps => (
+          'Apps',
+          'Inspect connected apps and available tool catalogs',
+          'Search apps',
+        ),
+        _EcosystemSection.mcp => (
+          'MCP',
+          'Manage Model Context Protocol servers, resources, and tools',
+          'Search MCP servers',
+        ),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final palette = ThemeTokens.of(context);
+    final controller = widget.controller;
+    final section = widget.selectedSection;
+    final (title, subtitle, searchPlaceholder) = _sectionMetadata(section);
+
+    return ColoredBox(
+      key: const ValueKey('customize-workspace-view'),
+      color: theme.workspaceBackground,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = math.max(
+            ThemeTokens.space6,
+            (constraints.maxWidth - _maxPageContentWidth) / 2,
+          );
+          final compactHeaderControls = constraints.maxWidth < 680;
+          return ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) {
+              final searchField = Focus(
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape &&
+                      _searchController.text.isNotEmpty) {
+                    _searchController.clear();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: ListenableBuilder(
+                  listenable: _searchFocusNode,
+                  builder: (context, _) {
+                    final focused = _searchFocusNode.hasFocus;
+                    return Container(
+                      width: compactHeaderControls ? null : 220,
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 11),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(17),
+                        border: Border.all(
+                          color: focused
+                              ? theme.focusRing
+                              : theme.hairlineBorder,
+                          width: focused
+                              ? 1.5
+                              : OfficialCodexTheme.hairlineBorderWidth,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.search_rounded,
+                            size: 15,
+                            color: theme.textMuted,
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey(
+                                'customize-workspace-search-field',
+                              ),
+                              controller: _searchController,
+                              focusNode: _searchFocusNode,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                isCollapsed: true,
+                                filled: false,
+                                contentPadding: EdgeInsets.zero,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                focusedErrorBorder: InputBorder.none,
+                                hintText: searchPlaceholder,
+                                hintStyle: TextStyle(
+                                  fontSize: 13,
+                                  color: theme.textMuted,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_searchQuery.isNotEmpty)
+                            CodexIconButton(
+                              tooltip: 'Clear search',
+                              size: 20,
+                              onPressed: _searchController.clear,
+                              icon: const Icon(Icons.close_rounded, size: 14),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+
+              final refreshButton = CodexIconButton(
+                key: const ValueKey('ecosystem-refresh-button'),
+                tooltip: 'Refresh',
+                onPressed: controller.isSectionLoading(section)
+                    ? null
+                    : () => controller.refresh(forceRefetch: true),
+                icon: const Icon(Icons.refresh_rounded, size: 17),
+              );
+
+              final titleColumn = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          key: const ValueKey('customize-page-title'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: theme.textPrimary,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ),
+                      if (controller.cwd.trim().isNotEmpty) ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          key: const ValueKey('customize-context-chip'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.elevatedSurface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: theme.hairlineBorder,
+                              width: OfficialCodexTheme.hairlineBorderWidth,
+                            ),
+                          ),
+                          child: Text(
+                            _projectName(controller.cwd),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: theme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    key: const ValueKey('customize-page-subtitle'),
+                    style: TextStyle(fontSize: 13, color: theme.textSecondary),
+                  ),
+                ],
+              );
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    key: const ValueKey('customize-workspace-header'),
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      18,
+                      horizontalPadding,
+                      14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.workspaceBackground,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: theme.hairlineBorder,
+                          width: OfficialCodexTheme.hairlineBorderWidth,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.sidebarCollapsed) ...[
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: CodexSegment<_EcosystemSection>(
+                              key: const ValueKey('ecosystem-section-selector'),
+                              items: [
+                                CodexSegmentItem(
+                                  value: _EcosystemSection.plugins,
+                                  label: controller.sectionSegmentLabel(
+                                    _EcosystemSection.plugins,
+                                  ),
+                                ),
+                                CodexSegmentItem(
+                                  value: _EcosystemSection.skills,
+                                  label: controller.sectionSegmentLabel(
+                                    _EcosystemSection.skills,
+                                  ),
+                                ),
+                                CodexSegmentItem(
+                                  value: _EcosystemSection.apps,
+                                  label: controller.sectionSegmentLabel(
+                                    _EcosystemSection.apps,
+                                  ),
+                                ),
+                                CodexSegmentItem(
+                                  value: _EcosystemSection.mcp,
+                                  label: controller.sectionSegmentLabel(
+                                    _EcosystemSection.mcp,
+                                  ),
+                                ),
+                              ],
+                              selectedValue: section,
+                              onSelected: widget.onSelectSection,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (compactHeaderControls)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: titleColumn),
+                                  const SizedBox(width: 8),
+                                  refreshButton,
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              searchField,
+                            ],
+                          )
+                        else
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(child: titleColumn),
+                              const SizedBox(width: 12),
+                              searchField,
+                              const SizedBox(width: 6),
+                              refreshButton,
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                  _EcosystemNoticesAndElicitationSlot(
+                    controller: controller,
+                    section: section,
+                    horizontalPadding: horizontalPadding,
+                    palette: palette,
+                  ),
+                  Expanded(
+                    child: _EcosystemSectionBody(
+                      controller: controller,
+                      section: section,
+                      searchQuery: _searchQuery,
+                      horizontalPadding: horizontalPadding,
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _EcosystemDialog extends StatefulWidget {
+  const _EcosystemDialog({
+    required this.gateway,
+    required this.cwd,
+    this.threadId,
+    this.threadController,
+    this.userInputController,
+  });
+
+  final EcosystemGateway gateway;
+  final String cwd;
+  final String? threadId;
+  final ThreadListController? threadController;
+  final UserInputController? userInputController;
+
+  @override
+  State<_EcosystemDialog> createState() => _EcosystemDialogState();
+}
+
+class _EcosystemDialogState extends State<_EcosystemDialog> {
+  late final _EcosystemController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = _EcosystemController(
+      gateway: widget.gateway,
+      cwd: widget.cwd,
+      threadId: widget.threadId,
+      threadController: widget.threadController,
+      userInputController: widget.userInputController,
+      isModal: true,
+      initialSection: _EcosystemSection.skills,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -3676,175 +4682,316 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760, maxHeight: 700),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                ThemeTokens.space6,
-                ThemeTokens.space4,
-                ThemeTokens.space3,
-                ThemeTokens.space3,
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.extension_outlined, size: 20),
-                  const SizedBox(width: ThemeTokens.space2),
-                  Expanded(
-                    child: Text(
-                      'Skills, Plugins & MCP',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, _) {
+            final section = _controller.section;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    ThemeTokens.space6,
+                    ThemeTokens.space4,
+                    ThemeTokens.space3,
+                    ThemeTokens.space3,
                   ),
-                  CodexSegment<_EcosystemSection>(
-                    key: const ValueKey('ecosystem-section-selector'),
-                    items: [
-                      CodexSegmentItem(
-                        value: _EcosystemSection.skills,
-                        label: 'Skills (${_skills.length})',
-                      ),
-                      CodexSegmentItem(
-                        value: _EcosystemSection.plugins,
-                        label: 'Plugins (${_plugins.length})',
-                      ),
-                      CodexSegmentItem(
-                        value: _EcosystemSection.apps,
-                        label: 'Apps ($_appsBadgeCount)',
-                      ),
-                      CodexSegmentItem(
-                        value: _EcosystemSection.mcp,
-                        label: 'MCP (${_mcpServers.length})',
-                      ),
-                    ],
-                    selectedValue: _section,
-                    onSelected: (next) => setState(() => _section = next),
-                  ),
-                  const SizedBox(width: ThemeTokens.space2),
-                  CodexIconButton(
-                    key: const ValueKey('ecosystem-refresh-button'),
-                    tooltip: 'Refresh',
-                    onPressed: _activeSectionLoading
-                        ? null
-                        : () => _refresh(forceRefetch: true),
-                    icon: const Icon(Icons.refresh_rounded, size: 17),
-                  ),
-                  CodexIconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: palette.border),
-            if (_activeSectionError case final error?)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: KeyedSubtree(
-                  key: _activeSectionErrorKey,
-                  child: _InlineNotice(
-                    icon: Icons.error_outline_rounded,
-                    color: palette.danger,
-                    text: error,
-                  ),
-                ),
-              ),
-            if (_section == _EcosystemSection.plugins &&
-                _pluginCatalogIsPartial &&
-                !_pluginsLoadFailed)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: KeyedSubtree(
-                  key: const ValueKey('ecosystem-plugins-partial'),
-                  child: _InlineNotice(
-                    icon: Icons.warning_amber_rounded,
-                    color: palette.warning,
-                    text: 'The plugin catalog may be incomplete.',
-                  ),
-                ),
-              ),
-            if (_pluginActionNotice case final notice?
-                when _section == _EcosystemSection.plugins)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: KeyedSubtree(
-                  key: const ValueKey('plugin-install-auth-notice'),
-                  child: _InlineNotice(
-                    icon: Icons.info_outline_rounded,
-                    color: palette.accent,
-                    text: notice,
-                  ),
-                ),
-              ),
-            if (_mcpNotice case final notice?
-                when _section == _EcosystemSection.mcp)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: KeyedSubtree(
-                  key: const ValueKey('mcp-action-notice'),
-                  child: _InlineNotice(
-                    icon: notice.startsWith('Reload failed')
-                        ? Icons.error_outline_rounded
-                        : Icons.check_circle_outline_rounded,
-                    color: notice.startsWith('Reload failed')
-                        ? palette.danger
-                        : palette.accent,
-                    text: notice,
+                  child: LayoutBuilder(
+                    builder: (context, headerConstraints) {
+                      final segment = CodexSegment<_EcosystemSection>(
+                        key: const ValueKey('ecosystem-section-selector'),
+                        items: [
+                          CodexSegmentItem(
+                            value: _EcosystemSection.skills,
+                            label: _controller.sectionSegmentLabel(
+                              _EcosystemSection.skills,
+                            ),
+                          ),
+                          CodexSegmentItem(
+                            value: _EcosystemSection.plugins,
+                            label: _controller.sectionSegmentLabel(
+                              _EcosystemSection.plugins,
+                            ),
+                          ),
+                          CodexSegmentItem(
+                            value: _EcosystemSection.apps,
+                            label: _controller.sectionSegmentLabel(
+                              _EcosystemSection.apps,
+                            ),
+                          ),
+                          CodexSegmentItem(
+                            value: _EcosystemSection.mcp,
+                            label: _controller.sectionSegmentLabel(
+                              _EcosystemSection.mcp,
+                            ),
+                          ),
+                        ],
+                        selectedValue: section,
+                        onSelected: _controller.setSection,
+                      );
+                      final actions = <Widget>[
+                        CodexIconButton(
+                          key: const ValueKey('ecosystem-refresh-button'),
+                          tooltip: 'Refresh',
+                          onPressed: _controller.isSectionLoading(section)
+                              ? null
+                              : () => _controller.refresh(forceRefetch: true),
+                          icon: const Icon(Icons.refresh_rounded, size: 17),
+                        ),
+                        CodexIconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                        ),
+                      ];
+                      if (headerConstraints.maxWidth < 680) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.extension_outlined, size: 20),
+                                const SizedBox(width: ThemeTokens.space2),
+                                Expanded(
+                                  child: Text(
+                                    'Skills, Plugins & MCP',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
+                                  ),
+                                ),
+                                ...actions,
+                              ],
+                            ),
+                            const SizedBox(height: ThemeTokens.space2),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: segment,
+                            ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          const Icon(Icons.extension_outlined, size: 20),
+                          const SizedBox(width: ThemeTokens.space2),
+                          Expanded(
+                            child: Text(
+                              'Skills, Plugins & MCP',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          segment,
+                          const SizedBox(width: ThemeTokens.space2),
+                          ...actions,
+                        ],
+                      );
+                    },
                   ),
                 ),
-              ),
-            if (widget.userInputController case final userInputController?)
-              AnimatedBuilder(
-                animation: userInputController,
-                builder: (context, _) {
-                  final directElicitations = _activeDirectMcpElicitations(
-                    userInputController,
-                  );
-                  final activeDirectElicitation =
-                      directElicitations.firstOrNull;
-                  if (activeDirectElicitation == null) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    key: const ValueKey('ecosystem-modal-elicitation-slot'),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: _McpElicitationCard(
-                      key: ValueKey(
-                        'mcp-elicitation-${activeDirectElicitation.requestId}',
-                      ),
-                      controller: userInputController,
-                      request: activeDirectElicitation,
-                      pendingCount: directElicitations.length,
-                      errorMessage: userInputController.errorMessage,
-                      margin: EdgeInsets.zero,
-                      maxFieldsHeight: 180,
-                    ),
-                  );
-                },
-              ),
-            Expanded(
-              child: _section == _EcosystemSection.apps
-                  ? _buildAppsList(context)
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(ThemeTokens.space5),
-                      child: switch (_section) {
-                        _EcosystemSection.skills => _buildSkillsList(context),
-                        _EcosystemSection.plugins => _buildPluginsList(context),
-                        _EcosystemSection.apps => const SizedBox.shrink(),
-                        _EcosystemSection.mcp => _buildMcpList(context),
-                      },
-                    ),
-            ),
-          ],
+                Divider(height: 1, color: palette.border),
+                _EcosystemNoticesAndElicitationSlot(
+                  controller: _controller,
+                  section: section,
+                  horizontalPadding: 20,
+                  palette: palette,
+                ),
+                Expanded(
+                  child: _EcosystemSectionBody(
+                    controller: _controller,
+                    section: section,
+                    searchQuery: '',
+                    horizontalPadding: ThemeTokens.space5,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+}
+
+class _EcosystemNoticesAndElicitationSlot extends StatelessWidget {
+  const _EcosystemNoticesAndElicitationSlot({
+    required this.controller,
+    required this.section,
+    required this.horizontalPadding,
+    required this.palette,
+  });
+
+  final _EcosystemController controller;
+  final _EcosystemSection section;
+  final double horizontalPadding;
+  final CodexPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = controller.sectionError(section);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (error != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              0,
+            ),
+            child: KeyedSubtree(
+              key: controller.sectionErrorKey(section),
+              child: _InlineNotice(
+                icon: Icons.error_outline_rounded,
+                color: palette.danger,
+                text: error,
+              ),
+            ),
+          ),
+        if (section == _EcosystemSection.plugins &&
+            controller.pluginCatalogIsPartial &&
+            !controller.pluginsLoadFailed)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              0,
+            ),
+            child: KeyedSubtree(
+              key: const ValueKey('ecosystem-plugins-partial'),
+              child: _InlineNotice(
+                icon: Icons.warning_amber_rounded,
+                color: palette.warning,
+                text: 'The plugin catalog may be incomplete.',
+              ),
+            ),
+          ),
+        if (controller.pluginActionNotice case final notice?
+            when section == _EcosystemSection.plugins)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              0,
+            ),
+            child: KeyedSubtree(
+              key: const ValueKey('plugin-install-auth-notice'),
+              child: _InlineNotice(
+                icon: Icons.info_outline_rounded,
+                color: palette.accent,
+                text: notice,
+              ),
+            ),
+          ),
+        if (controller.mcpNotice case final notice?
+            when section == _EcosystemSection.mcp)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              0,
+            ),
+            child: KeyedSubtree(
+              key: const ValueKey('mcp-action-notice'),
+              child: _InlineNotice(
+                icon: notice.startsWith('Reload failed')
+                    ? Icons.error_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: notice.startsWith('Reload failed')
+                    ? palette.danger
+                    : palette.accent,
+                text: notice,
+              ),
+            ),
+          ),
+        if (controller.userInputController case final userInputController?)
+          AnimatedBuilder(
+            animation: userInputController,
+            builder: (context, _) {
+              final directElicitations = controller.activeDirectMcpElicitations(
+                userInputController,
+              );
+              final activeDirectElicitation = directElicitations.firstOrNull;
+              if (activeDirectElicitation == null) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                key: const ValueKey('ecosystem-modal-elicitation-slot'),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  12,
+                  horizontalPadding,
+                  0,
+                ),
+                child: _McpElicitationCard(
+                  key: ValueKey(
+                    'mcp-elicitation-${activeDirectElicitation.requestId}',
+                  ),
+                  controller: userInputController,
+                  request: activeDirectElicitation,
+                  pendingCount: directElicitations.length,
+                  errorMessage: userInputController.errorMessage,
+                  margin: EdgeInsets.zero,
+                  maxFieldsHeight: 180,
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _EcosystemSectionBody extends StatelessWidget {
+  const _EcosystemSectionBody({
+    required this.controller,
+    required this.section,
+    required this.searchQuery,
+    required this.horizontalPadding,
+  });
+
+  final _EcosystemController controller;
+  final _EcosystemSection section;
+  final String searchQuery;
+  final double horizontalPadding;
+
+  String get _normalizedQuery => searchQuery.trim().toLowerCase();
+
+  @override
+  Widget build(BuildContext context) {
+    if (section == _EcosystemSection.apps) {
+      return _buildAppsList(context);
+    }
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        ThemeTokens.space5,
+        horizontalPadding,
+        ThemeTokens.space5,
+      ),
+      child: switch (section) {
+        _EcosystemSection.skills => _buildSkillsList(context),
+        _EcosystemSection.plugins => _buildPluginsList(context),
+        _EcosystemSection.apps => const SizedBox.shrink(),
+        _EcosystemSection.mcp => _buildMcpList(context),
+      },
     );
   }
 
   Widget _buildSkillsList(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    if (_skills.isEmpty) {
-      if (_skillsLoading) {
+    final skills = controller.skills;
+    if (skills.isEmpty) {
+      if (controller.skillsLoading) {
         return Row(
           key: const ValueKey('ecosystem-skills-loading'),
           children: [
@@ -3862,7 +5009,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           ],
         );
       }
-      if (_skillsLoadFailed) {
+      if (controller.skillsLoadFailed) {
         return Text(
           'Unable to load workspace skills.',
           key: const ValueKey('ecosystem-skills-unavailable'),
@@ -3875,10 +5022,31 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         style: Theme.of(context).textTheme.bodySmall,
       );
     }
+    final query = _normalizedQuery;
+    final filtered = query.isEmpty
+        ? skills
+        : skills
+              .where(
+                (skill) =>
+                    skill.name.toLowerCase().contains(query) ||
+                    skill.description.toLowerCase().contains(query) ||
+                    skill.scope.toLowerCase().contains(query) ||
+                    skill.path.toLowerCase().contains(query),
+              )
+              .toList(growable: false);
+    if (filtered.isEmpty) {
+      return Text(
+        controller.isSkillsAtCap
+            ? 'No matching loaded skills'
+            : 'No skills found',
+        key: const ValueKey('ecosystem-skills-search-empty'),
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final skill in _skills)
+        for (final skill in filtered)
           Container(
             key: ValueKey('skill-row-${skill.name}'),
             margin: const EdgeInsets.only(bottom: 8),
@@ -3937,14 +5105,26 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   variant: skill.enabled
                       ? CodexButtonVariant.secondary
                       : CodexButtonVariant.ghost,
-                  loading: _mutatingSkillPaths.contains(skill.path),
+                  loading: controller.isSkillMutating(skill.path),
                   onPressed:
-                      _skillsLoading || _mutatingSkillPaths.contains(skill.path)
+                      controller.skillsLoading ||
+                          controller.isSkillMutating(skill.path)
                       ? null
-                      : () => _toggleSkill(skill),
+                      : () => controller.toggleSkill(skill),
                   label: skill.enabled ? 'Enabled' : 'Disabled',
                 ),
               ],
+            ),
+          ),
+        if (controller.isSkillsAtCap)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Showing first $maxBoundedEcosystemItems loaded skills.',
+              key: const ValueKey('ecosystem-skills-bound-notice'),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: palette.textMuted),
             ),
           ),
       ],
@@ -3953,8 +5133,9 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Widget _buildPluginsList(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final catalogSupported = _catalogGateway != null;
-    if (_plugins.isEmpty) {
+    final catalogSupported = controller.catalogGateway != null;
+    final plugins = controller.plugins;
+    if (plugins.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3970,7 +5151,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ),
               ),
             ),
-          if (_pluginsLoading)
+          if (controller.pluginsLoading)
             Row(
               key: const ValueKey('ecosystem-plugins-loading'),
               children: [
@@ -3987,13 +5168,13 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ),
               ],
             )
-          else if (_pluginsLoadFailed)
+          else if (controller.pluginsLoadFailed)
             Text(
               'Unable to load plugin catalog.',
               key: const ValueKey('ecosystem-plugins-unavailable'),
               style: Theme.of(context).textTheme.bodySmall,
             )
-          else if (_pluginCatalogIsPartial)
+          else if (controller.pluginCatalogIsPartial)
             Text(
               'No plugin entries are available.',
               key: const ValueKey('ecosystem-plugins-partial-empty'),
@@ -4008,6 +5189,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         ],
       );
     }
+    final query = _normalizedQuery;
+    final filtered = query.isEmpty
+        ? plugins
+        : plugins
+              .where(
+                (plugin) =>
+                    plugin.name.toLowerCase().contains(query) ||
+                    plugin.effectivePluginName.toLowerCase().contains(query) ||
+                    plugin.description.toLowerCase().contains(query) ||
+                    (plugin.marketplaceName?.toLowerCase().contains(query) ??
+                        false) ||
+                    (plugin.sourceType?.toLowerCase().contains(query) ?? false),
+              )
+              .toList(growable: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -4023,148 +5218,176 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               ),
             ),
           ),
-        for (final plugin in _plugins)
-          Container(
-            key: ValueKey('plugin-row-${plugin.id}'),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: palette.surfaceRaised,
-              border: Border.all(
-                color: palette.border,
-                width: OfficialCodexTheme.hairlineBorderWidth,
+        if (filtered.isEmpty)
+          Text(
+            controller.isPluginsIncomplete
+                ? 'No matching loaded plugins'
+                : 'No matching plugins',
+            key: const ValueKey('ecosystem-plugins-search-empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          for (final plugin in filtered)
+            Container(
+              key: ValueKey('plugin-row-${plugin.id}'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                border: Border.all(
+                  color: palette.border,
+                  width: OfficialCodexTheme.hairlineBorderWidth,
+                ),
+                borderRadius: BorderRadius.circular(10),
               ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  plugin.name,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                if (plugin.version case final version?
+                                    when version.isNotEmpty)
+                                  Text(
+                                    'v$version',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: palette.textMuted),
+                                  ),
+                                if (plugin.marketplaceName case final mpName?
+                                    when mpName.isNotEmpty)
+                                  Text(
+                                    mpName,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: palette.textMuted),
+                                  ),
+                                if (plugin.sourceType case final sourceType?
+                                    when sourceType.isNotEmpty)
+                                  Text(
+                                    sourceType,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: palette.textMuted),
+                                  ),
+                              ],
+                            ),
+                            if (plugin.description.isNotEmpty) ...[
+                              const SizedBox(height: 4),
                               Text(
-                                plugin.name,
-                                style: Theme.of(context).textTheme.titleSmall,
+                                plugin.description,
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
-                              if (plugin.version case final version?
-                                  when version.isNotEmpty)
-                                Text(
-                                  'v$version',
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(color: palette.textMuted),
-                                ),
-                              if (plugin.marketplaceName case final mpName?
-                                  when mpName.isNotEmpty)
-                                Text(
-                                  mpName,
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(color: palette.textMuted),
-                                ),
-                              if (plugin.sourceType case final sourceType?
-                                  when sourceType.isNotEmpty)
-                                Text(
-                                  sourceType,
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(color: palette.textMuted),
-                                ),
                             ],
-                          ),
-                          if (plugin.description.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              plugin.description,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
+                            if (plugin.disabledReason case final reason?
+                                when reason.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Unavailable: $reason',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: palette.danger),
+                              ),
+                            ],
                           ],
-                          if (plugin.disabledReason case final reason?
-                              when reason.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Unavailable: $reason',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(color: palette.danger),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            plugin.installed
+                                ? (plugin.enabled ? 'Enabled' : 'Disabled')
+                                : 'Not installed',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                          if (catalogSupported) ...[
+                            const SizedBox(width: 8),
+                            CodexButton(
+                              key: ValueKey('plugin-read-${plugin.id}'),
+                              size: CodexButtonSize.sm,
+                              variant: CodexButtonVariant.ghost,
+                              loading: controller.isPluginReading(plugin.id),
+                              onPressed:
+                                  controller.pluginsLoading ||
+                                      controller.hasPluginsRefreshInFlight ||
+                                      controller.isPluginReading(plugin.id)
+                                  ? null
+                                  : () =>
+                                        controller.togglePluginDetails(plugin),
+                              label: controller.isPluginExpanded(plugin.id)
+                                  ? 'Hide details'
+                                  : 'Details',
                             ),
+                            const SizedBox(width: 6),
+                            if (!plugin.installed)
+                              CodexButton(
+                                key: ValueKey('plugin-install-${plugin.id}'),
+                                size: CodexButtonSize.sm,
+                                variant: CodexButtonVariant.secondary,
+                                loading: controller.isPluginMutating(plugin.id),
+                                onPressed:
+                                    !controller.pluginsLoading &&
+                                        !controller.hasPluginsRefreshInFlight &&
+                                        plugin.canInstall &&
+                                        !controller.hasMutatingPlugins
+                                    ? () => controller.installPlugin(plugin)
+                                    : null,
+                                label: 'Install',
+                              )
+                            else
+                              CodexButton(
+                                key: ValueKey('plugin-uninstall-${plugin.id}'),
+                                size: CodexButtonSize.sm,
+                                variant: CodexButtonVariant.ghost,
+                                loading: controller.isPluginMutating(plugin.id),
+                                onPressed:
+                                    !controller.pluginsLoading &&
+                                        !controller.hasPluginsRefreshInFlight &&
+                                        plugin.canUninstall &&
+                                        !controller.hasMutatingPlugins
+                                    ? () => controller.uninstallPlugin(plugin)
+                                    : null,
+                                label: 'Uninstall',
+                              ),
                           ],
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          plugin.installed
-                              ? (plugin.enabled ? 'Enabled' : 'Disabled')
-                              : 'Not installed',
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        if (catalogSupported) ...[
-                          const SizedBox(width: 8),
-                          CodexButton(
-                            key: ValueKey('plugin-read-${plugin.id}'),
-                            size: CodexButtonSize.sm,
-                            variant: CodexButtonVariant.ghost,
-                            loading: _readingPluginIds.contains(plugin.id),
-                            onPressed:
-                                _pluginsLoading ||
-                                    _pluginsRefreshInFlight != null ||
-                                    _readingPluginIds.contains(plugin.id)
-                                ? null
-                                : () => _togglePluginDetails(plugin),
-                            label: _expandedPluginIds.contains(plugin.id)
-                                ? 'Hide details'
-                                : 'Details',
-                          ),
-                          const SizedBox(width: 6),
-                          if (!plugin.installed)
-                            CodexButton(
-                              key: ValueKey('plugin-install-${plugin.id}'),
-                              size: CodexButtonSize.sm,
-                              variant: CodexButtonVariant.secondary,
-                              loading: _mutatingPluginIds.contains(plugin.id),
-                              onPressed:
-                                  !_pluginsLoading &&
-                                      _pluginsRefreshInFlight == null &&
-                                      plugin.canInstall &&
-                                      _mutatingPluginIds.isEmpty
-                                  ? () => _installPlugin(plugin)
-                                  : null,
-                              label: 'Install',
-                            )
-                          else
-                            CodexButton(
-                              key: ValueKey('plugin-uninstall-${plugin.id}'),
-                              size: CodexButtonSize.sm,
-                              variant: CodexButtonVariant.ghost,
-                              loading: _mutatingPluginIds.contains(plugin.id),
-                              onPressed:
-                                  !_pluginsLoading &&
-                                      _pluginsRefreshInFlight == null &&
-                                      plugin.canUninstall &&
-                                      _mutatingPluginIds.isEmpty
-                                  ? () => _uninstallPlugin(plugin)
-                                  : null,
-                              label: 'Uninstall',
-                            ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-                if (_expandedPluginIds.contains(plugin.id))
-                  _buildPluginDetailSection(context, plugin),
-              ],
+                    ],
+                  ),
+                  if (controller.isPluginExpanded(plugin.id))
+                    _buildPluginDetailSection(context, plugin),
+                ],
+              ),
             ),
-          ),
+          if (controller.isPluginsAtCap)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Showing first $maxBoundedEcosystemItems loaded plugins.',
+                key: const ValueKey('ecosystem-plugins-bound-notice'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -4174,7 +5397,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
     PluginSummaryModel plugin,
   ) {
     final palette = ThemeTokens.of(context);
-    final detail = _pluginDetails[plugin.id];
+    final detail = controller.pluginDetail(plugin.id);
     if (detail == null) {
       return const Padding(
         padding: EdgeInsets.only(top: 10),
@@ -4244,9 +5467,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Widget _buildAppsList(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    if (_catalogGateway == null) {
+    if (controller.catalogGateway == null) {
       return Padding(
-        padding: const EdgeInsets.all(ThemeTokens.space5),
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          ThemeTokens.space5,
+          horizontalPadding,
+          ThemeTokens.space5,
+        ),
         child: Align(
           alignment: Alignment.topLeft,
           child: KeyedSubtree(
@@ -4260,19 +5488,44 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         ),
       );
     }
+    final query = _normalizedQuery;
+    final allInstalled = controller.installedApps;
+    final allCatalog = controller.catalogApps;
+    final filteredInstalled = query.isEmpty
+        ? allInstalled
+        : allInstalled
+              .where(
+                (app) =>
+                    app.displayName.toLowerCase().contains(query) ||
+                    app.id.toLowerCase().contains(query),
+              )
+              .toList(growable: false);
+    final filteredCatalog = query.isEmpty
+        ? allCatalog
+        : allCatalog
+              .where(
+                (app) =>
+                    app.name.toLowerCase().contains(query) ||
+                    app.id.toLowerCase().contains(query) ||
+                    app.description.toLowerCase().contains(query) ||
+                    (app.category?.toLowerCase().contains(query) ?? false) ||
+                    (app.developer?.toLowerCase().contains(query) ?? false),
+              )
+              .toList(growable: false);
+
     return CustomScrollView(
       key: const ValueKey('ecosystem-apps-scroll'),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
             ThemeTokens.space5,
-            ThemeTokens.space5,
-            ThemeTokens.space5,
+            horizontalPadding,
             0,
           ),
           sliver: SliverList.list(
             children: [
-              if (_appsError case final appsError?)
+              if (controller.appsError case final appsError?)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: KeyedSubtree(
@@ -4285,25 +5538,38 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                   ),
                 ),
               Text(
-                'Installed Connector Runtime (${_installedApps.length})',
+                'Installed Connector Runtime (${controller.isInstalledAppsAtCap ? '${allInstalled.length} loaded' : '${allInstalled.length}'})',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
-              if (_installedApps.isEmpty)
+              if (allInstalled.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(
-                    _appsLoading
+                    controller.appsLoading
                         ? 'Loading installed connector runtime...'
-                        : _installedAppsLoadFailed
+                        : controller.installedAppsLoadFailed
                         ? 'Unable to load installed connector runtime.'
                         : 'No installed connector runtime apps in the committed snapshot.',
                     key: ValueKey(
-                      _appsLoading
+                      controller.appsLoading
                           ? 'ecosystem-installed-apps-loading'
-                          : _installedAppsLoadFailed
+                          : controller.installedAppsLoadFailed
                           ? 'ecosystem-installed-apps-unavailable'
                           : 'ecosystem-installed-apps-empty',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              else if (filteredInstalled.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    controller.isInstalledAppsAtCap
+                        ? 'No matching loaded installed connector apps.'
+                        : 'No matching installed connector apps.',
+                    key: const ValueKey(
+                      'ecosystem-installed-apps-search-empty',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -4311,33 +5577,51 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
             ],
           ),
         ),
-        if (_installedApps.isNotEmpty)
+        if (filteredInstalled.isNotEmpty)
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              ThemeTokens.space5,
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
               0,
-              ThemeTokens.space5,
+              horizontalPadding,
               12,
             ),
             sliver: SliverList.builder(
-              itemCount: _installedApps.length,
+              itemCount: filteredInstalled.length,
               itemBuilder: (context, index) =>
-                  _buildInstalledAppCard(context, _installedApps[index]),
+                  _buildInstalledAppCard(context, filteredInstalled[index]),
+            ),
+          ),
+        if (controller.isInstalledAppsAtCap)
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              0,
+              horizontalPadding,
+              12,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Text(
+                'Showing first $maxBoundedEcosystemItems loaded installed connector apps.',
+                key: const ValueKey('ecosystem-installed-apps-bound-notice'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
             ),
           ),
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space5),
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
           sliver: SliverList.list(
             children: [
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      'App Catalog (${_catalogApps.length})',
+                      'App Catalog (${controller.isCatalogAppsIncomplete ? '${allCatalog.length} loaded' : '${allCatalog.length}'})',
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
-                  if (_appsLoading)
+                  if (controller.appsLoading)
                     const SizedBox(
                       key: ValueKey('ecosystem-apps-loading'),
                       width: 14,
@@ -4347,22 +5631,22 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ],
               ),
               const SizedBox(height: 8),
-              if (_catalogApps.isEmpty && !_appsLoading)
+              if (allCatalog.isEmpty && !controller.appsLoading)
                 Padding(
                   padding: const EdgeInsets.only(bottom: ThemeTokens.space5),
                   child: Text(
-                    _catalogAppsLoadFailed
+                    controller.catalogAppsLoadFailed
                         ? 'Unable to load app catalog.'
                         : 'No catalog apps returned.',
                     key: ValueKey(
-                      _catalogAppsLoadFailed
+                      controller.catalogAppsLoadFailed
                           ? 'ecosystem-apps-unavailable'
                           : 'ecosystem-apps-empty',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 )
-              else if (_catalogApps.isEmpty && _appsLoading)
+              else if (allCatalog.isEmpty && controller.appsLoading)
                 Padding(
                   padding: const EdgeInsets.only(bottom: ThemeTokens.space5),
                   child: Text(
@@ -4371,30 +5655,41 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                     style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: palette.textMuted),
                   ),
+                )
+              else if (filteredCatalog.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: ThemeTokens.space5),
+                  child: Text(
+                    controller.isCatalogAppsIncomplete
+                        ? 'No matching loaded catalog apps.'
+                        : 'No matching catalog apps.',
+                    key: const ValueKey('ecosystem-apps-search-empty'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
             ],
           ),
         ),
-        if (_catalogApps.isNotEmpty)
+        if (filteredCatalog.isNotEmpty)
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space5),
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             sliver: SliverList.builder(
-              itemCount: _catalogApps.length,
+              itemCount: filteredCatalog.length,
               itemBuilder: (context, index) =>
-                  _buildCatalogAppCard(context, _catalogApps[index]),
+                  _buildCatalogAppCard(context, filteredCatalog[index]),
             ),
           ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            ThemeTokens.space5,
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
             0,
-            ThemeTokens.space5,
+            horizontalPadding,
             ThemeTokens.space5,
           ),
           sliver: SliverList.list(
             children: [
-              if (_appsNextCursor != null &&
-                  _catalogApps.length < maxBoundedEcosystemItems)
+              if (controller.appsNextCursor != null &&
+                  allCatalog.length < maxBoundedEcosystemItems)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Center(
@@ -4402,17 +5697,19 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                       key: const ValueKey('ecosystem-apps-load-more'),
                       size: CodexButtonSize.sm,
                       variant: CodexButtonVariant.secondary,
-                      loading: _loadingMoreApps,
-                      onPressed: _loadingMoreApps ? null : _loadMoreApps,
+                      loading: controller.loadingMoreApps,
+                      onPressed: controller.loadingMoreApps
+                          ? null
+                          : controller.loadMoreApps,
                       label: 'Load more apps',
                     ),
                   ),
                 )
-              else if (_catalogApps.length >= maxBoundedEcosystemItems)
+              else if (allCatalog.length >= maxBoundedEcosystemItems)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Showing first $maxBoundedEcosystemItems catalog apps.',
+                    'Showing first $maxBoundedEcosystemItems loaded catalog apps.',
                     key: const ValueKey('ecosystem-apps-bound-notice'),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelSmall
@@ -4461,11 +5758,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           key: ValueKey('installed-app-read-${installed.id}'),
           size: CodexButtonSize.sm,
           variant: CodexButtonVariant.ghost,
-          loading: _readingAppIds.contains(installed.id),
-          onPressed: _readingAppIds.contains(installed.id)
+          loading: controller.isAppReading(installed.id),
+          onPressed: controller.isAppReading(installed.id)
               ? null
-              : () => _toggleAppDetails(installed.id, installedSection: true),
-          label: _expandedInstalledAppIds.contains(installed.id)
+              : () => controller.toggleAppDetails(
+                  installed.id,
+                  installedSection: true,
+                ),
+          label: controller.isInstalledAppExpanded(installed.id)
               ? 'Hide details'
               : 'Details',
         ),
@@ -4508,7 +5808,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               );
             },
           ),
-          if (_expandedInstalledAppIds.contains(installed.id))
+          if (controller.isInstalledAppExpanded(installed.id))
             _buildAppDetailSection(context, installed.id),
         ],
       ),
@@ -4561,11 +5861,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
           key: ValueKey('app-read-${app.id}'),
           size: CodexButtonSize.sm,
           variant: CodexButtonVariant.ghost,
-          loading: _readingAppIds.contains(app.id),
-          onPressed: _readingAppIds.contains(app.id)
+          loading: controller.isAppReading(app.id),
+          onPressed: controller.isAppReading(app.id)
               ? null
-              : () => _toggleAppDetails(app.id, installedSection: false),
-          label: _expandedCatalogAppIds.contains(app.id)
+              : () => controller.toggleAppDetails(
+                  app.id,
+                  installedSection: false,
+                ),
+          label: controller.isCatalogAppExpanded(app.id)
               ? 'Hide details'
               : 'Details',
         ),
@@ -4609,7 +5912,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               );
             },
           ),
-          if (_expandedCatalogAppIds.contains(app.id))
+          if (controller.isCatalogAppExpanded(app.id))
             _buildAppDetailSection(context, app.id),
         ],
       ),
@@ -4618,13 +5921,14 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Widget _buildAppDetailSection(BuildContext context, String appId) {
     final palette = ThemeTokens.of(context);
-    if (_readingAppIds.contains(appId) && !_appDetails.containsKey(appId)) {
+    final detail = controller.appDetail(appId);
+    if (controller.isAppReading(appId) && detail == null) {
       return const Padding(
         padding: EdgeInsets.only(top: 10),
         child: LinearProgressIndicator(minHeight: 2),
       );
     }
-    if (_missingAppIds.contains(appId) && !_appDetails.containsKey(appId)) {
+    if (controller.isAppMissing(appId) && detail == null) {
       return Container(
         key: ValueKey('app-detail-missing-$appId'),
         margin: const EdgeInsets.only(top: 10),
@@ -4643,12 +5947,12 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
         ),
       );
     }
-    final detail = _appDetails[appId];
     if (detail == null) {
       return const SizedBox.shrink();
     }
+    const maxTools = _EcosystemController._maxDisplayedAppTools;
     final displayedTools = detail.toolSummaries
-        .take(_maxDisplayedAppTools)
+        .take(maxTools)
         .toList(growable: false);
     return Container(
       key: ValueKey('app-detail-$appId'),
@@ -4701,11 +6005,11 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-          if (detail.toolSummaries.length > _maxDisplayedAppTools)
+          if (detail.toolSummaries.length > maxTools)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Showing first $_maxDisplayedAppTools of ${detail.toolSummaries.length} tools.',
+                'Showing first $maxTools of ${detail.toolSummaries.length} tools.',
                 style: Theme.of(context).textTheme.labelSmall
                     ?.copyWith(color: palette.textMuted),
               ),
@@ -4717,7 +6021,19 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
 
   Widget _buildMcpList(BuildContext context) {
     final palette = ThemeTokens.of(context);
-    final gateway = _mcpGateway;
+    final gateway = controller.mcpGateway;
+    final servers = controller.mcpServers;
+    final query = _normalizedQuery;
+    final filtered = query.isEmpty
+        ? servers
+        : servers
+              .where(
+                (server) =>
+                    server.name.toLowerCase().contains(query) ||
+                    server.status.toLowerCase().contains(query) ||
+                    (server.authStatus?.toLowerCase().contains(query) ?? false),
+              )
+              .toList(growable: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -4737,17 +6053,20 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               key: const ValueKey('mcp-reload-button'),
               variant: CodexButtonVariant.secondary,
               size: CodexButtonSize.sm,
-              loading: _reloadingMcp,
-              onPressed: gateway == null || _reloadingMcp || _mcpLoading
+              loading: controller.reloadingMcp,
+              onPressed:
+                  gateway == null ||
+                      controller.reloadingMcp ||
+                      controller.mcpLoading
                   ? null
-                  : _reloadMcpServers,
+                  : controller.reloadMcpServers,
               label: 'Reload config',
             ),
           ],
         ),
         const SizedBox(height: ThemeTokens.space3),
-        if (_mcpServers.isEmpty)
-          if (_mcpLoading)
+        if (servers.isEmpty)
+          if (controller.mcpLoading)
             Row(
               key: const ValueKey('ecosystem-mcp-loading'),
               children: [
@@ -4764,7 +6083,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
                 ),
               ],
             )
-          else if (_mcpLoadFailed)
+          else if (controller.mcpLoadFailed)
             Text(
               'Unable to load MCP server status.',
               key: const ValueKey('ecosystem-mcp-unavailable'),
@@ -4775,120 +6094,153 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
               'No MCP servers configured.',
               key: const ValueKey('ecosystem-mcp-empty'),
               style: Theme.of(context).textTheme.bodySmall,
-            ),
-        for (final server in _mcpServers)
-          Builder(
-            builder: (context) {
-              final runtimeStatus = server.status.trim();
-              final authStatus = server.authStatus?.trim();
-              return Container(
-                key: ValueKey('mcp-row-${server.name}'),
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: palette.surfaceRaised,
-                  border: Border.all(
-                    color: palette.border,
-                    width: OfficialCodexTheme.hairlineBorderWidth,
+            )
+        else if (filtered.isEmpty)
+          Text(
+            controller.isMcpAtCap
+                ? 'No matching loaded MCP servers.'
+                : 'No matching MCP servers.',
+            key: const ValueKey('ecosystem-mcp-search-empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          for (final server in filtered)
+            Builder(
+              builder: (context) {
+                final runtimeStatus = server.status.trim();
+                final authStatus = server.authStatus?.trim();
+                return Container(
+                  key: ValueKey('mcp-row-${server.name}'),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: palette.surfaceRaised,
+                    border: Border.all(
+                      color: palette.border,
+                      width: OfficialCodexTheme.hairlineBorderWidth,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                server.name,
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${server.toolCount} tools · ${server.resourceCount} resources',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              if (authStatus != null &&
-                                  authStatus.isNotEmpty) ...[
-                                const SizedBox(height: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  'Auth: $authStatus',
-                                  key: ValueKey(
-                                    'mcp-auth-status-${server.name}',
-                                  ),
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(color: palette.textMuted),
+                                  server.name,
+                                  style: Theme.of(context).textTheme.titleSmall,
                                 ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${server.toolCount} tools · ${server.resourceCount} resources',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (authStatus != null &&
+                                    authStatus.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Auth: $authStatus',
+                                    key: ValueKey(
+                                      'mcp-auth-status-${server.name}',
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: palette.textMuted),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        if (runtimeStatus.isNotEmpty)
-                          Text(
-                            runtimeStatus,
-                            key: ValueKey('mcp-status-${server.name}'),
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(color: palette.textSecondary),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: ThemeTokens.space2),
-                    Wrap(
-                      spacing: ThemeTokens.space2,
-                      runSpacing: ThemeTokens.space2,
-                      children: [
-                        CodexButton(
-                          key: ValueKey('mcp-read-resource-${server.name}'),
-                          variant: CodexButtonVariant.secondary,
-                          size: CodexButtonSize.sm,
-                          loading:
-                              _mcpBusyServer == server.name &&
-                              _mcpBusyOperation ==
-                                  _McpOperationKind.readResource,
-                          onPressed: gateway == null || _mcpBusyServer != null
-                              ? null
-                              : () => _readMcpResource(server),
-                          label: 'Read resource',
-                        ),
-                        CodexButton(
-                          key: ValueKey('mcp-call-tool-${server.name}'),
-                          variant: CodexButtonVariant.secondary,
-                          size: CodexButtonSize.sm,
-                          loading:
-                              _mcpBusyServer == server.name &&
-                              _mcpBusyOperation == _McpOperationKind.callTool,
-                          onPressed: gateway == null || _mcpBusyServer != null
-                              ? null
-                              : () => _callMcpTool(server),
-                          label: 'Call tool',
-                        ),
-                      ],
-                    ),
-                    if (_mcpErrors[server.name] case final error?) ...[
+                          if (runtimeStatus.isNotEmpty)
+                            Text(
+                              runtimeStatus,
+                              key: ValueKey('mcp-status-${server.name}'),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: palette.textSecondary),
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: ThemeTokens.space2),
-                      SelectableText(
-                        error,
-                        key: ValueKey('mcp-error-${server.name}'),
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: palette.danger),
+                      Wrap(
+                        spacing: ThemeTokens.space2,
+                        runSpacing: ThemeTokens.space2,
+                        children: [
+                          CodexButton(
+                            key: ValueKey('mcp-read-resource-${server.name}'),
+                            variant: CodexButtonVariant.secondary,
+                            size: CodexButtonSize.sm,
+                            loading:
+                                controller.mcpBusyServer == server.name &&
+                                controller.mcpBusyOperation ==
+                                    _McpOperationKind.readResource,
+                            onPressed:
+                                gateway == null ||
+                                    controller.mcpBusyServer != null
+                                ? null
+                                : () => controller.readMcpResource(
+                                    context,
+                                    server,
+                                  ),
+                            label: 'Read resource',
+                          ),
+                          CodexButton(
+                            key: ValueKey('mcp-call-tool-${server.name}'),
+                            variant: CodexButtonVariant.secondary,
+                            size: CodexButtonSize.sm,
+                            loading:
+                                controller.mcpBusyServer == server.name &&
+                                controller.mcpBusyOperation ==
+                                    _McpOperationKind.callTool,
+                            onPressed:
+                                gateway == null ||
+                                    controller.mcpBusyServer != null
+                                ? null
+                                : () => controller.callMcpTool(context, server),
+                            label: 'Call tool',
+                          ),
+                        ],
                       ),
+                      if (controller.mcpError(server.name)
+                          case final error?) ...[
+                        const SizedBox(height: ThemeTokens.space2),
+                        SelectableText(
+                          error,
+                          key: ValueKey('mcp-error-${server.name}'),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: palette.danger),
+                        ),
+                      ],
+                      if (controller.mcpResult(server.name)
+                          case final result?) ...[
+                        const SizedBox(height: ThemeTokens.space3),
+                        _McpOperationResult(
+                          key: ValueKey('mcp-result-${server.name}'),
+                          result: result,
+                        ),
+                      ],
                     ],
-                    if (_mcpResults[server.name] case final result?) ...[
-                      const SizedBox(height: ThemeTokens.space3),
-                      _McpOperationResult(
-                        key: ValueKey('mcp-result-${server.name}'),
-                        result: result,
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
+                  ),
+                );
+              },
+            ),
+          if (controller.isMcpAtCap)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Showing first $maxBoundedEcosystemItems loaded MCP servers.',
+                key: const ValueKey('ecosystem-mcp-bound-notice'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: palette.textMuted),
+              ),
+            ),
+        ],
       ],
     );
   }

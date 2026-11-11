@@ -63,29 +63,53 @@ The wide shell, supported stock conversation controls, lazy activity/output,
 Goal side tab and question/composer stack have working source translations.
 Current deltas remain row-scoped in the Golden-State matrix. The rich-prose
 cluster and ordinary composer action have current source translations.
-Routed Customize destination/sidebar/focus structure is the next coherent
-candidate. Inline-code pill rendering remains machine-actionable research.
+Routed Customize destination/sidebar/focus structure now has a source
+translation and packaged-stock replay. Inline-code pill rendering remains
+the next concrete machine-actionable research candidate.
 Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- Shared source `2446dd0` integrates Gemini's A6/A11 cluster (`d0882b9`,
-  `316a4f4`, `50bda90`). The actual-diff review found no P0/P1. The owner
-  corrected Copy keyboard focus and the code-card border. Inline pill
-  rendering remains a PARTIAL-row machine follow-up.
-- The exact published `245204e` checkpoint passed all three hosted CI jobs.
-  Current source passed format, strict ASCII analysis, 549 default Flutter
-  cases, five direct-stock cases, pure-Dart boundary, memory benchmark and
-  Rust gates. Its independent Linux release/83-library closure, instrumented
-  packaged-stock replay and pure-Dart runtime smoke passed.
-- Gemini released the completed presentation surfaces. Both peers selected
-  A1 routed Customize as the next high-value candidate. Refresh the official
-  agy context and negotiate its writable surfaces after integration/CI.
-  Gemini remains the default presentation writer. Codex owns systems-risk
-  review, realistic runtime validation, integration and shared gates.
+- The A1 candidate contains Gemini's source `ea267d3` and evidence commits
+  `c8d3bd3` / `17d201c`. Actual-diff and packaged review returned the delayed
+  Back-navigation race, partial-catalog wording, nested search borders and
+  hidden tooltip leakage to the owner. Those corrections passed the shared
+  gates and independent replay. Documentation now matches the unchanged
+  32-entry navigation cap. Gemini released all six surfaces and the runtime
+  slot; Codex owns this integration checkpoint.
+- The exact published `22c1136` checkpoint passed all three hosted CI jobs
+  ([42976181660](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42976181660)).
+  The new candidate separately passed 553 default Flutter cases, five
+  direct-stock cases, strict ASCII analysis, pure-Dart boundary, history
+  benchmark, Rust gates, a clean Linux release/83-library closure and
+  pure-Dart MCP smoke. Its independent packaged MCP replay recorded one
+  resource read and one tool call on the selected stock thread.
+- On 2026-11-11 at 15:54, the host kernel reported global OOM and killed the
+  ChatGPT process. Codex and Gemini validation overlapped; the kernel snapshot
+  included two Flutter compiler pipelines and six test runners. The interrupted
+  Codex batch has no completion result. Its old workers are gone. A subsequent
+  four-file batch passed 69 cases serially; later owner edits have separate
+  pending validation. This does not establish a Native memory-leak diagnosis
+  or fix. Both peers now share one heavy validation/build/capture slot and use
+  `flutter test --concurrency=1` and `CARGO_BUILD_JOBS=2`. Installed Flutter
+  invokes Ninja directly: setting `CMAKE_BUILD_PARALLEL_LEVEL=2` alone did not
+  cap those jobs. Subsequent Linux builds use Flutter `--config-only`
+  followed by `cmake --build … --target install --parallel 2`; the independent
+  rebuild observed `ninja -j 2`. No user desktop
+  applications, swap configuration or account settings were changed.
 
 ## Current checkpoints
 
+- `ea267d3` adds wide inline Customize navigation with contextual Plugins,
+  Skills, Apps and MCP, Installed search and bounded Back/Forward. The active
+  conversation stays mounted; catalog state is lazy and scoped to the current
+  `(cwd, threadId)`. Compact retains its dialog. The independent replay
+  completed a stock turn, retained a composer draft across navigation,
+  displayed real MCP results and exited App/Host/stock/fixture processes.
+  Its first run correctly rejected malformed automated JSON input and exposed
+  stale incremental icon-font assets. Failure captures and the old font are
+  retained. A clean isolated rebuild and paced input passed; this does not
+  establish an upstream cache fix or account-backed UI parity.
 - `2446dd0` adds measured loose-list, quote, table, separator and fenced-code
   geometry through the bounded single-parse Markdown renderer. The code card
   has keyboard Copy and timer cleanup. Ordinary Desktop Send/Stop/Steer uses
@@ -106,16 +130,6 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   zero-input minute update, saved an objective, reverted a draft and exited
   the process tree. Integrated captures use a separate non-reusable folder.
   The fixture's model-metadata warning remains visible and recorded.
-- `0378125` integrated `d74cb39` + `f1e2fbb`. New chat, project and thread
-  labels share one wide axis and selection uses the full row. Collapsed
-  projects show loaded-thread status. Menus use pointer coordinates, focused
-  row keyboard coordinates or the ellipsis anchor. The owner corrected
-  compact drift, edge clipping and the reproduced 52 px keyboard offset.
-- `c241269` integrated `d3bf1d0` + `481788f`. Own Goal saves survive a
-  notification before acknowledgement, including a parked draft. External
-  objective replacement closes the old editor. The baseline reproduced the
-  stale editor. The release persisted two sequential keyboard saves and a
-  separate stock source replacement with clean process shutdown.
 
 The [current matrix](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) retains
 per-row implementation commits, evidence and next corrections. Earlier
@@ -125,7 +139,7 @@ and [preceding Desktop history](docs/history/DESKTOP_UI_CHECKPOINTS_through_fe67
 ## Current product and architecture
 
 - Desktop uses the bundled Rust `codex-native-host` and stock `codex app-server`. The local workflow includes thread management, turn streaming and steering, approvals, model and execution controls, bounded diff/output, stock review, and supported Skills/Plugins/Apps/MCP administration. Availability can depend on installed stock version, configuration and account.
-- The wide native desktop shell has a 52 logical px navigation rail and a 288 px contextual sidebar by default. The 340 px total left area is resizable, and the reading and composer column is capped at 672 px. Below 760 px Native uses compact Threads navigation. `OfficialCodexTheme` owns the geometry and colors, and the responsive shell keeps one active conversation state.
+- The wide native desktop shell has a 52 logical px navigation rail and a 288 px contextual sidebar by default. The 340 px total left area is resizable, and the reading and composer column is capped at 672 px. Plugins opens an inline Customize destination on wide Desktop. Below 760 px Native uses compact Threads navigation and retains the ecosystem dialog. `OfficialCodexTheme` owns the geometry and colors, and the responsive shell keeps one active conversation state.
 - Codex is the only wired product. Prose, Commands and Execution are timeline detail choices. The internal Work and Chat capability profiles and backend interfaces are compatibility seams. Independent ChatGPT Chat, Work orchestration and Responses backends are absent.
 - App-server owns persisted conversation state. Flutter retains bounded thread/history/active-turn projections, virtualizes lists, coalesces streaming, evicts inactive history, and lazily loads bounded output and diffs. Host spooling keeps large command payloads off the Flutter heap and preserves opaque MCP result fields with the same key name. Installed stock and public stable `0.167.0` returned the sampled command output inline. Public alpha `0.169.0-alpha.7` deferred eligible commands through the existing Native fetch path. Experimental `thread/items/read` returns the stored item.
 - Saved turns expose a detail disclosure in Commands and Execution even when a work duration cannot be shown. Opening it loads one bounded turn item page. A failed first read leaves the summary in place and can be retried.
@@ -137,29 +151,30 @@ and [preceding Desktop history](docs/history/DESKTOP_UI_CHECKPOINTS_through_fe67
 - Stock Pinned is protected by its reserved ID. Eligible unsectioned pins use stock membership after a fresh read. Custom-section threads and runtimes without that built-in retain explicitly labeled session pins.
 - Local Goal actions load the selected thread’s persisted goal on demand and support explicit paused creation, objective changes, pause/resume, and confirmed clear. Stock owns continuation. Desktop Review offers working-tree, base-branch, commit/ref, and custom targets through stock `review/start`. Both Review entry points apply the cold queue admission rule.
 - Local Runtime details displays a bounded read-only provider list when stock supports it. The list keeps display names, provider kinds and the default marker. Older versions show an availability message.
-- Local MCP resource and tool forms stay in the running operation's dialog. Direct actions on a cold thread require explicit resume. A global resource read remains available without a selected thread. Eligible saved MCP activity in Commands and Execution offers a one-item local read with a 32 KiB text preview.
+- Local MCP resource/tool inputs use dialogs; server elicitation stays with the initiating ecosystem operation, on the wide Customize surface or inside the compact dialog. Direct actions on a cold thread require explicit resume. A global resource read remains available without a selected thread. Eligible saved MCP activity in Commands and Execution offers a one-item local read with a 32 KiB text preview.
 - The local conversation header reads stored GitHub and GitLab review references for the selected thread with one in-flight scan and one replaceable pending target. The user can open a link or explicitly add one to a saved thread. Add checks existing canonical and legacy links before writing. Removing references, managed worktrees, and cloud attachments remain separate surfaces.
-- Skills, Plugins, Apps and MCP can load independently. Plugin refresh keeps the cached catalog on RPC failure and serializes catalog mutations through readback. Successful partial plugin catalogs retain usable rows and show a generic notice. Failed source paths and raw parser messages are omitted from the typed snapshot. The catalog still retains up to 100 entries. A truncation notice is ready for implementation.
+- Skills, Plugins, Apps and MCP can load independently. Plugin refresh keeps the cached catalog on RPC failure and serializes catalog mutations through readback. Successful partial catalogs retain usable rows. Partial, paginated or 100-capped inventories qualify loaded counts and empty/search wording. Failed source paths and raw parser messages are omitted from the typed snapshot; retained catalogs remain bounded.
 - Direct Host Remote is read-only. The transport allows bounded model/thread metadata and history reads and sequenced lifecycle projection. Android currently presents pairing, connection recovery and model/thread metadata. Thread/turn writes, approvals, diffs, and command-output reads remain outside the Remote contract. Official Remote support is experimental host-side control through stock schema. There is no Native mobile client for the official relay.
 
 ## Verification and pending gates
 
-- The current presentation source at `2446dd0` passed 549 default Flutter cases and
+- The current presentation source at `ea267d3` passed 553 default Flutter cases and
   five separately enabled direct-stock integration cases. Dart format and
   strict analysis passed in an ASCII physical-path source copy. This does
   not fix the recorded Unicode-path Flutter LSP framing failure.
-- The Linux release and its 83-library runtime closure passed. The current
-  packaged walkthrough exercised rich prose, Send/Stop/Esc/Steer presentation
-  and persisted interruption through bundled Host and installed stock
-  `0.167.0-alpha.3.2`. The pure-Dart runtime smoke shut down in 36 ms.
-  Earlier checkpoint walkthroughs cover project actions, saved output,
-  structured questions and Goal updates.
+- The clean Linux release and its 83-library runtime closure passed. The
+  independent packaged walkthrough at `/var/tmp/native-integrated-a1-ea267d3-r2/`
+  used bundled Host, installed stock `0.167.0-alpha.3.2` and disposable local
+  model/MCP fixtures. Its service-side audit verified resource/tool requests
+  and selected-thread identity; result rows, navigation and draft continuity
+  were inspected. No owned runtime children remain. Earlier checkpoints
+  cover rich prose, turn controls, project actions, output, questions and Goals.
 - The pure-Dart boundary checked 65 roots. The history benchmark retained
   100 of 1,000 turns while exercising ten 3 MiB command payloads. The
   unchanged Rust tree passed formatting, Clippy and 100 tests.
-- The preceding published `245204e` passed all three hosted CI jobs.
+- The preceding published `22c1136` passed all three hosted CI jobs.
   Each subsequent pushed HEAD requires its own result check.
-  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42965989053)
+  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42976181660)
 - Signed-in official live captures, subjective interaction acceptance
   and unavailable physical devices remain evidence gates on their own
   surfaces. The primary UI has machine-actionable rows in Golden State A.
