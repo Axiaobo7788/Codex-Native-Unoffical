@@ -25,10 +25,17 @@ Use this page for current facts, [the feature matrix](docs/reverse/OFFICIAL_FEAT
 - Previous UI reverse documents remain useful token/component evidence, but
   structural claims must be revalidated against the current official window.
   Older geometry tests are regression evidence, not proof of current parity.
-- Codex and Gemini remain equal peers through the official agy TUI. Gemini
-  preferentially refreshes live/ASAR/visual evidence; Codex preferentially
-  performs clean-room Flutter translation and protects architecture/state
-  invariants. Both review the actual result.
+- Codex and Gemini remain equal peers through the official agy TUI. During the
+  active Golden-State parity phase, **Gemini is the default presentation
+  writer**: it refreshes live/ASAR/visual evidence, owns the corresponding
+  Flutter presentation slice, captures Native, and iterates on measured visual
+  divergence. **Codex is the default systems-integrity owner and adversarial
+  reviewer**: it protects architecture/state/memory/protocol boundaries, adds
+  targeted regressions, exercises real stock/runtime paths, integrates, and
+  runs shared gates/CI. Codex should not take over a presentation slice unless
+  Gemini is blocked, the change is predominantly systems work, or ownership is
+  explicitly released. Prefer coherent Golden-State row-sized UI slices over
+  one remote push/full-CI cycle per micro-adjustment.
 - F33+ remains DEFERRED_BY_UI_PRIORITY while evidenced Golden-State work
   can progress. Freeze only the state that lacks evidence. When no UI state
   can progress, resume independent functional READY or RESEARCH_MORE work.

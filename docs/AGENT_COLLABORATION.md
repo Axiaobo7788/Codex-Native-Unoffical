@@ -255,6 +255,31 @@ Codex should not override measured visual evidence with abstract style
 preference. Gemini should not override architecture/memory/protocol invariants
 for visual convenience.
 
+### Golden-State presentation-owner mode
+
+When `PROJECT_STATUS.md` activates Desktop UI Visual Parity / Golden-State
+reconstruction, use a stronger temporary routing rule than the general
+preference above:
+
+1. Gemini owns the presentation slice end to end: current official evidence,
+   explicit mapping, Flutter presentation changes, Native same-state capture,
+   and visual correction loop.
+2. Codex reads and reviews the actual Gemini diff rather than reimplementing the
+   same presentation. Codex owns systems-risk findings, regression coverage,
+   real-stock/runtime verification, integration and CI.
+3. If a slice needs both presentation and systems work, split ownership by file
+   surface/worktree. One writer remains mandatory for every overlapping file.
+4. Keep UI slices large enough to close a meaningful Golden-State row or
+   coherent cluster. Avoid repeated remote push/full-CI cycles for isolated
+   spacing, wording, icon, or focus tweaks when those changes can be validated
+   together locally.
+5. Handoff back to Codex only when the visual slice has a concrete diff and
+   evidence. Codex returns P0/P1/P2 findings; the original owner fixes its own
+   presentation surface unless ownership is explicitly renegotiated.
+6. The mode ends with the Golden-State phase. It is not a permanent hierarchy:
+   Gemini is not Codex's subordinate, and Codex is not a permanent cleanup
+   worker.
+
 ### UI reconstruction protocol
 
 For official-fidelity work, neither peer invents a new visual direction.

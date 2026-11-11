@@ -139,6 +139,38 @@ Default specialization is a routing hint, not an exclusive boundary:
   other slice when it currently has the better context. Do not duplicate the
   same implementation merely to compare agents.
 
+#### Golden-State UI convergence ownership override
+
+While `PROJECT_STATUS.md` names an active Desktop UI Visual Parity / Golden-State
+phase, the peers remain equal but the default **write ownership** becomes
+intentionally asymmetric by surface:
+
+- **Antigravity/Gemini is the default presentation owner** for visual/interaction
+  translation slices whose main purpose is official Desktop fidelity. It should
+  gather or refresh official evidence, implement the corresponding Flutter
+  presentation in its own worktree, run the closest Native state, compare the
+  result, and iterate before handoff.
+- **Codex is the default systems-integrity owner and adversarial reviewer** for
+  those Gemini-owned presentation slices. Codex checks controller/domain
+  boundaries, bounded memory, lazy loading/virtualization, async lifecycle and
+  race behavior, protocol correctness, accessibility/keyboard regressions,
+  tests, real-stock validation, integration, and CI.
+- Codex must not take over a presentation slice merely because it can implement
+  it. Transfer presentation ownership to Codex only when Gemini is blocked, the
+  change is predominantly state/architecture rather than visual translation, or
+  Gemini explicitly releases the slice.
+- Gemini must not rewrite protocol/controller/state machinery for visual
+  convenience when the existing boundary can support the translated UI. If a
+  real systems change is required, release that surface or negotiate a
+  non-overlapping Codex-owned systems slice first.
+- Prefer **surface-sized coherent slices** (for example one complete Golden-State
+  row or tightly coupled row cluster) over one commit/CI cycle per spacing,
+  label, focus, or icon adjustment. Local targeted tests and captures should
+  iterate inside the owner worktree; shared full gates and hosted CI belong at
+  coherent integration checkpoints.
+- This override expires when the active Golden-State parity phase ends. The
+  normal evidence/context-based peer routing above then resumes.
+
 Parallel work rules:
 
 - Use separate Git worktrees/branches for independent writable slices.
