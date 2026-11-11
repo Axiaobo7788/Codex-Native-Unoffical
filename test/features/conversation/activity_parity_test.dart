@@ -725,64 +725,229 @@ Trailing paragraph 4.
       expect(find.text('schema'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'A7 reasoningParts applies official 182735 v1hC.W multi-part first-part emphasis while preserving raw Execution/search and sparse/single-part bodies',
+    (tester) async {
+      const savedParts = <String>[
+        'Plain summary title',
+        'First body paragraph.\n\nSecond body paragraph.',
+      ];
+      final harness = _A7ParityHarness(
+        reasoningText: savedParts.join('\n\n'),
+        reasoningParts: savedParts,
+      );
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(1191, 865),
+      );
+      await tester.tap(find.text('A7 parity thread'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('turn-work-a7-turn-1')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Thought'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('reasoning-markdown')), findsOneWidget);
+      expect(
+        find.textContaining('Plain summary title', findRichText: true),
+        findsNothing,
+      );
+      expect(
+        find.text('First body paragraph.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Second body paragraph.', findRichText: true),
+        findsOneWidget,
+      );
+
+      // Execution mode keeps unmodified raw text without synthetic **bold** syntax.
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Execution'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Plain summary title\n\nFirst body paragraph.\n\nSecond body paragraph.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('**Plain summary title**'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Commands'));
+      await tester.pumpAndSettle();
+
+      // In-conversation search matching the stripped plain first part reveals unmodified text.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('conversation-search-field')),
+        'Plain summary title',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Plain summary title\n\nFirst body paragraph.\n\nSecond body paragraph.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('conversation-search-close')));
+      await tester.pumpAndSettle();
+
+      if (find
+          .byKey(const ValueKey('jump-to-latest-button'))
+          .evaluate()
+          .isNotEmpty) {
+        await tester.tap(find.byKey(const ValueKey('jump-to-latest-button')));
+        await tester.pumpAndSettle();
+      }
+
+      // Live streaming multipart summary strips plain part[0] and keeps part[1].
+      harness.customTurnEvents
+        ..add(
+          const TurnStartedEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-parts-turn',
+          ),
+        )
+        ..add(
+          const ReasoningSummaryDeltaEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-parts-turn',
+            itemId: 'live-multipart',
+            summaryIndex: 0,
+            delta: 'Live plain title',
+          ),
+        )
+        ..add(
+          const ReasoningSummaryDeltaEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-parts-turn',
+            itemId: 'live-multipart',
+            summaryIndex: 1,
+            delta: 'Live body paragraph.',
+          ),
+        );
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(find.textContaining('Live plain title'), findsNothing);
+      expect(find.text('Live body paragraph.'), findsOneWidget);
+
+      // Sparse summaryIndex > 0 without part[0] preserves part[1] intact.
+      harness.customTurnEvents
+        ..add(
+          const ReasoningItemEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-parts-turn',
+            itemId: 'live-multipart',
+            status: 'completed',
+            completed: true,
+            summaryParts: ['', 'Sparse body without heading.'],
+          ),
+        )
+        ..add(
+          const ReasoningItemEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-parts-turn',
+            itemId: 'live-single-part',
+            status: 'completed',
+            completed: true,
+            summaryParts: ['Standalone plain summary.'],
+          ),
+        )
+        ..add(
+          const TurnCompletedEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-parts-turn',
+            status: TurnRuntimeStatus.completed,
+          ),
+        );
+      await tester.pumpAndSettle();
+
+      final thoughtHeaders = find.text('Thought');
+      expect(thoughtHeaders, findsNWidgets(3));
+      await tester.tap(thoughtHeaders.at(1));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Sparse body without heading.', findRichText: true),
+        findsOneWidget,
+      );
+      await tester.tap(thoughtHeaders.at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(thoughtHeaders.first);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Standalone plain summary.', findRichText: true),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 class _A7ParityHarness extends SimulatedRuntimeHarness {
-  _A7ParityHarness({required String reasoningText})
-    : super(
-        initialThreads: [
-          createTestThread(id: 'a7-thread', preview: 'A7 parity thread'),
-        ],
-        initialHistoryTurns: [
-          HistoryTurn(
-            id: 'a7-turn-1',
-            status: TurnRuntimeStatus.completed,
-            startedAt: DateTime.utc(2026),
-            completedAt: DateTime.utc(2026).add(const Duration(seconds: 4)),
-            items: const [_user, _assistant],
-          ),
-        ],
-        initialHistoryItems: [
-          _user,
-          HistoryItem(
-            id: 'a7-reason-1',
-            turnId: 'a7-turn-1',
-            kind: HistoryItemKind.reasoning,
-            text: reasoningText,
-            status: 'completed',
-          ),
-          const HistoryItem(
-            id: 'a7-cmd-1',
-            turnId: 'a7-turn-1',
-            kind: HistoryItemKind.activity,
-            text: 'Command: cat counter.txt',
-            status: 'completed',
-            isCommand: true,
-            commandAction: (
-              kind: CommandActionKind.read,
-              name: 'counter.txt',
-              path: 'counter.txt',
-              query: null,
-            ),
-            output: OutputDescriptor(
-              reference: 'a7-output-1',
-              bytes: 9,
-              storedBytes: 9,
-              truncated: false,
-              available: true,
-            ),
-          ),
-          const HistoryItem(
-            id: 'a7-cmd-2',
-            turnId: 'a7-turn-1',
-            kind: HistoryItemKind.activity,
-            text: 'Command: printf ok',
-            status: 'completed',
-            isCommand: true,
-          ),
-          _assistant,
-        ],
-      ) {
+  _A7ParityHarness({
+    required String reasoningText,
+    List<String> reasoningParts = const [],
+  }) : super(
+         initialThreads: [
+           createTestThread(id: 'a7-thread', preview: 'A7 parity thread'),
+         ],
+         initialHistoryTurns: [
+           HistoryTurn(
+             id: 'a7-turn-1',
+             status: TurnRuntimeStatus.completed,
+             startedAt: DateTime.utc(2026),
+             completedAt: DateTime.utc(2026).add(const Duration(seconds: 4)),
+             items: const [_user, _assistant],
+           ),
+         ],
+         initialHistoryItems: [
+           _user,
+           HistoryItem(
+             id: 'a7-reason-1',
+             turnId: 'a7-turn-1',
+             kind: HistoryItemKind.reasoning,
+             text: reasoningText,
+             reasoningParts: reasoningParts,
+             status: 'completed',
+           ),
+           const HistoryItem(
+             id: 'a7-cmd-1',
+             turnId: 'a7-turn-1',
+             kind: HistoryItemKind.activity,
+             text: 'Command: cat counter.txt',
+             status: 'completed',
+             isCommand: true,
+             commandAction: (
+               kind: CommandActionKind.read,
+               name: 'counter.txt',
+               path: 'counter.txt',
+               query: null,
+             ),
+             output: OutputDescriptor(
+               reference: 'a7-output-1',
+               bytes: 9,
+               storedBytes: 9,
+               truncated: false,
+               available: true,
+             ),
+           ),
+           const HistoryItem(
+             id: 'a7-cmd-2',
+             turnId: 'a7-turn-1',
+             kind: HistoryItemKind.activity,
+             text: 'Command: printf ok',
+             status: 'completed',
+             isCommand: true,
+           ),
+           _assistant,
+         ],
+       ) {
     storeOutput('a7-output-1', 'one\nthree');
   }
 
