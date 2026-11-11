@@ -2708,3 +2708,27 @@ backtick density:
   configured-server login, without implicitly loading a thread. Custom scopes,
   registration controls and per-thread overrides need their own supported
   product evidence before being claimed.
+
+
+## ADR-060 — Keep reasoning parts typed and bounded across live and saved views
+
+- **Status:** Accepted; packaged replay and presentation follow-up remain
+  independently tracked in the functional audit and Golden State A.
+- **Date:** 2026-11-12
+- **Context:** The caption-sized 240-character live projection collapsed
+  whitespace, ignored summary indices and discarded started/completed summary
+  bodies. U3's actual stock replay exposed different live and saved content.
+- **Decision:** Retain at most 8 KiB and 32 summary parts per reasoning item,
+  further respecting a smaller configured entry budget. Use sparse bounded keys
+  for stock indices, preserve an absent/empty first part, coalesce UI updates at
+  the existing cadence, and retain existing pending-item/entry/thread limits.
+  Completed nonempty stock snapshots are authoritative; missing/empty older
+  completion snapshots keep the observed live projection. Clip UTF-16 prefixes
+  at code-point boundaries and disclose truncation. Live and saved adapters
+  expose optional bounded immutable `reasoningParts` in addition to raw text.
+- **Consequences:** The presentation owner translates the official first-part
+  emphasis and paragraph composition from typed parts. Protocol/controller/raw
+  Execution and Find text do not acquire fabricated Markdown formatting.
+  Streaming keeps its lazy unparsed rendering, saved history remains paginated,
+  and inactive thread changes clear the transient accumulator. This projection
+  covers stock-provided summaries, not an independently reconstructed agent loop.

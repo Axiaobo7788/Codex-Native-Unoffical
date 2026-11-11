@@ -23,6 +23,7 @@ class ConversationEntry {
     this.status,
     this.commandActions = const {},
     this.commandOutput,
+    this.reasoningParts = const [],
     this.attachments = const [],
   });
 
@@ -35,6 +36,7 @@ class ConversationEntry {
   final String? status;
   final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
+  final List<String> reasoningParts;
   final List<UserAttachment> attachments;
 
   ConversationEntry copyWith({
@@ -44,6 +46,7 @@ class ConversationEntry {
     String? stockItemId,
     String? status,
     List<UserAttachment>? attachments,
+    List<String>? reasoningParts,
   }) => ConversationEntry(
     id: id,
     kind: kind,
@@ -54,6 +57,7 @@ class ConversationEntry {
     status: status ?? this.status,
     commandActions: commandActions,
     commandOutput: commandOutput,
+    reasoningParts: reasoningParts ?? this.reasoningParts,
     attachments: attachments ?? this.attachments,
   );
 }
@@ -77,7 +81,6 @@ class ConversationController extends ChangeNotifier {
   }
 
   static const _omittedPrefix = '[Earlier text omitted]\n';
-  static const _maxReasoningSummaryChars = 240;
   static const _maxMcpBaseSummaryChars = 160;
   static const _maxMcpProgressMessageChars = 240;
   static const _maxModelIdentifierChars = 120;
@@ -96,9 +99,9 @@ class ConversationController extends ChangeNotifier {
   final Duration coalesceInterval;
   final List<ConversationEntry> _entries = [];
   final LinkedHashMap<String, StringBuffer> _deltaBuffers = LinkedHashMap();
-  final LinkedHashMap<String, ({String turnId, StringBuffer buffer})>
-  _reasoningDeltaBuffers = LinkedHashMap();
-  final LinkedHashMap<String, String> _reasoningSummaries = LinkedHashMap();
+  final LinkedHashMap<String, String> _reasoningDeltaBuffers = LinkedHashMap();
+  final LinkedHashMap<String, _ReasoningSummaryBuffer> _reasoningSummaries =
+      LinkedHashMap();
   final LinkedHashMap<String, String> _mcpBaseSummaries = LinkedHashMap();
   late final StreamSubscription<TurnEvent> _eventSubscription;
   Timer? _flushTimer;
@@ -508,7 +511,12 @@ class ConversationController extends ChangeNotifier {
       case AssistantMessageEvent():
         _completeAssistantMessage(event);
       case ReasoningSummaryDeltaEvent():
-        _bufferReasoningDelta(event.itemId, event.turnId, event.delta);
+        _bufferReasoningDelta(
+          event.itemId,
+          event.turnId,
+          event.summaryIndex,
+          event.delta,
+        );
       case McpToolCallProgressEvent():
         final base = _mcpBaseSummaries[event.itemId] ?? 'MCP';
         final progress = _truncate(
@@ -641,9 +649,12 @@ class ConversationController extends ChangeNotifier {
         }
         var summary = event.summary;
         if (summary == 'Reasoning') {
-          final accumulated = _reasoningSummaries[event.itemId];
+          if (event is ReasoningItemEvent && event.summaryParts.isNotEmpty) {
+            _reasoningState(event.itemId).replace(event.summaryParts);
+          }
+          final accumulated = _reasoningSummaries[event.itemId]?.text;
           if (accumulated != null && accumulated.isNotEmpty) {
-            summary = 'Reasoning: $accumulated';
+            summary = _reasoningText(accumulated);
           }
         } else if (summary.startsWith('MCP: ')) {
           _rememberBounded(
@@ -657,6 +668,10 @@ class ConversationController extends ChangeNotifier {
             id: event.itemId,
             kind: ConversationEntryKind.activity,
             text: _bounded(summary),
+            reasoningParts:
+                summary == 'Reasoning' || summary.startsWith('Reasoning: ')
+                ? _reasoningSummaries[event.itemId]?.parts ?? const []
+                : const [],
             completed: event.completed,
             turnId: event.turnId,
             status: event.status,
@@ -707,28 +722,39 @@ class ConversationController extends ChangeNotifier {
     _flushTimer ??= Timer(coalesceInterval, _flushDeltas);
   }
 
-  void _bufferReasoningDelta(String itemId, String turnId, String delta) {
-    var pending = _reasoningDeltaBuffers[itemId];
-    if (pending == null) {
-      if (_reasoningDeltaBuffers.length >= maxPendingDeltaItems) {
-        final oldestId = _reasoningDeltaBuffers.keys.first;
-        _flushReasoningDelta(
-          oldestId,
-          _reasoningDeltaBuffers.remove(oldestId)!,
+  _ReasoningSummaryBuffer _reasoningState(String itemId) {
+    final previous = _reasoningSummaries.remove(itemId);
+    final state =
+        previous ??
+        _ReasoningSummaryBuffer(
+          min(
+            ReasoningItemEvent.maxSummaryCharacters,
+            maxEntryCharacters - 'Reasoning: '.length,
+          ),
         );
-      }
-      pending = (turnId: turnId, buffer: StringBuffer());
-      _reasoningDeltaBuffers[itemId] = pending;
+    _reasoningSummaries[itemId] = state;
+    while (_reasoningSummaries.length > maxEntries) {
+      final oldestId = _reasoningSummaries.keys.first;
+      _reasoningSummaries.remove(oldestId);
+      _reasoningDeltaBuffers.remove(oldestId);
     }
-    final existingLength = _reasoningSummaries[itemId]?.length ?? 0;
-    final remaining =
-        (_maxReasoningSummaryChars + 1) -
-        (existingLength + pending.buffer.length);
-    if (remaining > 0 && delta.isNotEmpty) {
-      pending.buffer.write(
-        delta.length <= remaining ? delta : delta.substring(0, remaining),
-      );
+    return state;
+  }
+
+  void _bufferReasoningDelta(
+    String itemId,
+    String turnId,
+    int summaryIndex,
+    String delta,
+  ) {
+    if (summaryIndex < 0 || delta.isEmpty) return;
+    if (!_reasoningDeltaBuffers.containsKey(itemId) &&
+        _reasoningDeltaBuffers.length >= maxPendingDeltaItems) {
+      final oldestId = _reasoningDeltaBuffers.keys.first;
+      _flushReasoningDelta(oldestId, _reasoningDeltaBuffers.remove(oldestId)!);
     }
+    _reasoningState(itemId).append(summaryIndex, delta);
+    _reasoningDeltaBuffers[itemId] = turnId;
     _flushTimer ??= Timer(coalesceInterval, _flushDeltas);
   }
 
@@ -771,10 +797,7 @@ class ConversationController extends ChangeNotifier {
     for (final entry in buffered.entries) {
       _flushDelta(entry.key, entry.value);
     }
-    final bufferedReasoning =
-        Map<String, ({String turnId, StringBuffer buffer})>.from(
-          _reasoningDeltaBuffers,
-        );
+    final bufferedReasoning = Map<String, String>.from(_reasoningDeltaBuffers);
     _reasoningDeltaBuffers.clear();
     for (final entry in bufferedReasoning.entries) {
       _flushReasoningDelta(entry.key, entry.value);
@@ -782,18 +805,10 @@ class ConversationController extends ChangeNotifier {
     _notify();
   }
 
-  void _flushReasoningDelta(
-    String itemId,
-    ({String turnId, StringBuffer buffer}) pending,
-  ) {
-    final existingSummary = _reasoningSummaries[itemId] ?? '';
-    final combined = '$existingSummary${pending.buffer}'
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final boundedSummary = combined.length <= _maxReasoningSummaryChars
-        ? combined
-        : '${combined.substring(0, _maxReasoningSummaryChars)}…';
-    _rememberBounded(_reasoningSummaries, itemId, boundedSummary);
+  void _flushReasoningDelta(String itemId, String turnId) {
+    final state = _reasoningSummaries[itemId];
+    if (state == null) return;
+    final boundedSummary = state.text;
     final index = _entries.indexWhere((entry) => entry.id == itemId);
     final isAlreadyCompleted = index != -1 && _entries[index].completed;
     final status = index != -1
@@ -803,14 +818,26 @@ class ConversationController extends ChangeNotifier {
       ConversationEntry(
         id: itemId,
         kind: ConversationEntryKind.activity,
-        text: boundedSummary.isEmpty
-            ? 'Reasoning'
-            : 'Reasoning: $boundedSummary',
+        text: _reasoningText(boundedSummary),
+        reasoningParts: state.parts,
         completed: isAlreadyCompleted,
-        turnId: pending.turnId.isEmpty ? _activeTurnId : pending.turnId,
+        turnId: turnId.isEmpty ? _activeTurnId : turnId,
         status: status,
       ),
     );
+  }
+
+  String _reasoningText(String summary) {
+    if (summary.isEmpty) return 'Reasoning';
+    const prefix = 'Reasoning: ';
+    final limit = min(
+      ReasoningItemEvent.maxSummaryCharacters,
+      maxEntryCharacters - prefix.length,
+    );
+    final bounded = summary.length <= limit
+        ? summary
+        : '${ReasoningItemEvent.prefixAtCodePointBoundary(summary, limit - 1)}…';
+    return '$prefix$bounded';
   }
 
   void _flushDelta(String itemId, StringBuffer buffer) {
@@ -984,4 +1011,71 @@ class ConversationController extends ChangeNotifier {
     unawaited(_eventSubscription.cancel());
     super.dispose();
   }
+}
+
+/// Sparse stock summary indices are keys, never array allocation sizes.
+/// Storage is bounded before concatenation; rendering occurs only on a flush.
+class _ReasoningSummaryBuffer {
+  _ReasoningSummaryBuffer(this.maxCharacters);
+  final int maxCharacters;
+  final Map<int, StringBuffer> _parts = {0: StringBuffer()};
+  var _characters = 0;
+  var _truncated = false;
+  List<String>? _cachedParts;
+
+  void append(int index, String delta) {
+    if (delta.isEmpty) return;
+    _cachedParts = null;
+    var part = _parts[index];
+    if (part == null) {
+      if (_parts.length >= ReasoningItemEvent.maxSummaryParts ||
+          _characters + (_parts.isEmpty ? 0 : 2) >= maxCharacters) {
+        _truncated = true;
+        return;
+      }
+      _characters += _parts.isEmpty ? 0 : 2;
+      part = StringBuffer();
+      _parts[index] = part;
+    }
+    final remaining = maxCharacters - _characters;
+    final accepted = delta.length <= remaining
+        ? delta
+        : ReasoningItemEvent.prefixAtCodePointBoundary(delta, remaining);
+    part.write(accepted);
+    _characters += accepted.length;
+    _truncated |= accepted.length < delta.length;
+  }
+
+  void replace(List<String> parts) {
+    _parts
+      ..clear()
+      ..[0] = StringBuffer();
+    _characters = 0;
+    _truncated = false;
+    _cachedParts = null;
+    final count = min(parts.length, ReasoningItemEvent.maxSummaryParts);
+    for (var index = 0; index < count; index++) {
+      append(index, parts[index]);
+    }
+    _truncated |= parts.length > count;
+  }
+
+  List<String> get parts {
+    if (_cachedParts case final cached?) return cached;
+    final indices = _parts.keys.toList()..sort();
+    final result = indices.map((index) => _parts[index].toString()).toList();
+    if (_truncated && result.isNotEmpty) {
+      final last = result.removeLast();
+      final prefix = _characters < maxCharacters
+          ? last
+          : ReasoningItemEvent.prefixAtCodePointBoundary(
+              last,
+              max(0, last.length - 1),
+            );
+      result.add('$prefix…');
+    }
+    return _cachedParts = List.unmodifiable(result);
+  }
+
+  String get text => parts.join('\n\n');
 }

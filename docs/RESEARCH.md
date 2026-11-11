@@ -4977,3 +4977,12 @@ not change Gemini's presentation composition. The same packaged MCP walkthrough
 exposed premature history hydration for a newly created unmaterialized thread.
 Both remain explicit supported gaps in the [functional audit](reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md),
 not a generic Human review gate.
+
+
+Public release metadata was rechecked on 2026-11-12: latest stable remains
+[`rust-v0.167.1`](https://github.com/openai/codex/releases/tag/rust-v0.167.1)
+(published 2026-11-10). Existing public-stock probes therefore still target the
+current stable release. This does not make installed/private-source revisions
+identical. ADR-060 records the bounded typed reasoning seam; its current shared
+machine gates pass, while packaged replay and the presentation follow-up remain
+separate pending claims.

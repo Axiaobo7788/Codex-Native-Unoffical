@@ -16,11 +16,50 @@ CommandActionKind? parseStockCommandActionKind(Object? type) => switch (type) {
   _ => null,
 };
 
+List<String> parseStockReasoningSummaryParts(
+  Object? value, {
+  int maxCharacters = ReasoningItemEvent.maxSummaryCharacters,
+}) {
+  if (value == null) return const [];
+  if (value is! List<Object?>) {
+    throw const ProtocolViolation('Reasoning summary must be a string list.');
+  }
+  final parts = <String>[];
+  var remaining = maxCharacters < ReasoningItemEvent.maxSummaryCharacters
+      ? maxCharacters
+      : ReasoningItemEvent.maxSummaryCharacters;
+  for (final raw in value) {
+    if (parts.length == ReasoningItemEvent.maxSummaryParts || remaining <= 2) {
+      if (parts.isNotEmpty) {
+        final last = parts.removeLast();
+        parts.add(
+          last.isEmpty
+              ? '…'
+              : '${ReasoningItemEvent.prefixAtCodePointBoundary(last, last.length - 1)}…',
+        );
+      }
+      break;
+    }
+    if (raw is! String) {
+      throw const ProtocolViolation('Reasoning summary must contain strings.');
+    }
+    if (parts.isNotEmpty) remaining -= 2;
+    if (raw.length > remaining) {
+      parts.add(
+        '${ReasoningItemEvent.prefixAtCodePointBoundary(raw, remaining - 1)}…',
+      );
+      break;
+    }
+    parts.add(raw);
+    remaining -= raw.length;
+  }
+  return List.unmodifiable(parts);
+}
+
 final class TurnProtocolAdapter {
   static const _maxTurnPlanSteps = 50;
   static const _maxPlanStepLength = 240;
   static const _maxPlanExplanationLength = 320;
-  static const _maxReasoningDeltaLength = 240;
   static const _maxProgressMessageLength = 240;
   static const _maxHookMessageLength = 240;
   static const _maxModelIdentifierLength = 120;
@@ -331,9 +370,9 @@ final class TurnProtocolAdapter {
       turnId: _requiredString(params, 'turnId'),
       itemId: _requiredString(params, 'itemId'),
       summaryIndex: rawIndex,
-      delta: _truncate(
+      delta: ReasoningItemEvent.boundedText(
         _requiredString(params, 'delta'),
-        _maxReasoningDeltaLength,
+        ReasoningItemEvent.maxSummaryCharacters,
       ),
     );
   }
@@ -543,6 +582,17 @@ final class TurnProtocolAdapter {
         review: review,
         status: _activityStatus(item, completed),
         completed: completed,
+      );
+    }
+
+    if (type == 'reasoning') {
+      return ReasoningItemEvent(
+        threadId: threadId,
+        turnId: turnId,
+        itemId: itemId,
+        status: _activityStatus(item, completed),
+        completed: completed,
+        summaryParts: parseStockReasoningSummaryParts(item['summary']),
       );
     }
 

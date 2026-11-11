@@ -5,7 +5,8 @@ import 'jsonl_decoder.dart';
 import 'output_protocol.dart';
 import 'protocol_models.dart';
 import 'thread_protocol.dart';
-import 'turn_protocol.dart' show parseStockCommandActionKind;
+import 'turn_protocol.dart'
+    show parseStockCommandActionKind, parseStockReasoningSummaryParts;
 import 'user_message_protocol.dart';
 
 final class HistoryProtocolAdapter {
@@ -298,6 +299,20 @@ final class HistoryProtocolAdapter {
     return hasText || (deferred && blocks.isEmpty) ? blocks : null;
   }
 
+  HistoryItem _reasoningItem(String id, String turnId, Object? summary) {
+    final parts = parseStockReasoningSummaryParts(
+      summary,
+      maxCharacters: maxTextCharacters,
+    );
+    return HistoryItem(
+      id: id,
+      turnId: turnId,
+      kind: HistoryItemKind.reasoning,
+      text: parts.join('\n\n'),
+      reasoningParts: parts,
+    );
+  }
+
   HistoryTurn _parseTurn(Object? value) {
     if (value is! Map<String, Object?>) {
       throw const ProtocolViolation('History turn must be an object.');
@@ -388,12 +403,7 @@ final class HistoryProtocolAdapter {
         kind: HistoryItemKind.assistant,
         text: _bounded(_optionalString(value, 'text') ?? ''),
       ),
-      'reasoning' => HistoryItem(
-        id: id,
-        turnId: turnId,
-        kind: HistoryItemKind.reasoning,
-        text: _bounded(_stringList(value['summary']).join('\n')),
-      ),
+      'reasoning' => _reasoningItem(id, turnId, value['summary']),
       'commandExecution' => HistoryItem(
         id: id,
         turnId: turnId,
@@ -580,9 +590,6 @@ final class HistoryProtocolAdapter {
     }
     return '${value.substring(0, end)}…';
   }
-
-  static List<String> _stringList(Object? value) =>
-      value is List<Object?> ? value.whereType<String>().toList() : const [];
 
   static int _listLength(Object? value) =>
       value is List<Object?> ? value.length : 0;

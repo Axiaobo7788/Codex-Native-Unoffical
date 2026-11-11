@@ -832,7 +832,9 @@ void main() {
     final reasoningEntry = controller.entries.singleWhere(
       (e) => e.id == 'reason-huge',
     );
-    expect(reasoningEntry.text.length, lessThanOrEqualTo(260));
+    expect(reasoningEntry.text.length, 1024);
+    expect(reasoningEntry.text, startsWith('Reasoning: '));
+    expect(reasoningEntry.text, endsWith('…'));
     expect(reasoningEntry.completed, isTrue);
     expect(reasoningEntry.status, 'completed');
 

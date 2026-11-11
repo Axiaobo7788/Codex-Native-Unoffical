@@ -964,7 +964,7 @@ void main() {
     final sub = adapter.events.listen(events.add);
     addTearDown(sub.cancel);
 
-    final longText = 'x' * 500;
+    final longText = 'x' * (20 * 1024);
     notifications
       ..add(
         CodexNotification(
@@ -1010,7 +1010,7 @@ void main() {
 
     expect(events, hasLength(3));
     final reasoning = events[0] as ReasoningSummaryDeltaEvent;
-    expect(reasoning.delta.length, 241);
+    expect(reasoning.delta.length, ReasoningItemEvent.maxSummaryCharacters);
     expect(reasoning.delta.endsWith('…'), isTrue);
 
     final reroute = events[1] as ModelReroutedEvent;

@@ -203,6 +203,38 @@ class ActivityEvent extends TurnEvent {
   final OutputDescriptor? commandOutput;
 }
 
+/// A bounded public reasoning summary snapshot, separate from activity captions.
+/// Stock owns the full item; the UI retains only this working projection.
+class ReasoningItemEvent extends ActivityEvent {
+  const ReasoningItemEvent({
+    required super.threadId,
+    required super.turnId,
+    required super.itemId,
+    required super.status,
+    required super.completed,
+    required this.summaryParts,
+  }) : super(summary: 'Reasoning');
+
+  static const maxSummaryCharacters = 8 * 1024;
+  static const maxSummaryParts = 32;
+
+  final List<String> summaryParts;
+
+  static String prefixAtCodePointBoundary(String text, int maxCodeUnits) {
+    var end = text.length < maxCodeUnits ? text.length : maxCodeUnits;
+    if (end > 0) {
+      final last = text.codeUnitAt(end - 1);
+      if (last >= 0xD800 && last <= 0xDBFF) end -= 1;
+    }
+    return text.substring(0, end);
+  }
+
+  static String boundedText(String text, int maxCodeUnits) =>
+      text.length <= maxCodeUnits
+      ? text
+      : '${prefixAtCodePointBoundary(text, maxCodeUnits - 1)}…';
+}
+
 enum ReviewModePhase { entered, exited }
 
 class ReviewModeEvent extends ActivityEvent {

@@ -117,12 +117,15 @@ permission to lower the engineering or visual quality bar.
   `/var/tmp/native-codex-desktop-reasoning-stream`, branch
   `agent/codex-desktop-reasoning-stream`, base `03b23c4`. The actual U3 replay
   revealed live reasoning flattened to 240 characters before presentation.
-  Codex owns protocol/domain/controller and related tests; the authored 8 KiB,
-  32-part, coalesced projection passes 46 focused tests and strict analysis.
-  Three old-source red cases reproduce lost newlines, part ordering and missing
-  started/completed snapshots. Peer review found no P0/P1 and two P2s: UTF-16 clipping and saved multipart
-  paragraph parity. Corrections, real-stock replay and shared gates remain
-  pending; first-part emphasis stays in presentation rather than protocol. No presentation file is rewritten for this correction.
+  Codex owns protocol/domain/controller/history adapters and related tests.
+  The 8 KiB/32-part coalesced projection now passes 615 default Flutter cases
+  (five opt-in skips), five enabled actual-stock cases, strict analysis,
+  68-root pure-Dart compilation, memory benchmark and two-job Linux release.
+  Three old-source red cases reproduce body/part/snapshot loss. Both peer P2s
+  (UTF-16 clipping and saved multipart boundaries) have red-before-green
+  evidence. Optional bounded `reasoningParts` preserves the presentation seam;
+  raw text gains no synthetic emphasis. Packaged reasoning replay is next.
+  No presentation file is rewritten for this systems correction.
 - **Track U / Gemini:** U3 `22bf94e` released its six presentation/test surfaces
   after official-TUI handoff. Codex independently reviewed the diff and light/dark
   captures, then merged it. Reasoning Markdown uses the measured 14 px hierarchy,
@@ -148,13 +151,14 @@ permission to lower the engineering or visual quality bar.
   before/after shared validation; 607 default Flutter cases plus five opt-in
   skips and five enabled actual-stock cases pass. Exact branch CI
   [43111251522](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43111251522)
-  is still in progress. Main integration is next; do not call this exact CI green.
+  passed all three platforms. Main now includes it through `abd0e41`.
 - Previous branch `0cdf0e8` passed all three hosted platforms at
   [43101623112](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43101623112).
-- **Last hosted-verified main `deb70761f3ebbe32de878b3cd7bc0ff5da400a5c`:**
-  [43092114873](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43092114873)
-  passed all three platforms. It includes catalog truth and U1 typography,
-  preserving the cold-resume failure correction `a0d2a05`.
+- **Last hosted-verified main `abd0e413222994cc8961f2dd75c08ad7dad99083`:**
+  [43113451050](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43113451050)
+  passed Linux verification, Windows and macOS. It includes MCP/U2/U3 and
+  preserves prior catalog, typography and cold-resume corrections. The current
+  reasoning systems slice is not yet integrated into that checkpoint.
 - Older A6/A7/Customize/question/Goal narratives and prior CI counts remain in
   [checkpoint history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md).
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) remains the visual
@@ -189,7 +193,16 @@ permission to lower the engineering or visual quality bar.
 
 ## Verification and pending gates
 
-- Source `03b23c4`: format 203 files/zero changes, strict analysis, 68-root
+- Current reasoning systems source: format 204 files/zero changes, strict
+  analysis, 68-root pure-Dart boundary, 615 default Flutter cases/five skips,
+  five enabled installed-stock cases and history memory benchmark pass.
+  The first release invocation omitted the Cargo job environment and was
+  intentionally terminated with its owned process tree (exit 143). The rerun
+  explicitly used `CARGO_BUILD_JOBS=2` and CMake `--parallel 2` and passed
+  release/83-library closure. All 218 tracked application/test/tool/Linux/build
+  input hashes matched before/after. Rust source is unchanged; prior 100-test
+  evidence remains distinct. Real packaged reasoning replay is pending.
+- Prior source `03b23c4`: format 203 files/zero changes, strict analysis, 68-root
   pure-Dart boundary, 607 default Flutter cases/five opt-in skips, five enabled
   real-stock cases, history 100/1,000 plus ten 3 MiB outputs, two-job Linux
   release/83-library closure, existing MCP and installed/public name-only OAuth

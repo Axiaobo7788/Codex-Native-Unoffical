@@ -25,6 +25,7 @@ class HistoryItem {
     this.isCommand = false,
     this.commandAction,
     this.canReadMcpText = false,
+    this.reasoningParts = const [],
     this.attachments = const [],
   });
 
@@ -38,6 +39,7 @@ class HistoryItem {
   final bool isCommand;
   final HistoryCommandAction? commandAction;
   final bool canReadMcpText;
+  final List<String> reasoningParts;
   final List<UserAttachment> attachments;
 }
 
