@@ -105,9 +105,14 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   (`2e1df69`); its Linux run also failed on archive-host DNS within five minutes.
   A second bounded candidate substitutes the public Linux Kernel Archives
   Ubuntu mirror for the first entry, keeping Canonical fallbacks, required
-  packages, Ubuntu 22.04 and normal APT trust checks. Hosted recovery is still
-  unproved; the first candidate is not merged into main. Gemini independently
-  owns the next A6 user-bubble/attachment presentation slice and heavy slot.
+  packages, Ubuntu 22.04 and normal APT trust checks. Exact recovery candidate
+  `ae3be852c6ec6ffa21391fdf866aeccf6872356e` passed all three hosted jobs in
+  [43056716141](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43056716141),
+  including the full Linux verification and build chain. The failed first
+  experiment remains negative evidence; its history is preserved by ordinary
+  commits. The integration HEAD requires its own exact-HEAD CI result.
+  Gemini independently owns the active A6 user-bubble/attachment presentation
+  slice and heavy slot; Codex continues light review and integration work.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak

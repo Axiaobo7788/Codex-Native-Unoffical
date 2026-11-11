@@ -4857,7 +4857,8 @@ The first scoped experiment, `2e1df69` / run `43053753441`, removed only the
 Azure entry and retained the vendor's Canonical HTTPS fallbacks. Linux still
 reported `Temporary failure resolving 'archive.ubuntu.com'` and hit the new
 five-minute step deadline before project checks. The experiment did not
-restore Hosted CI and is not merged into main. Its negative decoded log is
+restore Hosted CI and was not accepted as a standalone correction. Its negative
+decoded log is
 `ci-2e1df69-linux-candidate-failure.log` under the same private artifact root.
 YAML parsing and shell syntax did not predict remote reachability.
 
@@ -4871,6 +4872,16 @@ observations, not local cryptographic verification or evidence of GitHub
 connectivity. The real runner's unchanged APT trust verification and package
 install must succeed before this candidate can be accepted. The only
 workflow change remains the existing install step and five-minute deadline.
+
+The second candidate, `ae3be852c6ec6ffa21391fdf866aeccf6872356e`, subsequently
+passed all three jobs in [exact-HEAD run 43056716141](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43056716141).
+Linux performed the required APT update/install with unchanged Ubuntu signature
+verification, then completed formatting, pure-Dart boundary, Rust fmt/Clippy/tests,
+Flutter analysis/tests, Linux build/runtime closure and the existing Android
+artifact checks. Windows and macOS build/bundle checks also passed. This proves
+that hosted candidate's dependency recovery and required gates; it does not erase
+the earlier DNS failures or establish future mirror availability. The normal
+integration keeps both experiment commits and needs its own exact-HEAD CI result.
 
 Local resolution is separate evidence: an eight-second probe resolved Azure
 but timed out for the two Canonical names, while the web tool could read
