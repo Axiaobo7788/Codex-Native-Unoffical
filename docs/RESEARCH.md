@@ -4781,3 +4781,26 @@ picker from stock model and reasoning overrides. A real Linux release
 round trip showed that the catalog default can differ from the model
 resolved by config, and clearing overrides lets an existing stock session
 retain its model and effort. The composer now discloses that inheritance.
+
+
+## Build 25894 Goal typography reconciliation
+
+The installed `93122.91c6d75720.js` appearance configuration sets
+`sansFontSize.default` to 14. `182735.5b42af8792.js` applies that
+value and its scaled text table to root and body. The Goal editor
+in `725496.2b985984cc.js` uses `text-base` for its content and
+`text-size-chat` for its relative-time label. Both compute to
+14 px with a 21 px inherited line box under the default applied
+variables. The toolbar label uses `text-sm` with an explicit
+18 px line box, resolving to 13/18. The pane row is 40 px and
+Electron body `p-panel` resolves to 20 px.
+
+A private Chromium specimen loaded the installed CSS with the
+runtime's default variable values. It superseded the peer's
+initial 16 px body inference. The uninitialized CSS specimen had
+a 13 px chat fallback. The official appearance application chain
+is therefore part of the measured contract. This specimen does
+not establish a signed-in live capture or the Human reference's
+personal font and zoom preferences. Current Native translation
+and the remaining Goal state gaps are recorded in the
+[Golden-State matrix](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md#a9-editor-toolbar-and-save-shortcut).

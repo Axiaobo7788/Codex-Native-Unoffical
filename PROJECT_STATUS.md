@@ -131,10 +131,17 @@ action footer. Direct choices advance or submit by click or digit
 in the active Desktop request. A project row keeps its New chat
 action reachable by Tab. Home, open Changes, Review, expanded activity,
 compact and dark variants have separate evidence gates.
-[Hosted CI for `3be9a8e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42944063808)
+[Hosted CI for `29fa508`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42946327809)
 
 ## Current checkpoint
 
+- `c8e96a0` translates the Goal editor toolbar and guarded save shortcut.
+  The font runtime/CSS chain corrected the initial body-size inference.
+  The real Linux package saved through Ctrl+S, retained an unsaved draft
+  across 950/1191 px resizing and discarded it on explicit close. External
+  source-change closure, minute refresh and Revert focus remain active A9
+  checks. The matrix preserves the initial saved-only resize observation
+  and the pre-existing isolated-Xvfb frame warning.
 - `4d379ed` maps Goal status, objective, bullet and usage into the same
   click target with the measured compact actions. The peer comparison
   corrected short-goal flex and horizontal insets. The exact Linux package
@@ -188,7 +195,7 @@ remain available as history.
 
 ## Verification and pending gates
 
-- The current presentation source passed 534 default Flutter cases and
+- The current presentation source passed 536 default Flutter cases and
   five separately enabled direct-stock integration cases. Dart format and
   strict analysis passed in an ASCII physical-path source copy. This does
   not fix the recorded Unicode-path Flutter LSP framing failure.
@@ -199,9 +206,9 @@ remain available as history.
 - The pure-Dart boundary checked 65 roots. The history benchmark retained
   100 of 1,000 turns while exercising ten 3 MiB command payloads. The
   unchanged Rust tree passed formatting, Clippy and 100 tests.
-- The latest confirmed shared CI checkpoint is `3be9a8e`.
+- The latest confirmed shared CI checkpoint is `29fa508`.
   Later exact-HEAD runs remain separate until their results are read.
-  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42944063808)
+  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42946327809)
 - Signed-in official live captures, subjective interaction acceptance
   and unavailable physical devices remain evidence gates on their own
   surfaces. The primary UI has machine-actionable rows in Golden State A.
