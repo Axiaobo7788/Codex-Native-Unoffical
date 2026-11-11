@@ -37,7 +37,7 @@ got here.
 | A3 Project/thread rows | H1 has full-width row pills (`x71–397`) with a `16 px` reserved leading slot (`927552.qK2L` `reserveLeadingSlot: isGrouped` -> `384375.cSic.y` `w-4 shrink-0`) so child thread titles start at the exact same horizontal coordinate (`x112`) as `New chat` and project titles, plus right-click pointer-coordinate and `ContextMenu` / `Shift+F10` row-`bottomLeft` context menu (`86296.oprL` + `189497.rmk3`) and trailing spinner, unread dot or merged-PR glyph. | Paired stock captures at 1191×865 verify 36 px full-width row pills (`x60–331`), exact parent-label horizontal alignment (`x95` across `New chat`, project titles and child thread titles), pointer-positioned right-click and row-`bottomLeft` `ContextMenu`/`Shift+F10` thread menu opening with persistent row highlight, running spinner and 8 px blue unread dot, with compact geometry preserved under `!hasNavigationRail`. | `fe31e9e`, `9bff30d`, `9785c1a`, `8ee189e`, `d74cb39`, `f1e2fbb` | `927552.2a3666383e.js` derives the purple glyph from an actual merged PR state. Native thread attachments carry link identity but lack provider merge state and stay on-demand. | PARTIAL | Verify the supported Git/PR indicators with comparable data. Keep the merged glyph evidence-blocked until reliable state is available. Do not scan attachments for every visible thread. |
 | A4 Shared page/surface geometry | H1 puts sidebar and workspace inside one rounded surface. S2 has a 340 logical px default left panel, 52 px rail fallback and 42 rem content cap. | N1 and geometry tests show a single page with 52 + 288 px default, a resizable sidebar and 672 px reading/composer cap. | `5dc63ca`, `d836c16`, `c3ac6f0` | H1 physical positions depend on zoom and sidebar preference. Native's supported wide geometry follows the same logical roles. | PARITY_ACCEPTABLE | Preserve the dimensions for this state. Measure official logical gutters and resize persistence when a matched signed-in window is available. |
 | A5 Workspace header | H1 has folder/title, then thread menu, detail control and trailing panel toggle. `446282.FR4w` puts the side-panel action at right order 300 and delegates panel visibility to `ZU27.kO`. | The release has the three trailing roles and opens conversation search through the thread menu. The last control hides and restores the Goal editor with its draft. The draft also survives switching to stock Changes and back. | `0e19880`, `86eed8a`, `dafafba`, `dc7c3ee` | Native retains its linked-PR affordance and a single current Goal draft. It has no general task tab launcher. | PARTIAL | Verify the signed-in menu and simultaneous tab state. Map backed destinations while preserving link management and the bounded reading position. |
-| A6 Conversation reading/prose | H1 shows left reading-column prose with quiet inline events. `702243.U6mT` + `index.html` `@layer` zero root outer margins (`[&>*:first-child]:mt-0 [&>*:last-child]:mb-0`). `0040d5ae1a9f.css` uses `1.625` line-height, body-relative heading sizes/line boxes, `2 em` list text inset (`w600` primary-ink markers), `li + li = 0`, `li > p + p = 4*S` (`1.0 em`), `blockquote` (`2*S` block / `6*S` inline-start padding, `1*S` rounded bar, `0` internal gap), `table` (`4*S` top margin, `max(12px, 0.875em)` `tabular-nums`, borderless outer/vertical grid, `1 px` strong header rule, `1 px` subtle non-last row rules, `6*S` last-row bottom padding), `hr` (`1 px` strong rule, `7*S` margins) and `.InlineCode` (`0.92 em`, `1 px 6 px` pill, `6 px` radius). `23355`/`272587` give `CodeSnippet` `5*S` margins, `20 px` radius, `1 px` subtle border, `48 px` header, mapped language labels and `28×28` / `16 px` copy action. `225284.y5H2`/`o7K3` and `34052` govern message actions. | Retains old/latest message action visibility, `1.625` line-height, `2 em` list inset and heading hierarchy, and adds single-AST-pass zeroed root top/bottom edges, loose-list `1.0 em` intra-item paragraph gaps with `0` inter-item/nested-list spacing, `blockquote` rounded bar/insets/`0` internal gap, `20 px`-radius / `1 px`-border / `48 px`-header fenced code card (`Dart`/`Rust` labels + keyboard-focusable `28×28` / `16 px` `CodexIconButton` copy), borderless-vertical aligned `table` with `tabular-nums` and cell links, `1 px` `hr`, and normalized literal HTML blocks, exercised at `1191×865` against stock (`/var/tmp/native-gemini-a6-a11-qg8x7i49/native-walkthrough-r1/`). | `d836c16`, `650c721`, `a8d9e97`, `2a48724`, `67b85ca`, `80d318d`, `f7144df`, `55541ea`, `d0882b9` | As a current implementation tradeoff, `InlineCode` translates `0.92 em` monospace and `~9%` ink tint on `TextSpan` without `1 px 6 px` pill padding or `6 px` radius while keeping continuous `SelectionArea` selection, inline wrapping and enclosing link `TapGestureRecognizer`s on the default inline path. Native reading column renders `640 px` content width (`672 - 32`) at `1191×865`. Physical text scale, attachments and user bubbles lack a matched signed-in comparison. | PARTIAL | Evaluate custom inline-code `1 px 6 px` pill / `6 px` radius rendering (`Text.rich` / `WidgetSpan` or custom inline background painting) against selection, line-wrapping and link-recognizer regressions; compare attachment chips, user-message bubbles and physical font scaling against a matched signed-in official window while retaining single-parse bounded lazy Markdown. |
+| A6 Conversation reading/prose | H1 shows left reading-column prose with quiet inline events. `702243.U6mT` + `index.html` `@layer` zero root outer margins (`[&>*:first-child]:mt-0 [&>*:last-child]:mb-0`). `0040d5ae1a9f.css` uses `1.625` line-height, body-relative heading sizes/line boxes, `2 em` list text inset (`w600` primary-ink markers), `li + li = 0`, `li > p + p = 4*S` (`1.0 em`), `blockquote` (`2*S` block / `6*S` inline-start padding, `1*S` rounded bar, `0` internal gap), `table` (`4*S` top margin, `max(12px, 0.875em)` `tabular-nums`, borderless outer/vertical grid, `1 px` strong header rule, `1 px` subtle non-last row rules, `6*S` last-row bottom padding), `hr` (`1 px` strong rule, `7*S` margins) and `.InlineCode-Cddi3Y` (`702243.37e071a6c0.js` `dir="ltr"`, `0.92 em` container-relative monospace, `1 px 6 px` pill, `6 px` radius, `box-decoration-break: clone`, standalone prose fill light `0x171A1C1F` / `#EAEBEB` on `#FFFFFF` and dark `0x1CEDEDED` / `#373737` on `#212121`). `23355`/`272587` give `CodeSnippet` `5*S` margins, `20 px` radius, `1 px` subtle border, `48 px` header, mapped language labels and `28×28` / `16 px` copy action. `225284.y5H2`/`o7K3` and `34052` govern message actions. | Retains old/latest message action visibility, `1.625` line-height, `2 em` list inset, heading hierarchy, zeroed root outer edges, loose-list `1.0 em` intra-item paragraph gaps, `blockquote` rounded bar/insets, `20 px`-radius / `48 px`-header fenced code card with keyboard-focusable `28×28` / `16 px` copy, borderless-vertical aligned `table`, `1 px` `hr`, and normalized literal HTML, and adds `1 px 6 px` / `6 px`-radius `dir="ltr"` inline-code pills across `p`, `h1`–`h6`, `ul`/`ol`, `blockquote`, `table` `th`/`td` and enclosing `<a>` links (`[`code`](...)` and `[See `code` here](...)`) while keeping fenced `<pre><code>` unpilled, multi-span heading line boxes intact, `SelectionArea` `selectAll`/drag document order continuous, global `2×` `TextScaler` geometry exact, cached `onTapLink` updates late-dispatched, and `0` image-sentinel GETs across paired `1191×865` light (`#FFFFFF` / `#EAEBEB`) and dark (`#212121` / `#373737`) packaged stock replays (`/var/tmp/native-gemini-a6-inline-code-r1/stock-replay-r2/`), compared against an identical-text controlled `13.5 px` / `640 px` CSS specimen (`official-a6-inline-code-matched-13_5-{light,dark}.png`). | `d836c16`, `650c721`, `a8d9e97`, `2a48724`, `67b85ca`, `80d318d`, `f7144df`, `55541ea`, `d0882b9`, `d9dc65f` | Native reading column renders `640 px` content width (`672 - 32`) at `1191×865` with `ThemeTokens.bodyMedium` `13.5 px` (used to match the controlled component specimen, not as proof of the official signed-in account's font preference). Tokens `<= 640 px` move onto the next line at the preceding space in both CSS and Native `WidgetSpan` (differing slightly in glyph advance between Chrome `Liberation Mono` and Linux system `monospace`); a single unbroken inline-code token `> 640 px` wraps cleanly inside one `640 px`-bounded `6 px`-rounded `WidgetSpan` pill box rather than CSS `box-decoration-break: clone` per-line fragment rounding. Physical text scale, attachment chips and user bubbles lack a matched signed-in comparison. | PARTIAL | Compare attachment chips, user-message bubbles and physical font scaling against a matched signed-in official window while retaining single-parse bounded lazy Markdown and explicit `> 640 px` single-token `WidgetSpan` wrapping. |
 | A7 Thought/activity/read-run | H1 shows quiet Thinking and borderless read/run. `225284.NKAf` groups exploration and pluralizes runs. `getw` supplies the completed disclosure, `100921.waM8/F9dY` formats duration and `225284.O3Io` supplies expanded exploration captions. | A stock live turn displayed one Read files segment and singular ran a command. A saved turn opens a second collapsed Read files and ran a command group. The group shows typed read, search and list captions plus a generic Ran row. The Linux release restored real output across Execution and Commands, then released the preview on explicit group collapse. | `388147a`, `0a0f79c`, `31d2abd`, `0c8caca`, `f68889c`, `a18b1fa`, `a3bcd98` | The genuinely untimed fallback lacks a collapsed count. Native groups only completed successful commands with a known in-page boundary. Search and Execution retain individual rows. Mixed-tool groups, declined commands, titled reasoning and matched signed-in expansion remain open. | PARTIAL | Compare grouped row density and specialized or declined command captions. Keep count claims bounded by the loaded page. |
 | A8 Closed Changes affordance | H1 x705–911 shows a centered count chip. `34052.eR/ovhK` defines its 20 px elevated surface and closed-only gate. `225284.Bj1J.ef/eg` attaches an upper interactive file list while running. | A held real stock reply allowed a two-file +2/−0 preview during the turn. Selecting the second file opened its actual patch. The closed chip is removed when the pane opens. Header close preserves reading position. | `155ea2f`, `f31239e`, `c36da98`, `a983fa9` | Native uses the bounded stock diff snapshot. A keyboard user opens the pane directly. The separate open-pane composition belongs to D. | PARITY_ACCEPTABLE | Retain the stock snapshot gate and keyboard entry. Compare the actual open pane in D once the A screen is closed. |
 | A9 Selected Goal | H1 shows status, clipped objective, elapsed and clear/resume/expand icons. `309406.Ceox.tn` routes title and expand through the same visible-tab toggle and retains dirty state while the tab is parked. The `cI4i` rail applies a 13 px inset. `725496.G5g5` + `182735.KIKs` refresh relative wall time every 60 s while visible, pause when hidden, refresh on visibility return, and cancel on disposal; `74692.wgrH.setPromptText` reverts text with collapsed end selection without refocusing. | The release confirms the inset and opens the stock editor from title or expand. Save, Escape and request submission were exercised. Switching panes retains an unsaved draft. Explicit Close or a second click on the visible Goal strip closes the tab and returns to the saved objective. A 1191×865 stock release run mounted ~15 s after Goal seed transitioned autonomously from `Updated just now` to `Updated 1 min ago` across the 60 s wall-clock tick with zero input or stream events, then persisted a `Ctrl+S` update (`Updated just now`) and reverted an unsaved suffix via pointer click without stealing focus. | `09037a2`, `e5bbfed`, `fc192ff`, `2c5e8c1`, `02862e4`, `dc7c3ee`, `3505385`, `4d379ed`, `c8e96a0`, `d3bf1d0`, `481788f`, `d09fe2e` | Native confirms clear and uses a full reading surface when both columns cannot fit. The tray uses inline objective, bullet and usage within its click target, with 24 px actions. Own saves retain the editor across notification-before-ack ordering, external stock replacement closes the old editor, the mounted 60 s wall-clock timer pauses when hidden and cancels on disposal, and Revert sets collapsed end selection without refocusing. Signed-in terminal variants (`complete`, `blocked`, `usage_limited`, `budget_limited`) and matched live official captures remain open. | PARTIAL | Compare signed-in terminal Goal variants and tab-strip chrome when matched signed-in official captures are available. |
@@ -1111,3 +1111,101 @@ cache fix. Portal/AT-SPI/PipeWire/DRI3 warnings, a recovered initial OpenGL
 resize timeout and the warm-turn model-metadata fallback banner remain
 negative evidence. A0/A1 retain their row-scoped PARTIAL evidence boundaries;
 Golden State A remains active.
+
+## A6 inline-code pill translation
+
+In installed build `25894` (`app.asar` SHA-256
+`121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`),
+`702243.37e071a6c0.js` (`vN`) renders non-fenced inline `<code>` with
+`className: "InlineCode-Cddi3Y"` and `dir="ltr"`, while
+`/webview/assets/async/0040d5ae1a9f.css` (SHA-256
+`37d64cfdd1f7d93c14ccd52b34e4f88fbdff5ef0cd8ed1c96c6085a64d8408f0`) defines
+`display: inline; padding: 1px 6px; border-radius: 6px; box-decoration-break:
+clone; overflow-wrap: anywhere; word-break: break-word; font-size: .92em`.
+Two headless Chromium `1191×865` CSS specimen sets were captured in
+`/var/tmp/native-gemini-a6-inline-code-r1/`: an initial unmatched `13 px`
+exploratory token specimen (`official-a6-inline-code-{light,dark}.png`,
+`official-a6-inline-code-metrics.json`, generator `build_specimen.py`, which
+omitted the mixed-link phrase and second list item) and a controlled
+identical-text `13.5 px` / `640 px` component specimen
+(`official-a6-inline-code-matched-13_5-{light,dark}.png`,
+`official-a6-inline-code-matched-13_5-metrics.json`, generator
+`build_specimen_matched_13_5.py`) matching `a6-inline-code-fixture.md` and
+Native's `ThemeTokens.bodyMedium` (`13.5 px`, `21.9375 px` line height; used
+solely for attributable component comparison rather than claiming the official
+signed-in account's default font preference). They verified:
+
+1. Standalone assistant prose resolves `color-mix(in srgb,
+   var(--color-background-primary-ghost-hover) 60%, var(--color-text) 6%)` to
+   `color(srgb 0.101961 0.109804 0.121569 / 0.09)` (`Color(0x171A1C1F)`,
+   composited `#EAEBEB` on `#FFFFFF`) in light mode and `color(srgb 0.930283
+   0.930283 0.930283 / 0.108)` (`Color(0x1CEDEDED)`, composited `#373737` on
+   `#212121`) in dark mode, replacing the earlier too-bright `0x21FFFFFF`
+   estimate.
+2. `.InlineCode-Cddi3Y` scales `0.92×` relative to its parent container (`p`,
+   `h1`–`h6`, `ul`/`ol`, `blockquote`, and `12 px` `table` `th`/`td`), inherits
+   parent weight and enclosing `<a>` dotted underline, and wraps natural glyph
+   ascent+descent plus `2 px` vertical padding without inflating outer
+   paragraph/heading line boxes.
+
+Minimal public-API runtime probes
+(`/var/tmp/native-gemini-a6-inline-code-r1/public_api_probe_test.dart`) tested
+`flutter_markdown_plus` + `SelectionArea` before implementation:
+- Naive `builders['code']` dropped enclosing `<a>` tap activation and collapsed
+  multi-span `h1` outer `StrutStyle` height unless heading builders pass the
+  heading `TextStyle` as `styleSheet.p`, while omitting `TextScaler.noScaling`
+  on inner `Text` inside `WidgetSpan` caused `4×` global painted scaling at `2×`
+  `MediaQuery.textScaler` (`_AutoScaleInlineWidget`).
+- Both `SelectableRegionState.selectAll` and `PointerDeviceKind.mouse` drag
+  across single-line, `640 px` wrapped, and multi-pill wrapped paragraphs
+  preserved exact document order, rejecting the static `SelectionArea` ordering
+  concern without adding a custom `SelectionContainer` delegate.
+
+`d9dc65f` promotes inline-code geometry and light/dark fills to canonical tokens on
+`OfficialCodexTheme` / `OfficialCodexThemeData` and translates inline `<code>`
+inside `DesktopMarkdownBody` via `_PreScopeElementBuilder` (skipping fenced
+`<pre><code>`), `_LinkScopePaddingBuilder` (tracking non-empty enclosing `<a>`
+scopes), `_DesktopInlineCodeBuilder` (`inherit: false`, `TextDirection.ltr`,
+`TextScaler.noScaling`, `PlaceholderAlignment.baseline` on
+`TextBaseline.alphabetic`, `DecoratedBox` + `Padding(1 px, 6 px)`, and
+late-dispatch `(text, href, title) => widget.onTapLink(text, href, title)` so
+callback-only updates on a cached `DesktopMarkdownBody` never retain a stale
+closure or force a reparse), and `h1`–`h6` `MarkdownBuilder` instances. Single
+`16 KiB` AST parse, `!completed` streaming `SelectableText` bypass, `http`/`https`
+link validation, literal HTML, and zero-network blocked images are unchanged.
+
+Serial `--concurrency=1` gates passed `23/23` cases (`assistant_markdown_test`,
+`theme_tokens_test`, `official_convergence_geometry_test`), `dart format`,
+`dart analyze --fatal-infos`, the `65`-root pure-Dart boundary, and a clean
+first-build `83`-library Linux release closure (`CARGO_BUILD_JOBS=2`,
+`--config-only`, `cmake --build ... --target install --parallel 2`; runner
+`be105bf4ad81df2559a7d0e14590a4a9b5a0583a7ea4223bfa79a09e53c81a32`, `libapp.so`
+`74b643598ab3676b99818bcb40afc5d1941915d8b7f55590293fa30ab2fc4379`, host
+`73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`, icon font
+`1e17adc97b27856e6bf9463fd616263567c4523d6f9361c1c8436043fecf1baf`). In
+`1191×865` packaged stock replay against `/opt/codex-desktop/resources/codex`:
+- `stock-replay-r1` (`/var/tmp/native-gemini-a6-inline-code-r1/stock-replay-r1/`)
+  verified light rendering and `0` sentinel image GETs, and showed that
+  `GTK_THEME=Adwaita:dark` without `gsettings` left `FlGnomeSettings` in light
+  mode (preserved intact).
+- `stock-replay-r2` (`/var/tmp/native-gemini-a6-inline-code-r1/stock-replay-r2/`,
+  helper `run_a6_inline_code_replay_r2.sh`
+  `c07ae8bddfab9b14acba3db65afa717da3c1ec3e30cf7322934e9c677fa712fd`, fixture
+  `ce66acb6b1cadf0070bafa789a3b5db83ec8b644303c5e9e4d5d8c19c5fcbe8e`, manifest
+  `SHA256SUMS`) set isolated `dbus-run-session` `gsettings
+  org.gnome.desktop.interface color-scheme` (`default` vs `prefer-dark`),
+  verified `0` requests to the positively tested loopback image sentinel after
+  both App/Host/stock trees exited, and confirmed exact composited pixel parity
+  with the controlled `13.5 px` `25894` specimen (`sampled-native-pixels.json`:
+  light `#FFFFFF` canvas / `#EAEBEB` pill; dark `#212121` canvas / `#373737`
+  pill). In the controlled `13.5 px` / `640 px` comparison, paragraph `s-p1`
+  wraps at the same word (`... here in` / `one sentence.`), while `s-p-wrap`'s
+  `79`-character path pill wraps onto line 2 at the preceding space in both
+  renderers (`600.16 px` in Chrome `Liberation Mono`, pushing `path.` to line 3,
+  versus narrower Linux system `monospace` fitting `after path.` on line 2).
+  Xvfb portal/AT-SPI/PipeWire/DRI3 warnings, a recovered initial `1280×720 ->
+  1191×865` OpenGL resize timeout, single unbroken `> 640 px` token `WidgetSpan`
+  box wrapping (versus CSS `box-decoration-break: clone` per-line fragment
+  rounding), and matched signed-in official captures/font preferences remain
+  explicit boundaries (`MACHINE VERIFIED` + `AGENT REAL-USE VERIFIED`, `NOT YET
+  HUMAN VERIFIED`).

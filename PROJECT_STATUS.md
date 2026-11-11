@@ -62,28 +62,34 @@ and deferred unless they expose a material defect.
 The wide shell, supported stock conversation controls, lazy activity/output,
 Goal side tab and question/composer stack have working source translations.
 Current deltas remain row-scoped in the Golden-State matrix. The rich-prose
-cluster and ordinary composer action have current source translations.
-Routed Customize destination/sidebar/focus structure now has a source
-translation and packaged-stock replay. Inline-code pill rendering remains
-the next concrete machine-actionable research candidate.
+cluster, inline-code pills and ordinary composer action have current source
+translations. Routed Customize destination/sidebar/focus structure also has a
+source translation and packaged-stock replay.
 Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- The A1 candidate contains Gemini's source `ea267d3` and evidence commits
-  `c8d3bd3` / `17d201c`. Actual-diff and packaged review returned the delayed
-  Back-navigation race, partial-catalog wording, nested search borders and
-  hidden tooltip leakage to the owner. Those corrections passed the shared
-  gates and independent replay. Documentation now matches the unchanged
-  32-entry navigation cap. Gemini released all six surfaces and the runtime
-  slot; Codex owns this integration checkpoint.
-- The exact published `22c1136` checkpoint passed all three hosted CI jobs
-  ([42976181660](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42976181660)).
-  The new candidate separately passed 553 default Flutter cases, five
-  direct-stock cases, strict ASCII analysis, pure-Dart boundary, history
-  benchmark, Rust gates, a clean Linux release/83-library closure and
-  pure-Dart MCP smoke. Its independent packaged MCP replay recorded one
-  resource read and one tool call on the selected stock thread.
+- Exact shared HEAD `5e0996aee18363845b628b1e50ef5b3bb73c4b30` (integrating the
+  A0/A1 Customize slice `ea267d3` + `c8d3bd3` + `17d201c`) passed all three
+  hosted CI jobs
+  ([43007725868](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43007725868):
+  `verify`, `Windows x64`, `macOS arm64`).
+- Gemini completed the A6 Desktop inline-code pill candidate (`d9dc65f`) on
+  branch `agent/gemini-golden-a-inline-code` (`/var/tmp/native-gemini-golden-a-inline-code`).
+  Public-API runtime probes (`/var/tmp/native-gemini-a6-inline-code-r1/public_api_probe_test.dart`)
+  reproduced lost enclosing-link taps and `4×` double-scaling without
+  `TextScaler.noScaling` while confirming that built-in `SelectionArea`
+  `selectAll` and mouse drag preserve exact document order across wrapped
+  multi-pill paragraphs (no custom selection delegate needed). Peer diff review
+  consolidated `DesktopMarkdownBody` defaults and table scale onto
+  `OfficialCodexTheme` and switched pill link taps to late State callback
+  dispatch, verified on a cached `DesktopMarkdownBody` update with equal
+  `MarkdownStyleSheet` and `identical` pill widget instances. Gemini now
+  releases all six owned surfaces (`official_codex_theme.dart`,
+  `assistant_markdown.dart`, `desktop_markdown_body.dart`,
+  `assistant_markdown_test.dart`, `OFFICIAL_UI_GOLDEN_STATE_A.md`,
+  `PROJECT_STATUS.md`) and the single heavy runtime slot to Codex for
+  independent systems-integrity review, shared gates and integration.
 - On 2026-11-11 at 15:54, the host kernel reported global OOM and killed the
   ChatGPT process. Codex and Gemini validation overlapped; the kernel snapshot
   included two Flutter compiler pipelines and six test runners. The interrupted
@@ -100,7 +106,31 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Current checkpoints
 
-- `ea267d3` adds wide inline Customize navigation with contextual Plugins,
+- `d9dc65f` translates `.InlineCode-Cddi3Y`
+  (`1 px 6 px` padding, `6 px` radius, `dir="ltr"`, container-relative `0.92 em`
+  monospace, light `0x171A1C1F` / `#EAEBEB` on `#FFFFFF`, dark `0x1CEDEDED` /
+  `#373737` on `#212121`) across `p`, `h1`–`h6`, `ul`/`ol`, `blockquote`,
+  `table` `th`/`td` and enclosing `<a>` links while preserving `16 KiB` single
+  AST parse, `!completed` streaming bypass, fenced `<pre><code>` exclusion,
+  `http`/`https` link validation, literal HTML and zero-network blocked images.
+  Serial `--concurrency=1` validation passed `23/23` cases
+  (`assistant_markdown_test`, `theme_tokens_test`,
+  `official_convergence_geometry_test`), `dart format`, `dart analyze
+  --fatal-infos`, `65`-root pure-Dart boundary and a clean first-build
+  `83`-library Linux bundle closure. Packaged `1191×865` stock replay
+  (`/var/tmp/native-gemini-a6-inline-code-r1/stock-replay-r2/`) verified `0`
+  requests to the positively tested loopback image sentinel after light and dark
+  App/Host/stock exit and matched the controlled identical-text `13.5 px` /
+  `640 px` build `25894` CSS specimen (`official-a6-inline-code-matched-13_5-{light,dark}.png`,
+  calibrated to `ThemeTokens.bodyMedium` without claiming official signed-in
+  account font preference; the earlier unmatched `13 px` exploratory specimen,
+  `stock-replay-r1` without `gsettings` dark toggle, Xvfb
+  portal/AT-SPI/PipeWire/DRI3/initial-resize warnings, `Liberation Mono` vs
+  Linux system `monospace` glyph advance, and single unbroken `> 640 px` token
+  `WidgetSpan` box wrapping vs CSS `box-decoration-break: clone` per-fragment
+  rounding remain recorded boundaries; `MACHINE VERIFIED` + `AGENT REAL-USE
+  VERIFIED`, `NOT YET HUMAN VERIFIED`).
+- `ea267d3` (`5e0996a`) adds wide inline Customize navigation with contextual Plugins,
   Skills, Apps and MCP, Installed search and bounded Back/Forward. The active
   conversation stays mounted; catalog state is lazy and scoped to the current
   `(cwd, threadId)`. Compact retains its dialog. The independent replay
