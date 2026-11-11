@@ -143,8 +143,10 @@ evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-N
   in the footer. The Linux release retained and submitted the answer
   after resizing through 820×420. `279e476` and `6d26962` translate the
   180 ms direct activation and numbered keys. Linux release runs
-  returned both alternate choices by click and by digit. Arrow
-  selection and inline-editor Enter remain machine work in A10.
+  returned both alternate choices by click and by digit. `5fa5eab`
+  adds arrow selection and Other Enter. The packaged app returned
+  both answers using the keyboard. A2 project-row keyboard actions
+  and the remaining A10 navigation states stay in the matrix.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `80d318d` translates the Desktop assistant heading proportions.
