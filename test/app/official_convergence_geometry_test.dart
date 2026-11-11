@@ -122,14 +122,37 @@ void main() {
           findsOneWidget,
         );
         final projectHeadingFinder = find.text('project');
+        final projectRowFinder = find.byKey(
+          const ValueKey('project-heading-/workspace/project'),
+        );
         final threadRowFinder = find.byKey(
           const ValueKey('thread-row-geom-thread-1'),
         );
+        final threadTitleFinder = find.text('Geometry Test Thread');
         expect(projectHeadingFinder, findsOneWidget);
+        expect(projectRowFinder, findsOneWidget);
         expect(threadRowFinder, findsOneWidget);
+        expect(threadTitleFinder, findsOneWidget);
+        expect(
+          tester.getSize(projectRowFinder).height,
+          closeTo(OfficialCodexTheme.navRowHeight + 2.0, 0.5),
+        );
         expect(
           tester.getTopLeft(threadRowFinder).dx,
-          greaterThan(tester.getTopLeft(sidebarFinder).dx + 14.0),
+          closeTo(
+            tester
+                .getTopLeft(find.byKey(const ValueKey('new-thread-button')))
+                .dx,
+            0.5,
+          ),
+        );
+        expect(
+          tester.getTopLeft(threadTitleFinder).dx,
+          closeTo(tester.getTopLeft(projectHeadingFinder).dx, 0.5),
+        );
+        expect(
+          tester.getTopLeft(threadTitleFinder).dx,
+          closeTo(tester.getTopLeft(find.text('New chat')).dx, 0.5),
         );
 
         // Home keeps a centered composer and hides thread detail modes.

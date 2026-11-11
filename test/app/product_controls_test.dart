@@ -160,6 +160,167 @@ void main() {
   });
 
   testWidgets(
+    'secondary click opens project and thread context menus while collapsed project row replaces raw count with status indicator',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController()
+        ..extraThreads = [
+          ThreadSummary(
+            id: 'unread-thread',
+            sessionId: 'unread-session',
+            preview: 'Unread project thread',
+            cwd: '/workspace-unread',
+            createdAt: DateTime.utc(2026),
+            updatedAt: DateTime.utc(2026),
+            status: ThreadRuntimeStatus.idle,
+            ephemeral: false,
+            readReceipt: const ThreadReadReceipt(revision: '1', unread: true),
+          ),
+          ThreadSummary(
+            id: 'running-thread',
+            sessionId: 'running-session',
+            preview: 'Running project thread',
+            cwd: '/workspace-running',
+            createdAt: DateTime.utc(2026),
+            updatedAt: DateTime.utc(2026),
+            status: ThreadRuntimeStatus.active,
+            ephemeral: false,
+          ),
+        ];
+      addTearDown(runtime.closeStreams);
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final projectRow = find.widgetWithText(CodexSidebarRow, 'workspace');
+      final threadRow = find.byKey(
+        const ValueKey('thread-row-controls-thread'),
+      );
+      expect(projectRow, findsOneWidget);
+      expect(threadRow, findsOneWidget);
+
+      if (Platform.isLinux || Platform.isMacOS) {
+        final projectMenuItem = find.text(
+          Platform.isMacOS ? 'Reveal in Finder' : 'Open in File Manager',
+        );
+        final clickPoint = tester.getTopLeft(projectRow) + const Offset(28, 18);
+        await tester.tapAt(clickPoint, buttons: kSecondaryMouseButton);
+        await tester.pump();
+        expect(projectMenuItem, findsOneWidget);
+        expect(tester.widget<CodexSidebarRow>(projectRow).highlighted, isTrue);
+        expect(
+          tester.getTopLeft(find.byType(CodexMenu<VoidCallback>)).dx,
+          closeTo(clickPoint.dx, 1.0),
+        );
+        expect(
+          tester.getTopLeft(find.byType(CodexMenu<VoidCallback>)).dy,
+          closeTo(clickPoint.dy, 1.0),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+        expect(projectMenuItem, findsNothing);
+      }
+
+      final threadClickPoint =
+          tester.getTopLeft(threadRow) + const Offset(36, 18);
+      await tester.tapAt(threadClickPoint, buttons: kSecondaryMouseButton);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dx,
+        closeTo(threadClickPoint.dx, 1.0),
+      );
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dy,
+        closeTo(threadClickPoint.dy, 1.0),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsNothing);
+
+      // ContextMenu and Shift+F10 on focused thread row open menu at row bottomLeft.
+      final threadFocus = Focus.of(tester.element(threadRow));
+      threadFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dx,
+        closeTo(tester.getBottomLeft(threadRow).dx, 1.0),
+      );
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dy,
+        closeTo(tester.getBottomLeft(threadRow).dy, 1.0),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsNothing);
+
+      threadFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dx,
+        closeTo(tester.getBottomLeft(threadRow).dx, 1.0),
+      );
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dy,
+        closeTo(tester.getBottomLeft(threadRow).dy, 1.0),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsNothing);
+
+      // Right-clicking near a short viewport bottom clamps the menu inside the viewport.
+      tester.view.physicalSize = const Size(1440, 320);
+      await tester.pump();
+      await tester.tapAt(threadClickPoint, buttons: kSecondaryMouseButton);
+      await tester.pump();
+      final clampedMenuRect = tester.getRect(find.byType(CodexMenu<String>));
+      expect(clampedMenuRect.top, greaterThanOrEqualTo(8.0));
+      expect(clampedMenuRect.bottom, lessThanOrEqualTo(312.0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      tester.view.physicalSize = const Size(1440, 900);
+      await tester.pump();
+
+      // Collapse idle/unread/running projects and verify status indicator priority.
+      await tester.tap(projectRow);
+      await tester.tap(
+        find.widgetWithText(CodexSidebarRow, 'workspace-unread'),
+      );
+      await tester.tap(
+        find.widgetWithText(CodexSidebarRow, 'workspace-running'),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('thread-row-controls-thread')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: projectRow, matching: find.text('1')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('project-unread-/workspace-unread')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('project-running-/workspace-running')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'compact thread selection and reselection open conversation while refresh or failed read keeps Threads open and Escape closes sidebar',
     (tester) async {
       tester.view.physicalSize = const Size(720, 800);

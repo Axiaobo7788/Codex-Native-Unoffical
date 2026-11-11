@@ -17,7 +17,10 @@ class CodexSidebarRow extends StatefulWidget {
     this.trailingBuilder,
     this.revealTrailingOnFocus = false,
     this.selected = false,
+    this.highlighted = false,
     this.onTap,
+    this.onSecondaryTap,
+    this.onSecondaryTapDown,
     this.onLongPress,
     this.height = OfficialCodexTheme.navRowHeight,
     this.radius = 10.0,
@@ -32,7 +35,10 @@ class CodexSidebarRow extends StatefulWidget {
   final Widget Function(BuildContext context, bool isHovered)? trailingBuilder;
   final bool revealTrailingOnFocus;
   final bool selected;
+  final bool highlighted;
   final VoidCallback? onTap;
+  final VoidCallback? onSecondaryTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onLongPress;
   final double height;
   final double radius;
@@ -59,6 +65,24 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
     }
   }
 
+  void _invokeContextMenu() {
+    final onSecondaryTapDown = widget.onSecondaryTapDown;
+    if (onSecondaryTapDown != null) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        final localOffset = Offset(0, box.size.height);
+        onSecondaryTapDown(
+          TapDownDetails(
+            globalPosition: box.localToGlobal(localOffset),
+            localPosition: localOffset,
+          ),
+        );
+        return;
+      }
+    }
+    widget.onSecondaryTap?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
@@ -67,13 +91,15 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
     Color background = Colors.transparent;
     if (widget.selected) {
       background = palette.selected;
-    } else if (_isHovered) {
+    } else if (_isHovered || widget.highlighted) {
       background = palette.hover;
     }
 
     final textColor = widget.selected
         ? theme.textPrimary
-        : (_isHovered ? theme.textPrimary : theme.textSecondary);
+        : ((_isHovered || widget.highlighted)
+              ? theme.textPrimary
+              : theme.textSecondary);
 
     Widget content = SizedBox(
       height: widget.height,
@@ -154,14 +180,32 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) => widget.onTap?.call(),
           ),
+          if (widget.onSecondaryTap != null ||
+              widget.onSecondaryTapDown != null)
+            _ContextMenuIntent: CallbackAction<_ContextMenuIntent>(
+              onInvoke: (_) => _invokeContextMenu(),
+            ),
         },
-        shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        shortcuts: {
+          const SingleActivator(LogicalKeyboardKey.enter):
+              const ActivateIntent(),
+          const SingleActivator(LogicalKeyboardKey.space):
+              const ActivateIntent(),
+          if (widget.onSecondaryTap != null ||
+              widget.onSecondaryTapDown != null) ...{
+            const SingleActivator(LogicalKeyboardKey.contextMenu):
+                const _ContextMenuIntent(),
+            const SingleActivator(LogicalKeyboardKey.f10, shift: true):
+                const _ContextMenuIntent(),
+          },
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
+          onSecondaryTapDown: widget.onSecondaryTapDown,
+          onSecondaryTap: widget.onSecondaryTapDown == null
+              ? widget.onSecondaryTap
+              : null,
           onLongPress: widget.onLongPress,
           child: MouseRegion(
             onEnter: (_) => _handleHover(true),
@@ -181,4 +225,8 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
 
     return result;
   }
+}
+
+class _ContextMenuIntent extends Intent {
+  const _ContextMenuIntent();
 }
