@@ -76,9 +76,13 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   var _preDepth = 0;
   var _inlineCodePillCount = 0;
   var _needsRebuild = true;
+  bool? _builtWithFiniteWidth;
   double? _lastMaxWidth;
+  var _minValidRootMaxWidth = 0.0;
+  var _maxValidRootMaxWidth = double.infinity;
   TextScaler? _lastTextScaler;
   var _currentAvailableWidth = double.infinity;
+  var _currentWidthInset = 0.0;
   var _currentTextScaler = TextScaler.noScaling;
   List<Widget> _children = const [];
 
@@ -108,13 +112,41 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     }
   }
 
-  T _withAvailableWidth<T>(double width, T Function() action) {
-    final previous = _currentAvailableWidth;
-    _currentAvailableWidth = width;
+  T _withContainerWidth<T>({
+    required double availableWidth,
+    required double widthInset,
+    required T Function() action,
+  }) {
+    final previousWidth = _currentAvailableWidth;
+    final previousInset = _currentWidthInset;
+    _currentAvailableWidth = availableWidth;
+    _currentWidthInset = widthInset;
     try {
       return action();
     } finally {
-      _currentAvailableWidth = previous;
+      _currentAvailableWidth = previousWidth;
+      _currentWidthInset = previousInset;
+    }
+  }
+
+  void _recordRootWidthThreshold({
+    required bool fits,
+    required double thresholdRootWidth,
+  }) {
+    if (!thresholdRootWidth.isFinite) {
+      return;
+    }
+    const subpixelCushion = 1.0;
+    if (fits) {
+      _minValidRootMaxWidth = math.max(
+        _minValidRootMaxWidth,
+        thresholdRootWidth + subpixelCushion,
+      );
+    } else {
+      _maxValidRootMaxWidth = math.min(
+        _maxValidRootMaxWidth,
+        math.max(0.0, thresholdRootWidth - subpixelCushion),
+      );
     }
   }
 
@@ -142,7 +174,11 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     _activeLinks.clear();
     _preDepth = 0;
     _inlineCodePillCount = 0;
+    _builtWithFiniteWidth = maxWidth.isFinite;
+    _minValidRootMaxWidth = 0.0;
+    _maxValidRootMaxWidth = double.infinity;
     _currentAvailableWidth = maxWidth;
+    _currentWidthInset = 0.0;
     _currentTextScaler = textScaler;
     if (widget.data.isEmpty) {
       _children = const [];
@@ -190,6 +226,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
       required int listDepth,
       required bool insideBlockquote,
       required double availableWidth,
+      required double widthInset,
     }) {
       if (node is md.Element) {
         switch (node.tag) {
@@ -199,6 +236,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
               listDepth: listDepth,
               insideBlockquote: insideBlockquote,
               availableWidth: availableWidth,
+              widthInset: widthInset,
               textScaler: textScaler,
               buildChildNode: buildNode,
             );
@@ -209,38 +247,43 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
               index: currentIndex,
               listDepth: listDepth,
               availableWidth: availableWidth,
+              widthInset: widthInset,
               buildChildNode: buildNode,
             );
           case 'table':
             final currentIndex = tableIndex++;
-            return _withAvailableWidth(
-              double.infinity,
-              () => _buildTable(node, index: currentIndex),
+            return _withContainerWidth(
+              availableWidth: double.infinity,
+              widthInset: 0.0,
+              action: () => _buildTable(node, index: currentIndex),
             );
           case 'hr':
             final currentIndex = hrIndex++;
             return _buildHorizontalRule(index: currentIndex);
           case 'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6':
             return _wrapBuilt(
-              _withAvailableWidth(
-                availableWidth,
-                () => getHeadingBuilder(node.tag).build([node]),
+              _withContainerWidth(
+                availableWidth: availableWidth,
+                widthInset: widthInset,
+                action: () => getHeadingBuilder(node.tag).build([node]),
               ),
             );
           case 'p' when insideBlockquote:
             return _wrapBuilt(
-              _withAvailableWidth(
-                availableWidth,
-                () => getBlockquoteParagraphBuilder().build([node]),
+              _withContainerWidth(
+                availableWidth: availableWidth,
+                widthInset: widthInset,
+                action: () => getBlockquoteParagraphBuilder().build([node]),
               ),
             );
         }
       }
       final normalized = node is md.Text ? md.Element('p', [node]) : node;
       return _wrapBuilt(
-        _withAvailableWidth(
-          availableWidth,
-          () => zeroBuilder.build([normalized]),
+        _withContainerWidth(
+          availableWidth: availableWidth,
+          widthInset: widthInset,
+          action: () => zeroBuilder.build([normalized]),
         ),
       );
     }
@@ -252,6 +295,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
           listDepth: 0,
           insideBlockquote: false,
           availableWidth: maxWidth,
+          widthInset: 0.0,
         ),
     ];
     final tags = nodes.map(_nodeTag).toList(growable: false);
@@ -289,12 +333,14 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     required int listDepth,
     required bool insideBlockquote,
     required double availableWidth,
+    required double widthInset,
     required TextScaler textScaler,
     required Widget Function(
       md.Node node, {
       required int listDepth,
       required bool insideBlockquote,
       required double availableWidth,
+      required double widthInset,
     })
     buildChildNode,
   }) {
@@ -364,9 +410,11 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         );
       }
 
+      final itemDelta = markerBoxWidth + markerGap;
       final itemAvailableWidth = availableWidth.isFinite
-          ? math.max(0.0, availableWidth - markerBoxWidth - markerGap)
+          ? math.max(0.0, availableWidth - itemDelta)
           : double.infinity;
+      final itemWidthInset = widthInset + itemDelta;
 
       final itemWidgets = <Widget>[];
       final childTags = blocks.map(_nodeTag).toList(growable: false);
@@ -390,6 +438,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
             listDepth: isNestedList ? listDepth + 1 : listDepth,
             insideBlockquote: insideBlockquote,
             availableWidth: itemAvailableWidth,
+            widthInset: itemWidthInset,
           ),
         );
       }
@@ -528,18 +577,22 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     required int index,
     required int listDepth,
     required double availableWidth,
+    required double widthInset,
     required Widget Function(
       md.Node node, {
       required int listDepth,
       required bool insideBlockquote,
       required double availableWidth,
+      required double widthInset,
     })
     buildChildNode,
   }) {
     final space = widget.bodyEm / 4;
+    final quoteDelta = space * 6;
     final childAvailableWidth = availableWidth.isFinite
-        ? math.max(0.0, availableWidth - space * 6)
+        ? math.max(0.0, availableWidth - quoteDelta)
         : double.infinity;
+    final childWidthInset = widthInset + quoteDelta;
     final blocks = _normalizeContainerChildren(
       blockquote.children ?? const <md.Node>[],
     );
@@ -567,6 +620,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
           listDepth: listDepth,
           insideBlockquote: true,
           availableWidth: childAvailableWidth,
+          widthInset: childWidthInset,
         ),
       );
     }
@@ -825,6 +879,8 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
           _inlineCodePillCount++;
         },
         availableWidth: () => _currentAvailableWidth,
+        widthInset: () => _currentWidthInset,
+        recordWidthThreshold: _recordRootWidthThreshold,
         textScaler: () => _currentTextScaler,
         currentLink: () => _activeLinks.isEmpty ? null : _activeLinks.last,
         obtainLinkRecognizer: (link) =>
@@ -947,13 +1003,21 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
-        if (_needsRebuild ||
-            _lastMaxWidth != maxWidth ||
-            _lastTextScaler != textScaler) {
+        final canReuseForWidth =
+            !_needsRebuild &&
+            _lastTextScaler == textScaler &&
+            _builtWithFiniteWidth == maxWidth.isFinite &&
+            (_lastMaxWidth == maxWidth ||
+                !maxWidth.isFinite ||
+                (maxWidth >= _minValidRootMaxWidth &&
+                    maxWidth <= _maxValidRootMaxWidth));
+        if (!canReuseForWidth) {
           _needsRebuild = false;
           _lastMaxWidth = maxWidth;
           _lastTextScaler = textScaler;
           _buildBlocks(maxWidth: maxWidth, textScaler: textScaler);
+        } else {
+          _lastMaxWidth = maxWidth;
         }
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -1070,6 +1134,8 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
     required this.hasPillSlot,
     required this.consumePillSlot,
     required this.availableWidth,
+    required this.widthInset,
+    required this.recordWidthThreshold,
     required this.textScaler,
     required this.currentLink,
     required this.obtainLinkRecognizer,
@@ -1087,6 +1153,9 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
   final bool Function() hasPillSlot;
   final VoidCallback consumePillSlot;
   final double Function() availableWidth;
+  final double Function() widthInset;
+  final void Function({required bool fits, required double thresholdRootWidth})
+  recordWidthThreshold;
   final TextScaler Function() textScaler;
   final _ActiveMarkdownLink? Function() currentLink;
   final GestureRecognizer Function(_ActiveMarkdownLink link)
@@ -1166,19 +1235,28 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
     }
     final maxInnerTextWidth =
         (containerWidth / scaleFactor) - horizontalPadding * 2;
-    if (maxInnerTextWidth <= 0) {
-      return false;
-    }
-    final painter = TextPainter(
-      text: TextSpan(text: codeText, style: pillTextStyle),
-      textDirection: TextDirection.ltr,
-      textScaler: TextScaler.noScaling,
-      locale: Localizations.maybeLocaleOf(context),
-    )..layout(maxWidth: maxInnerTextWidth);
+    final painter =
+        TextPainter(
+          text: TextSpan(text: codeText, style: pillTextStyle),
+          textDirection: TextDirection.ltr,
+          textScaler: TextScaler.noScaling,
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout(
+          maxWidth: maxInnerTextWidth > 0 ? maxInnerTextWidth : double.infinity,
+        );
     final fits =
+        maxInnerTextWidth > 0 &&
         painter.computeLineMetrics().length <= 1 &&
         painter.width <= maxInnerTextWidth + 0.01;
+    final intrinsicInnerWidth = math.max(
+      painter.maxIntrinsicWidth,
+      fits ? painter.width : 0.0,
+    );
     painter.dispose();
+    final thresholdRootWidth =
+        widthInset() +
+        (intrinsicInnerWidth + horizontalPadding * 2) * scaleFactor;
+    recordWidthThreshold(fits: fits, thresholdRootWidth: thresholdRootWidth);
     return fits;
   }
 

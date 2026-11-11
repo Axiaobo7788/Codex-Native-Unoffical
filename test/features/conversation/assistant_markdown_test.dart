@@ -1249,8 +1249,23 @@ const fenced = 'not_inline_pill';
           width: 640,
         ),
       );
-      expect(find.text(mediumToken), findsOneWidget);
+      final pillAt640 = tester.widget<Text>(find.text(mediumToken));
 
+      // Non-threshold width change (640 -> 620) reuses cached block widgets.
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 620,
+        ),
+      );
+      expect(
+        identical(tester.widget<Text>(find.text(mediumToken)), pillAt640),
+        isTrue,
+      );
+
+      // Crossing below the fit threshold (620 -> 300) switches to flat TextSpan,
+      // and non-threshold narrowing (300 -> 280) reuses that RichText subtree.
       await tester.pumpWidget(
         buildThemed(
           brightness: Brightness.light,
@@ -1259,10 +1274,35 @@ const fenced = 'not_inline_pill';
         ),
       );
       expect(find.text(mediumToken), findsNothing);
-      expect(
+      final flatRichAt300 = tester.widget<RichText>(
         find.textContaining(mediumToken, findRichText: true),
-        findsOneWidget,
       );
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 280,
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<RichText>(
+            find.textContaining(mediumToken, findRichText: true),
+          ),
+          flatRichAt300,
+        ),
+        isTrue,
+      );
+
+      // Widening back across the threshold (280 -> 640) restores the rich pill.
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 640,
+        ),
+      );
+      expect(find.text(mediumToken), findsOneWidget);
 
       await tester.pumpWidget(
         buildThemed(
@@ -1353,6 +1393,7 @@ $bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${t
         required Brightness brightness,
         required String data,
         required ExternalLinkLauncher launcher,
+        double width = 640,
       }) {
         final themeData = brightness == Brightness.dark
             ? OfficialCodexThemeData.dark
@@ -1364,7 +1405,7 @@ $bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${t
             child: Scaffold(
               body: SingleChildScrollView(
                 child: SizedBox(
-                  width: 640,
+                  width: width,
                   child: AssistantMarkdown(
                     data: data,
                     completed: true,
@@ -1613,10 +1654,45 @@ $bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${t
           brightness: Brightness.light,
           data: dense16KiB,
           launcher: (_) async => true,
+          width: 640,
         ),
       );
       final denseElementCount = tester.allElements.length;
       expect(denseElementCount - emptyShellElements, lessThan(2000));
+      final denseFirstPillAt640 = tester.widget<Text>(find.text('a').first);
+
+      // Narrowing 640 -> 620 -> 640 crosses zero pill fit thresholds and reuses
+      // the built subtree without re-parsing or rebuilding the 4,096 spans.
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: dense16KiB,
+          launcher: (_) async => true,
+          width: 620,
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<Text>(find.text('a').first),
+          denseFirstPillAt640,
+        ),
+        isTrue,
+      );
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: dense16KiB,
+          launcher: (_) async => true,
+          width: 640,
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<Text>(find.text('a').first),
+          denseFirstPillAt640,
+        ),
+        isTrue,
+      );
 
       await tester.pumpWidget(_app(const SizedBox.shrink()));
       await tester.pump();
