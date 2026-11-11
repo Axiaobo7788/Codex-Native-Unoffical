@@ -131,9 +131,18 @@ action footer. Direct choices advance or submit by click or digit
 in the active Desktop request. A project row keeps its New chat
 action reachable by Tab. Home, open Changes, Review, expanded activity,
 compact and dark variants have separate evidence gates.
-[Hosted CI for `22ee7c3`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42924141648)
+[Hosted CI for `9315a5e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42937867643)
 
 ## Current checkpoint
+
+- `15e3242` maps Escape on the matching ordinary stock question
+  to the existing turn interrupt. The first real replay exposed an
+  over-restrictive `isBlocking` assumption. The corrected route
+  passed timer and focused-Other stock replays. The 532 default
+  Flutter tests and strict ASCII-path analysis passed, including
+  approval/IME/popover priority and failed-interrupt focus restoration.
+  H1 async input remains separate.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `a3bcd98` adds the bounded nested disclosure for verified saved
   Desktop command groups. The packaged Linux app expanded a stock
