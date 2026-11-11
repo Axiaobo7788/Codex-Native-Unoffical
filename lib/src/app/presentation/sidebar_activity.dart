@@ -183,8 +183,16 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 8, 2),
+                  padding: EdgeInsets.fromLTRB(
+                    18,
+                    widget.hasNavigationRail ? 4 : 8,
+                    8,
+                    widget.hasNavigationRail ? 0 : 2,
+                  ),
                   child: _ThreadCatalogHeader(
+                    minHeight: widget.hasNavigationRail
+                        ? OfficialCodexTheme.navRowHeight
+                        : null,
                     revealActions:
                         widget.hasNavigationRail && !controller.showArchived,
                     title: Text(
@@ -195,9 +203,10 @@ class _ThreadPanelState extends State<_ThreadPanel> {
                           : 'Threads',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: palette.textMuted,
-                        fontSize: 11.5,
+                        fontSize: widget.hasNavigationRail ? 13.0 : 11.5,
+                        height: widget.hasNavigationRail ? (18.0 / 13.0) : null,
                         fontWeight: FontWeight.w500,
-                        letterSpacing: 0.1,
+                        letterSpacing: widget.hasNavigationRail ? 0.0 : 0.1,
                       ),
                     ),
                     actions: [
@@ -650,6 +659,16 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             directory: project.key,
             count: project.value.length,
             collapsed: collapsed,
+            hasNavigationRail: widget.hasNavigationRail,
+            hasError: project.value.any(
+              (thread) => thread.status == ThreadRuntimeStatus.systemError,
+            ),
+            hasRunning: project.value.any(
+              (thread) => thread.status == ThreadRuntimeStatus.active,
+            ),
+            hasUnread: project.value.any(
+              (thread) => thread.readReceipt?.unread ?? false,
+            ),
           ),
         );
         if (!collapsed) {
@@ -666,7 +685,12 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         null when scoped => 'thread-list-section-${controller.sectionScopeId}',
         null => 'thread-list',
       }),
-      padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+      padding: EdgeInsets.fromLTRB(
+        widget.hasNavigationRail ? 8 : 6,
+        0,
+        widget.hasNavigationRail ? 8 : 6,
+        8,
+      ),
       itemCount: rows.length + (hasFooter ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == rows.length) {
@@ -1117,11 +1141,13 @@ typedef _GoalDialogResult = ({
 
 class _ThreadCatalogHeader extends StatefulWidget {
   const _ThreadCatalogHeader({
+    this.minHeight,
     required this.revealActions,
     required this.title,
     required this.actions,
   });
 
+  final double? minHeight;
   final bool revealActions;
   final Widget title;
   final List<Widget> actions;
@@ -1146,19 +1172,22 @@ class _ThreadCatalogHeaderState extends State<_ThreadCatalogHeader> {
       child: Focus(
         canRequestFocus: false,
         onFocusChange: (focused) => setState(() => _focused = focused),
-        child: Row(
-          children: [
-            Expanded(child: widget.title),
-            if (widget.revealActions)
-              Opacity(
-                key: const ValueKey('desktop-project-header-actions'),
-                opacity: _hovered || _focused ? 1 : 0,
-                alwaysIncludeSemantics: true,
-                child: actions,
-              )
-            else
-              actions,
-          ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: widget.minHeight ?? 0),
+          child: Row(
+            children: [
+              Expanded(child: widget.title),
+              if (widget.revealActions)
+                Opacity(
+                  key: const ValueKey('desktop-project-header-actions'),
+                  opacity: _hovered || _focused ? 1 : 0,
+                  alwaysIncludeSemantics: true,
+                  child: actions,
+                )
+              else
+                actions,
+            ],
+          ),
         ),
       ),
     );
@@ -1686,11 +1715,19 @@ final class _ProjectHeading {
     required this.directory,
     required this.count,
     required this.collapsed,
+    this.hasNavigationRail = false,
+    this.hasError = false,
+    this.hasRunning = false,
+    this.hasUnread = false,
   });
 
   final String directory;
   final int count;
   final bool collapsed;
+  final bool hasNavigationRail;
+  final bool hasError;
+  final bool hasRunning;
+  final bool hasUnread;
 }
 
 class _ProjectHeadingRow extends StatefulWidget {
@@ -1721,6 +1758,69 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
     super.dispose();
   }
 
+  Widget? _buildCollapsedIndicator(
+    BuildContext context,
+    CodexPalette palette,
+    _ProjectHeading heading,
+  ) {
+    if (!heading.hasNavigationRail) {
+      return Text(
+        '${heading.count}',
+        style: Theme.of(context).textTheme.labelSmall,
+      );
+    }
+    if (heading.hasError) {
+      return SizedBox.square(
+        dimension: 16,
+        child: Center(
+          child: Semantics(
+            label: 'Project has thread with error',
+            child: Container(
+              key: ValueKey('project-error-${heading.directory}'),
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: palette.danger,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (heading.hasRunning) {
+      return SizedBox.square(
+        key: ValueKey('project-running-${heading.directory}'),
+        dimension: 16,
+        child: CircularProgressIndicator(
+          strokeWidth: 1.7,
+          color: palette.textMuted,
+          semanticsLabel: 'Project has running thread',
+        ),
+      );
+    }
+    if (heading.hasUnread) {
+      return SizedBox.square(
+        dimension: 16,
+        child: Center(
+          child: Semantics(
+            label: 'Project has unread thread',
+            child: Container(
+              key: ValueKey('project-unread-${heading.directory}'),
+              width: OfficialCodexTheme.sidebarUnreadIndicatorSize,
+              height: OfficialCodexTheme.sidebarUnreadIndicatorSize,
+              decoration: const BoxDecoration(
+                color: OfficialCodexTheme.sidebarUnreadIndicatorColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final heading = widget.heading;
@@ -1728,6 +1828,13 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
     final leadingIcon = heading.collapsed
         ? Icons.folder_outlined
         : Icons.folder_open_outlined;
+    final reveal = widget.onRevealDirectory;
+    final newThread = widget.onNewThreadInProject;
+    final collapsedIndicator = _buildCollapsedIndicator(
+      context,
+      palette,
+      heading,
+    );
 
     return FocusTraversalGroup(
       policy: OrderedTraversalPolicy(),
@@ -1738,109 +1845,117 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
           padding: const EdgeInsets.only(top: 2.0),
           child: FocusTraversalOrder(
             order: const NumericFocusOrder(0),
-            child: CodexSidebarRow(
-              height: 32.0,
-              tooltip: heading.directory,
-              title: _projectName(heading.directory),
-              leading: Icon(
-                leadingIcon,
-                size: 15,
-                color: palette.textSecondary,
-              ),
-              onTap: widget.onToggleCollapse,
-              trailingBuilder: (context, hovered) {
-                final count = Text(
-                  '${heading.count}',
-                  style: Theme.of(context).textTheme.labelSmall,
-                );
-                final reveal = widget.onRevealDirectory;
-                final newThread = widget.onNewThreadInProject;
-                if (reveal == null && newThread == null) {
-                  return heading.collapsed ? count : const SizedBox.shrink();
-                }
-                return ListenableBuilder(
-                  listenable: _menuController,
-                  builder: (context, actions) {
-                    final showActions =
-                        hovered || _focusWithin || _menuController.isOpen;
-                    return Stack(
-                      alignment: Alignment.centerRight,
-                      children: [
-                        if (heading.collapsed && !showActions) count,
-                        Opacity(
-                          key: ValueKey(
-                            'project-actions-visibility-${heading.directory}',
-                          ),
-                          opacity: showActions ? 1 : 0,
-                          alwaysIncludeSemantics: true,
-                          child: IgnorePointer(
-                            ignoring: !showActions,
-                            child: actions,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+            child: ListenableBuilder(
+              listenable: _menuController,
+              builder: (context, _) => CodexSidebarRow(
+                height: heading.hasNavigationRail
+                    ? OfficialCodexTheme.navRowHeight
+                    : 32.0,
+                tooltip: heading.directory,
+                title: _projectName(heading.directory),
+                highlighted: _menuController.isOpen,
+                leading: Icon(
+                  leadingIcon,
+                  size: heading.hasNavigationRail ? 16 : 15,
+                  color: palette.textSecondary,
+                ),
+                onTap: widget.onToggleCollapse,
+                onSecondaryTap: reveal != null ? _menuController.show : null,
+                onSecondaryTapDown: reveal != null
+                    ? (details) => _menuController.show(
+                        globalPosition: details.globalPosition,
+                      )
+                    : null,
+                trailingBuilder: (context, hovered) {
+                  if (reveal == null && newThread == null) {
+                    return heading.collapsed && collapsedIndicator != null
+                        ? collapsedIndicator
+                        : const SizedBox.shrink();
+                  }
+                  final showActions =
+                      hovered || _focusWithin || _menuController.isOpen;
+                  return Stack(
+                    alignment: Alignment.centerRight,
                     children: [
-                      if (reveal != null)
-                        FocusTraversalOrder(
-                          order: const NumericFocusOrder(1),
-                          child: CodexPopoverAnchor(
-                            controller: _menuController,
-                            width: 216,
-                            popoverBuilder: (context, close) =>
-                                CodexMenu<VoidCallback>(
-                                  items: [
-                                    CodexMenuItem(
-                                      value: reveal,
-                                      label: Platform.isMacOS
-                                          ? 'Reveal in Finder'
-                                          : Platform.isWindows
-                                          ? 'Open in Explorer'
-                                          : 'Open in File Manager',
+                      if (heading.collapsed &&
+                          !showActions &&
+                          collapsedIndicator != null)
+                        collapsedIndicator,
+                      Opacity(
+                        key: ValueKey(
+                          'project-actions-visibility-${heading.directory}',
+                        ),
+                        opacity: showActions ? 1 : 0,
+                        alwaysIncludeSemantics: true,
+                        child: IgnorePointer(
+                          ignoring: !showActions,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (reveal != null)
+                                FocusTraversalOrder(
+                                  order: const NumericFocusOrder(1),
+                                  child: CodexPopoverAnchor(
+                                    controller: _menuController,
+                                    width: 216,
+                                    popoverBuilder: (context, close) =>
+                                        CodexMenu<VoidCallback>(
+                                          items: [
+                                            CodexMenuItem(
+                                              value: reveal,
+                                              label: Platform.isMacOS
+                                                  ? 'Reveal in Finder'
+                                                  : Platform.isWindows
+                                                  ? 'Open in Explorer'
+                                                  : 'Open in File Manager',
+                                              icon: const Icon(
+                                                Icons.folder_open_outlined,
+                                              ),
+                                            ),
+                                          ],
+                                          onSelected: (action) {
+                                            close();
+                                            action();
+                                          },
+                                        ),
+                                    child: CodexIconButton(
+                                      key: ValueKey(
+                                        'project-menu-${heading.directory}',
+                                      ),
+                                      tooltip: 'Project actions',
+                                      size: 22,
+                                      onPressed: _menuController.toggle,
                                       icon: const Icon(
-                                        Icons.folder_open_outlined,
+                                        Icons.more_horiz_rounded,
+                                        size: 14,
                                       ),
                                     ),
-                                  ],
-                                  onSelected: (action) {
-                                    close();
-                                    action();
-                                  },
+                                  ),
                                 ),
-                            child: CodexIconButton(
-                              key: ValueKey(
-                                'project-menu-${heading.directory}',
-                              ),
-                              tooltip: 'Project actions',
-                              size: 22,
-                              onPressed: _menuController.toggle,
-                              icon: const Icon(
-                                Icons.more_horiz_rounded,
-                                size: 14,
-                              ),
-                            ),
+                              if (newThread != null)
+                                FocusTraversalOrder(
+                                  order: const NumericFocusOrder(2),
+                                  child: CodexIconButton(
+                                    key: ValueKey(
+                                      'project-new-thread-${heading.directory}',
+                                    ),
+                                    tooltip: 'New chat in project',
+                                    size: 22,
+                                    onPressed: newThread,
+                                    icon: const Icon(
+                                      Icons.add_rounded,
+                                      size: 15,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      if (newThread != null)
-                        FocusTraversalOrder(
-                          order: const NumericFocusOrder(2),
-                          child: CodexIconButton(
-                            key: ValueKey(
-                              'project-new-thread-${heading.directory}',
-                            ),
-                            tooltip: 'New chat in project',
-                            size: 22,
-                            onPressed: newThread,
-                            icon: const Icon(Icons.add_rounded, size: 15),
-                          ),
-                        ),
+                      ),
                     ],
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -2031,45 +2146,103 @@ class _ThreadRowState extends State<_ThreadRow> {
         : null;
     final hasMetadataBadges = pinBadge != null || goalBadge != null;
 
-    final rowWidget = CodexSidebarRow(
-      containerKey: ValueKey('thread-row-${thread.id}'),
-      title: thread.displayTitle,
-      tooltip: gitReference == null
-          ? null
-          : '${thread.displayTitle}\nGit · $gitReference',
-      selected: widget.selected,
-      onTap: widget.enabled ? widget.onSelect : null,
-      revealTrailingOnFocus: showRunning || showTrailingUnread,
-      padding: EdgeInsets.only(left: leadingColor != null ? 8 : 10, right: 8),
-      leading: leadingColor != null
-          ? Semantics(
-              label: unread ? 'Unread thread' : null,
-              child: Container(
-                key: unread ? ValueKey('thread-unread-${thread.id}') : null,
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: leadingColor,
-                  shape: BoxShape.circle,
-                ),
+    final leadingDot = leadingColor != null
+        ? Semantics(
+            label: unread ? 'Unread thread' : null,
+            child: Container(
+              key: unread ? ValueKey('thread-unread-${thread.id}') : null,
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: leadingColor,
+                shape: BoxShape.circle,
               ),
-            )
-          : null,
-      trailingBuilder: (context, isHovered) {
-        if (isHovered ||
-            _menuController.isOpen ||
-            (widget.selected && !showRunning && !showTrailingUnread)) {
+            ),
+          )
+        : null;
+
+    final rowWidget = ListenableBuilder(
+      listenable: _menuController,
+      builder: (context, _) => CodexSidebarRow(
+        containerKey: ValueKey('thread-row-${thread.id}'),
+        title: thread.displayTitle,
+        tooltip: gitReference == null
+            ? null
+            : '${thread.displayTitle}\nGit · $gitReference',
+        selected: widget.selected,
+        highlighted: _menuController.isOpen,
+        onTap: widget.enabled ? widget.onSelect : null,
+        onSecondaryTap: widget.enabled ? _menuController.show : null,
+        onSecondaryTapDown: widget.enabled
+            ? (details) =>
+                  _menuController.show(globalPosition: details.globalPosition)
+            : null,
+        revealTrailingOnFocus: showRunning || showTrailingUnread,
+        padding: EdgeInsets.only(
+          left: widget.hasNavigationRail ? 10 : (leadingColor != null ? 8 : 10),
+          right: 8,
+        ),
+        leading: widget.hasNavigationRail
+            ? SizedBox.square(
+                dimension: 16,
+                child: leadingDot != null ? Center(child: leadingDot) : null,
+              )
+            : leadingDot,
+        trailingBuilder: (context, isHovered) {
+          final showActions =
+              isHovered ||
+              _menuController.isOpen ||
+              (widget.selected && !showRunning && !showTrailingUnread);
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (thread.status == ThreadRuntimeStatus.notLoaded)
+              if (showActions && thread.status == ThreadRuntimeStatus.notLoaded)
                 CodexIconButton(
                   tooltip: 'Resume thread',
                   onPressed: widget.enabled ? widget.onResume : null,
                   size: 24,
                   icon: const Icon(Icons.play_arrow_rounded, size: 16),
                 ),
+              if (!showActions) ...[
+                if (widget.pinned) ...[
+                  Icon(
+                    Icons.push_pin_rounded,
+                    size: 12,
+                    color: palette.textMuted,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                if (runningIndicator != null)
+                  runningIndicator
+                else if (showTrailingUnread)
+                  SizedBox.square(
+                    dimension: 16,
+                    child: Center(
+                      child: Semantics(
+                        label: 'Unread thread',
+                        child: Container(
+                          key: ValueKey('thread-unread-${thread.id}'),
+                          width: OfficialCodexTheme.sidebarUnreadIndicatorSize,
+                          height: OfficialCodexTheme.sidebarUnreadIndicatorSize,
+                          decoration: const BoxDecoration(
+                            color:
+                                OfficialCodexTheme.sidebarUnreadIndicatorColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (widget.showTimestamp)
+                  Text(
+                    key: ValueKey('thread-timestamp-${thread.id}'),
+                    _shortTime(thread.updatedAt),
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(fontSize: 11, color: palette.textMuted),
+                  ),
+              ],
               CodexPopoverAnchor(
+                key: ValueKey('thread-menu-anchor-${thread.id}'),
                 controller: _menuController,
                 targetAnchor: Alignment.bottomRight,
                 followerAnchor: Alignment.topRight,
@@ -2179,74 +2352,43 @@ class _ThreadRowState extends State<_ThreadRow> {
                     }
                   },
                 ),
-                child: CodexIconButton(
-                  key: ValueKey('thread-menu-${thread.id}'),
-                  tooltip: 'Thread actions',
-                  onPressed: widget.enabled ? _menuController.toggle : null,
-                  size: 24,
-                  icon: const Icon(Icons.more_horiz_rounded, size: 15),
-                ),
+                child: showActions
+                    ? CodexIconButton(
+                        key: ValueKey('thread-menu-${thread.id}'),
+                        tooltip: 'Thread actions',
+                        onPressed: widget.enabled
+                            ? _menuController.toggle
+                            : null,
+                        size: 24,
+                        icon: const Icon(Icons.more_horiz_rounded, size: 15),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ],
           );
-        }
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.pinned) ...[
-              Icon(Icons.push_pin_rounded, size: 12, color: palette.textMuted),
-              const SizedBox(width: 4),
-            ],
-            if (runningIndicator != null)
-              runningIndicator
-            else if (showTrailingUnread)
-              SizedBox.square(
-                dimension: 16,
-                child: Center(
-                  child: Semantics(
-                    label: 'Unread thread',
-                    child: Container(
-                      key: ValueKey('thread-unread-${thread.id}'),
-                      width: OfficialCodexTheme.sidebarUnreadIndicatorSize,
-                      height: OfficialCodexTheme.sidebarUnreadIndicatorSize,
-                      decoration: const BoxDecoration(
-                        color: OfficialCodexTheme.sidebarUnreadIndicatorColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            else if (widget.showTimestamp)
-              Text(
-                key: ValueKey('thread-timestamp-${thread.id}'),
-                _shortTime(thread.updatedAt),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(fontSize: 11, color: palette.textMuted),
-              ),
-          ],
-        );
-      },
+        },
+      ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.only(left: 14.0),
-      child: hasMetadataBadges
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                rowWidget,
-                _ThreadMetadataStrip(
-                  threadId: thread.id,
-                  pinBadge: pinBadge,
-                  persistedPinned: widget.persistedPinned,
-                  goalBadge: goalBadge,
-                ),
-              ],
-            )
-          : rowWidget,
-    );
+    final body = hasMetadataBadges
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              rowWidget,
+              _ThreadMetadataStrip(
+                threadId: thread.id,
+                hasNavigationRail: widget.hasNavigationRail,
+                pinBadge: pinBadge,
+                persistedPinned: widget.persistedPinned,
+                goalBadge: goalBadge,
+              ),
+            ],
+          )
+        : rowWidget;
+    return widget.hasNavigationRail
+        ? body
+        : Padding(padding: const EdgeInsets.only(left: 14.0), child: body);
   }
 
   static String? _formatGitReference(ThreadGitInfo? gitInfo) {
@@ -2297,12 +2439,14 @@ class _ThreadRowState extends State<_ThreadRow> {
 class _ThreadMetadataStrip extends StatelessWidget {
   const _ThreadMetadataStrip({
     required this.threadId,
+    this.hasNavigationRail = false,
     this.pinBadge,
     this.persistedPinned = false,
     required this.goalBadge,
   });
 
   final String threadId;
+  final bool hasNavigationRail;
   final String? pinBadge;
   final bool persistedPinned;
   final String? goalBadge;
@@ -2314,7 +2458,7 @@ class _ThreadMetadataStrip extends StatelessWidget {
         ?.copyWith(fontSize: 10.5, color: palette.textMuted, height: 1.1);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 8, 4),
+      padding: EdgeInsets.fromLTRB(hasNavigationRail ? 34 : 10, 0, 8, 4),
       child: Wrap(
         spacing: 4,
         runSpacing: 3,
