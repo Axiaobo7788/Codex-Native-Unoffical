@@ -269,6 +269,69 @@ print('bounded');
     },
   );
 
+  testWidgets('desktop tight list rows use the measured zero-margin flow', (
+    tester,
+  ) async {
+    for (final nested in [false, true]) {
+      final source = nested
+          ? '- First item\n- Second item\n  - Nested item\n- Last item'
+          : '- First item\n- Second item\n- Last item';
+      await tester.pumpWidget(
+        _app(
+          AssistantMarkdown(
+            data: source,
+            completed: true,
+            proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+          ),
+        ),
+      );
+      final labels = [
+        'First item',
+        'Second item',
+        if (nested) 'Nested item',
+        'Last item',
+      ];
+      for (var index = 1; index < labels.length; index++) {
+        final first = find.text(labels[index - 1], findRichText: true);
+        final second = find.text(labels[index], findRichText: true);
+        expect(
+          tester.getTopLeft(second).dy - tester.getTopLeft(first).dy,
+          closeTo(tester.getSize(first).height, 0.01),
+        );
+      }
+      expect(tester.takeException(), isNull);
+    }
+
+    await tester.pumpWidget(
+      _app(
+        const AssistantMarkdown(
+          data: '- First item\n\n- Second item',
+          completed: true,
+          proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+        ),
+      ),
+    );
+    final first = find.text('First item', findRichText: true);
+    final second = find.text('Second item', findRichText: true);
+    expect(
+      tester.getTopLeft(second).dy - tester.getTopLeft(first).dy,
+      greaterThan(tester.getSize(first).height),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(
+      _app(
+        const AssistantMarkdown(
+          data: '3. Third item\n4. Fourth item',
+          completed: true,
+          proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+        ),
+      ),
+    );
+    expect(find.text('3.', findRichText: true), findsOneWidget);
+    expect(find.text('4.', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('caps the source passed to the Markdown parser', (tester) async {
     final oversized =
         'prefix-${List.filled(AssistantMarkdown.maxSourceCharacters + 32, 'x').join()}';

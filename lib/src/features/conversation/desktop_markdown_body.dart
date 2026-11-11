@@ -7,8 +7,8 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 /// Uses the existing Markdown parser and builder once, with screen-CSS spacing
-/// between supported top-level blocks. Nested and unknown block layouts keep
-/// the builder's existing spacing.
+/// between supported top-level blocks and within tight lists. Loose lists
+/// and unknown block layouts keep the builder's existing spacing.
 class DesktopMarkdownBody extends StatefulWidget {
   const DesktopMarkdownBody({
     super.key,
@@ -63,25 +63,29 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     final nodes = document.parseLines(
       const LineSplitter().convert(widget.data),
     );
-    final built = MarkdownBuilder(
-      delegate: this,
-      selectable: false,
-      styleSheet: widget.styleSheet,
-      imageDirectory: null,
-      checkboxBuilder: null,
-      bulletBuilder: null,
-      listItemCrossAxisAlignment: MarkdownListItemCrossAxisAlignment.baseline,
-      builders: widget.builders,
-      paddingBuilders: const {},
-      imageBuilder: widget.imageBuilder,
-      fitContent: true,
-    ).build(nodes);
-
-    // The public builder places one spacer between top-level block widgets.
-    // Keep its result intact if a future or unusual node has another shape.
-    if (nodes.isEmpty || built.length != nodes.length * 2 - 1) {
-      _children = built;
-      return;
+    final normalBuilder = _builder(widget.styleSheet);
+    MarkdownBuilder? tightListBuilder;
+    final blocks = <Widget>[];
+    for (final node in nodes) {
+      final MarkdownBuilder builder;
+      if (_isTightList(node)) {
+        tightListBuilder ??= _builder(
+          widget.styleSheet.copyWith(blockSpacing: 0),
+        );
+        builder = tightListBuilder;
+      } else {
+        builder = normalBuilder;
+      }
+      final built = builder.build([node]);
+      blocks.add(
+        built.length == 1
+            ? built.single
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: built,
+              ),
+      );
     }
     final tags = nodes
         .map((node) => node is md.Element ? node.tag : null)
@@ -93,9 +97,51 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
             key: ValueKey('desktop-markdown-gap-$index'),
             height: _adjacentGap(tags, index),
           ),
-        built[index * 2],
+        blocks[index],
       ],
     ];
+  }
+
+  MarkdownBuilder _builder(MarkdownStyleSheet styleSheet) => MarkdownBuilder(
+    delegate: this,
+    selectable: false,
+    styleSheet: styleSheet,
+    imageDirectory: null,
+    checkboxBuilder: null,
+    bulletBuilder: null,
+    listItemCrossAxisAlignment: MarkdownListItemCrossAxisAlignment.baseline,
+    builders: widget.builders,
+    paddingBuilders: const {},
+    imageBuilder: widget.imageBuilder,
+    fitContent: true,
+  );
+
+  bool _isTightList(md.Node node) {
+    if (node is! md.Element || (node.tag != 'ul' && node.tag != 'ol')) {
+      return false;
+    }
+    bool tight(md.Node child) {
+      if (child is! md.Element) return true;
+      if (const {
+        'p',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'pre',
+        'blockquote',
+        'table',
+        'hr',
+        'section',
+      }.contains(child.tag)) {
+        return false;
+      }
+      return child.children?.every(tight) ?? true;
+    }
+
+    return node.children?.every(tight) ?? true;
   }
 
   double _adjacentGap(List<String?> tags, int index) {
