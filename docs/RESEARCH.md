@@ -4827,3 +4827,36 @@ not establish a signed-in live capture or the Human reference's
 personal font and zoom preferences. Current Native translation
 and the remaining Goal state gaps are recorded in the
 [Golden-State matrix](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md#a9-editor-toolbar-and-save-shortcut).
+
+## Desktop UI verification — hosted Ubuntu mirror failures
+
+On 2026-11-11, run `43033221454` at `ea4eb1a` did not reach project checks
+on either Linux attempt: one was cancelled after the stall, and the other
+hit the job deadline. Run `43047223523` at documentation-only `03ecc21`
+reproduced the same `azure.archive.ubuntu.com` DNS failures and reached the
+20-minute job deadline. Windows/macOS passed. The decoded negative logs are
+retained under `/var/tmp/native-ui-r0.BbOvHT/`; the A7 source separately passed
+the local shared gates and packaged stock replay.
+
+The actual hosted image was `ubuntu22/20261101.347` (22.04.5, x64, centralus).
+Its [pinned source configuration](https://github.com/actions/runner-images/blob/ubuntu22/20261101.347/images/ubuntu/scripts/build/configure-apt-sources.sh)
+already supplies Azure at priority 1, then Canonical's HTTPS archive and
+security mirrors at priorities 2 and 3 through `/etc/apt/apt-mirrors.txt`.
+The upstream [mirror-stall report](https://github.com/actions/runner-images/issues/14594)
+and [accepted retry/failover correction](https://github.com/actions/runner-images/pull/14643)
+explain why a failing first mirror can consume the job before checks begin.
+The pinned image already includes that upstream timeout configuration.
+
+The scoped recovery removes only the Azure entry from this ephemeral job's
+existing mirror list, leaving the vendor's Canonical HTTPS fallbacks and
+normal APT signature checks in place. The same required package install has a
+five-minute step deadline. Runner generation, Ubuntu version, package list,
+permissions and subsequent checks are unchanged. This remains a candidate
+until a real hosted run verifies it; YAML parsing and shell syntax alone do
+not prove remote connectivity or CI success.
+
+Local resolution is separate evidence: an eight-second probe resolved Azure
+but timed out for the two Canonical names, while the web tool could read
+Canonical's signed Jammy indexes. These results do not prove a global DNS
+outage, invalid hostname, or healthy GitHub-runner connectivity. No local
+resolver, account or package-source settings were changed.

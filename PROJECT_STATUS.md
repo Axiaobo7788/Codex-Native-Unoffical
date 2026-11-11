@@ -69,8 +69,8 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- Gemini's A7 source `ff931b9` and formatting-only child `7012dd3` are being
-  integrated normally onto the published documentation checkpoint `03ecc21`.
+- Gemini's A7 source `ff931b9` and formatting-only child `7012dd3` landed in
+  the normal published merge `1ec254dc4e7466f7598acc0a13aab784abf72ad8`.
   Codex independently reviewed the source and packaged behavior. Gemini has
   released all seven file surfaces and the heavy slot, retaining ownership
   for concrete presentation findings. No controller/protocol/history change
@@ -97,9 +97,13 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   This is preserved external negative evidence, not a passing Linux gate or
   a demonstrated UI regression. Documentation checkpoint `03ecc21` has its
   own run [43047223523](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43047223523):
-  Windows/macOS passed and Linux remains in dependency installation. The A7
-  integration's publication and exact-HEAD CI are pending. No workflow or
-  package-source configuration was changed in this slice.
+  Windows/macOS passed; Linux again exhausted the 20-minute limit on the
+  same Azure mirror DNS failure before project checks. The published A7
+  integration has exact run [43051090054](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43051090054)
+  in progress. A separate Codex slice is testing a minimal recovery of the
+  existing Linux dependency-install step: use the image's existing Canonical
+  HTTPS fallbacks and a five-minute step deadline, with required installs and
+  normal APT trust checks retained. This has not yet proved Hosted CI recovery.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak
