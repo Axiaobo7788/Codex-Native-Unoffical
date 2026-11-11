@@ -135,10 +135,14 @@ compact and dark variants have separate evidence gates.
 
 ## Current checkpoint
 
-- `0c45b67` gives the project New chat action stable keyboard traversal.
-  A Linux stock session verified creation and a turn in the second
-  disposable project. The 530-case Flutter suite and ASCII-path
-  analysis passed. The local project menu remains in the A2 queue.
+- `0c45b67` gives project New chat stable keyboard traversal. A Linux
+  stock session verified creation and a turn in the second disposable
+  project. `a8b2104` adds the start-aligned local project menu. The
+  packaged Linux app dispatched the exact folder to an isolated
+  system handler and showed an error after that folder moved. The
+  530 default Flutter cases and ASCII-path analysis passed. Official
+  right-click, account destinations and project-wide operations remain
+  separately tracked in A2.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `9402faa` and `8b9fe5c` translate the stock question default and
