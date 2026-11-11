@@ -1,10 +1,13 @@
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
+import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
 import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
 import 'package:codex_native_unofficial/src/features/conversation/desktop_markdown_body.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:markdown/markdown.dart' as md;
 
 void main() {
   testWidgets('renders bounded Markdown without loading assistant images', (
@@ -687,6 +690,23 @@ Final paragraph. A remote image stays an explicit blocked preview.
         OfficialCodexTheme.codeBlockBorderWidth,
       );
       expect(find.text('Dart'), findsOneWidget);
+      final codeHeaderText = tester.widget<Text>(find.text('Dart'));
+      expect(codeHeaderText.style?.fontSize, 13.0);
+      expect(codeHeaderText.style?.fontWeight, FontWeight.w500);
+      final codeContentText = tester.widget<Text>(
+        find.descendant(
+          of: codeBlock,
+          matching: find.textContaining('int add(int first, int second)'),
+        ),
+      );
+      expect(
+        codeContentText.style?.fontSize,
+        OfficialCodexTheme.chatCodeFontSize,
+      );
+      expect(
+        codeContentText.style!.fontSize! * codeContentText.style!.height!,
+        closeTo(OfficialCodexTheme.chatCodeBlockMinLineHeight, 0.01),
+      );
       final codeCopyButton = find.byKey(
         const ValueKey('desktop-markdown-code-copy'),
       );
@@ -1700,6 +1720,307 @@ $bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${t
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'application ThemeTokens light and dark themes resolve initialized 14px chat / 12px code scale and Electron foregrounds',
+    (tester) async {
+      const sample = '''# Heading one
+
+Body prose with `inline_pill` token.
+
+| Header | Cell |
+| :--- | :--- |
+| Key | Value |
+
+```dart
+void main() {}
+```''';
+
+      for (final (theme, official, expectedPrimary) in [
+        (
+          ThemeTokens.lightTheme,
+          OfficialCodexThemeData.light,
+          const Color(0xFF1A1C1F),
+        ),
+        (
+          ThemeTokens.darkTheme,
+          OfficialCodexThemeData.dark,
+          const Color(0xFFDFDFDF),
+        ),
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: OfficialCodexThemeProvider(
+              data: official,
+              child: const Scaffold(
+                body: SingleChildScrollView(
+                  child: SizedBox(
+                    width: 640,
+                    child: AssistantMarkdown(
+                      data: sample,
+                      completed: true,
+                      proseLineHeight:
+                          OfficialCodexTheme.assistantProseLineHeight,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final h1Style = tester
+            .widget<Text>(find.text('Heading one'))
+            .textSpan!
+            .style!;
+        expect(h1Style.fontSize, 21.0);
+        expect(h1Style.fontSize! * h1Style.height!, closeTo(28.0, 0.01));
+        expect(h1Style.color, expectedPrimary);
+
+        final bodyRich = tester.widget<RichText>(
+          find.textContaining('Body prose with', findRichText: true),
+        );
+        expect(bodyRich.text.style?.fontSize, 14.0);
+        expect(bodyRich.text.style?.height, 1.625);
+        expect(bodyRich.text.style?.color, expectedPrimary);
+
+        final pillText = tester.widget<Text>(find.text('inline_pill'));
+        expect(pillText.style?.fontSize, closeTo(12.88, 0.01));
+        expect(pillText.style?.color, expectedPrimary);
+
+        TextStyle findRichSpanStyle(String target) {
+          TextStyle? matched;
+          tester
+              .widget<RichText>(find.text(target, findRichText: true))
+              .text
+              .visitChildren((span) {
+                if (span is TextSpan && span.text == target) {
+                  matched = span.style;
+                  return false;
+                }
+                return true;
+              });
+          return matched!;
+        }
+
+        final thStyle = findRichSpanStyle('Header');
+        expect(thStyle.fontSize, 12.25);
+        expect(thStyle.fontSize! * thStyle.height!, closeTo(14.0, 0.01));
+
+        final tdStyle = findRichSpanStyle('Value');
+        expect(tdStyle.fontSize, 12.25);
+        expect(tdStyle.fontSize! * tdStyle.height!, closeTo(22.75, 0.01));
+
+        final codeText = tester.widget<Text>(find.text('void main() {}'));
+        expect(codeText.style?.fontSize, 12.0);
+        expect(
+          codeText.style!.fontSize! * codeText.style!.height!,
+          closeTo(20.0, 0.01),
+        );
+        expect(codeText.style?.color, expectedPrimary);
+      }
+    },
+  );
+
+  testWidgets(
+    'DesktopMarkdownBody aligns pill fit, delegate context, partial heading inheritance, and cache invalidation with merged DefaultTextStyle under nonlinear scaling',
+    (tester) async {
+      const token = 'u1_nonlinear_fit_token';
+      const customColor = Color(0xFF225588);
+      TextStyle? observedDelegateDefaultStyle;
+
+      Widget buildCustomMarkdown({
+        required double width,
+        required TextScaler mediaScaler,
+        double outerDefaultFontSize = 24.0,
+        TextStyle? paragraphStyle = const TextStyle(
+          fontSize: 12.0,
+          height: 1.5,
+          color: customColor,
+          letterSpacing: 0.4,
+        ),
+        TextScaler? styleSheetScaler,
+        String markdown = 'Check `$token` ~~probe~~\n\n# Heading `h1_pill`',
+      }) {
+        final styleSheet = MarkdownStyleSheet.fromTheme(ThemeTokens.lightTheme)
+            .copyWith(
+              p: paragraphStyle,
+              h1: const TextStyle(fontSize: 20.0, fontWeight: FontWeight.w600),
+              code: const TextStyle(fontFamily: 'monospace'),
+              textScaler: styleSheetScaler,
+            );
+        return MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: mediaScaler),
+            child: Scaffold(
+              body: DefaultTextStyle(
+                style: TextStyle(
+                  fontSize: outerDefaultFontSize,
+                  color: const Color(0xFF991111),
+                ),
+                child: SizedBox(
+                  width: width,
+                  child: DesktopMarkdownBody(
+                    data: markdown,
+                    styleSheet: styleSheet,
+                    extensionSet: md.ExtensionSet.gitHubWeb,
+                    builders: {
+                      'del': _ContextProbeBuilder(
+                        onVisit: (style) =>
+                            observedDelegateDefaultStyle = style,
+                      ),
+                    },
+                    imageBuilder: (_, _, _) => const SizedBox.shrink(),
+                    onTapLink: (_, _, _) {},
+                    bodyEm: 12.0,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // 1. Nonlinear TextScaler (2x for <=14px, 1x for >14px) with outer 24px
+      // DefaultTextStyle and custom 12px styleSheet.p: rendered WidgetSpan
+      // scales by 2.0x (from merged 12px DefaultTextStyle), so at 340px `token`
+      // (~252px unscaled, ~504px scaled) must fall back to a flat TextSpan
+      // instead of wrapping onto 2 lines inside a WidgetSpan pill.
+      await tester.pumpWidget(
+        buildCustomMarkdown(
+          width: 340,
+          mediaScaler: const _SmallBoostNonlinearScaler(),
+        ),
+      );
+      expect(observedDelegateDefaultStyle?.fontSize, 12.0);
+      expect(observedDelegateDefaultStyle?.color, customColor);
+      expect(find.text(token), findsNothing);
+      final flatAt340 = tester.widget<RichText>(
+        find.textContaining(token, findRichText: true),
+      );
+
+      // Non-threshold narrowing (340 -> 320) reuses the cached subtree.
+      await tester.pumpWidget(
+        buildCustomMarkdown(
+          width: 320,
+          mediaScaler: const _SmallBoostNonlinearScaler(),
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<RichText>(
+            find.textContaining(token, findRichText: true),
+          ),
+          flatAt340,
+        ),
+        isTrue,
+      );
+
+      // Partial H1 style inherits color + letterSpacing from merged styleSheet.p.
+      final h1PillText = tester.widget<Text>(find.text('h1_pill'));
+      expect(h1PillText.style?.color, customColor);
+      expect(h1PillText.style?.letterSpacing, 0.4);
+
+      // Widening across the 2.0x threshold (320 -> 600) promotes `token` to a
+      // single-line rich pill scaled by 2.0x.
+      await tester.pumpWidget(
+        buildCustomMarkdown(width: 600, mediaScaler: TextScaler.noScaling),
+      );
+      final unscaledPillRect = tester.getRect(
+        find
+            .ancestor(of: find.text(token), matching: find.byType(DecoratedBox))
+            .first,
+      );
+      await tester.pumpWidget(
+        buildCustomMarkdown(
+          width: 600,
+          mediaScaler: const _SmallBoostNonlinearScaler(),
+        ),
+      );
+      expect(find.text(token), findsOneWidget);
+      final nonlinearPillRect = tester.getRect(
+        find
+            .ancestor(of: find.text(token), matching: find.byType(DecoratedBox))
+            .first,
+      );
+      expect(nonlinearPillRect.width, closeTo(unscaledPillRect.width * 2, 1.0));
+
+      // 2. Explicit styleSheet.textScaler overrides ambient MediaQuery scaler.
+      await tester.pumpWidget(
+        buildCustomMarkdown(
+          width: 340,
+          mediaScaler: TextScaler.noScaling,
+          styleSheetScaler: const TextScaler.linear(2.0),
+        ),
+      );
+      expect(find.text(token), findsNothing);
+
+      // 3. Ambient DefaultTextStyle change (when styleSheet.p omits fontSize)
+      // invalidates the width cache and updates inline-code pill font size.
+      await tester.pumpWidget(
+        buildCustomMarkdown(
+          width: 600,
+          mediaScaler: TextScaler.noScaling,
+          outerDefaultFontSize: 12.0,
+          paragraphStyle: const TextStyle(height: 1.5),
+          markdown: 'Ambient `dyn_pill` check.',
+        ),
+      );
+      expect(
+        tester.widget<Text>(find.text('dyn_pill')).style?.fontSize,
+        closeTo(12.0 * OfficialCodexTheme.inlineCodeFontScale, 0.01),
+      );
+      await tester.pumpWidget(
+        buildCustomMarkdown(
+          width: 600,
+          mediaScaler: TextScaler.noScaling,
+          outerDefaultFontSize: 20.0,
+          paragraphStyle: const TextStyle(height: 1.5),
+          markdown: 'Ambient `dyn_pill` check.',
+        ),
+      );
+      expect(
+        tester.widget<Text>(find.text('dyn_pill')).style?.fontSize,
+        closeTo(20.0 * OfficialCodexTheme.inlineCodeFontScale, 0.01),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+}
+
+final class _SmallBoostNonlinearScaler extends TextScaler {
+  const _SmallBoostNonlinearScaler();
+
+  @override
+  double scale(double fontSize) => fontSize <= 14.0 ? fontSize * 2.0 : fontSize;
+
+  @override
+  double get textScaleFactor => 1.0;
+
+  @override
+  bool operator ==(Object other) => other is _SmallBoostNonlinearScaler;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+}
+
+final class _ContextProbeBuilder extends MarkdownElementBuilder {
+  _ContextProbeBuilder({required this.onVisit});
+
+  final ValueChanged<TextStyle> onVisit;
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    onVisit(DefaultTextStyle.of(context).style);
+    return Text.rich(TextSpan(text: element.textContent, style: parentStyle));
+  }
 }
 
 Widget _app(Widget child) => MaterialApp(home: Scaffold(body: child));

@@ -53,8 +53,7 @@ class DesktopMarkdownBody extends StatefulWidget {
   State<DesktopMarkdownBody> createState() => _DesktopMarkdownBodyState();
 }
 
-class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
-    implements MarkdownBuilderDelegate {
+class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
   static const _blockTags = <String>{
     'p',
     'h1',
@@ -80,10 +79,15 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   double? _lastMaxWidth;
   var _minValidRootMaxWidth = 0.0;
   var _maxValidRootMaxWidth = double.infinity;
+  TextStyle? _lastDefaultTextStyle;
   TextScaler? _lastTextScaler;
+  Locale? _lastLocale;
   var _currentAvailableWidth = double.infinity;
   var _currentWidthInset = 0.0;
+  var _currentDefaultTextStyle = const TextStyle();
   var _currentTextScaler = TextScaler.noScaling;
+  Locale? _currentLocale;
+  BuildContext? _currentMarkdownContext;
   List<Widget> _children = const [];
 
   @override
@@ -154,11 +158,13 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     String text,
     TextStyle style,
     TextScaler textScaler,
+    Locale? locale,
   ) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
       textScaler: textScaler,
+      locale: locale,
       maxLines: 1,
     )..layout();
     final width = painter.width;
@@ -167,8 +173,11 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   }
 
   void _buildBlocks({
+    required BuildContext markdownContext,
     required double maxWidth,
+    required TextStyle defaultTextStyle,
     required TextScaler textScaler,
+    required Locale? locale,
   }) {
     _disposeRecognizers();
     _activeLinks.clear();
@@ -179,139 +188,146 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     _maxValidRootMaxWidth = double.infinity;
     _currentAvailableWidth = maxWidth;
     _currentWidthInset = 0.0;
+    _currentDefaultTextStyle = defaultTextStyle;
     _currentTextScaler = textScaler;
-    if (widget.data.isEmpty) {
-      _children = const [];
-      return;
-    }
-    final document = md.Document(
-      extensionSet: widget.extensionSet,
-      encodeHtml: false,
-    );
-    final nodes = document.parseLines(
-      const LineSplitter().convert(widget.data),
-    );
-    if (nodes.isEmpty) {
-      _children = const [];
-      return;
-    }
+    _currentLocale = locale;
+    _currentMarkdownContext = markdownContext;
+    try {
+      if (widget.data.isEmpty) {
+        _children = const [];
+        return;
+      }
+      final document = md.Document(
+        extensionSet: widget.extensionSet,
+        encodeHtml: false,
+      );
+      final nodes = document.parseLines(
+        const LineSplitter().convert(widget.data),
+      );
+      if (nodes.isEmpty) {
+        _children = const [];
+        return;
+      }
 
-    final zeroBuilder = _builder(widget.styleSheet.copyWith(blockSpacing: 0));
-    final headingBuilders = <String, MarkdownBuilder>{};
-    MarkdownBuilder getHeadingBuilder(String tag) =>
-        headingBuilders.putIfAbsent(
-          tag,
-          () => _builder(
+      final zeroBuilder = _builder(widget.styleSheet.copyWith(blockSpacing: 0));
+      final headingBuilders = <String, MarkdownBuilder>{};
+      MarkdownBuilder getHeadingBuilder(String tag) =>
+          headingBuilders.putIfAbsent(
+            tag,
+            () => _builder(
+              widget.styleSheet.copyWith(
+                blockSpacing: 0,
+                p: widget.styleSheet.styles[tag] ?? widget.styleSheet.p,
+              ),
+            ),
+          );
+      MarkdownBuilder? blockquoteParagraphBuilder;
+      MarkdownBuilder getBlockquoteParagraphBuilder() =>
+          blockquoteParagraphBuilder ??= _builder(
             widget.styleSheet.copyWith(
               blockSpacing: 0,
-              p: widget.styleSheet.styles[tag] ?? widget.styleSheet.p,
+              p: widget.styleSheet.p?.copyWith(fontWeight: FontWeight.w400),
             ),
-          ),
-        );
-    MarkdownBuilder? blockquoteParagraphBuilder;
-    MarkdownBuilder getBlockquoteParagraphBuilder() =>
-        blockquoteParagraphBuilder ??= _builder(
-          widget.styleSheet.copyWith(
-            blockSpacing: 0,
-            p: widget.styleSheet.p?.copyWith(fontWeight: FontWeight.w400),
-          ),
-        );
+          );
 
-    var blockquoteIndex = 0;
-    var tableIndex = 0;
-    var hrIndex = 0;
+      var blockquoteIndex = 0;
+      var tableIndex = 0;
+      var hrIndex = 0;
 
-    Widget buildNode(
-      md.Node node, {
-      required int listDepth,
-      required bool insideBlockquote,
-      required double availableWidth,
-      required double widthInset,
-    }) {
-      if (node is md.Element) {
-        switch (node.tag) {
-          case 'ul' || 'ol':
-            return _buildList(
-              node,
-              listDepth: listDepth,
-              insideBlockquote: insideBlockquote,
-              availableWidth: availableWidth,
-              widthInset: widthInset,
-              textScaler: textScaler,
-              buildChildNode: buildNode,
-            );
-          case 'blockquote':
-            final currentIndex = blockquoteIndex++;
-            return _buildBlockquote(
-              node,
-              index: currentIndex,
-              listDepth: listDepth,
-              availableWidth: availableWidth,
-              widthInset: widthInset,
-              buildChildNode: buildNode,
-            );
-          case 'table':
-            final currentIndex = tableIndex++;
-            return _withContainerWidth(
-              availableWidth: double.infinity,
-              widthInset: 0.0,
-              action: () => _buildTable(node, index: currentIndex),
-            );
-          case 'hr':
-            final currentIndex = hrIndex++;
-            return _buildHorizontalRule(index: currentIndex);
-          case 'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6':
-            return _wrapBuilt(
-              _withContainerWidth(
+      Widget buildNode(
+        md.Node node, {
+        required int listDepth,
+        required bool insideBlockquote,
+        required double availableWidth,
+        required double widthInset,
+      }) {
+        if (node is md.Element) {
+          switch (node.tag) {
+            case 'ul' || 'ol':
+              return _buildList(
+                node,
+                listDepth: listDepth,
+                insideBlockquote: insideBlockquote,
                 availableWidth: availableWidth,
                 widthInset: widthInset,
-                action: () => getHeadingBuilder(node.tag).build([node]),
-              ),
-            );
-          case 'p' when insideBlockquote:
-            return _wrapBuilt(
-              _withContainerWidth(
+                textScaler: textScaler,
+                buildChildNode: buildNode,
+              );
+            case 'blockquote':
+              final currentIndex = blockquoteIndex++;
+              return _buildBlockquote(
+                node,
+                index: currentIndex,
+                listDepth: listDepth,
                 availableWidth: availableWidth,
                 widthInset: widthInset,
-                action: () => getBlockquoteParagraphBuilder().build([node]),
-              ),
-            );
+                buildChildNode: buildNode,
+              );
+            case 'table':
+              final currentIndex = tableIndex++;
+              return _withContainerWidth(
+                availableWidth: double.infinity,
+                widthInset: 0.0,
+                action: () => _buildTable(node, index: currentIndex),
+              );
+            case 'hr':
+              final currentIndex = hrIndex++;
+              return _buildHorizontalRule(index: currentIndex);
+            case 'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6':
+              return _wrapBuilt(
+                _withContainerWidth(
+                  availableWidth: availableWidth,
+                  widthInset: widthInset,
+                  action: () => getHeadingBuilder(node.tag).build([node]),
+                ),
+              );
+            case 'p' when insideBlockquote:
+              return _wrapBuilt(
+                _withContainerWidth(
+                  availableWidth: availableWidth,
+                  widthInset: widthInset,
+                  action: () => getBlockquoteParagraphBuilder().build([node]),
+                ),
+              );
+          }
         }
-      }
-      final normalized = node is md.Text ? md.Element('p', [node]) : node;
-      return _wrapBuilt(
-        _withContainerWidth(
-          availableWidth: availableWidth,
-          widthInset: widthInset,
-          action: () => zeroBuilder.build([normalized]),
-        ),
-      );
-    }
-
-    final blocks = <Widget>[
-      for (final node in nodes)
-        buildNode(
-          node,
-          listDepth: 0,
-          insideBlockquote: false,
-          availableWidth: maxWidth,
-          widthInset: 0.0,
-        ),
-    ];
-    final tags = nodes.map(_nodeTag).toList(growable: false);
-
-    // MarkdownRoot carries `[&>*:first-child]:mt-0 [&>*:last-child]:mb-0`, so
-    // outer top and bottom margins at root edges collapse to 0.
-    _children = [
-      for (var index = 0; index < nodes.length; index++) ...[
-        if (index > 0)
-          SizedBox(
-            key: ValueKey('desktop-markdown-gap-$index'),
-            height: _adjacentGap(tags, index),
+        final normalized = node is md.Text ? md.Element('p', [node]) : node;
+        return _wrapBuilt(
+          _withContainerWidth(
+            availableWidth: availableWidth,
+            widthInset: widthInset,
+            action: () => zeroBuilder.build([normalized]),
           ),
-        blocks[index],
-      ],
-    ];
+        );
+      }
+
+      final blocks = <Widget>[
+        for (final node in nodes)
+          buildNode(
+            node,
+            listDepth: 0,
+            insideBlockquote: false,
+            availableWidth: maxWidth,
+            widthInset: 0.0,
+          ),
+      ];
+      final tags = nodes.map(_nodeTag).toList(growable: false);
+
+      // MarkdownRoot carries `[&>*:first-child]:mt-0 [&>*:last-child]:mb-0`, so
+      // outer top and bottom margins at root edges collapse to 0.
+      _children = [
+        for (var index = 0; index < nodes.length; index++) ...[
+          if (index > 0)
+            SizedBox(
+              key: ValueKey('desktop-markdown-gap-$index'),
+              height: _adjacentGap(tags, index),
+            ),
+          blocks[index],
+        ],
+      ];
+    } finally {
+      _currentMarkdownContext = null;
+    }
   }
 
   Widget _wrapBuilt(List<Widget> built) {
@@ -349,7 +365,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     final space = widget.bodyEm / 4;
     final markerGutterWidth = widget.bodyEm * 1.625;
     final markerGap = space * 1.5;
-    final baseStyle = widget.styleSheet.p ?? const TextStyle();
+    final baseStyle = _currentDefaultTextStyle;
     final markerStyle = baseStyle.copyWith(
       color: baseStyle.color,
       fontWeight: FontWeight.w600,
@@ -395,7 +411,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         );
         markerBoxWidth = math.max(
           markerGutterWidth,
-          _measureSingleLineWidth(markerLabel, markerStyle, textScaler),
+          _measureSingleLineWidth(
+            markerLabel,
+            markerStyle,
+            textScaler,
+            _currentLocale,
+          ),
         );
       } else {
         final bullet = switch (listDepth) {
@@ -406,7 +427,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         marker = Text(bullet, textAlign: TextAlign.right, style: markerStyle);
         markerBoxWidth = math.max(
           markerGutterWidth,
-          _measureSingleLineWidth(bullet, markerStyle, textScaler),
+          _measureSingleLineWidth(
+            bullet,
+            markerStyle,
+            textScaler,
+            _currentLocale,
+          ),
         );
       }
 
@@ -696,8 +722,8 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     }
 
     final space = widget.bodyEm / 4;
-    final baseStyle = widget.styleSheet.p ?? const TextStyle(fontSize: 14);
-    final baseFontSize = baseStyle.fontSize ?? 14.0;
+    final baseStyle = _currentDefaultTextStyle;
+    final baseFontSize = baseStyle.fontSize ?? OfficialCodexTheme.chatFontSize;
     final smallFontSize = math.max(12.0, baseFontSize * 0.875);
     final headerStyle = baseStyle.copyWith(
       fontSize: smallFontSize,
@@ -881,10 +907,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         availableWidth: () => _currentAvailableWidth,
         widthInset: () => _currentWidthInset,
         recordWidthThreshold: _recordRootWidthThreshold,
+        defaultTextStyle: () => _currentDefaultTextStyle,
         textScaler: () => _currentTextScaler,
+        locale: () => _currentLocale,
         currentLink: () => _activeLinks.isEmpty ? null : _activeLinks.last,
         obtainLinkRecognizer: (link) =>
-            link.recognizer ??= createLink(link.text, link.href, link.title),
+            link.recognizer ??= _createLink(link.text, link.href, link.title),
         onTapLink: (text, href, title) => widget.onTapLink(text, href, title),
         fallbackStyle: styleSheet.p,
         backgroundColor: widget.inlineCodeBackground,
@@ -895,7 +923,11 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
       ),
     };
     return MarkdownBuilder(
-      delegate: this,
+      delegate: _DesktopMarkdownDelegate(
+        context: _currentMarkdownContext ?? context,
+        onCreateLink: _createLink,
+        onFormatText: _formatText,
+      ),
       selectable: false,
       styleSheet: styleSheet,
       imageDirectory: null,
@@ -961,8 +993,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         _ => null,
       };
 
-  @override
-  GestureRecognizer createLink(String text, String? href, String title) {
+  GestureRecognizer _createLink(String text, String? href, String title) {
     final recognizer = TapGestureRecognizer()
       ..onTap = () => widget.onTapLink(text, href, title);
     _recognizers.add(recognizer);
@@ -978,8 +1009,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     return recognizer;
   }
 
-  @override
-  TextSpan formatText(MarkdownStyleSheet styleSheet, String code) => TextSpan(
+  TextSpan _formatText(MarkdownStyleSheet styleSheet, String code) => TextSpan(
     text: code.endsWith('\n') ? code.substring(0, code.length - 1) : code,
     style: styleSheet.code,
   );
@@ -999,34 +1029,76 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
 
   @override
   Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        final canReuseForWidth =
-            !_needsRebuild &&
-            _lastTextScaler == textScaler &&
-            _builtWithFiniteWidth == maxWidth.isFinite &&
-            (_lastMaxWidth == maxWidth ||
-                !maxWidth.isFinite ||
-                (maxWidth >= _minValidRootMaxWidth &&
-                    maxWidth <= _maxValidRootMaxWidth));
-        if (!canReuseForWidth) {
-          _needsRebuild = false;
-          _lastMaxWidth = maxWidth;
-          _lastTextScaler = textScaler;
-          _buildBlocks(maxWidth: maxWidth, textScaler: textScaler);
-        } else {
-          _lastMaxWidth = maxWidth;
-        }
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _children,
-        );
-      },
+    final effectiveDefaultStyle = DefaultTextStyle.of(context).style
+        .merge(widget.styleSheet.p);
+    final textScaler =
+        widget.styleSheet.textScaler ?? MediaQuery.textScalerOf(context);
+    final locale = Localizations.maybeLocaleOf(context);
+    return DefaultTextStyle.merge(
+      style: widget.styleSheet.p,
+      child: LayoutBuilder(
+        builder: (markdownContext, constraints) {
+          final maxWidth = constraints.maxWidth;
+          final canReuseForWidth =
+              !_needsRebuild &&
+              _lastDefaultTextStyle == effectiveDefaultStyle &&
+              _lastTextScaler == textScaler &&
+              _lastLocale == locale &&
+              _builtWithFiniteWidth == maxWidth.isFinite &&
+              (_lastMaxWidth == maxWidth ||
+                  !maxWidth.isFinite ||
+                  (maxWidth >= _minValidRootMaxWidth &&
+                      maxWidth <= _maxValidRootMaxWidth));
+          if (!canReuseForWidth) {
+            _needsRebuild = false;
+            _lastMaxWidth = maxWidth;
+            _lastDefaultTextStyle = effectiveDefaultStyle;
+            _lastTextScaler = textScaler;
+            _lastLocale = locale;
+            _buildBlocks(
+              markdownContext: markdownContext,
+              maxWidth: maxWidth,
+              defaultTextStyle: effectiveDefaultStyle,
+              textScaler: textScaler,
+              locale: locale,
+            );
+          } else {
+            _lastMaxWidth = maxWidth;
+          }
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _children,
+          );
+        },
+      ),
     );
   }
+}
+
+final class _DesktopMarkdownDelegate implements MarkdownBuilderDelegate {
+  _DesktopMarkdownDelegate({
+    required this.context,
+    required this.onCreateLink,
+    required this.onFormatText,
+  });
+
+  @override
+  final BuildContext context;
+
+  final GestureRecognizer Function(String text, String? href, String title)
+  onCreateLink;
+
+  final TextSpan Function(MarkdownStyleSheet styleSheet, String code)
+  onFormatText;
+
+  @override
+  GestureRecognizer createLink(String text, String? href, String title) =>
+      onCreateLink(text, href, title);
+
+  @override
+  TextSpan formatText(MarkdownStyleSheet styleSheet, String code) =>
+      onFormatText(styleSheet, code);
 }
 
 final class _ActiveMarkdownLink {
@@ -1136,7 +1208,9 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
     required this.availableWidth,
     required this.widthInset,
     required this.recordWidthThreshold,
+    required this.defaultTextStyle,
     required this.textScaler,
+    required this.locale,
     required this.currentLink,
     required this.obtainLinkRecognizer,
     required this.onTapLink,
@@ -1156,7 +1230,9 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
   final double Function() widthInset;
   final void Function({required bool fits, required double thresholdRootWidth})
   recordWidthThreshold;
+  final TextStyle Function() defaultTextStyle;
   final TextScaler Function() textScaler;
+  final Locale? Function() locale;
   final _ActiveMarkdownLink? Function() currentLink;
   final GestureRecognizer Function(_ActiveMarkdownLink link)
   obtainLinkRecognizer;
@@ -1214,7 +1290,6 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
   }
 
   bool _fitsSingleLinePill({
-    required BuildContext context,
     required String codeText,
     required TextStyle pillTextStyle,
     required double scaleBaseFontSize,
@@ -1229,7 +1304,7 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
     final scaler = textScaler();
     final scaleFactor = scaleBaseFontSize > 0
         ? scaler.scale(scaleBaseFontSize) / scaleBaseFontSize
-        : 1.0;
+        : 0.0;
     if (scaleFactor <= 0 || !scaleFactor.isFinite) {
       return false;
     }
@@ -1240,7 +1315,7 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
           text: TextSpan(text: codeText, style: pillTextStyle),
           textDirection: TextDirection.ltr,
           textScaler: TextScaler.noScaling,
-          locale: Localizations.maybeLocaleOf(context),
+          locale: locale(),
         )..layout(
           maxWidth: maxInnerTextWidth > 0 ? maxInnerTextWidth : double.infinity,
         );
@@ -1281,12 +1356,14 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
     }
 
     final codeText = element.textContent;
-    final defaultStyle = DefaultTextStyle.of(context).style;
+    final defaultStyle = defaultTextStyle();
     final effectiveParent = defaultStyle
         .merge(fallbackStyle)
         .merge(parentStyle);
     final baseFontSize =
-        effectiveParent.fontSize ?? preferredStyle?.fontSize ?? 14.0;
+        effectiveParent.fontSize ??
+        preferredStyle?.fontSize ??
+        OfficialCodexTheme.chatFontSize;
     final activeLink = currentLink();
 
     if (!hasPillSlot()) {
@@ -1319,10 +1396,9 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
     );
 
     if (!_fitsSingleLinePill(
-      context: context,
       codeText: codeText,
       pillTextStyle: pillTextStyle,
-      scaleBaseFontSize: defaultStyle.fontSize ?? baseFontSize,
+      scaleBaseFontSize: defaultStyle.fontSize ?? kDefaultFontSize,
     )) {
       return _buildFlatSpanFallback(
         codeText: codeText,

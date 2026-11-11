@@ -18,6 +18,12 @@ Its first correction retains existing peer commit `aba5feb` and current bounded
 controllers; final packaged/runtime evidence belongs in the audit, separately
 from simulated runtime tests and Human acceptance.
 
+The fresh [MCP OAuth preflight](reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md#next-functional-preflight--stock-owned-mcp-oauth)
+now verifies an account-free local authorization/PKCE/completion flow through the
+bundled Host and both installed stock and current public `0.167.1`. Native UI
+wiring remains missing. This is real runtime contract evidence, separate from a
+future product walkthrough or real external account acceptance.
+
 ## Current Codex Desktop UI fidelity
 
 _Reviewed: 2026-11-06_

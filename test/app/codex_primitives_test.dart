@@ -471,16 +471,49 @@ void main() {
           const ValueKey('interactive-inline-row'),
         );
 
-        // Natural chat line-height (~20px), not the 34px execution card box.
-        expect(tester.getSize(staticRow).height, lessThan(26.0));
-        expect(tester.getSize(interactiveRow).height, lessThan(26.0));
+        // Natural `.text-size-chat` line-height (`21px` at `14px`), not the 34px execution card box.
+        expect(tester.getSize(staticRow).height, closeTo(21.0, 0.5));
+        expect(tester.getSize(interactiveRow).height, closeTo(21.0, 0.5));
 
         final staticText = tester.widget<Text>(find.text('Read README.md'));
         expect(staticText.style?.fontFamily, isNull);
-        expect(staticText.style?.fontSize, 13.5);
+        expect(staticText.style?.fontSize, 14.0);
+        expect(staticText.style?.height, 1.5);
         expect(
           staticText.style?.color,
           OfficialCodexThemeData.light.activitySummaryText,
+        );
+        expect(
+          OfficialCodexThemeData.light.textPrimary,
+          const Color(0xFF1A1C1F),
+        );
+        expect(
+          OfficialCodexThemeData.dark.textPrimary,
+          const Color(0xFFDFDFDF),
+        );
+        expect(
+          OfficialCodexThemeData.light.userBubbleBackground,
+          const Color(0x0D1A1C1F),
+        );
+        expect(
+          OfficialCodexThemeData.dark.userBubbleBackground,
+          const Color(0x0DDFDFDF),
+        );
+        expect(
+          OfficialCodexThemeData.light.activitySummaryText,
+          const Color(0x991A1C1F),
+        );
+        expect(
+          OfficialCodexThemeData.dark.activitySummaryText,
+          const Color(0x99DFDFDF),
+        );
+        expect(
+          OfficialCodexThemeData.light.activityChildText,
+          const Color(0x4D1A1C1F),
+        );
+        expect(
+          OfficialCodexThemeData.dark.activityChildText,
+          const Color(0x4DDFDFDF),
         );
         expect(
           find.descendant(
@@ -580,10 +613,10 @@ void main() {
               tester.getBottomLeft(hairline).dy,
           16.0,
         );
-        expect(
-          tester.widget<Text>(find.text('Worked for 7s')).style?.color,
-          OfficialCodexThemeData.light.textMuted,
-        );
+        final workLabel = tester.widget<Text>(find.text('Worked for 7s'));
+        expect(workLabel.style?.fontSize, 14.0);
+        expect(workLabel.style?.height, 1.5);
+        expect(workLabel.style?.color, OfficialCodexThemeData.light.textMuted);
 
         final gesture = await tester.createGesture(
           kind: PointerDeviceKind.mouse,

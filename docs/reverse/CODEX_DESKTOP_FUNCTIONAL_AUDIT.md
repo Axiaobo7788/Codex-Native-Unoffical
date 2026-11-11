@@ -210,3 +210,49 @@ This is `AGENT REAL-USE VERIFIED`, not Human acceptance or physical screen-reade
 verification. U1 is a separate peer source and has not been merged into this F
 binary. The remaining supported gaps above keep Track F active independently of
 Track U.
+
+## Second correction checkpoint — bounded catalog truth
+
+Source `45c80d8` preserves original `6c278c5` as a normal-merge parent, while
+retaining the current Customize controller/shared notice composition rather than
+restoring its old dialog header. `PluginCatalogSnapshot.isTruncated` signals an
+observed distinct usable entry omitted after 100 retained entries. Duplicates or
+unusable entries do not fabricate truncation. Marketplace-source errors remain
+independent `isPartial` state; queries and the retention cap do not change.
+
+Peer review found pre-cap malformed enabled/installed fields threw a TypeError
+while post-cap shape checks skipped them. Two red protocol tests reproduced the
+read failure; an uncaught application crash and normal stock emission of malformed
+booleans were not observed. Shared validity checks now skip unusable catalog rows
+and reject present malformed detail summaries with FormatException, preserving
+only the existing missing-summary compatibility fallback. This avoids inventing
+an enabled state from damaged supplied detail. Truncation is monotonic. The
+explicit notice suppresses its redundant bottom cap notice; exact-100 and legacy
+gateway counts keep conservative loaded wording.
+
+Thirteen protocol tests, compact/wide notice tests and strict analysis pass.
+Combined U1/source gates, direct-stock saturated/exact catalog probes and a new
+packaged walkthrough are pending. This checkpoint does not yet close the catalog
+row or the separate authoritative installed-inventory research.
+
+## Next functional preflight — stock-owned MCP OAuth
+
+Installed `0.167.0-alpha.3.2` and current public `0.167.1` both completed a fresh
+account-free, private local OAuth flow through the real bundled Host and stock.
+`mcpServerStatus/list` changed `notLoggedIn` to `oAuth`; each run performed one
+local authorization/PKCE token exchange and emitted a successful completion with
+the response's loginId. No user credential, private service, or fake app-server
+was involved. Only the local MCP/OAuth service is a test fixture. Profiles and
+results: `/var/tmp/native-mcp-oauth-installed-preflight-r1/` and
+`/var/tmp/native-mcp-oauth-public-01671-preflight-r1/`.
+
+Current generated schemas allow server name, optional thread scope, registration
+strategy, scopes and timeout; completion supports loginId correlation with an
+older-server omission fallback. Public source `c875667e` corroborates streamable
+HTTP support, stock-owned storage and asynchronous completion. It is not claimed
+to be the exact installed source revision. Enterprise/private auth is excluded.
+This confirms implementation feasibility; Native still has no start/browser/
+completion action, so its product row remains MISSING. Next implement bounded,
+truthful stock-owned lifecycle and failure/cancellation wording, without exposing
+or persisting credentials in Flutter. Real external account acceptance remains
+user-operated and separate from the disposable flow.

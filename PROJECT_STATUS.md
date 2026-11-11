@@ -138,8 +138,13 @@ permission to lower the engineering or visual quality bar.
   memory, controller/state work and the conversation resume-feedback surface.
   The file locks do not overlap. Gemini finished its U1 local validation and
   released the heavy slot. Codex now owns serialized integration/runtime checks;
-  Gemini remains on light source/evidence work until the next explicit handoff.
-- Baseline `327ed906a0231ab4aac864956f224279fad2ad64` passed all three hosted
+  Gemini released `dc96f3e` + `b247e07` and all eight U1 files. The next proposed
+  UI slice is fresh-evidence A7 captions/live grouping, with separate ownership
+  from Codex ecosystem/protocol work.
+- Current published `993a7001ff47d7a99a2769c1cf8e4864749076e5` is clean and passed
+  all three hosted jobs in [43081894366](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43081894366).
+  The next local integration combines U1 and catalog truth; its shared/real-stock
+  gates are pending. The original baseline `327ed906a0231ab4aac864956f224279fad2ad64` passed all three hosted
   jobs in [43068445251](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43068445251).
   Run `43068047360` at its ancestor `11e2d3a` was superseded by the governance
   push; cancellation is not a passing or failing source validation result.

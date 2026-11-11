@@ -119,10 +119,10 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 ### 3.5 `CodexActivityRow`
 
 - **Role**: Compact representation of tool executions, bash commands, and MCP calls.
-- **Current composition**: Quiet borderless inline row, `20px` minimum line box, `14px` leading icon and `6px` icon gap; grouped rows use `4px` spacing (`ff931b9` / `7012dd3`).
+- **Current composition**: Quiet borderless inline row, `21px` initialized line box at `14px` chat size, `14px` leading icon and `6px` icon gap; grouped rows use `4px` spacing (`ff931b9` / `7012dd3`).
 - **Hierarchy**: Thought disclosure, saved completed-turn divider and activity/output actions share the timeline rather than individual elevated cards.
 - **Bounds**: Saved activity retains its `224px` lazy viewport, reasoning its `140px` viewport, and output remains on demand.
-- **Remaining deltas**: Captions, live grouping and richer reasoning presentation remain explicit A7 work. Default foreground/type refinement is active Track U1; this entry does not close it.
+- **Remaining deltas**: Captions, live grouping and richer reasoning presentation remain explicit A7 work. Initialized foreground/type refinement is translated in `dc96f3e` / `b247e07`; matched signed-in visual closure remains open.
 
 ### 3.6 `CodexPopover` & `CodexMenu`
 

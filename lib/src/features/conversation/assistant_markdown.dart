@@ -480,10 +480,17 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
       final label = _formatDesktopLanguage(widget.language);
       final codeSurface = codexTheme.isDark
           ? const Color(0xFF282828)
-          : const Color(0xFFF5F5F5);
-      final baseSize = widget.bodyFontSize ?? 13.6;
-      final codeFontSize = baseSize * 0.92 < 12.5 ? 12.5 : baseSize * 0.92;
-      final codeLineHeight = math.max(codeFontSize * 1.5, 20.0) / codeFontSize;
+          : const Color(0xFFF2F3F3);
+      final baseSize = widget.bodyFontSize ?? OfficialCodexTheme.chatFontSize;
+      final codeFontSize =
+          OfficialCodexTheme.chatCodeFontSize *
+          (baseSize / OfficialCodexTheme.chatFontSize);
+      final codeLineHeight =
+          math.max(
+            codeFontSize * 1.5,
+            OfficialCodexTheme.chatCodeBlockMinLineHeight,
+          ) /
+          codeFontSize;
       return Container(
         key: const ValueKey('desktop-markdown-code-block'),
         width: double.infinity,
@@ -808,7 +815,9 @@ class _AssistantArtifactCardState extends State<_AssistantArtifactCard> {
                 widget.block.content,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontFamily: isWriting ? null : 'monospace',
-                  fontSize: isWriting ? 13.5 : 12.5,
+                  fontSize: isWriting
+                      ? OfficialCodexTheme.chatFontSize
+                      : OfficialCodexTheme.chatCodeFontSize,
                   height: 1.55,
                   color: palette.textPrimary,
                 ),

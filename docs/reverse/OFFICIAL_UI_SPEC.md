@@ -13,14 +13,17 @@
 >
 > **Current-state authority:** [Golden State A](OFFICIAL_UI_GOLDEN_STATE_A.md)
 > supersedes the original R0 token tables where later component evidence differs.
-> The A6 user-bubble measurements below were refreshed from build `25894` and
+> The initialized typography/foreground contract is now `dc96f3e` / `b247e07`:
+> chat `14px`, prose line-height `1.625`, activity line-height `1.5`, code `12px`
+> with a `20px` minimum line box; primary ink light `#1A1C1F`, dark `#DFDFDF`.
+> These supersede old color/type rows below. The A6 user-bubble measurements were refreshed from build `25894` and
 > source `77d3401`; remaining historical rows do not establish current parity.
 
 > **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`, `app.asar` SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)
 >
 > **Bundled Engine**: `codex app-server` (`codex-cli 0.167.0-alpha.3.2`)
 >
-> **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/f7b86f5422b9.css`, `webview/assets/async/e77f816560c6.css`, `182735.5b42af8792.js`, `499225.36a7812ae9.js`, `961657.97fdcc5e7d.js`, `192774.5ab6c36839.js`)
+> **Primary Source**: `/opt/codex-desktop/resources/app.asar` (`webview/assets/async/0040d5ae1a9f.css`, `webview/assets/async/e77f816560c6.css`, `182735.5b42af8792.js`, `499225.36a7812ae9.js`, `961657.97fdcc5e7d.js`, `192774.5ab6c36839.js`)
 >
 > **Evidence Grading Standards**: `PUBLIC_DOC`, `PUBLIC_SOURCE`, `HUMAN_REVIEWED`, `LIVE_OBSERVED`, `LIVE_CALLED`, `STATIC_BUNDLE`, `STATIC_APK`, `STATIC_DEX`, `LOCAL_SCHEMA`, `INFERRED`
 >
