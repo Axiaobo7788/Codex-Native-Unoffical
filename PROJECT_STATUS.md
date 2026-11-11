@@ -75,8 +75,9 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   ([43007725868](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43007725868):
   `verify`, `Windows x64`, `macOS arm64`).
 - Gemini completed the A6 Desktop inline-code pill candidate (`d9dc65f` +
-  `3c5c840`), bounded-density follow-up (`82b9685` + `48ca158`, `ADR-058`), and
-  internally wrapping inline-code copy-order fix (`e836769`) on branch
+  `3c5c840`), bounded-density follow-up (`82b9685` + `48ca158`, `ADR-058`),
+  internally wrapping inline-code copy-order fix (`e836769` + `82b07ac`), and
+  bounded root-width validity band follow-up (`40e8aaf`) on branch
   `agent/gemini-golden-a-inline-code` (`/var/tmp/native-gemini-golden-a-inline-code`).
   Codex's independent packaged real-use replay on `48ca158`
   (`/var/tmp/native-integrated-a6-inline-48ca158-r1/`, preserved intact) exposed
@@ -88,29 +89,30 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   while the 2-line `WidgetSpan` overflowed onto `' ends here.'`, making
   `_SelectableTextContainerDelegate._compareScreenOrder` sort `' ends here.'` at
   `left = 446` ahead of the `6 px`-padded pill `Text` at `left = 452`). Follow-up
-  `e836769` propagates actual container available width (`LayoutBuilder`
-  `maxWidth`, list marker gutter, blockquote `6 * S` inset, `table` `Infinity`,
-  and `MediaQuery.textScalerOf(context)` scale division) so inline-code tokens
-  that fit on a single line remain `1 px 6 px` / `6 px`-radius `WidgetSpan`
-  pills (up to `128` per message) while internally wrapping tokens fall back to
-  merged styled/linked `TextSpan`s without consuming a pill slot (`!hasPillSlot()`
-  short-circuits before `TextPainter` layout for `129..4,096`). Serial
-  `--concurrency=1` validation (`24/24` cases), `dart format`, `dart analyze
-  --fatal-infos`, `65`-root pure-Dart boundary, clean `--parallel 2` `83`-library
-  Linux bundle (`libapp.so`
-  `ac0d8d16774144a8a0497accaef7e2bb585f714866f5d89e56b471efa80a1457`), and
-  packaged stock replay (`/var/tmp/native-gemini-a6-multiline-copy-r2/`, after
-  preserving `r1` where `selected-clipboard.txt` already matched `271/271` bytes
-  and a `y=231` contiguous-fill helper scan tripped on glyph ink) verified exact
-  `271`-byte clipboard parity (`089bf9dc13e93287a15fb2722e2aed1f0e2136ff6a3baff26ddf1c8a2084a467`),
-  all four live link variants (`linked.cfg` pill, `128`th `budget_link` pill,
-  Thread 2 `> 640 px` wrapped `TextSpan` link, Thread 2 `#129` over-budget
-  `TextSpan` link), and `0` image-sentinel GETs after clean App/Host/stock/Xvfb
-  exit. Gemini now releases the single heavy runtime slot and all seven owned
-  surfaces (`official_codex_theme.dart`, `assistant_markdown.dart`,
+  `e836769` resolved the copy-order and crowding defect via actual-width-aware
+  flat `TextSpan` fallback, and Codex's subsequent packaged AOT narrow-resize
+  check (`/var/tmp/native-ui-r0.BbOvHT/a6-width-release-comparison-r2.json` and
+  repeat, preserving R1 interior-ROI calibration) measured `1012 -> 992` dense
+  resize shifting `~294–334 ms / 2` frames (`48ca158`) to `~1,007–1,038 ms / 6`
+  frames (`e836769`). Follow-up `40e8aaf` derives a constant-size per-message
+  root-width validity band `[_minValidRootMaxWidth, _maxValidRootMaxWidth]` from
+  `TextPainter.maxIntrinsicWidth` + container `widthInset` during `<= 128`
+  candidate measurements so `LayoutBuilder` reuses `_children` without AST
+  re-parse or widget rebuild whenever `maxWidth` crosses no fit/fallback
+  threshold. Serial `--concurrency=1` validation (`24/24` cases), `dart format`,
+  `dart analyze --fatal-infos`, `65`-root pure-Dart boundary, clean `--parallel
+  2` `83`-library Linux bundle (`libapp.so`
+  `9ce93d8f3afa5050c80756a793af9b401cd20a8355ce8c832ffba0547c7ba38e`), and
+  packaged stock replay (`/var/tmp/native-gemini-a6-multiline-copy-r3/`,
+  preserving `48ca158`, `r1`, `r2` and `a6-width-release-comparison-r2.json`)
+  verified exact `271`-byte clipboard parity (`089bf9dc13e93287a15fb2722e2aed1f0e2136ff6a3baff26ddf1c8a2084a467`),
+  all four live link variants, `213.8 ms` coarse `1012 -> 992` dense narrow
+  resize, and `0` image-sentinel GETs after clean App/Host/stock/Xvfb exit.
+  Gemini now releases the single heavy runtime slot and all seven owned surfaces
+  (`official_codex_theme.dart`, `assistant_markdown.dart`,
   `desktop_markdown_body.dart`, `assistant_markdown_test.dart`, `DECISIONS.md`,
   `OFFICIAL_UI_GOLDEN_STATE_A.md`, `PROJECT_STATUS.md`) to Codex for independent
-  width-reflow cost check, shared gates and integration.
+  AOT resize remeasurement, shared gates and integration.
 - On 2026-11-11 at 15:54, the host kernel reported global OOM and killed the
   ChatGPT process. Codex and Gemini validation overlapped; the kernel snapshot
   included two Flutter compiler pipelines and six test runners. The interrupted
@@ -127,37 +129,42 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Current checkpoints
 
-- `d9dc65f` + `82b9685` + `e836769` (`ADR-058`) translate `.InlineCode-Cddi3Y`
-  (`1 px 6 px` padding, `6 px` radius, `dir="ltr"`, container-relative `0.92 em`
-  monospace, light `0x171A1C1F` / `#EAEBEB` on `#FFFFFF`, dark `0x1CEDEDED` /
-  `#373737` on `#212121`) across `p`, `h1`–`h6`, `ul`/`ol`, `blockquote`,
-  `table` `th`/`td` and enclosing `<a>` links, capping single-line rich
-  `WidgetSpan` pills at `128` per message and falling back to actual-width-aware
-  merged styled/linked `TextSpan`s for over-budget (`129+`) and internally
-  wrapping tokens (eliminating `forceStrutHeight` vertical overflow and
-  `_compareScreenOrder` drag-copy inversion exposed on `48ca158` in
-  `/var/tmp/native-integrated-a6-inline-48ca158-r1/`) while preserving `16 KiB`
-  single AST parse, `!completed` streaming bypass, fenced `<pre><code>`
-  exclusion, `http`/`https` link validation, literal HTML and zero-network
-  blocked images. Serial `--concurrency=1` validation passed `24/24` cases
-  (`assistant_markdown_test`, `theme_tokens_test`,
+- `d9dc65f` + `82b9685` + `e836769` + `40e8aaf` (`ADR-058`) translate
+  `.InlineCode-Cddi3Y` (`1 px 6 px` padding, `6 px` radius, `dir="ltr"`,
+  container-relative `0.92 em` monospace, light `0x171A1C1F` / `#EAEBEB` on
+  `#FFFFFF`, dark `0x1CEDEDED` / `#373737` on `#212121`) across `p`, `h1`–`h6`,
+  `ul`/`ol`, `blockquote`, `table` `th`/`td` and enclosing `<a>` links, capping
+  single-line rich `WidgetSpan` pills at `128` per message, falling back to
+  actual-width-aware merged styled/linked `TextSpan`s for over-budget (`129+`)
+  and internally wrapping tokens (eliminating `forceStrutHeight` vertical
+  overflow and `_compareScreenOrder` drag-copy inversion exposed on `48ca158` in
+  `/var/tmp/native-integrated-a6-inline-48ca158-r1/`), and reusing built block
+  subtrees across non-threshold width changes via a constant-size per-message
+  root-width validity band (`40e8aaf`, resolving the `1012 -> 992` dense resize
+  cost measured on `e836769` in
+  `/var/tmp/native-ui-r0.BbOvHT/a6-width-release-comparison-r2.json`) while
+  preserving `16 KiB` single AST parse, `!completed` streaming bypass, fenced
+  `<pre><code>` exclusion, `http`/`https` link validation, literal HTML and
+  zero-network blocked images. Serial `--concurrency=1` validation passed `24/24`
+  cases (`assistant_markdown_test`, `theme_tokens_test`,
   `official_convergence_geometry_test`), `dart format`, `dart analyze
   --fatal-infos`, `65`-root pure-Dart boundary and clean `--parallel 2`
   `83`-library Linux bundle closure (`libapp.so`
-  `ac0d8d16774144a8a0497accaef7e2bb585f714866f5d89e56b471efa80a1457`).
+  `9ce93d8f3afa5050c80756a793af9b401cd20a8355ce8c832ffba0547c7ba38e`).
   Packaged `1191×865` stock replays verified `0` requests to the positively
   tested loopback image sentinel after App/Host/stock exit across paired
   light/dark runs (`/var/tmp/native-gemini-a6-inline-code-r1/stock-replay-r2/`)
-  and exact `271`-byte drag+`Ctrl+C` clipboard parity plus all four
-  pill/budget/wrapped/over-budget link targets
-  (`/var/tmp/native-gemini-a6-multiline-copy-r2/`, preserving `48ca158` and `r1`
-  negative artifacts), matching the controlled identical-text `13.5 px` /
-  `640 px` build `25894` CSS specimen
-  (`official-a6-inline-code-matched-13_5-{light,dark}.png`, calibrated to
-  `ThemeTokens.bodyMedium` without claiming official signed-in account font
-  preference; uncapped `d9dc65f` dense profiling, the earlier unmatched `13 px`
-  exploratory specimen, `stock-replay-r1` without `gsettings` dark toggle,
-  preserved `48ca158` copy-order / `r1` helper-scan artifacts, Xvfb
+  and exact `271`-byte drag+`Ctrl+C` clipboard parity, all four
+  pill/budget/wrapped/over-budget link targets, and `213.8 ms` coarse `1012 ->
+  992` dense narrow resize (`/var/tmp/native-gemini-a6-multiline-copy-r3/`,
+  preserving `48ca158`, `r1`, `r2` and `a6-width-release-comparison-*`
+  artifacts), matching the controlled identical-text `13.5 px` / `640 px` build
+  `25894` CSS specimen (`official-a6-inline-code-matched-13_5-{light,dark}.png`,
+  calibrated to `ThemeTokens.bodyMedium` without claiming official signed-in
+  account font preference; uncapped `d9dc65f` dense profiling, `e836769` narrow
+  resize profiling, the earlier unmatched `13 px` exploratory specimen,
+  `stock-replay-r1` without `gsettings` dark toggle, preserved `48ca158`
+  copy-order / `r1` helper-scan artifacts, Xvfb
   portal/AT-SPI/PipeWire/DRI3/initial-resize warnings, `Liberation Mono` vs
   Linux system `monospace` glyph advance, and the active `RESEARCH_MORE` single
   unbroken `> 640 px` token flat `TextSpan` fallback vs CSS

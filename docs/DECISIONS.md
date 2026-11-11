@@ -2613,6 +2613,13 @@ backtick density:
   0`, `' ends here.'` `left = outerLeft` < `6 px`-padded pill `Text` `left =
   outerLeft + 6`) to invert drag+`Ctrl+C` clipboard order (`Path  ends
   here.src/features/...`).
+- In packaged AOT narrow-resize profiling on `e836769` vs `48ca158`
+  (`/var/tmp/native-ui-r0.BbOvHT/a6-width-release-comparison-r2.json` and repeat
+  run, preserving R1 interior-ROI calibration), narrowing `1012 -> 992` (`640 ->
+  620` reading width) on an `8 KiB`-projected dense thread shifted `~294–334 ms /
+  2` observed frames (`48ca158`) to `~1,007–1,038 ms / 6` frames (`e836769`)
+  because `_lastMaxWidth != maxWidth` re-parsed and rebuilt all blocks on every
+  pixel even when zero pill/flat fit thresholds were crossed.
 
 ### Decision
 
@@ -2636,13 +2643,18 @@ backtick density:
    late-dispatched `TapGestureRecognizer` lifecycle, and exact `SelectionArea`
    drag/`selectAll` document order.
 4. Check `!hasPillSlot()` before `TextPainter` width measurement so over-budget
-   tokens (`129..4,096`) incur zero layout probes, and cache built block
-   subtrees across parent rebuilds whenever `(data, style/theme inputs,
-   constraints.maxWidth, MediaQuery.textScalerOf(context))` are unchanged.
+   tokens (`129..4,096`) incur zero layout probes, and derive a constant-size
+   per-message root-width validity band `[_minValidRootMaxWidth,
+   _maxValidRootMaxWidth]` from `TextPainter.maxIntrinsicWidth`, scale factor,
+   and local container `widthInset` during `<= 128` candidate measurements
+   (`40e8aaf`) so `LayoutBuilder` reuses `_children` without AST re-parse or
+   widget rebuild whenever `(data, style/theme inputs, textScaler)` are
+   unchanged and `constraints.maxWidth` crosses no fit/fallback threshold.
 5. Keep `AssistantMarkdown.maxSourceCharacters` (`16 KiB`),
    `HistoryProtocolAdapter` (`8 KiB`), `!completed` streaming `SelectableText`
    bypass, and controller/protocol boundaries unchanged without adding a custom
-   inline text-layout engine or custom `SelectionContainer` delegate.
+   inline text-layout engine, per-width cache map, or custom
+   `SelectionContainer` delegate.
 
 ### Consequences
 
@@ -2650,13 +2662,16 @@ backtick density:
   `1 px 6 px` / `6 px`-radius pill presentation, while internally wrapping
   tokens fall back cleanly to continuous flat-tinted `TextSpan`s without
   vertical line-box crowding or clipboard inversion (verified on the `271`-byte
-  P1 paragraph in `/var/tmp/native-gemini-a6-multiline-copy-r2/`, SHA-256
+  P1 paragraph in `/var/tmp/native-gemini-a6-multiline-copy-r2/` and
+  `/var/tmp/native-gemini-a6-multiline-copy-r3/`, SHA-256
   `089bf9dc13e93287a15fb2722e2aed1f0e2136ff6a3baff26ddf1c8a2084a467`).
 - Dense backtick dumps cap rich pill subtree fan-out at `O(1)` (`< 2,000` added
   elements even on `4,096` inline-code tokens in `16 KiB`, returning to exact
-  baseline element count on unmount) while width/text-scale changes reclassify
-  container-fitting vs wrapping tokens and unrelated parent rebuilds reuse
-  cached subtrees.
+  baseline element count on unmount) and reflow natively across non-crossing
+  window resizes (`213.8 ms` coarse `1012 -> 992` dense resize in
+  `/var/tmp/native-gemini-a6-multiline-copy-r3/`), rebuilding only when root
+  width actually crosses a candidate token's single-line fit threshold or
+  data/style/text-scale inputs change.
 - Both the `128`-pill cap and the internally wrapping flat-span fallback are
   deliberate Native bounded-presentation safeguards, tracked separately from the
   active `RESEARCH_MORE` CSS `box-decoration-break: clone` per-line fragment
