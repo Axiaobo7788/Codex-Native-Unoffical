@@ -135,6 +135,14 @@ compact and dark variants have separate evidence gates.
 
 ## Current checkpoint
 
+- `f7144df` translates measured Desktop Markdown root-block
+  adjacency with the existing single parser and builder. A paired
+  stock replay confirmed the expected vertical corrections with
+  unchanged horizontal text geometry. The 533 default Flutter cases,
+  five opt-in stock cases, strict ASCII-path analysis and Linux
+  runtime closure passed. Nested and root-edge spacing remain in A6.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+
 - `15e3242` maps Escape on the matching ordinary stock question
   to the existing turn interrupt. The first real replay exposed an
   over-restrictive `isBlocking` assumption. The corrected route
