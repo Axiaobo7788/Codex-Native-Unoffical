@@ -148,21 +148,245 @@ void main() {
   });
 
   group('CodexMessageBubble', () {
-    testWidgets('clamps to 75% max width and toggles long message collapse', (
-      tester,
-    ) async {
-      final longText =
-          'Paragraph content testing message bubble collapse threshold. ' * 20;
+    testWidgets(
+      'translates borderless 70% 22px 16x10 user bubble with relaxed line box and zero negative tracking',
+      (tester) async {
+        final longSingleParagraph =
+            'Official user bubble geometry check across reading column width. ' *
+            8;
 
-      await tester.pumpWidget(
-        wrap(CodexMessageBubble(text: longText, maxColumnWidth: 704.0)),
-      );
+        await tester.pumpWidget(
+          wrap(
+            brightness: Brightness.light,
+            SizedBox(
+              width: 672.0,
+              child: CodexMessageBubble(text: longSingleParagraph),
+            ),
+          ),
+        );
 
-      expect(find.text('Show full message'), findsOneWidget);
-      await tester.tap(find.text('Show full message'));
-      await tester.pumpAndSettle();
-      expect(find.text('Show less'), findsOneWidget);
-    });
+        final bubble = find.byType(CodexMessageBubble);
+        final surface = tester.widget<Container>(
+          find.descendant(
+            of: bubble,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container && widget.decoration is BoxDecoration,
+            ),
+          ),
+        );
+        final surfaceFinder = find.descendant(
+          of: bubble,
+          matching: find.byWidget(surface),
+        );
+        expect(
+          tester.getSize(surfaceFinder).width,
+          lessThanOrEqualTo(672.0 * 0.70 + 0.01),
+        );
+        expect(
+          surface.padding,
+          const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        );
+        final decoration = surface.decoration! as BoxDecoration;
+        expect(decoration.color, OfficialCodexTheme.lightUserBubbleBackground);
+        expect(decoration.borderRadius, BorderRadius.circular(22.0));
+        expect(decoration.border, isNull);
+
+        final selectable = tester.widget<SelectableText>(
+          find.descendant(of: bubble, matching: find.byType(SelectableText)),
+        );
+        expect(selectable.style?.fontSize, 14.0);
+        expect(selectable.style?.height, 1.625);
+        expect(selectable.style?.letterSpacing, isNull);
+        expect(find.text('Show more'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'collapses only past 20 rendered lines and toggles Show more / Show less via pointer, keyboard, and semantics',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          final twentyLines = List.generate(
+            20,
+            (index) => 'Prompt line ${index + 1}',
+          ).join('\n');
+          await tester.pumpWidget(
+            wrap(
+              SizedBox(
+                width: 672.0,
+                child: CodexMessageBubble(
+                  text: twentyLines,
+                  expandKey: const ValueKey('expand-20'),
+                ),
+              ),
+            ),
+          );
+          expect(find.text('Show more'), findsNothing);
+          expect(find.textContaining('Prompt line 20'), findsOneWidget);
+
+          final twentyFiveLines = List.generate(
+            25,
+            (index) => 'Prompt line ${index + 1}',
+          ).join('\n');
+          await tester.pumpWidget(
+            wrap(
+              SizedBox(
+                width: 672.0,
+                child: CodexMessageBubble(
+                  text: twentyFiveLines,
+                  expandKey: const ValueKey('expand-25'),
+                ),
+              ),
+            ),
+          );
+
+          final toggle = find.byKey(const ValueKey('expand-25'));
+          expect(find.text('Show more'), findsOneWidget);
+          expect(find.text('…'), findsOneWidget);
+          expect(
+            tester.getTopLeft(toggle).dy -
+                tester.getBottomLeft(find.text('…')).dy,
+            closeTo(OfficialCodexTheme.userMessageExpandGap, 0.01),
+          );
+          expect(find.textContaining('Prompt line 19'), findsOneWidget);
+          expect(find.textContaining('Prompt line 25'), findsNothing);
+          final collapsedSelectable = tester.widget<SelectableText>(
+            find.byType(SelectableText),
+          );
+          expect(
+            collapsedSelectable.data,
+            List.generate(19, (index) => 'Prompt line ${index + 1}').join('\n'),
+          );
+          expect(collapsedSelectable.data, isNot(contains('…')));
+          expect(collapsedSelectable.data, isNot(contains('Show more')));
+          expect(
+            find.semantics.byLabel(RegExp(r'Prompt line 25')),
+            findsNothing,
+          );
+          expect(
+            tester
+                .widget<AnimatedRotation>(
+                  find.descendant(
+                    of: toggle,
+                    matching: find.byType(AnimatedRotation),
+                  ),
+                )
+                .turns,
+            0.0,
+          );
+
+          // Screen-reader semantics tap expands.
+          final node = tester.getSemantics(toggle).getSemanticsData();
+          expect(node.label, 'Show more');
+          expect(node.hasAction(SemanticsAction.tap), isTrue);
+          tester.semantics.tap(find.semantics.byLabel('Show more'));
+          await tester.pumpAndSettle();
+
+          expect(find.text('Show less'), findsOneWidget);
+          expect(find.text('…'), findsNothing);
+          expect(find.textContaining('Prompt line 25'), findsOneWidget);
+          final expandedSelectable = tester.widget<SelectableText>(
+            find.byType(SelectableText),
+          );
+          expect(expandedSelectable.data, twentyFiveLines);
+          expect(expandedSelectable.data, isNot(contains('Show less')));
+          expect(
+            tester
+                .widget<AnimatedRotation>(
+                  find.descendant(
+                    of: toggle,
+                    matching: find.byType(AnimatedRotation),
+                  ),
+                )
+                .turns,
+            0.5,
+          );
+
+          // Keyboard Enter collapses back to 20-line preview.
+          final focusNode = Focus.of(
+            tester.element(
+              find.descendant(
+                of: toggle,
+                matching: find.byType(GestureDetector),
+              ),
+            ),
+          );
+          focusNode.requestFocus();
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Show more'), findsOneWidget);
+          expect(find.textContaining('Prompt line 25'), findsNothing);
+
+          // Expanding and then updating `text` resets expansion to collapsed (`189497.oQwr.ee` parity).
+          await tester.tap(toggle);
+          await tester.pumpAndSettle();
+          expect(find.text('Show less'), findsOneWidget);
+
+          final updatedTwentySixLines = List.generate(
+            26,
+            (index) => 'Updated line ${index + 1}',
+          ).join('\n');
+          await tester.pumpWidget(
+            wrap(
+              SizedBox(
+                width: 672.0,
+                child: CodexMessageBubble(
+                  text: updatedTwentySixLines,
+                  expandKey: const ValueKey('expand-25'),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Show more'), findsOneWidget);
+          expect(find.textContaining('Updated line 26'), findsNothing);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+
+    testWidgets(
+      'bounds collapsed slice to 512 * maxCollapsedLines and caps expanded display safely across surrogate pairs',
+      (tester) async {
+        // Place an emoji straddling the 10,240 code-unit collapsed slice boundary.
+        final prefix = 'a' * 10239;
+        final hugePrompt = '$prefix🚀${'b' * 4000}';
+
+        await tester.pumpWidget(
+          wrap(
+            SizedBox(
+              width: 672.0,
+              child: CodexMessageBubble(
+                text: hugePrompt,
+                maxExpandedCharacters: 11000,
+                expandKey: const ValueKey('expand-huge'),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Show more'), findsOneWidget);
+        final collapsedSelectable = tester.widget<SelectableText>(
+          find.byType(SelectableText),
+        );
+        expect(collapsedSelectable.data!.length, lessThanOrEqualTo(10240));
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byKey(const ValueKey('expand-huge')));
+        await tester.pumpAndSettle();
+
+        final expandedSelectable = tester.widget<SelectableText>(
+          find.byType(SelectableText),
+        );
+        expect(expandedSelectable.data!.length, 11000);
+        expect(find.text('…'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('CodexActivityRow and CodexActivityDivider', () {

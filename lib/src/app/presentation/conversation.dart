@@ -6428,11 +6428,14 @@ class _UserMessageEntryView extends StatelessWidget {
       attachments: attachments,
     );
     final fullText = presentation.bodyText.trim();
+    final boundedAttachments = presentation.attachments
+        .take(maxUserAttachments)
+        .toList(growable: false);
     final attachmentWidgets = [
-      for (var index = 0; index < presentation.attachments.length; index += 1)
+      for (var index = 0; index < boundedAttachments.length; index += 1)
         _UserAttachmentChip(
           key: ValueKey('user-attachment-${entry.id}-$index'),
-          attachment: presentation.attachments[index],
+          attachment: boundedAttachments[index],
         ),
     ];
     final keySuffix = turnId ?? entry.id;
@@ -6505,11 +6508,45 @@ class _UserMessageEntryView extends StatelessWidget {
           icon: const Icon(Icons.undo_rounded, size: 14),
         ),
     ];
-    final bubble = CodexMessageBubble(
-      key: ValueKey('user-message-bubble-${entry.id}'),
-      text: fullText,
-      attachments: attachmentWidgets,
-      expandKey: ValueKey('user-expand-${entry.id}'),
+    final attachmentRow = attachmentWidgets.isEmpty
+        ? null
+        : Align(
+            key: ValueKey('user-attachments-row-${entry.id}'),
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 6,
+              runSpacing: 6,
+              children: attachmentWidgets,
+            ),
+          );
+    final bubble = (fullText.isNotEmpty || attachmentWidgets.isEmpty)
+        ? CodexMessageBubble(
+            key: ValueKey('user-message-bubble-${entry.id}'),
+            text: fullText,
+            expandKey: ValueKey('user-expand-${entry.id}'),
+          )
+        : null;
+    final messageContent = switch ((attachmentRow, bubble)) {
+      (final row?, final b?) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          row,
+          const SizedBox(height: OfficialCodexTheme.userMessageAttachmentGap),
+          b,
+        ],
+      ),
+      (final row?, null) => row,
+      (null, final b?) => b,
+      (null, null) => const SizedBox.shrink(),
+    };
+    final actionRow = Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 2,
+      runSpacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: actionButtons,
     );
 
     return Padding(
@@ -6522,30 +6559,26 @@ class _UserMessageEntryView extends StatelessWidget {
             : ThemeTokens.space4,
       ),
       child: actionButtons.isEmpty
-          ? bubble
+          ? messageContent
           : revealActions
           ? _HoverMessageActions(
-              content: bubble,
+              content: messageContent,
               actionsKey: const ValueKey('desktop-user-message-actions'),
               alignment: CrossAxisAlignment.end,
-              actions: Wrap(
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: actionButtons,
+              actions: Padding(
+                padding: const EdgeInsets.only(
+                  top: OfficialCodexTheme.userMessageActionGap,
+                ),
+                child: actionRow,
               ),
             )
-          : Stack(
-              alignment: Alignment.centerRight,
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Positioned(
-                  left: 0,
-                  bottom: 4,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: actionButtons,
-                  ),
-                ),
-                bubble,
+                messageContent,
+                const SizedBox(height: OfficialCodexTheme.userMessageActionGap),
+                actionRow,
               ],
             ),
     );
@@ -6814,14 +6847,24 @@ class _ComposerAttachmentDialogState extends State<_ComposerAttachmentDialog> {
   }
 }
 
-class _UserAttachmentChip extends StatelessWidget {
+class _UserAttachmentChip extends StatefulWidget {
   const _UserAttachmentChip({super.key, required this.attachment});
 
   final UserAttachment attachment;
 
   @override
+  State<_UserAttachmentChip> createState() => _UserAttachmentChipState();
+}
+
+class _UserAttachmentChipState extends State<_UserAttachmentChip> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
+    final attachment = widget.attachment;
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final icon = switch (attachment.kind) {
       UserAttachmentKind.pastedText => Icons.notes_rounded,
       UserAttachmentKind.file => Icons.description_outlined,
@@ -6833,46 +6876,99 @@ class _UserAttachmentChip extends StatelessWidget {
     final hasDetails =
         (attachment.path != null && attachment.path!.isNotEmpty) ||
         (attachment.preview != null && attachment.preview!.isNotEmpty);
-    return MouseRegion(
-      cursor: hasDetails ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: hasDetails ? () => _showAttachmentDetails(context) : null,
-        child: Container(
-          decoration: BoxDecoration(
-            color: palette.surfaceRaised,
-            border: Border.all(
-              color: palette.border,
-              width: OfficialCodexTheme.hairlineBorderWidth,
-            ),
-            borderRadius: BorderRadius.circular(10),
+
+    final pill = ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: OfficialCodexTheme.userAttachmentPillMaxWidth,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: hasDetails && _hovered ? palette.hover : palette.surface,
+          border: Border.all(
+            color: _focused ? theme.focusRing : palette.border,
+            width: _focused ? 1.5 : 1.0,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: palette.textSecondary),
-              const SizedBox(width: 6),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 240),
-                child: Text(
-                  attachment.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium
-                      ?.copyWith(color: palette.textPrimary),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: OfficialCodexTheme.activityInlineIconSize,
+              color: palette.textMuted,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                attachment.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.textPrimary,
+                  fontSize: 13.0,
+                  height: 18.0 / 13.0,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!hasDetails) {
+      return pill;
+    }
+
+    void openDetails() => _showAttachmentDetails(context, attachment);
+
+    return Semantics(
+      button: true,
+      label: attachment.label,
+      excludeSemantics: true,
+      onTap: openDetails,
+      child: FocusableActionDetector(
+        mouseCursor: SystemMouseCursors.click,
+        onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
+        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              openDetails();
+              return null;
+            },
           ),
+          ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+            onInvoke: (_) {
+              openDetails();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: openDetails,
+          child: pill,
         ),
       ),
     );
   }
 
-  void _showAttachmentDetails(BuildContext context) {
+  void _showAttachmentDetails(BuildContext context, UserAttachment attachment) {
+    final theme = OfficialCodexTheme.of(context);
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: theme.modalSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+          side: BorderSide(
+            color: theme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
         title: Text(attachment.label),
         content: ConstrainedBox(
           constraints: const BoxConstraints(

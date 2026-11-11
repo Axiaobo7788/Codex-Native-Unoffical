@@ -4883,8 +4883,47 @@ that hosted candidate's dependency recovery and required gates; it does not eras
 the earlier DNS failures or establish future mirror availability. The normal
 integration keeps both experiment commits and needs its own exact-HEAD CI result.
 
+The published A7 baseline `1ec254d` also failed Linux dependency installation
+before project checks in [43051090054](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43051090054);
+its Windows/macOS jobs passed. The normal recovery merge `ca17d84` then completed
+Linux verification and Windows on attempt 1 of [43060044321](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43060044321).
+macOS executed no steps: the check annotation stated that a hosted runner could
+not acquire the job after multiple attempts and reported arm64 capacity limits.
+Only macOS was retried at the same SHA; attempt 2 passed, so all three jobs at
+`ca17d84e079bf07da51ed6f3d7b7dddf4880f853` are verified. The zero-step capacity
+failure remains preserved in `main-ca17d84-macos-queue-capacity-attempt1.json`;
+`main-ca17d84-ci-attempt2-success.json` records the later exact-SHA pass. No runner
+label, permissions or product code was changed to resolve that transient queue.
+
 Local resolution is separate evidence: an eight-second probe resolved Azure
 but timed out for the two Canonical names, while the web tool could read
 Canonical's signed Jammy indexes. These results do not prove a global DNS
 outage, invalid hostname, or healthy GitHub-runner connectivity. No local
 resolver, account or package-source settings were changed.
+
+## Build 25894 — user bubble and initialized appearance reconciliation
+
+The A6 peer refreshed `webview/assets/async/14353.acaf5eaf67.js` (`vHM0`,
+`dKZq`), `fc8ef2a8f545.css` (`.bubble-vBnidZ`), `225284` normal conversation
+composition and `189497.oQwr.ee` expansion reset. The normal bubble is borderless,
+actual-column `70%`, `22 px`, `16×10 px`, `5%` ink, with `20` collapsed lines,
+`19lh` content clip plus ellipsis, and a `10 px` combined disclosure gap.
+`ghostUserMessage` uses transparent hover; compact-only negative letter spacing
+is not a normal-thread token. The external attachment stack has an `8 px` gap.
+
+The initialized font chain is `93122` default sans size `14` / code `12` →
+`182735` root/body size application → Electron `e77` chat override. It supersedes
+the uninitialized `13 px` fallback. Native's earlier controlled `13.5 px` Markdown
+specimen established a component comparison at that chosen size, not initialized
+official-default parity. Global typography/foreground reconciliation remains
+machine-actionable; the new user-bubble role already uses `14 px`. H1 account
+appearance and zoom are a separate evidence gap. A future pass must reconcile
+roles and wrap budgets together, rather than scattering per-widget overrides.
+
+The dKZq inert observer applies only to clipped interactive descendants, while
+bounded rendered child text remains clipped by CSS. Native's current collapsed
+SelectableText uses the visible prefix and retains full projected-text toolbar
+Copy; it is a calibrated selection difference. Plain user text vs the official
+user-message Markdown/directive variant and attachment thumbnails/hover cards
+remain open. Implementation, source-bound verification, private paired captures,
+negative evidence and remaining corrections belong in the [A6 contract](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md#a6-user-bubble-and-externalized-attachments).

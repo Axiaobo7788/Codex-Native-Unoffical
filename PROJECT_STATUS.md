@@ -69,50 +69,32 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- Gemini's A7 source `ff931b9` and formatting-only child `7012dd3` landed in
-  the normal published merge `1ec254dc4e7466f7598acc0a13aab784abf72ad8`.
-  Codex independently reviewed the source and packaged behavior. Gemini has
-  released all seven file surfaces and the heavy slot, retaining ownership
-  for concrete presentation findings. No controller/protocol/history change
-  was needed. Golden State A and A7 remain `PARTIAL`, with machine work ahead.
-- The independent ASCII snapshot matches all 196 source/test/tool files.
-  Format, strict analysis, 65-root pure-Dart boundary, 561 default Flutter
-  cases, five separately enabled direct-stock cases, the 100/1,000-turn history
-  benchmark with ten 3 MiB outputs, and 100 Rust tests/fmt/Clippy passed.
-  The clean two-job Linux release/83-library closure and pure-Dart MCP smoke
-  also passed. The fresh release independently opened real saved file output,
-  retained its preview across Execution/Commands, exposed raw reasoning in
-  Execution, cleared the preview on group collapse, and exited App/Host/stock.
-  The A6 clipboard/link/image observations remain prior-checkpoint evidence;
-  they are not additional claims about this A7 walkthrough.
-- Previous published checkpoint `5e0996aee18363845b628b1e50ef5b3bb73c4b30` passed
-  all three hosted jobs in [43007725868](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43007725868).
-  Exact-HEAD run [43033221454](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43033221454)
-  passed the Windows and macOS jobs. Linux attempt 1 never reached project
-  checks: Ubuntu package installation repeatedly reported `Temporary failure
-  resolving 'azure.archive.ubuntu.com'`. It was cancelled after the prolonged
-  stall; only Linux was retried at the same SHA. Attempt 2 encountered the
-  same DNS failure and was cancelled by the 20-minute job timeout, again
-  before project checks.
-  This is preserved external negative evidence, not a passing Linux gate or
-  a demonstrated UI regression. Documentation checkpoint `03ecc21` has its
-  own run [43047223523](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43047223523):
-  Windows/macOS passed; Linux again exhausted the 20-minute limit on the
-  same Azure mirror DNS failure before project checks. The published A7
-  integration has exact run [43051090054](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43051090054):
-  Windows/macOS passed and Linux again hit the dependency-install deadline.
-  A separate Codex recovery slice first tried the image's Canonical fallbacks
-  (`2e1df69`); its Linux run also failed on archive-host DNS within five minutes.
-  A second bounded candidate substitutes the public Linux Kernel Archives
-  Ubuntu mirror for the first entry, keeping Canonical fallbacks, required
-  packages, Ubuntu 22.04 and normal APT trust checks. Exact recovery candidate
-  `ae3be852c6ec6ffa21391fdf866aeccf6872356e` passed all three hosted jobs in
-  [43056716141](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43056716141),
-  including the full Linux verification and build chain. The failed first
-  experiment remains negative evidence; its history is preserved by ordinary
-  commits. The integration HEAD requires its own exact-HEAD CI result.
-  Gemini independently owns the active A6 user-bubble/attachment presentation
-  slice and heavy slot; Codex continues light review and integration work.
+- Gemini completed the six-file A6 user-message slice at
+  `77d34019c7836cedd42155404e640ca0da2c8e4f`, based on `1ec254d`, and explicitly
+  released its write surfaces and heavy slot after packaged wide/narrow replay.
+  Codex owns independent serialized verification and integration; Gemini retains
+  presentation-fix ownership for concrete findings. No controller, protocol,
+  history or transport changes were needed. Golden State A remains `PARTIAL`.
+- The independent ASCII snapshot matches all 196 source/test/tool files and
+  package metadata. Format, strict analysis, the 65-root pure-Dart boundary,
+  565 default Flutter cases, five separately enabled direct-stock cases and the
+  100/1,000-turn history benchmark with ten 3 MiB outputs passed. A frozen prior
+  A7 release independently opened new real stock-persisted long user text and an
+  attachment, copied the full prompt exactly, and exited App/Host/stock. A fresh
+  source-77 release also passed Rust fmt/Clippy/100 tests, the clean two-job
+  Linux build/83-library closure and pure-Dart MCP smoke. Its independent AOT
+  `4b703ae5…` then opened the same stock history, copied full text exactly while
+  collapsed and expanded, opened/closed attachment details, resized to `820 px`,
+  switched threads and exited App/Host/stock. Startup resize/click observations
+  and expansion scroll-follow behavior remain calibrated evidence, not claims
+  of official interaction equivalence.
+- The published baseline `ca17d84e079bf07da51ed6f3d7b7dddf4880f853` passed all
+  three hosted jobs in [43060044321, attempt 2](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43060044321).
+  Linux and Windows passed on attempt 1; macOS executed no steps because hosted
+  arm64 capacity could not supply a runner. Its same-SHA job-only retry passed.
+  Earlier A6/A7 Linux attempts failed dependency downloads before project checks;
+  the bounded recovery and all negative evidence are in [Research](docs/RESEARCH.md#desktop-ui-verification--hosted-ubuntu-mirror-failures).
+  The new A6 integration will need its own exact-HEAD CI result.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak
@@ -125,6 +107,15 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Current checkpoints
 
+- A6 source `77d3401` translates actual-parent `70%` user-bubble width,
+  borderless `22 px` corners, `16×10 px` padding, initialized `14 px` text,
+  `20`-line disclosure with a `10 px` combined button gap, externalized attachment
+  pills and attachment-only messages. Independent packaged replay measures
+  `447`/`313` fill pixels at `1191`/`820` viewport width (logical `448`/`313.6`),
+  with full Copy exact in collapsed and expanded states. User-message Markdown,
+  clipped-selection semantics and attachment thumbnails remain explicit deltas.
+  The global body `13.5→14 px` initialized-default gap remains machine-actionable,
+  separately from H1 personal appearance. See the [current A6 contract](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md#a6-user-bubble-and-externalized-attachments).
 - `ff931b9` + `7012dd3` translate quiet inline activity and Thought disclosures,
   grouped 4 px spacing, the 140 px reasoning viewport and completed-turn
   divider rhythm. The saved group keeps its 224 px lazy list and existing

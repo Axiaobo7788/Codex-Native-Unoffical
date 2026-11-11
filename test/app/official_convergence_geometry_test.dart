@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_message_bubble.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/domain/approval_models.dart';
@@ -268,7 +269,38 @@ void main() {
           BorderRadius.circular(OfficialCodexTheme.composerRadiusPill),
         );
 
-        // User bubbles remain capped at 75% of the reading column.
+        // User bubbles remain capped at 70% of the reading column with 22px borderless geometry.
+        final bubbleWidgetFinder = find.byType(CodexMessageBubble);
+        expect(bubbleWidgetFinder, findsOneWidget);
+        final bubbleContainerFinder = find.descendant(
+          of: bubbleWidgetFinder,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Container && widget.decoration is BoxDecoration,
+          ),
+        );
+        final bubbleContainer = tester.widget<Container>(bubbleContainerFinder);
+        final bubbleDecoration = bubbleContainer.decoration! as BoxDecoration;
+        expect(
+          bubbleDecoration.borderRadius,
+          BorderRadius.circular(OfficialCodexTheme.userMessageRadius),
+        );
+        expect(bubbleDecoration.border, isNull);
+        expect(
+          bubbleContainer.padding,
+          const EdgeInsets.symmetric(
+            horizontal: OfficialCodexTheme.userMessageHorizontalPadding,
+            vertical: OfficialCodexTheme.userMessageVerticalPadding,
+          ),
+        );
+        expect(
+          tester.getSize(bubbleContainerFinder).width,
+          lessThanOrEqualTo(
+            OfficialCodexTheme.maxContentWidth *
+                    OfficialCodexTheme.maxUserBubbleWidthFactor +
+                0.01,
+          ),
+        );
         final bubbleFinder = find.text('Hello Codex from geometry test suite!');
         expect(bubbleFinder, findsOneWidget);
         final bubbleSize = tester.getSize(bubbleFinder);
@@ -478,10 +510,86 @@ void main() {
         expect(find.byKey(const ValueKey('compact-workspace')), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'caps long user bubble at 70% of actual reading column width at both 1191x865 and narrow 820x865 desktop widths',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.devicePixelRatio = 1.0;
+
+        final longPrompt =
+            'Verify that the user message bubble clamps to seventy percent of the actual containing reading column rather than clamping to one hundred percent on narrow desktop viewports. ' *
+            2;
+        final runtime = _GeometryTestRuntimeController(userPrompt: longPrompt);
+        addTearDown(runtime.closeStreams);
+
+        Future<(double columnWidth, double surfaceWidth)> measureAt(
+          Size size,
+        ) async {
+          tester.view.physicalSize = size;
+          await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+          await tester.pumpAndSettle();
+          final threadRow = find.text('Geometry Test Thread');
+          if (find.byType(CodexMessageBubble).evaluate().isEmpty &&
+              threadRow.evaluate().isNotEmpty) {
+            await tester.tap(threadRow.first);
+            await tester.pumpAndSettle();
+          }
+          expect(
+            find.byKey(const ValueKey('desktop-split-workspace')),
+            findsOneWidget,
+          );
+          final bubbleRow = find.byType(CodexMessageBubble);
+          expect(bubbleRow, findsOneWidget);
+          final surface = find.descendant(
+            of: bubbleRow,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container && widget.decoration is BoxDecoration,
+            ),
+          );
+          return (
+            tester.getSize(bubbleRow).width,
+            tester.getSize(surface).width,
+          );
+        }
+
+        final (wideColumn, wideSurface) = await measureAt(
+          const Size(1191.0, 865.0),
+        );
+        // Timeline reading column is 672px minus 2 * 16px list padding = 640px.
+        expect(wideColumn, OfficialCodexTheme.maxContentWidth - 32.0);
+        expect(
+          wideSurface,
+          lessThanOrEqualTo(
+            wideColumn * OfficialCodexTheme.maxUserBubbleWidthFactor + 0.01,
+          ),
+        );
+        expect(wideSurface, greaterThan(wideColumn * 0.65));
+
+        final (narrowColumn, narrowSurface) = await measureAt(
+          const Size(820.0, 865.0),
+        );
+        expect(narrowColumn, lessThan(wideColumn));
+        expect(
+          narrowSurface,
+          lessThanOrEqualTo(
+            narrowColumn * OfficialCodexTheme.maxUserBubbleWidthFactor + 0.01,
+          ),
+        );
+        expect(narrowSurface, greaterThan(narrowColumn * 0.64));
+      },
+    );
   });
 }
 
 class _GeometryTestRuntimeController extends RuntimeController {
+  _GeometryTestRuntimeController({
+    this.userPrompt = 'Hello Codex from geometry test suite!',
+  });
+
+  final String userPrompt;
   final StreamController<TurnEvent> _turns =
       StreamController<TurnEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvals =
@@ -504,14 +612,14 @@ class _GeometryTestRuntimeController extends RuntimeController {
       status: TurnRuntimeStatus.completed,
       startedAt: DateTime.utc(2026, 1, 1, 12, 0, 0),
       completedAt: DateTime.utc(2026, 1, 1, 12, 0, 42),
-      items: const [
+      items: [
         HistoryItem(
           id: 'item-user-1',
           turnId: 'turn-geom-1',
           kind: HistoryItemKind.user,
-          text: 'Hello Codex from geometry test suite!',
+          text: userPrompt,
         ),
-        HistoryItem(
+        const HistoryItem(
           id: 'item-cmd-1',
           turnId: 'turn-geom-1',
           kind: HistoryItemKind.activity,
