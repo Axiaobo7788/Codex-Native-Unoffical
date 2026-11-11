@@ -238,6 +238,13 @@ void main() {
         );
         final send = find.byKey(const ValueKey('composer-send-button'));
         expect(
+          tester.getSize(send),
+          const Size(
+            OfficialCodexTheme.sendButtonDiameter,
+            OfficialCodexTheme.sendButtonDiameter,
+          ),
+        );
+        expect(
           tester.getCenter(attach).dx,
           lessThan(tester.getCenter(field).dx),
         );

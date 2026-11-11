@@ -4161,6 +4161,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         maxLines: 6,
         textInputAction: TextInputAction.newline,
         decoration: InputDecoration(
+          isDense: desktopComposer,
           hintText: thread == null && !canCreateOnSend
               ? 'Select or create a thread'
               : canSteer
@@ -4171,7 +4172,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
           disabledBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
+          contentPadding: desktopComposer
+              ? const EdgeInsets.fromLTRB(2, 5, 8, 5)
+              : const EdgeInsets.fromLTRB(2, 2, 8, 8),
         ),
       ),
     );
@@ -4393,6 +4396,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               draft.text.trim().isNotEmpty ||
                               _composerAttachments.isNotEmpty;
                           final showSteer = canSteer && hasDraft;
+                          final primaryActionSize = widget.hasDesktopShell
+                              ? OfficialCodexTheme.sendButtonDiameter
+                              : 34.0;
+                          final primaryActionIconSize = widget.hasDesktopShell
+                              ? OfficialCodexTheme.sendButtonIconSize
+                              : 18.0;
+                          final stopIconSize = widget.hasDesktopShell
+                              ? OfficialCodexTheme.sendButtonIconSize
+                              : 17.0;
                           if (showStop && !showSteer) {
                             final armed =
                                 _armedComposerStop != null &&
@@ -4402,7 +4414,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               tooltip: armed
                                   ? 'Press Esc again to stop'
                                   : 'Stop turn',
-                              size: 34,
+                              size: primaryActionSize,
+                              iconSize: stopIconSize,
                               shape: BoxShape.circle,
                               variant: CodexButtonVariant.primary,
                               onPressed: _stopComposerTurn,
@@ -4410,14 +4423,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                   ? Builder(
                                       builder: (context) => Text(
                                         'Esc',
+                                        maxLines: 1,
+                                        softWrap: false,
                                         textScaler: TextScaler.noScaling,
                                         style: TextStyle(
                                           color: IconTheme.of(context).color,
-                                          fontSize: 11,
+                                          fontSize: widget.hasDesktopShell
+                                              ? 10.5
+                                              : 11,
+                                          height: 1.0,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     )
-                                  : const Icon(Icons.stop_rounded, size: 17),
+                                  : Icon(
+                                      Icons.stop_rounded,
+                                      size: stopIconSize,
+                                    ),
                             );
                           }
                           return CodexIconButton(
@@ -4425,7 +4447,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             tooltip: canSteer
                                 ? 'Steer turn (Enter)'
                                 : 'Send (Enter)',
-                            size: 34,
+                            size: primaryActionSize,
+                            iconSize: primaryActionIconSize,
                             shape: BoxShape.circle,
                             variant: CodexButtonVariant.primary,
                             disabledOpacity: 0.5,
@@ -4436,7 +4459,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                               canSteer && !desktopComposer
                                   ? Icons.subdirectory_arrow_right_rounded
                                   : Icons.arrow_upward_rounded,
-                              size: 18,
+                              size: primaryActionIconSize,
                             ),
                           );
                         },

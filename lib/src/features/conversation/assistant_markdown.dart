@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/primitives/codex_button.dart';
 import '../../app/theme/official_codex_theme.dart';
 import '../../app/theme_tokens.dart';
 import '../../domain/assistant_content_blocks.dart';
@@ -61,19 +63,21 @@ class AssistantMarkdown extends StatelessWidget {
 
     final presentation = parseAssistantContentPresentation(source);
     final palette = ThemeTokens.of(context);
+    final codexTheme = OfficialCodexTheme.of(context);
     final baseStyleSheet = MarkdownStyleSheet.fromTheme(theme);
     final fontSize = bodyStyle?.fontSize;
     final lineHeight = proseLineHeight;
+    final isDesktop = lineHeight != null && fontSize != null;
     // Desktop lists inset their text by one line height plus 1.5 spaces,
     // where one Markdown space is one quarter of the body font size.
-    final listIndent = lineHeight == null || fontSize == null
+    final listIndent = !isDesktop
         ? 20.0
         : (MediaQuery.textScalerOf(context).scale(fontSize) *
                       (lineHeight + 1.5 / 4) -
                   (baseStyleSheet.listBulletPadding?.horizontal ?? 0))
               .clamp(0.0, double.infinity);
     TextStyle? desktopHeading(double sizeRatio, double lineBoxRatio) {
-      if (lineHeight == null || fontSize == null) {
+      if (!isDesktop) {
         return null;
       }
       return bodyStyle?.copyWith(
@@ -83,18 +87,30 @@ class AssistantMarkdown extends StatelessWidget {
       );
     }
 
+    final inlineCodeBackground = codexTheme.isDark
+        ? const Color(0x21FFFFFF)
+        : const Color(0x171A1C1F);
     final styleSheet = baseStyleSheet.copyWith(
-      a: bodyStyle?.copyWith(
-        color: theme.colorScheme.primary,
-        decoration: TextDecoration.underline,
-        decorationColor: theme.colorScheme.primary,
-      ),
+      a: isDesktop
+          ? bodyStyle?.copyWith(
+              color: palette.textPrimary,
+              decoration: TextDecoration.underline,
+              decorationStyle: TextDecorationStyle.dotted,
+              decorationColor: palette.textMuted,
+            )
+          : bodyStyle?.copyWith(
+              color: theme.colorScheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: theme.colorScheme.primary,
+            ),
       p: bodyStyle,
       code: bodyStyle?.copyWith(
         color: palette.textPrimary,
-        backgroundColor: palette.surfaceRaised,
+        backgroundColor: isDesktop
+            ? inlineCodeBackground
+            : palette.surfaceRaised,
         fontFamily: 'monospace',
-        fontSize: 12.5,
+        fontSize: isDesktop ? fontSize * 0.92 : 12.5,
       ),
       h1:
           desktopHeading(1.5, 2) ??
@@ -112,7 +128,10 @@ class AssistantMarkdown extends StatelessWidget {
       h6: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
       blockSpacing: 10,
       listIndent: listIndent,
-      listBullet: bodyStyle?.copyWith(color: palette.textSecondary),
+      listBullet: bodyStyle?.copyWith(
+        color: isDesktop ? palette.textPrimary : palette.textSecondary,
+        fontWeight: isDesktop ? FontWeight.w600 : null,
+      ),
       tableBorder: TableBorder.all(color: palette.border),
       tableCellsPadding: const EdgeInsets.all(ThemeTokens.space2),
       blockquotePadding: const EdgeInsets.symmetric(
@@ -128,14 +147,18 @@ class AssistantMarkdown extends StatelessWidget {
     );
 
     Widget buildMarkdown(String markdownData) => SelectionArea(
-      child: lineHeight != null && fontSize != null
+      child: isDesktop
           ? DesktopMarkdownBody(
               key: const ValueKey('assistant-markdown'),
               data: markdownData,
               styleSheet: styleSheet,
               bodyEm: MediaQuery.textScalerOf(context).scale(fontSize),
+              borderMedium: palette.borderStrong,
+              borderLight: codexTheme.hairlineBorder,
               extensionSet: _safeExtensions,
-              builders: {'pre': _CodeBlockBuilder()},
+              builders: {
+                'pre': _CodeBlockBuilder(desktop: true, bodyFontSize: fontSize),
+              },
               imageBuilder: (uri, title, alt) =>
                   _blockedImage(context, uri, title, alt),
               onTapLink: (text, href, title) =>
@@ -147,7 +170,12 @@ class AssistantMarkdown extends StatelessWidget {
               selectable: false,
               extensionSet: _safeExtensions,
               styleSheet: styleSheet,
-              builders: {'pre': _CodeBlockBuilder()},
+              builders: {
+                'pre': _CodeBlockBuilder(
+                  desktop: false,
+                  bodyFontSize: fontSize,
+                ),
+              },
               imageBuilder: (uri, title, alt) =>
                   _blockedImage(context, uri, title, alt),
               onTapLink: (text, href, title) =>
@@ -280,11 +308,22 @@ class _LiteralHtmlBlockSyntax extends md.BlockSyntax {
   @override
   md.Node parse(md.BlockParser parser) {
     final literal = _delegate.parse(parser);
+    if (literal is md.Text) {
+      final normalized = literal.text
+          .replaceFirst(RegExp(r'^\n+'), '')
+          .replaceFirst(RegExp(r'\n+$'), '');
+      return md.Element('p', [md.Text(normalized)]);
+    }
     return md.Element('p', [literal]);
   }
 }
 
 class _CodeBlockBuilder extends MarkdownElementBuilder {
+  _CodeBlockBuilder({required this.desktop, required this.bodyFontSize});
+
+  final bool desktop;
+  final double? bodyFontSize;
+
   @override
   Widget? visitElementAfterWithContext(
     BuildContext context,
@@ -307,40 +346,210 @@ class _CodeBlockBuilder extends MarkdownElementBuilder {
     if (code.endsWith('\n')) {
       code = code.substring(0, code.length - 1);
     }
-    return _FencedCodeBlockView(language: language, code: code);
+    return _FencedCodeBlockView(
+      language: language,
+      code: code,
+      desktop: desktop,
+      bodyFontSize: bodyFontSize,
+    );
   }
 }
 
 class _FencedCodeBlockView extends StatefulWidget {
-  const _FencedCodeBlockView({required this.language, required this.code});
+  const _FencedCodeBlockView({
+    required this.language,
+    required this.code,
+    required this.desktop,
+    this.bodyFontSize,
+  });
 
   final String language;
   final String code;
+  final bool desktop;
+  final double? bodyFontSize;
 
   @override
   State<_FencedCodeBlockView> createState() => _FencedCodeBlockViewState();
 }
 
 class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
+  static const _desktopLanguageLabels = <String, String>{
+    'bash': 'Bash',
+    'c': 'C',
+    'c++': 'C++',
+    'cpp': 'C++',
+    'cs': 'C#',
+    'csharp': 'C#',
+    'css': 'CSS',
+    'dart': 'Dart',
+    'diff': 'Diff',
+    'dockerfile': 'Dockerfile',
+    'go': 'Go',
+    'golang': 'Go',
+    'graphql': 'GraphQL',
+    'html': 'HTML',
+    'java': 'Java',
+    'javascript': 'JavaScript',
+    'js': 'JavaScript',
+    'json': 'JSON',
+    'jsx': 'JSX',
+    'kotlin': 'Kotlin',
+    'kt': 'Kotlin',
+    'md': 'Markdown',
+    'markdown': 'Markdown',
+    'objc': 'Objective-C',
+    'php': 'PHP',
+    'plaintext': 'Plain text',
+    'powershell': 'PowerShell',
+    'py': 'Python',
+    'python': 'Python',
+    'rb': 'Ruby',
+    'rs': 'Rust',
+    'ruby': 'Ruby',
+    'rust': 'Rust',
+    'scss': 'SCSS',
+    'sh': 'Shell',
+    'shell': 'Shell',
+    'sql': 'SQL',
+    'swift': 'Swift',
+    'text': 'Plain text',
+    'toml': 'TOML',
+    'ts': 'TypeScript',
+    'tsx': 'TSX',
+    'txt': 'Plain text',
+    'typescript': 'TypeScript',
+    'xml': 'XML',
+    'yaml': 'YAML',
+    'yml': 'YAML',
+    'zsh': 'Zsh',
+  };
+
+  Timer? _copiedResetTimer;
   var _copied = false;
   var _copyHovered = false;
+
+  static String _formatDesktopLanguage(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return 'Code';
+    }
+    final normalized = trimmed.split(RegExp(r'\s+')).first.toLowerCase();
+    return _desktopLanguageLabels[normalized] ?? trimmed;
+  }
 
   Future<void> _copyCode() async {
     await Clipboard.setData(ClipboardData(text: widget.code));
     if (!mounted) {
       return;
     }
+    _copiedResetTimer?.cancel();
     setState(() => _copied = true);
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      setState(() => _copied = false);
+    _copiedResetTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _FencedCodeBlockView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code ||
+        oldWidget.language != widget.language) {
+      _copiedResetTimer?.cancel();
+      _copied = false;
     }
+  }
+
+  @override
+  void dispose() {
+    _copiedResetTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final codexTheme = OfficialCodexTheme.of(context);
+    if (widget.desktop) {
+      final label = _formatDesktopLanguage(widget.language);
+      final codeSurface = codexTheme.isDark
+          ? const Color(0xFF282828)
+          : const Color(0xFFF5F5F5);
+      final baseSize = widget.bodyFontSize ?? 13.6;
+      final codeFontSize = baseSize * 0.92 < 12.5 ? 12.5 : baseSize * 0.92;
+      final codeLineHeight = math.max(codeFontSize * 1.5, 20.0) / codeFontSize;
+      return Container(
+        key: const ValueKey('desktop-markdown-code-block'),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: codeSurface,
+          border: Border.all(
+            color: codexTheme.hairlineBorder,
+            width: OfficialCodexTheme.codeBlockBorderWidth,
+          ),
+          borderRadius: BorderRadius.circular(
+            OfficialCodexTheme.codeBlockRadius,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: OfficialCodexTheme.codeBlockHeaderHeight,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 6, 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 13,
+                          height: 18 / 13,
+                          fontWeight: FontWeight.w500,
+                          color: palette.textPrimary,
+                        ),
+                      ),
+                    ),
+                    CodexIconButton(
+                      key: const ValueKey('desktop-markdown-code-copy'),
+                      size: 28,
+                      iconSize: 16,
+                      tooltip: _copied ? 'Copied' : 'Copy code',
+                      onPressed: _copyCode,
+                      icon: Icon(
+                        _copied ? Icons.check_rounded : Icons.copy_rounded,
+                        color: _copied ? palette.success : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                widget.code,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  fontSize: codeFontSize,
+                  height: codeLineHeight,
+                  color: palette.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final label = widget.language.isEmpty ? 'code' : widget.language;
     final codeSurface = codexTheme.isDark
         ? const Color(0xFF171817)

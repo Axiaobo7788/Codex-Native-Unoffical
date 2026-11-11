@@ -121,8 +121,21 @@ abstract final class OfficialCodexTheme {
   /// Attachment chip corner radius (10px).
   static const double attachmentChipRadius = 10.0;
 
-  /// Circular Send/Stop button diameter (34px).
-  static const double sendButtonDiameter = 34.0;
+  /// Ordinary Electron composer primary action diameter (`--spacing-token-button-composer`: `7 * 4px = 28px`,
+  /// while `[data-dictation-enabled]` overrides to `36px` on unsupported voice branches).
+  static const double sendButtonDiameter = 28.0;
+
+  /// Composer primary action icon size (`--icon-primary-action-size`: `16px`).
+  static const double sendButtonIconSize = 16.0;
+
+  /// Desktop Markdown fenced code block surface radius (`--radius-3xl-base`: `1.25rem = 20px`).
+  static const double codeBlockRadius = 20.0;
+
+  /// Desktop Markdown fenced code block border width (`border border-subtle`: `1px`).
+  static const double codeBlockBorderWidth = 1.0;
+
+  /// Desktop Markdown fenced code block action bar minimum height (`min-h-12`: `48px`).
+  static const double codeBlockHeaderHeight = 48.0;
 
   /// Thread reading canvas horizontal gutters (24px).
   static const double threadBodyInlinePadding = 24.0;

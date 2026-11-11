@@ -470,8 +470,11 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(find.text('Here is the code:'), findsOneWidget);
-          expect(find.text('rust'), findsOneWidget);
-          expect(find.text('Copy'), findsWidgets);
+          expect(find.text('Rust'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('desktop-markdown-code-copy')),
+            findsOneWidget,
+          );
         },
       );
 
