@@ -782,6 +782,48 @@ void main() {
     }
 
     final next = find.byKey(const ValueKey('user-input-next'));
+    final nextQuestion = find.byKey(const ValueKey('user-input-next-question'));
+    final previous = find.byKey(const ValueKey('user-input-previous'));
+    final firstCount = find.text('1 of 2');
+    final secondCount = find.text('2 of 2');
+    expect(tester.widget<CodexIconButton>(previous).isEnabled, isFalse);
+    expect(
+      tester.getTopLeft(firstCount).dy,
+      lessThan(tester.getTopLeft(next).dy),
+    );
+    expect(
+      tester.getCenter(previous).dx,
+      lessThan(tester.getCenter(firstCount).dx),
+    );
+    expect(
+      tester.getCenter(firstCount).dx,
+      lessThan(tester.getCenter(nextQuestion).dx),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(secondCount, findsOneWidget);
+    expect(tester.widget<CodexIconButton>(nextQuestion).isEnabled, isFalse);
+    expect(runtime.userInputSubmissions, isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(secondCount, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(firstCount, findsOneWidget);
+
+    await tester.tap(field('first'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(firstCount, findsOneWidget);
+    await tester.tap(nextQuestion);
+    await tester.pumpAndSettle();
+    expect(secondCount, findsOneWidget);
+    await tester.tap(previous);
+    await tester.pumpAndSettle();
+
     await chooseOther('first', 'First custom draft');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
@@ -859,7 +901,7 @@ void main() {
     final next = find.byKey(const ValueKey('user-input-next'));
     final submit = find.byKey(const ValueKey('user-input-submit'));
     final field = find.byKey(const ValueKey('user-input-note-text'));
-    expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
     expect(tester.widget<CodexButton>(next).label, 'Continue');
     final markers = find.byKey(
       const ValueKey('desktop-question-option-marker'),
@@ -895,12 +937,12 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
     expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
     expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
     await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
 
     FocusNode optionFocus(String label) => Focus.of(
       tester.element(
@@ -935,7 +977,7 @@ void main() {
     );
     expect(tester.widget<Semantics>(alternate).properties.checked, isTrue);
     await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(incremental.hasFocus, isTrue);
@@ -943,10 +985,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 179));
-    expect(find.text('Question 1 of 2'), findsOneWidget);
+    expect(find.text('1 of 2'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1));
     await tester.pumpAndSettle();
-    expect(find.text('Question 2 of 2'), findsOneWidget);
+    expect(find.text('2 of 2'), findsOneWidget);
     expect(tester.widget<TextField>(field).obscureText, isTrue);
     await tester.enterText(field, '  Keep this private.  ');
     await tester.tap(find.byKey(const ValueKey('user-input-previous')));

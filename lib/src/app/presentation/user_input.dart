@@ -645,6 +645,17 @@ class _UserInputCardState extends State<_UserInputCard> {
       _acceptCurrentChoice(question);
       return KeyEventResult.handled;
     }
+    if ((event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowRight) &&
+        widget.request.questions.length > 1) {
+      if (_choiceAdvanceTimer == null) {
+        _showQuestion(
+          _questionIndex +
+              (event.logicalKey == LogicalKeyboardKey.arrowRight ? 1 : -1),
+        );
+      }
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
         event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _moveChoiceFocus(
@@ -749,8 +760,7 @@ class _UserInputCardState extends State<_UserInputCard> {
     final submitting = widget.controller.isSubmitting(widget.request.requestId);
     final questions = widget.request.questions;
     final stepped = widget.desktop && questions.length > 1;
-    final showHeader =
-        !widget.desktop || stepped || widget.pendingCount > 1 || submitting;
+    final showHeader = !widget.desktop || widget.pendingCount > 1 || submitting;
     final visibleQuestions = stepped ? [questions[_questionIndex]] : questions;
     final hasNext = stepped && _questionIndex < questions.length - 1;
     final canContinue = hasNext
@@ -785,7 +795,6 @@ class _UserInputCardState extends State<_UserInputCard> {
                 ? current
                 : null;
             final actions = _requestActions(
-              stepped: stepped,
               hasNext: hasNext,
               submitting: submitting,
               canContinue: canContinue,
@@ -803,7 +812,13 @@ class _UserInputCardState extends State<_UserInputCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (showHeader) ...[
+                          if (stepped) ...[
+                            _questionStepHeader(
+                              questions[_questionIndex],
+                              submitting,
+                            ),
+                            const SizedBox(height: ThemeTokens.space3),
+                          ] else if (showHeader) ...[
                             Row(
                               children: [
                                 if (!widget.desktop)
@@ -816,10 +831,8 @@ class _UserInputCardState extends State<_UserInputCard> {
                                   const SizedBox(width: ThemeTokens.space2),
                                 Expanded(
                                   child: Text(
-                                    stepped
-                                        ? 'Question ${_questionIndex + 1} of ${questions.length}'
-                                        : 'Codex needs your input'
-                                              '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
+                                    'Codex needs your input'
+                                    '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
                                     style: widget.desktop
                                         ? Theme.of(context).textTheme.bodySmall
                                               ?.copyWith(
@@ -860,6 +873,7 @@ class _UserInputCardState extends State<_UserInputCard> {
                               visibleQuestions[index],
                               submitting,
                               inlineOther: inlineQuestion != null,
+                              showTitle: !stepped,
                             ),
                           ],
                         ],
@@ -895,8 +909,67 @@ class _UserInputCardState extends State<_UserInputCard> {
     );
   }
 
+  Widget _questionStepHeader(UserInputQuestion question, bool submitting) {
+    final theme = Theme.of(context).textTheme;
+    final count = widget.request.questions.length;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(
+        start: ThemeTokens.space1,
+        top: ThemeTokens.space1,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              question.question,
+              style: theme.bodyMedium?.copyWith(
+                fontSize: 14,
+                height: 20 / 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: ThemeTokens.space2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CodexIconButton(
+                key: const ValueKey('user-input-previous'),
+                tooltip: 'Previous question',
+                size: 20,
+                onPressed: submitting || _questionIndex == 0
+                    ? null
+                    : () => _showQuestion(_questionIndex - 1),
+                icon: const Icon(Icons.chevron_left_rounded, size: 14),
+              ),
+              const SizedBox(width: ThemeTokens.space1),
+              Text('${_questionIndex + 1} of $count', style: theme.bodySmall),
+              const SizedBox(width: ThemeTokens.space1),
+              CodexIconButton(
+                key: const ValueKey('user-input-next-question'),
+                tooltip: 'Next question',
+                size: 20,
+                onPressed: submitting || _questionIndex == count - 1
+                    ? null
+                    : () => _showQuestion(_questionIndex + 1),
+                icon: const Icon(Icons.chevron_right_rounded, size: 14),
+              ),
+              if (submitting) ...[
+                const SizedBox(width: ThemeTokens.space1),
+                const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _requestActions({
-    required bool stepped,
     required bool hasNext,
     required bool submitting,
     required bool canContinue,
@@ -904,20 +977,6 @@ class _UserInputCardState extends State<_UserInputCard> {
     mainAxisSize: MainAxisSize.min,
     mainAxisAlignment: MainAxisAlignment.end,
     children: [
-      if (stepped && _questionIndex > 0) ...[
-        Flexible(
-          child: CodexButton(
-            key: const ValueKey('user-input-previous'),
-            variant: CodexButtonVariant.ghost,
-            size: CodexButtonSize.sm,
-            label: 'Previous',
-            onPressed: submitting
-                ? null
-                : () => _showQuestion(_questionIndex - 1),
-          ),
-        ),
-        const SizedBox(width: ThemeTokens.space2),
-      ],
       Flexible(
         child: CodexButton(
           key: const ValueKey('user-input-cancel'),
@@ -1001,6 +1060,7 @@ class _UserInputCardState extends State<_UserInputCard> {
     UserInputQuestion question,
     bool submitting, {
     required bool inlineOther,
+    required bool showTitle,
   }) {
     final palette = ThemeTokens.of(context);
     final textController = _textControllers[question.id]!;
@@ -1016,9 +1076,14 @@ class _UserInputCardState extends State<_UserInputCard> {
           ),
           const SizedBox(height: ThemeTokens.space1),
         ],
-        Text(question.question, style: Theme.of(context).textTheme.bodyMedium),
-        if (question.options.isNotEmpty) ...[
+        if (showTitle) ...[
+          Text(
+            question.question,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: ThemeTokens.space2),
+        ],
+        if (question.options.isNotEmpty) ...[
           for (final (index, option) in question.options.indexed) ...[
             _UserInputOptionTile(
               key: ValueKey('user-input-${question.id}-${option.label}'),
@@ -1052,10 +1117,8 @@ class _UserInputCardState extends State<_UserInputCard> {
               _answerField(question, textController, submitting),
             ],
           ],
-        ] else ...[
-          const SizedBox(height: ThemeTokens.space2),
+        ] else
           _answerField(question, textController, submitting),
-        ],
       ],
     );
   }
@@ -1173,7 +1236,11 @@ class _UserInputCardState extends State<_UserInputCard> {
   );
 
   void _showQuestion(int index) {
-    if (index < 0 || index >= widget.request.questions.length) return;
+    if (index == _questionIndex ||
+        index < 0 ||
+        index >= widget.request.questions.length) {
+      return;
+    }
     _cancelChoiceAdvance();
     if (_questionScroll.hasClients) {
       _questionScroll.jumpTo(0);
