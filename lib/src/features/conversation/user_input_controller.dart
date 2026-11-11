@@ -34,6 +34,8 @@ final class UserInputController extends ChangeNotifier {
   late final StreamSubscription<UserInputEvent> _subscription;
   StreamSubscription<McpElicitationEvent>? _mcpSubscription;
   Object? _submittingRequestId;
+  // Resolution can retire a write before its gateway Future completes.
+  Object? _submissionToken;
   String? _errorMessage;
   var _disposed = false;
 
@@ -48,10 +50,14 @@ final class UserInputController extends ChangeNotifier {
     Object requestId,
     Map<String, List<String>> answers,
   ) async {
-    if (_submittingRequestId != null ||
-        !_pending.any((request) => request.requestId == requestId)) {
+    final request = _pending
+        .where((request) => request.requestId == requestId)
+        .firstOrNull;
+    if (_disposed || _submittingRequestId != null || request == null) {
       return;
     }
+    final token = Object();
+    _submissionToken = token;
     _submittingRequestId = requestId;
     _errorMessage = null;
     _notify();
@@ -60,31 +66,45 @@ final class UserInputController extends ChangeNotifier {
         requestId: requestId,
         answers: UserInputAnswers(answers),
       );
-      _pending.removeWhere((request) => request.requestId == requestId);
+      _pending.remove(request);
     } catch (error) {
-      _errorMessage = error.toString();
+      if (identical(_submissionToken, token)) {
+        _errorMessage = error.toString();
+      }
     } finally {
-      _submittingRequestId = null;
-      _notify();
+      if (identical(_submissionToken, token)) {
+        _submissionToken = null;
+        _submittingRequestId = null;
+        _notify();
+      }
     }
   }
 
   Future<void> cancel(Object requestId) async {
-    if (_submittingRequestId != null ||
-        !_pending.any((request) => request.requestId == requestId)) {
+    final request = _pending
+        .where((request) => request.requestId == requestId)
+        .firstOrNull;
+    if (_disposed || _submittingRequestId != null || request == null) {
       return;
     }
+    final token = Object();
+    _submissionToken = token;
     _submittingRequestId = requestId;
     _errorMessage = null;
     _notify();
     try {
       await gateway.cancelUserInput(requestId);
-      _pending.removeWhere((request) => request.requestId == requestId);
+      _pending.remove(request);
     } catch (error) {
-      _errorMessage = error.toString();
+      if (identical(_submissionToken, token)) {
+        _errorMessage = error.toString();
+      }
     } finally {
-      _submittingRequestId = null;
-      _notify();
+      if (identical(_submissionToken, token)) {
+        _submissionToken = null;
+        _submittingRequestId = null;
+        _notify();
+      }
     }
   }
 
@@ -94,13 +114,17 @@ final class UserInputController extends ChangeNotifier {
     Map<String, Object?> content = const {},
   }) async {
     final mcp = mcpGateway;
-    if (mcp == null ||
+    final request = _pendingElicitations
+        .where((request) => request.requestId == requestId)
+        .firstOrNull;
+    if (_disposed ||
+        mcp == null ||
         _submittingRequestId != null ||
-        !_pendingElicitations.any(
-          (request) => request.requestId == requestId,
-        )) {
+        request == null) {
       return;
     }
+    final token = Object();
+    _submissionToken = token;
     _submittingRequestId = requestId;
     _errorMessage = null;
     _notify();
@@ -111,13 +135,18 @@ final class UserInputController extends ChangeNotifier {
         content: content,
       );
       _pendingElicitations.removeWhere(
-        (request) => request.requestId == requestId,
+        (pending) => identical(pending, request),
       );
     } catch (error) {
-      _errorMessage = error.toString();
+      if (identical(_submissionToken, token)) {
+        _errorMessage = error.toString();
+      }
     } finally {
-      _submittingRequestId = null;
-      _notify();
+      if (identical(_submissionToken, token)) {
+        _submissionToken = null;
+        _submittingRequestId = null;
+        _notify();
+      }
     }
   }
 
@@ -142,6 +171,7 @@ final class UserInputController extends ChangeNotifier {
         }
         if (_submittingRequestId == event.requestId) {
           _submittingRequestId = null;
+          _submissionToken = null;
         }
     }
     _notify();
@@ -178,6 +208,7 @@ final class UserInputController extends ChangeNotifier {
         }
         if (_submittingRequestId == event.requestId) {
           _submittingRequestId = null;
+          _submissionToken = null;
         }
     }
     _notify();
@@ -197,6 +228,8 @@ final class UserInputController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _submissionToken = null;
+    _submittingRequestId = null;
     unawaited(_subscription.cancel());
     final mcpSubscription = _mcpSubscription;
     if (mcpSubscription != null) {
