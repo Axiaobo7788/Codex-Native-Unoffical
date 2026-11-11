@@ -127,7 +127,8 @@ separated from the permissions control by 8 px. The ordinary focused
 composer retains its neutral border. Desktop assistant Markdown uses
 the measured body-relative heading proportions. Desktop stock choices
 preselect the first answer. Wide stock questions show Other in the
-action footer. Home, open Changes,
+action footer. Direct choices advance or submit by click or digit
+in the active Desktop request. Home, open Changes,
 Review, expanded activity, compact and dark variants have separate
 evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
 
@@ -140,8 +141,10 @@ evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-N
   after moving back and forward. The installed binary rejected both
   sampled no-options shapes. `a142fd0` puts the wide custom field
   in the footer. The Linux release retained and submitted the answer
-  after resizing through 820×420. The official numbered/direct-choice
-  transition remains machine work in A10.
+  after resizing through 820×420. `279e476` and `6d26962` translate the
+  180 ms direct activation and numbered keys. Linux release runs
+  returned both alternate choices by click and by digit. Arrow
+  selection and inline-editor Enter remain machine work in A10.
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `80d318d` translates the Desktop assistant heading proportions.
