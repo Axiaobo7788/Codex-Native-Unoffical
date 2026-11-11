@@ -4,6 +4,8 @@
 >
 > **Target Architecture**: Clean-Room Semantic Presentation Primitives (`lib/src/app/primitives/`) & `OfficialCodexTheme` (`lib/src/app/theme/`)
 >
+> **Current-state authority:** [Golden State A](OFFICIAL_UI_GOLDEN_STATE_A.md) supersedes historical R0 composition and token claims. User-bubble and activity entries below reflect later verified A6/A7 sources; they do not imply whole-screen parity.
+>
 > **Evidence Grading**: `STATIC_BUNDLE`, `HUMAN_REVIEWED` (`H1`), `LIVE_OBSERVED` (disposable sign-in gate), `LOCAL_SCHEMA`, `PUBLIC_SOURCE`
 
 ---
@@ -27,7 +29,7 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 | **`CodexIconButton`** | `lib/src/app/primitives/codex_button.dart` | `IconButton` | Radix icon action button | Radius: `8px` / `10px`, Size: `32px` / `34px` / `36px` | Quiet square icon container; hover highlight with zero elevation change; accessible tooltip binding. |
 | **`CodexSidebarRow`** | `lib/src/app/primitives/codex_sidebar_row.dart` | `ListTile`, `ListTileTheme` | `--height-token-row: 36px` nav row | Height: `36px`, Radius: `10px`, Padding: `0 10px` | Single-line title with trailing relative time or status dot; persistent neutral selection tint; keyboard navigable. |
 | **`CodexComposer`** | `lib/src/app/primitives/codex_composer.dart` | `Card`, Material `TextField` box | Floating composer container | Width up to `672px`, active desktop radius `28px` | Auto-growing input, attachment on the left, active controls on the right. Empty and compact Native layouts keep their separate controls row. |
-| **`CodexMessageBubble`** | `lib/src/app/primitives/codex_message_bubble.dart`| Material `Card`, `Container` | User message pill (`--user-message-*`) | Width up to `75%` (`504px` at cap), radius `18px` | Right-aligned prompt bubble with bounded preview and explicit expansion. |
+| **`CodexMessageBubble`** | `lib/src/app/primitives/codex_message_bubble.dart`| Material `Card`, `Container` | User message pill (`--user-message-*`) | Actual-parent `70%`, borderless `22px`, `16×10px` padding | Right-aligned prompt bubble with bounded preview and explicit expansion. |
 | **`CodexActivityRow`** | `lib/src/app/primitives/codex_activity_row.dart` | Material `Card`, `ExpansionTile` | Inline command and tool activity | Height `34px` | Neutral inline variant on Desktop. The bordered variant remains available for review and compact activity. Output remains on demand. |
 | **`CodexPopover`** | `lib/src/app/primitives/codex_popover.dart` | Material `Dialog`, `PopupMenuButton` | Radix Popover primitive | Radius: `16px` / `20px`, Elevation Tier 2 | Anchored overlay positioning; dismisses on outside tap or `Escape`; smoothly transitions without full-screen route blockage. |
 | **`CodexMenu`** | `lib/src/app/primitives/codex_menu.dart` | Material `MenuAnchor`, `PopupMenuEntry` | Radix DropdownMenu | Item height: `32px`, Radius: `8px`, Container radius: `16px` | Keyboard arrow up/down selection, hotkey shortcut indicator, divider rules, submenus. |
@@ -106,24 +108,21 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 
 - **Role**: Render user prompt entries with clear visual boundaries.
 - **Alignment**: Flush right in the reading column.
-- Width is capped at `75%` of the column (`504px` at `672px`).
-- **Corner Radius**: `18px` (`--user-message-border-radius`).
-- **Background**: Soft translucent tint `light-dark(var(--alpha-05), var(--alpha-08))` (`#2F2F2F` in dark mode).
-- **Attachments Row**: Rendered above the message text if files/images are attached:
-  - Pill chip: Height `28px`, radius `10px`, icon + truncated path.
-- **Content Collapse**: Long prompts exceeding 12 lines or 680 characters display a "Show full message" / "Show less" toggle.
+- **Verified mapping**: build `25894` `14353.vHM0` / `dKZq`, `.bubble-vBnidZ` and `225284` attachment composition; translated in `77d3401`.
+- **Width**: `70%` of the actual available parent column; wide/narrow independent fill scans are recorded in Golden State A.
+- **Shape**: Borderless `22px` corners, `16×10px` padding and `5%` ink tint.
+- **Text**: Normal `14px` role, `1.625` line height.
+- **Attachments**: Separate bounded pills `8px` above the bubble. Attachment-only messages have no empty text bubble. Thumbnail/preview fidelity remains open.
+- **Disclosure**: More than 20 rendered lines shows `Show more` / `Show less`, with `10px` total separation (4px flex gap plus 6px margin). Native collapsed selectable text uses a bounded prefix; full toolbar Copy remains exact. This differs from official CSS clipping and is not claimed identical.
+- **Bounds**: Existing saved/live source caps and 16-attachment cap remain; collapse measurement is bounded and cached per message.
 
 ### 3.5 `CodexActivityRow`
 
 - **Role**: Compact representation of tool executions, bash commands, and MCP calls.
-- **Height**: `34px`.
-- **Corner Radius**: `8px`.
-- **Border**: `0.5px` hairline border.
-- **Surface**: Subtle elevated card tint.
-- **Content**:
-  - Leading terminal glyph (`terminal_rounded`) or MCP wrench glyph.
-  - Monospace summary text (`12.5px`).
-  - Trailing action: `View output` link, triggering the bounded output dialog.
+- **Current composition**: Quiet borderless inline row, `20px` minimum line box, `14px` leading icon and `6px` icon gap; grouped rows use `4px` spacing (`ff931b9` / `7012dd3`).
+- **Hierarchy**: Thought disclosure, saved completed-turn divider and activity/output actions share the timeline rather than individual elevated cards.
+- **Bounds**: Saved activity retains its `224px` lazy viewport, reasoning its `140px` viewport, and output remains on demand.
+- **Remaining deltas**: Captions, live grouping and richer reasoning presentation remain explicit A7 work. Default foreground/type refinement is active Track U1; this entry does not close it.
 
 ### 3.6 `CodexPopover` & `CodexMenu`
 

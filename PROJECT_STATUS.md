@@ -113,13 +113,37 @@ permission to lower the engineering or visual quality bar.
   for Track U coherent Golden-State slices. Codex remains the default systems /
   protocol / functional-parity owner for Track F and adversarial reviewer of UI
   changes. They are equal peers; ownership follows the current slice.
-- The immediate next Codex-owned action is a **fresh Codex Desktop functional
-  parity audit**, not merely consuming the old READY list. The immediate
-  Gemini-owned action is the highest-impact evidenced remaining Golden-State UI
-  row/cluster.
+- Codex's [fresh Track F audit](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md)
+  re-exported five installed/public stock schemas, including current public
+  stable `0.167.1`, and traced supported requests through actual Desktop actions.
+  Confirmed gaps include normal cold-resume feedback, account/MCP OAuth access,
+  catalog truncation and several bounded research workflows. Stable schema alone
+  did not establish an enabled additional-permission workflow: its emitter flags
+  remain under-development/off by default. The first functional correction is
+  ordinary cold-resume failure feedback, adapting existing peer source `aba5feb`
+  through a provenance-preserving normal merge rather than duplicating it.
+  The latest 42 targeted controller/Send/Review tests, strict analysis and
+  65-root pure-Dart gate pass. A fresh private real-stock baseline reproduces
+  the hidden sidebar-only failure at 720×800; patched packaged replay and the
+  combined F/U shared gate are still pending at this source checkpoint.
+- Gemini owns Track U1 initialized typography/foreground reconciliation in its
+  separate worktree from `327ed90`: canonical theme, token adapter, activity and
+  Markdown presentation plus three related tests. Codex owns functional audit
+  memory, controller/state work and the conversation resume-feedback surface.
+  The file locks do not overlap. Gemini finished its U1 local validation and
+  released the heavy slot. Codex now owns serialized integration/runtime checks;
+  Gemini remains on light source/evidence work until the next explicit handoff.
+- Baseline `327ed906a0231ab4aac864956f224279fad2ad64` passed all three hosted
+  jobs in [43068445251](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43068445251).
+  Run `43068047360` at its ancestor `11e2d3a` was superseded by the governance
+  push; cancellation is not a passing or failing source validation result.
 - Live coordination continues only through the official `agy` TUI. Use separate
   worktrees and avoid overlapping writes. Heavy Flutter/Cargo validation remains
   serialized after the recorded host OOM.
+  Local Flutter tests use `--concurrency=1`, Cargo uses two jobs, and Linux
+  release builds use `--config-only` followed by `cmake --build … --target
+  install --parallel 2` (actual Ninja `-j 2`), since Flutter bypasses the CMake
+  parallelism environment setting on this toolchain.
 - Integration checkpoints must update both the functional matrix and UI
   Golden-State evidence. Closing either one track alone is not permission to end
   the program.

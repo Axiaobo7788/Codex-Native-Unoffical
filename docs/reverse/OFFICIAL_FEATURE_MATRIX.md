@@ -25,6 +25,16 @@ Every official feature observed across the Desktop ASAR bundle (`STATIC_BUNDLE`)
 
 ---
 
+## Current Codex Desktop functional assessment
+
+The [fresh Track F capability/workflow audit](CODEX_DESKTOP_FUNCTIONAL_AUDIT.md)
+is authoritative for the narrowed Desktop target at `327ed90`: it checks five
+actual stock versions including public stable `0.167.1`, follows adapters through
+reachable actions, and separates supported gaps from opt-in/private boundaries.
+The F1–F32 rows below retain implementation history; their old `IMPLEMENTED` or
+`HUMAN_REVIEW_PENDING` labels do not establish current functional or visual
+completion. Current UI status belongs to the Golden-State contracts.
+
 ## 2. Re-Audited Feature Matrix vs Actual Codebase (`lib/src/`)
 
 ### 2.1 Shared Shell, Window Chrome & Product Mode Architecture
@@ -205,7 +215,7 @@ matrix to have no remaining machine-actionable gap inside the narrowed scope.
 
 | State | Slice | Value, evidence and implementation boundary |
 |---|---|---|
-| `READY` | **Fresh Codex Desktop functional-parity audit** | Re-audit current Native HEAD against the current public/stable stock app-server schema, deliberately adopted public experimental stock surfaces, and reproducible official Codex Desktop workflows. Produce an explicit capability/workflow matrix with `MATCH`, `PARTIAL`, `MISSING`, `PRIVATE_ONLY`, `BLOCKED`, `NOT_APPLICABLE` and evidence grade. This audit runs in parallel with Golden-State UI work and is the authoritative source for the next functional slice. |
+| `ACTIVE` | **Track F fresh audit → normal cold-resume failure feedback** | [Current capability/workflow audit](CODEX_DESKTOP_FUNCTIONAL_AUDIT.md) revalidated five runtimes, current Native access paths and support boundaries. First correction is confirmed conversation-visible feedback for implicit/explicit cold-resume failure, preserving drafts and attempt identity. Track U proceeds independently. |
 | `HUMAN_REVIEW_PENDING` | Desktop primary structural translation | Current build and signed-in active capture ground the rail, contextual sidebar, header, inline activity and bottom composer. Native keeps one conversation through resize. Comparable signed-in compact, empty, dark, expanded activity and open secondary surfaces remain open. [Evidence and known differences](OFFICIAL_UI_STRUCTURAL_MAPPING.md) |
 | `HUMAN_REVIEW_PENDING` | F15 local Goal and Review target presentation | Both use the public stock schema. Objective copy, focus, dialog flow, and interaction feel need separate Human feedback. |
 | `HUMAN_REVIEW_PENDING` | F16 scoped Section browsing | Native browses one bounded section at a time in stock order. Direct stock and Host calls verified pagination. Subjective browse and filter interactions still need Human feedback. |

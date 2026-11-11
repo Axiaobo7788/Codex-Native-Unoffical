@@ -10,6 +10,11 @@
 >
 > **Implementation rule:** Do not design. Translate observable official
 > structure/geometry/states into the closest clean-room Flutter equivalent.
+>
+> **Current-state authority:** [Golden State A](OFFICIAL_UI_GOLDEN_STATE_A.md)
+> supersedes the original R0 token tables where later component evidence differs.
+> The A6 user-bubble measurements below were refreshed from build `25894` and
+> source `77d3401`; remaining historical rows do not establish current parity.
 
 > **Audited Package**: ChatGPT / Codex Desktop Linux Packaging (`26.1103.60933`, `codexBuildNumber: "25894"`, `codexBuildFlavor: "prod"`, `app.asar` SHA-256 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`)
 >
@@ -55,8 +60,8 @@ All values recorded here are derived from direct inspection of the official desk
 | **Thread Timeline Inset** | `24px` horizontal (`--padding-toolbar`) | `px-[var(--thread-body-inline-padding,var(--padding-toolbar))]` (`KkZX`) | `STATIC_BUNDLE` | Horizontal gutters on reading canvas |
 | **Composer Max-Width** | `672px` (`42rem`, matches `--thread-body-max-width`) | `KkZX` (`max-w-(--thread-body-max-width)`) | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Bottom composer container width aligned to thread column |
 | **Composer Corner Radius** | `24px` (`1.5rem`), pill `28px` | `--composer-border-radius: 24px`, `--composer-radius: calc(var(--spacing) * 7)` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Rounded geometry of bottom composer (`ComposerFooter-WlpjXt` controls cluster to right) |
-| **User Message Max-Width** | `75%` of column | `--user-message-max-width: 75%` | `STATIC_BUNDLE` | Maximum width of right-aligned user bubble within reading column |
-| **User Message Corner Radius**| `18px` (`1.125rem`) | `--user-message-border-radius: 18px` | `STATIC_BUNDLE` / `HUMAN_REVIEWED` | Smooth rounded corner for user messages |
+| **User Message Max-Width** | `70%` of the actual parent column | `14353.vHM0` / `dKZq`, `fc8ef2a8f545.css` `.bubble-vBnidZ` | `STATIC_BUNDLE` / `AGENT REAL-USE VERIFIED` | Source `77d3401`; use the actual available column, not the nominal wide cap |
+| **User Message Corner Radius**| `22px`, borderless | `.bubble-vBnidZ` | `STATIC_BUNDLE` / `AGENT REAL-USE VERIFIED` | Revalidated A6 component; `16×10px` padding |
 
 ---
 
@@ -138,7 +143,7 @@ reading width and composer arrangement.
 | 6 | **Search Field** | Height `32px`, corner radius `8px`, padding `0 8px` | Background Tier 1, border `0.5px`, focus ring | Input `13px`, leading search icon `16px`, `Ctrl+K` pill | `idle`, `hover`, `focus-visible`, `disabled` | `STATIC_BUNDLE` / `LIVE_OBSERVED` |
 | 7 | **Thread Header** | Height `46px`, padding `0 16px` | Tier 1 background, bottom hairline border | Title `14px` bold, project link `13px` muted | `idle`, `hover`, `running` | `STATIC_BUNDLE` |
 | 8 | **Conversation Column**| Max-width `704px` (`44rem`), inline padding `24px` | Tier 1 background, centered horizontal alignment | Base typography scale `14px` | `idle`, `streaming`, `running` | `STATIC_BUNDLE` / `LIVE_OBSERVED` |
-| 9 | **User Message Bubble**| Max-width `75%` (`~528px`), radius `18px`, padding `10px 14px` | Soft translucent tint (`alpha 8%` dark / `5%` light) | Text `14px`, line-height `1.6`, right-aligned | `idle`, `hover`, `selected` | `STATIC_BUNDLE` / `LIVE_OBSERVED` |
+| 9 | **User Message Bubble**| Actual-parent `70%`, radius `22px`, padding `10px 16px`, no border | Soft translucent ink (`5%` in current A6 translation) | Text `14px`, line-height `1.625`, right-aligned; 20-line disclosure, 10px total button gap | collapsed / expanded; attachments outside, 8px above | `STATIC_BUNDLE` / `AGENT REAL-USE VERIFIED`; matched signed-in acceptance remains open |
 | 10 | **Assistant Prose** | Left-aligned, unboxed canvas, padding `12px 0` | Text primary (`#ECECEC` / `#0D0D0D`) | Text `14px` (`line-height: 1.6`) dense mode | `idle`, `streaming` | `STATIC_BUNDLE` / `LIVE_OBSERVED` |
 | 11 | **Markdown Elements** | Headers `h1..h3`, lists `margin-left: 20px`, tables | Hairline table borders, muted code spans | Headers `16-20px` bold, body `14px` | `idle`, `hover` | `STATIC_BUNDLE` |
 | 12 | **Code Block** | Radius `8px`, header `32px` height, padding `12px 14px` | Background `#171817` (dark) / `#F4F4F4` (light) | Monospace `12.5px`, language label, copy button | `idle`, `hover`, `pressed` | `STATIC_BUNDLE` |
@@ -169,7 +174,7 @@ The following table records the precise divergence between the measured official
 | UI Dimension / Token | Measured Official Specification | Legacy Native Value (`HEAD`) | Delta (`Official - Native`) | Resolution in Convergence (Slices A–E) |
 |---|---|---|---|---|
 | **Reading Column Width** | `704px` (`44rem`) | `760px` | `-56 px` | Clamped `maxWidth: 704.0` in `OfficialCodexTheme` & `ConversationView` |
-| **User Message Max Width**| `75%` of column (`~528px`) | `560px` | `-32 px` | Set `maxUserBubbleWidthFactor = 0.75` (~528px max) in `CodexMessageBubble` |
+| **User Message Max Width**| Historical R0 `75%` assumption superseded by actual-parent `70%` | Historical `560px` | Re-evaluated in A6 | Source `77d3401`; current contract and independent wide/narrow scans are in Golden State A |
 | **Composer Corner Radius**| `24px` (`1.5rem`) / `28px` | `22px` | `+2 px`..`+6 px` | Updated `ThemeTokens.radiusComposer = 24.0` |
 | **App Titlebar Height** | `46px` (`38px` macOS) | `52px` | `-6 px` | Reduced titlebar / header height to `46.0` (`OfficialCodexTheme.titlebarHeight`) |
 | **Sidebar Width (Default)**| `260px` | `264px` | `-4 px` | Aligned `OfficialCodexTheme.sidebarWidth = 260.0` |

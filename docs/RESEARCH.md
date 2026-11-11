@@ -5,6 +5,19 @@ other working clients. It is not a catalog of projects or an endorsement of
 their architecture. Upstream behavior and measurements in this repository remain
 authoritative.
 
+## Current Codex Desktop functional audit
+
+The [2026-11-12 capability/workflow audit](reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md)
+compares five installed/public stock versions, current public stable `0.167.1`,
+actual Native access paths and existing real-stock evidence. It supersedes old
+F1–F32 labels as completion evidence for the narrowed Desktop target. Schema
+presence alone does not prove a normally enabled workflow: additional-permission
+emitter flags remain under-development/off by default. The audit records this
+negative boundary and prioritizes the confirmed normal cold-resume feedback gap.
+Its first correction retains existing peer commit `aba5feb` and current bounded
+controllers; final packaged/runtime evidence belongs in the audit, separately
+from simulated runtime tests and Human acceptance.
+
 ## Current Codex Desktop UI fidelity
 
 _Reviewed: 2026-11-06_

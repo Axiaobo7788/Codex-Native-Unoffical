@@ -527,6 +527,73 @@ void main() {
   });
 
   test(
+    'resume outcome distinguishes loaded, failed, and skipped attempts',
+    () async {
+      final gateway = _FakeThreadGateway()
+        ..pages.add(
+          ThreadPage(threads: [_thread('1'), _thread('2')], nextCursor: null),
+        );
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(controller.dispose);
+      addTearDown(gateway.dispose);
+
+      await controller.refresh();
+      await controller.selectThread('1');
+
+      final wrongSelection = await controller
+          .ensureSelectedThreadLoadedWithOutcome('2');
+      expect(wrongSelection.status, ThreadResumeStatus.skipped);
+      expect(gateway.resumeIds, isEmpty);
+
+      gateway.resumeError = StateError('JSON-RPC error -32600: no rollout');
+      final failed = await controller.ensureSelectedThreadLoadedWithOutcome(
+        '1',
+      );
+      expect(failed.status, ThreadResumeStatus.failed);
+      expect(failed.errorMessage, contains('no rollout'));
+      expect(controller.errorMessage, contains('no rollout'));
+      expect(controller.selectedThread?.status, ThreadRuntimeStatus.notLoaded);
+
+      gateway.resumeError = null;
+      final loaded = await controller.ensureSelectedThreadLoadedWithOutcome(
+        '1',
+      );
+      expect(loaded.status, ThreadResumeStatus.loaded);
+      expect(loaded.thread?.status, ThreadRuntimeStatus.idle);
+      expect(controller.errorMessage, isNull);
+
+      final alreadyLoaded = await controller
+          .ensureSelectedThreadLoadedWithOutcome('1');
+      expect(alreadyLoaded.status, ThreadResumeStatus.loaded);
+      expect(gateway.resumeIds, ['1', '1']);
+    },
+  );
+
+  test(
+    'late failed resume after disposal is skipped without feedback',
+    () async {
+      final gateway = _FakeThreadGateway()
+        ..pages.add(ThreadPage(threads: [_thread('1')], nextCursor: null))
+        ..pendingResume = Completer<ThreadSummary>();
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(gateway.dispose);
+      await controller.refresh();
+      await controller.selectThread('1');
+      var notifications = 0;
+      controller.addListener(() => notifications += 1);
+      final attempt = controller.ensureSelectedThreadLoadedWithOutcome('1');
+      expect(gateway.resumeIds, ['1']);
+      expect(notifications, 1);
+      controller.dispose();
+      gateway.pendingResume!.completeError(StateError('retired runtime'));
+      final outcome = await attempt;
+      expect(outcome.status, ThreadResumeStatus.skipped);
+      expect(outcome.errorMessage, isNull);
+      expect(notifications, 1);
+    },
+  );
+
+  test(
     'refresh deduplicates duplicate thread IDs and tops up initial page',
     () async {
       final gateway = _FakeThreadGateway()
@@ -1171,6 +1238,8 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   final Map<String, ThreadSection?> readSectionOverrides = {};
   final Map<String, String> readIdOverrides = {};
   bool sectionSupport = true;
+  Object? resumeError;
+  Completer<ThreadSummary>? pendingResume;
 
   @override
   bool get supportsThreadSections => sectionSupport;
@@ -1270,6 +1339,12 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   @override
   Future<ThreadSummary> resumeThread(String threadId) async {
     resumeIds.add(threadId);
+    if (pendingResume case final pending?) {
+      return pending.future;
+    }
+    if (resumeError case final error?) {
+      throw error;
+    }
     return _thread(threadId, status: ThreadRuntimeStatus.idle);
   }
 
