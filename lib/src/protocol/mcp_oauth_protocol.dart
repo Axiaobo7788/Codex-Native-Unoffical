@@ -22,7 +22,7 @@ final class McpOauthProtocolAdapter {
 
   Future<McpOauthLoginAttempt> start({
     required String serverName,
-    int timeoutSeconds = 180,
+    int? timeoutSeconds,
   }) async {
     final name = serverName.trim();
     if (name.isEmpty ||
@@ -30,7 +30,8 @@ final class McpOauthProtocolAdapter {
         _controlCharacters.hasMatch(name)) {
       throw ArgumentError('Invalid MCP server name.');
     }
-    if (timeoutSeconds < 1 || timeoutSeconds > 900) {
+    if (timeoutSeconds != null &&
+        (timeoutSeconds < 1 || timeoutSeconds > 900)) {
       throw ArgumentError(
         'MCP sign-in timeout must be between 1 and 900 seconds.',
       );
@@ -39,7 +40,7 @@ final class McpOauthProtocolAdapter {
     try {
       result = await request('mcpServer/oauth/login', {
         'name': name,
-        'timeoutSecs': timeoutSeconds,
+        'timeoutSecs': ?timeoutSeconds,
       });
     } on JsonRpcException catch (error) {
       if (error.code == -32601) {

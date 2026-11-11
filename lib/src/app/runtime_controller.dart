@@ -200,7 +200,7 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<McpOauthLoginAttempt> startMcpOauthLogin({
     required String serverName,
-    int timeoutSeconds = 180,
+    int? timeoutSeconds,
   }) {
     if (!supportsMcpOauth) {
       throw UnsupportedError('MCP sign-in requires a connected local runtime.');

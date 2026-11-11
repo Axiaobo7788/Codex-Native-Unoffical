@@ -104,10 +104,7 @@ client_id = ${jsonEncode(McpOauthHttpFixture.clientId)}
     );
     stage = 'login start';
     final attempt = await connection
-        .startMcpOauthLogin(
-          serverName: McpOauthHttpFixture.serverName,
-          timeoutSeconds: 20,
-        )
+        .startMcpOauthLogin(serverName: McpOauthHttpFixture.serverName)
         .timeout(deadline);
     _check(
       attempt.authorizationUri.scheme == 'http' &&

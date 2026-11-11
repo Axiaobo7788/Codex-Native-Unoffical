@@ -15,9 +15,12 @@ class McpOauthController extends ChangeNotifier {
   McpOauthController({
     required this.gateway,
     required this.launchBrowser,
-    this.timeoutSeconds = 180,
+    this.timeoutSeconds,
     this.startTimeout = const Duration(seconds: 30),
-  }) : assert(timeoutSeconds >= 1 && timeoutSeconds <= 900),
+  }) : assert(
+         timeoutSeconds == null ||
+             (timeoutSeconds >= 1 && timeoutSeconds <= 900),
+       ),
        assert(startTimeout > Duration.zero) {
     _subscription = gateway.mcpOauthEvents.listen(
       _handleEvent,
@@ -28,7 +31,7 @@ class McpOauthController extends ChangeNotifier {
 
   final McpOauthGateway gateway;
   final McpOauthBrowserLauncher launchBrowser;
-  final int timeoutSeconds;
+  final int? timeoutSeconds;
   final Duration startTimeout;
   late final StreamSubscription<McpOauthEvent> _subscription;
   Timer? _deadline;
@@ -111,7 +114,12 @@ class McpOauthController extends ChangeNotifier {
       _phase = McpOauthPhase.waiting;
       _message = 'Continue in your browser.';
       _deadline?.cancel();
-      _deadline = Timer(Duration(seconds: timeoutSeconds + 5), () {
+      // Current public stock defaults to a 300s callback window. Keep a soft
+      // projection watchdog without shortening the backend's default window.
+      final completionDeadline = timeoutSeconds == null
+          ? const Duration(minutes: 5, seconds: 5)
+          : Duration(seconds: timeoutSeconds! + 5);
+      _deadline = Timer(completionDeadline, () {
         if (_isCurrent(generation)) {
           _finish(
             McpOauthPhase.unconfirmed,

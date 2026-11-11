@@ -24,11 +24,13 @@ void main() {
       );
       final attempt = await adapter.start(serverName: ' local-mcp ');
       expect(calls.single.$1, 'mcpServer/oauth/login');
-      expect(calls.single.$2, {'name': 'local-mcp', 'timeoutSecs': 180});
+      expect(calls.single.$2, {'name': 'local-mcp'});
       expect(attempt.authorizationUri.host, 'auth.example.test');
       expect(attempt.loginId, 'login-1');
       loginId = null;
       expect((await adapter.start(serverName: 'local-mcp')).loginId, isNull);
+      await adapter.start(serverName: 'local-mcp', timeoutSeconds: 20);
+      expect(calls.last.$2, {'name': 'local-mcp', 'timeoutSecs': 20});
     },
   );
 

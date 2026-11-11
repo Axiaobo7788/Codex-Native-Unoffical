@@ -9,6 +9,7 @@ class _Gateway implements McpOauthGateway {
   final events = StreamController<McpOauthEvent>.broadcast(sync: true);
   final starts = <Completer<McpOauthLoginAttempt>>[];
   final names = <String>[];
+  final timeouts = <int?>[];
   @override
   bool supportsMcpOauth = true;
   @override
@@ -16,9 +17,10 @@ class _Gateway implements McpOauthGateway {
   @override
   Future<McpOauthLoginAttempt> startMcpOauthLogin({
     required String serverName,
-    int timeoutSeconds = 180,
+    int? timeoutSeconds,
   }) {
     names.add(serverName);
+    timeouts.add(timeoutSeconds);
     final result = Completer<McpOauthLoginAttempt>();
     starts.add(result);
     return result.future;
@@ -205,6 +207,33 @@ void main() {
       expect(controller.phase, McpOauthPhase.succeeded);
     },
   );
+
+  testWidgets('default flow leaves the backend window intact beyond 180s', (
+    tester,
+  ) async {
+    final actor = McpOauthController(
+      gateway: gateway,
+      launchBrowser: (uri) async => false,
+    );
+    try {
+      final start = actor.signIn('mcp');
+      gateway.starts.single.complete(_attempt());
+      await start;
+      expect(gateway.timeouts.single, isNull);
+      await tester.pump(const Duration(seconds: 190));
+      expect(actor.phase, McpOauthPhase.waiting);
+      gateway.events.add(
+        const McpOauthCompleted(
+          serverName: 'mcp',
+          success: true,
+          loginId: 'current',
+        ),
+      );
+      expect(actor.phase, McpOauthPhase.succeeded);
+    } finally {
+      actor.dispose();
+    }
+  });
 
   test('legacy global completion works without a login id', () async {
     final start = controller.signIn('mcp');

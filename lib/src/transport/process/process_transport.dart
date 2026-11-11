@@ -211,7 +211,7 @@ class ProcessTransport
   @override
   Future<McpOauthLoginAttempt> startMcpOauthLogin({
     required String serverName,
-    int timeoutSeconds = 180,
+    int? timeoutSeconds,
   }) async {
     if (_closing) {
       throw const TransportClosedException();

@@ -9,6 +9,6 @@ abstract interface class McpOauthGateway {
   /// Authenticates a globally configured server without loading a cold thread.
   Future<McpOauthLoginAttempt> startMcpOauthLogin({
     required String serverName,
-    int timeoutSeconds = 180,
+    int? timeoutSeconds,
   });
 }

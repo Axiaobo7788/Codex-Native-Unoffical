@@ -105,6 +105,7 @@ void main() {
       await pumpEventQueue();
       final request = jsonDecode(child.writes.single) as Map<String, Object?>;
       expect(request['method'], 'mcpServer/oauth/login');
+      expect(request['params'], {'name': 'mcp'});
       for (var i = 0; i < 20; i++) {
         await expectLater(
           transport.startMcpOauthLogin(serverName: 'other'),

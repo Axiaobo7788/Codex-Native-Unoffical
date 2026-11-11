@@ -26,7 +26,7 @@ class _OauthHarness extends SimulatedRuntimeHarness {
   @override
   Future<McpOauthLoginAttempt> startMcpOauthLogin({
     required String serverName,
-    int timeoutSeconds = 180,
+    int? timeoutSeconds,
   }) async {
     starts.add(serverName);
     return McpOauthLoginAttempt(

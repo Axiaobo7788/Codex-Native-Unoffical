@@ -1,8 +1,9 @@
 # Local Desktop MCP authentication access
 
 Current Track F work, based on `deb70761f3ebbe32de878b3cd7bc0ff5da400a5c`.
-The Native access source passes focused and real-stock checks; packaged replay
-and peer review remain pending. This document separates the supported stock
+Published Native access source `0cdf0e8` passes shared gates, peer correction
+and packaged replay. A subsequent default-timeout correction is authored but
+targeted-verified; combined release gates are pending. This document separates the supported stock
 contract from the client projection and each validation level.
 
 ## Official and stock evidence
@@ -86,12 +87,13 @@ production route change. Corrected product `r2` and full focused `r3` pass.
   or model. Installed `0.167.0-alpha.3.2` and public `0.167.1` both pass via the
   unchanged bundled Host `73218b92…`. Logs are
   `/var/tmp/native-ui-r0.BbOvHT/mcp-oauth-{installed,public-01671}-smoke-r1.log`.
-- A packaged Native walkthrough, browser-handoff failure/retry and clean owned
-  process teardown remain pending. Human/external-provider acceptance remains
-  separate. The product matrix must not become MATCH from authored tests alone.
+- Source-bound packaged replay now passes as recorded below. Human/external-
+  provider acceptance remains separate; earlier counts above are historical
+  focused evidence, not the latest shared result.
 
-Heavy validation remains serialized. Gemini explicitly released its U2 slot;
-Codex now owns it while Gemini performs light-only peer review.
+Heavy validation remains serialized. After the completed `0cdf0e8` gates and
+owned runtime teardown, Codex released the slot to Gemini for U3, and Gemini has now explicitly
+returned it after its source/captures. Codex owns current combined validation.
 
 ## Targeted peer review and corrections
 
@@ -114,8 +116,9 @@ cannot leave a stale loading animation running behind the modal. The first
 correction exposed that animation timeout and is retained as negative evidence.
 
 Strict analysis and 42 focused MCP/runtime/navigation cases pass after these
-corrections. The full 601-case + five-skip pass at `0ecb27d` predates them; a fresh
-shared gate and packaged walkthrough remain pending. Logs are under
+corrections. A fresh `0cdf0e8` shared run passes 603 default cases plus five
+opt-in skips and five separately enabled real-stock cases. The 601-case pass at
+`0ecb27d` predates these corrections and remains separately source-bound. Logs are under
 `/var/tmp/native-ui-r0.BbOvHT/mcp-oauth-peer-*` and
 `mcp-oauth-wide-modal-focus-red-r1.log`.
 
@@ -128,3 +131,65 @@ client does not infer authentication success from invalid wire data. A legitimat
 stock cross-scope notification that contradicts this policy has not been observed.
 That evidence boundary stays explicit rather than adding a scoped-error framework
 from synthetic malformed notifications alone.
+
+
+## Packaged and shared checkpoint at `0cdf0e8`
+
+All 376 tracked files were hashed before and after shared validation. Format
+203 files/zero changes, strict analysis, 68-root pure-Dart compilation, history
+100/1,000 plus ten 3 MiB discarded outputs, Rust fmt/Clippy/100 tests, two-job
+Linux release/83-library closure, existing MCP smoke and new installed/public
+OAuth smoke pass. Exact branch CI `43101623112` passes all three platforms.
+The default Flutter suite above mixes unit, widget and typed simulated product
+integration; its count is not a full-process E2E claim.
+
+Frozen bundle: `/var/tmp/native-desktop-mcp-u2-0cdf0e8-r1/`, AOT
+`b99abbd6165f68a260cff793ae996e6f0e027953277af94dd9fe25d510960a51`,
+Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
+Its source manifest and per-file hashes bind the captures to this source.
+
+- Installed success profile: pending authentication survives navigation,
+  1191×865 → 720×800 → wide, compact close/reopen, resizing while the modal is
+  retained and retrying the same handoff. Completion/readback shows `oAuth`;
+  Escape closes the widened modal. One authorization/exchange and 20
+  authenticated MCP calls were observed.
+- Public `0.167.1`: completion and Reload config retain `oAuth`. After full
+  App/Host/stock teardown and a new app process, the same private profile reads
+  authenticated status without another authorization. One authorization/exchange
+  and 15 authenticated MCP calls were observed. This is stock credential
+  persistence, not in-app crash recovery.
+- Both successful profiles created zero threads and had no observed
+  overflow/Unhandled failure. Owned App/Host/stock/Xvfb/provider/portal/DBus
+  workers exited. Private driver/accessibility warnings remain recorded.
+- Initial installed setup had no valid URI handler: launch API accepted a URI,
+  but no callback occurred; stock later reported failure. Counters were zero.
+  The successful runs used a controlled GIO `.desktop` URI handler constrained
+  to the local fixture. Minimal portal OpenURI counters were zero, so no portal
+  callback claim is made. Actual Chrome/external-provider/account and Human
+  acceptance are not established.
+
+## Default-timeout correction — targeted verified, combined gates pending
+
+The final audit found a material configuration mismatch: Native forced 180
+seconds, whereas the inspected official manager sends only the server name.
+Public stock source `c875667e`, `perform_oauth_login.rs`, defines the omitted
+OAuth timeout as 300 seconds and the request processor preserves omission.
+The authored correction omits optional `timeoutSecs` by default, retains bounded
+explicit overrides, and gives the client completion watchdog five minutes plus
+five seconds. The watchdog is local observation, not backend cancellation.
+
+Tests now assert name-only protocol and ProcessTransport requests, and that a
+normal flow still waits after 190 seconds. The typed real-stock smoke now uses
+omission too. An isolated `0cdf0e8` worktree reproduces both failures: forced `timeoutSecs:
+180` and the prematurely expiring controller. Corrected format, strict analysis,
+68-root pure-Dart compilation and 43 focused cases pass. Both installed/public
+real Host-backed OAuth smoke runs pass with timeout omitted. The first focused
+command accidentally named two nonexistent test files; it was corrected and
+rerun, not treated as a product failure. Logs are `mcp-timeout-*` under
+`/var/tmp/native-ui-r0.BbOvHT/`. Fresh combined release/shared gates remain
+pending; prior `0cdf0e8` CI/captures do not validate this new source.
+
+Concurrent different-server authentication and custom scope/registration/thread
+overrides remain separate research. The first global path serializes one
+app-level pending flow; this checkpoint does not establish all MCP workflow
+parity or optional rich app UI support.
