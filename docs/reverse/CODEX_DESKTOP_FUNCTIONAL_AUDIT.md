@@ -92,7 +92,7 @@ next action identifies a real external dependency.
 |---|---|---|---|---|---|
 | Local runtime discovery, initialization, stop/restart | MATCH | Installed/public schemas; fresh direct-stock cases and MCP smoke | `process_transport.dart`, executable/Host locators, `runtime_controller.dart`, Runtime panel | Stock harness remains in the child process; handshake, request correlation and shutdown are implemented. Physical platform installation/signing is not established by Linux tests. | Preserve lifecycle gates; investigate concrete regressions rather than inventing a new runtime. |
 | Local thread create/list/select/read/resume, bounded ordinary history | MATCH | Stable `thread/*`, `thread/turns/list`, `thread/items/list`; fresh packaged same-stock history replay | `thread_protocol.dart`, `thread_list_controller.dart`, `history_controller.dart`, sidebar and timeline | Normal supported path is reachable and paginated. Provider discovery and failed cold resume have separate non-matching rows below. | Keep all history/working-set caps and inactive-view eviction. |
-| Cold-resume failure feedback in the active conversation | PARTIAL | Stable `thread/resume`; [F32B normal-entry stock evidence](THREAD_PROVIDER_RESUME_PRESENTATION_EVIDENCE.md) | `_send` and `_confirmColdResume` in `conversation.dart`; controller catches into `errorMessage`; sidebar displays it | Ordinary send can return without conversation-visible feedback when the sidebar is hidden/compact. The draft is retained. Review has a separate feedback path; it does not fix normal send. | Fresh targeted reproduction, then attempt/selection-scoped feedback for normal implicit and explicit resume without sending a turn or changing provider discovery. |
+| Cold-resume failure feedback in the active conversation | MATCH | Stable `thread/resume`; fresh before/after packaged stock replay and 42 targeted cases | Source `a0d2a05` preserves peer `aba5feb`, adds typed loaded/failed/skipped outcomes and a bounded current-thread live-region notice above the composer | Failed normal Send and explicit resume now preserve draft/attachments with visible feedback in compact and collapsed-sidebar states. Review uses attempt outcome. This does not close provider discovery or other thread-action feedback. | Preserve the guards; continue the next supported gap. Physical screen-reader/Human acceptance remains unrun. |
 | Provider-aware saved-thread discovery and recovery | PARTIAL | [Four-build stock/provider matrix](THREAD_PROVIDER_SCOPE_EVIDENCE.md), fresh same-version exports | `thread_protocol.dart` defaults to configured-provider lists; saved title search shares that scope; `JsonRpcException.data` is retained | All-provider local history is supported upstream, but Native has no explicit discovery/read-only recovery path. Cold resume differs between 0.167 and 0.169 alpha. | Design bounded explicit discovery and structured provider-block handling from actual version behavior; never silently switch providers or send queued work. |
 | Thread rename/archive/unarchive/permanent deletion | MATCH | Stable schemas; `thread_smoke.dart` and existing controller/stock evidence | Typed thread gateway, sidebar actions/confirmation | Supported local actions are reachable. Deleting real user data remains an explicit user action; this audit performs no such deletion. | Retain destructive confirmation and truthful failures. |
 | Turn start, assistant streaming, steer and interrupt | MATCH | Stable turn/item methods; current direct-stock cases and earlier real Linux turn walks | `turn_protocol.dart`, `conversation_controller.dart`, composer Send/Steer/Stop | Ordinary lifecycle is wired, including stopped/failed/completed states. Streaming is coalesced. | Preserve race/admission guards and 50 ms coalescing. |
@@ -138,23 +138,23 @@ next action identifies a real external dependency.
 
 | Rank | Confirmed gap | User-visible value | Support confidence | Feasibility / risk | Action |
 |---|---|---|---|---|---|
-| 1 | Cold-resume failure hidden from conversation | High: a normal failed send can look inert | High: fresh current source plus prior normal-entry real stock evidence | Small state/presentation seam, independent of U1; guard stale attempts and keep draft | Fresh current reproduction and attempt-scoped feedback for implicit and explicit resume. |
+| Closed (`a0d2a05`) | Cold-resume failure hidden from conversation | High: a normal failed send can look inert | High: fresh current source plus prior normal-entry real stock evidence | Small state/presentation seam, independent of U1; guard stale attempts and keep draft | Fresh current reproduction and attempt-scoped feedback for implicit and explicit resume. |
 | 2 | Silent plugin catalog omission | Medium/high for affected workspaces; truthful inventory | High: stable response + distinct 131-row fixture; current cap/source-error code | Narrow protocol/model/UI truth correction, low regression surface | Signal genuine truncation separately from partial sources while retaining cap 100. |
 | 3 | Account and MCP OAuth access paths absent | High: onboarding/configured-server usability | High stable contracts; actual identity flow requires user/local OAuth evidence | Separate lifecycle/security/UI work | Implement complete stock-owned flows, not a credential bridge. |
 | 4 | Additional-permission grant coverage | High when the opt-in feature is in scope | Stable request/response, but relevant emitter flags are under-development and off | Security-sensitive; normal-workflow/adoption evidence still needed | Reproduce and classify before implementation; schema presence alone is insufficient. |
 | 5 | Global search, queue, suggestions, terminal cleanup and richer saved data | High but different scopes/dependencies | Public methods exist; bounds and state behavior need focused probes | Separate coherent slices, not one generic framework | Progress the highest supported research item and reclassify; no queue-exhaustion stop. |
 
-The local repository also retains unmerged peer commit
+The first correction preserves peer commit
 `aba5febb1f8b7e6dcd722a62df512a3172315f2b`
 (`agent/gemini-conversation-resume-failure`). It adds immutable resume outcomes,
 a thread-scoped conversation notice, and targeted controller/product tests.
-The old worktree is clean. Review and adapt this existing implementation to the
-current request/composer composition, preserve its original commit, and verify
-current behavior; do not duplicate it merely because the current owner is Codex.
+The old worktree is clean. Normal merge `a0d2a05` retains that commit as its second
+parent and adapts it to the current request/composer composition; the source was
+reviewed by both peers and independently verified against real stock.
 
 No completion is asserted: this audit finds both supported `MISSING` and material
-`PARTIAL` workflows. The first implementation is conversation-visible cold-resume failure feedback,
-then this assessment must be refreshed. A green implementation checkpoint is not a
+`PARTIAL` workflows. The first correction is verified below; explicit catalog
+truncation is the next active functional slice. A green implementation checkpoint is not a
 stop condition; Track U continues concurrently.
 
 ## First correction checkpoint — cold-resume feedback
@@ -186,7 +186,27 @@ preserved as invalid setup evidence, not counted as a reproduction. No user
 account or project data was used. Only the model-response endpoint is loopback;
 the app-server and Host are real processes.
 
-The patched packaged replay and combined F/U shared validation are pending at
-this source checkpoint. Do not promote the correction to real-use verified or
-close the audit row until those checks run. The remaining supported gaps above
-keep Track F active independently of Track U.
+Patched source `a0d2a05` passed 570 default Flutter cases (five opt-in skips),
+five separately enabled real-stock cases, history 100/1,000 plus ten 3 MiB
+outputs, Rust fmt/Clippy/100 tests, two-job Linux release, 83-library closure and
+pure-Dart MCP smoke. The auxiliary ASCII source was byte-compared across all
+196 tracked lib/test/tool files. This does not claim the original Unicode-path
+LSP framing defect is fixed.
+
+Independent patched AOT `b396a6abeb5da3d1af2c9745e0e6b5ffd88ebd774c1c90cdef776cd20b18a5ee`
+uses the same real Host/stock and directly seeded private fixture. At 720×800 a
+failed Send shows the error above the composer while retaining the local file
+attachment and exact draft. Dismiss retains both; a repeated failed Send shows
+the error again. At 1191×865 it remains visible with the sidebar collapsed.
+Both failed sends left the held rollout byte-identical. Restoring it and retrying
+creates exactly one stock task-start/completion pair containing the draft and
+file, clears composer/error, and renders the real stock response. App/Host/stock
+and private Xvfb exited. The loopback model fixture was also stopped. Full
+manifest, hashes, screenshots and before/after setup evidence are in the r2
+artifact above. No overflow/Unhandled was found; baseline Xvfb accessibility /
+graphics warnings and stock fixture model-metadata fallback remain recorded.
+
+This is `AGENT REAL-USE VERIFIED`, not Human acceptance or physical screen-reader
+verification. U1 is a separate peer source and has not been merged into this F
+binary. The remaining supported gaps above keep Track F active independently of
+Track U.
