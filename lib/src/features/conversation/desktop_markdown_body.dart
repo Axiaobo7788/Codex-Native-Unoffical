@@ -30,6 +30,7 @@ class DesktopMarkdownBody extends StatefulWidget {
     this.inlineCodeVerticalPadding =
         OfficialCodexTheme.inlineCodeVerticalPadding,
     this.inlineCodeFontScale = OfficialCodexTheme.inlineCodeFontScale,
+    this.maxInlineCodePills = OfficialCodexTheme.maxInlineCodePills,
   });
 
   final String data;
@@ -46,6 +47,7 @@ class DesktopMarkdownBody extends StatefulWidget {
   final double inlineCodeHorizontalPadding;
   final double inlineCodeVerticalPadding;
   final double inlineCodeFontScale;
+  final int maxInlineCodePills;
 
   @override
   State<DesktopMarkdownBody> createState() => _DesktopMarkdownBodyState();
@@ -72,6 +74,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   final _recognizers = <TapGestureRecognizer>[];
   final _activeLinks = <_ActiveMarkdownLink>[];
   var _preDepth = 0;
+  var _inlineCodePillCount = 0;
   List<Widget> _children = const [];
 
   @override
@@ -94,7 +97,8 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
             oldWidget.inlineCodeHorizontalPadding ||
         widget.inlineCodeVerticalPadding !=
             oldWidget.inlineCodeVerticalPadding ||
-        widget.inlineCodeFontScale != oldWidget.inlineCodeFontScale) {
+        widget.inlineCodeFontScale != oldWidget.inlineCodeFontScale ||
+        widget.maxInlineCodePills != oldWidget.maxInlineCodePills) {
       _buildBlocks();
     }
   }
@@ -103,6 +107,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     _disposeRecognizers();
     _activeLinks.clear();
     _preDepth = 0;
+    _inlineCodePillCount = 0;
     if (widget.data.isEmpty) {
       _children = const [];
       return;
@@ -722,7 +727,16 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
       'code': _DesktopInlineCodeBuilder(
         delegate: widget.builders['code'],
         isInsidePre: () => _preDepth > 0,
+        consumePillSlot: () {
+          if (_inlineCodePillCount >= widget.maxInlineCodePills) {
+            return false;
+          }
+          _inlineCodePillCount++;
+          return true;
+        },
         currentLink: () => _activeLinks.isEmpty ? null : _activeLinks.last,
+        obtainLinkRecognizer: (link) =>
+            link.recognizer ??= createLink(link.text, link.href, link.title),
         onTapLink: (text, href, title) => widget.onTapLink(text, href, title),
         fallbackStyle: styleSheet.p,
         backgroundColor: widget.inlineCodeBackground,
@@ -804,6 +818,15 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     final recognizer = TapGestureRecognizer()
       ..onTap = () => widget.onTapLink(text, href, title);
     _recognizers.add(recognizer);
+    if (_activeLinks.isNotEmpty) {
+      final current = _activeLinks.last;
+      if (current.recognizer == null &&
+          current.text == text &&
+          current.href == href &&
+          current.title == title) {
+        current.recognizer = recognizer;
+      }
+    }
     return recognizer;
   }
 
@@ -835,7 +858,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
 }
 
 final class _ActiveMarkdownLink {
-  const _ActiveMarkdownLink({
+  _ActiveMarkdownLink({
     required this.text,
     required this.href,
     required this.title,
@@ -844,6 +867,7 @@ final class _ActiveMarkdownLink {
   final String text;
   final String? href;
   final String title;
+  GestureRecognizer? recognizer;
 }
 
 final class _LinkScopePaddingBuilder extends MarkdownPaddingBuilder {
@@ -935,7 +959,9 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
   _DesktopInlineCodeBuilder({
     required this.delegate,
     required this.isInsidePre,
+    required this.consumePillSlot,
     required this.currentLink,
+    required this.obtainLinkRecognizer,
     required this.onTapLink,
     required this.fallbackStyle,
     required this.backgroundColor,
@@ -947,7 +973,10 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
 
   final MarkdownElementBuilder? delegate;
   final bool Function() isInsidePre;
+  final bool Function() consumePillSlot;
   final _ActiveMarkdownLink? Function() currentLink;
+  final GestureRecognizer Function(_ActiveMarkdownLink link)
+  obtainLinkRecognizer;
   final MarkdownTapLinkCallback onTapLink;
   final TextStyle? fallbackStyle;
   final Color backgroundColor;
@@ -982,6 +1011,47 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
         .merge(parentStyle);
     final baseFontSize =
         effectiveParent.fontSize ?? preferredStyle?.fontSize ?? 14.0;
+    final activeLink = currentLink();
+
+    if (!consumePillSlot()) {
+      final recognizer = activeLink != null
+          ? obtainLinkRecognizer(activeLink)
+          : null;
+      final parentHeight = effectiveParent.height;
+      final fallbackSpanStyle = TextStyle(
+        inherit: true,
+        color: effectiveParent.color ?? preferredStyle?.color,
+        backgroundColor: backgroundColor,
+        fontFamily: preferredStyle?.fontFamily ?? 'monospace',
+        fontFamilyFallback:
+            preferredStyle?.fontFamilyFallback ??
+            effectiveParent.fontFamilyFallback,
+        fontSize: baseFontSize * fontScale,
+        height: parentHeight != null && fontScale > 0
+            ? parentHeight / fontScale
+            : null,
+        fontWeight: effectiveParent.fontWeight,
+        fontStyle: effectiveParent.fontStyle,
+        letterSpacing: effectiveParent.letterSpacing,
+        decoration: effectiveParent.decoration,
+        decorationColor: effectiveParent.decorationColor,
+        decorationStyle: effectiveParent.decorationStyle,
+        decorationThickness: effectiveParent.decorationThickness,
+        fontFeatures: effectiveParent.fontFeatures,
+        textBaseline: TextBaseline.alphabetic,
+      );
+      return Text.rich(
+        TextSpan(
+          text: element.textContent,
+          style: fallbackSpanStyle,
+          recognizer: recognizer,
+          mouseCursor: recognizer != null
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
+        ),
+      );
+    }
+
     final pillTextStyle = TextStyle(
       inherit: false,
       color: effectiveParent.color ?? preferredStyle?.color,
@@ -1020,7 +1090,6 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
       ),
     );
 
-    final activeLink = currentLink();
     if (activeLink != null) {
       pill = MouseRegion(
         cursor: SystemMouseCursors.click,

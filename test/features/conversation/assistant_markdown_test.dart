@@ -1193,6 +1193,302 @@ const fenced = 'not_inline_pill';
       }
     },
   );
+
+  testWidgets(
+    'desktop inline code enforces shared 128-pill budget with styled linked TextSpan fallback',
+    (tester) async {
+      final launched = <Uri>[];
+      String tok(int n) => 'tok_${n.toString().padLeft(3, '0')}';
+
+      final bodyPills = [for (var i = 8; i <= 128; i++) '`${tok(i)}`']
+          .join(' ');
+      final overBudgetSource =
+          '''# Heading `${tok(1)}`
+
+| Header `${tok(2)}` | `${tok(3)}` |
+| :--- | :--- |
+| `${tok(4)}` | `${tok(5)}` |
+
+- Bullet `${tok(6)}`
+
+> Quote `${tok(7)}`
+
+$bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${tok(131)}` here](https://example.invalid/mixed-over).
+
+# Over heading `${tok(132)}`
+
+| Over `${tok(133)}` | `${tok(134)}` |
+| :--- | :--- |
+| Row | `${tok(135)}` |''';
+
+      Widget buildBudgetApp({
+        required Brightness brightness,
+        required String data,
+        required ExternalLinkLauncher launcher,
+      }) {
+        final themeData = brightness == Brightness.dark
+            ? OfficialCodexThemeData.dark
+            : OfficialCodexThemeData.light;
+        return MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          home: OfficialCodexThemeProvider(
+            data: themeData,
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: SizedBox(
+                  width: 640,
+                  child: AssistantMarkdown(
+                    data: data,
+                    completed: true,
+                    proseLineHeight:
+                        OfficialCodexTheme.assistantProseLineHeight,
+                    externalLinkLauncher: launcher,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      TextSpan? findSpanByText(InlineSpan rootSpan, String target) {
+        TextSpan? found;
+        rootSpan.visitChildren((span) {
+          if (span is TextSpan && span.text == target) {
+            found = span;
+            return false;
+          }
+          return true;
+        });
+        if (found != null) {
+          return found;
+        }
+        if (rootSpan is TextSpan && rootSpan.text == target) {
+          return rootSpan;
+        }
+        return null;
+      }
+
+      TextSpan? findSpanInTree(String target) {
+        for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+          final match = findSpanByText(rich.text, target);
+          if (match != null) {
+            return match;
+          }
+        }
+        return null;
+      }
+
+      for (final (brightness, expectedFill) in [
+        (Brightness.light, OfficialCodexTheme.lightInlineCodeBackground),
+        (Brightness.dark, OfficialCodexTheme.darkInlineCodeBackground),
+      ]) {
+        await tester.pumpWidget(
+          buildBudgetApp(
+            brightness: brightness,
+            data: overBudgetSource,
+            launcher: (uri) async {
+              launched.add(uri);
+              return true;
+            },
+          ),
+        );
+
+        final root = find.byKey(const ValueKey('assistant-markdown'));
+        final bodySize = Theme.of(tester.element(root))
+            .textTheme
+            .bodyMedium!
+            .fontSize!;
+        final tableSize = bodySize * 0.875 < 12.0 ? 12.0 : bodySize * 0.875;
+
+        // Exactly 128 rich WidgetSpan pills are created across heading + table +
+        // list + blockquote + paragraph.
+        final pillRadius = BorderRadius.circular(
+          OfficialCodexTheme.inlineCodeRadius,
+        );
+        final pillDecoratedCount = tester
+            .widgetList<DecoratedBox>(
+              find.descendant(of: root, matching: find.byType(DecoratedBox)),
+            )
+            .where((w) {
+              final d = w.decoration;
+              return d is BoxDecoration && d.borderRadius == pillRadius;
+            })
+            .length;
+        expect(pillDecoratedCount, OfficialCodexTheme.maxInlineCodePills);
+        expect(find.text(tok(1)), findsOneWidget);
+        expect(find.text(tok(5)), findsOneWidget);
+        expect(find.text(tok(128)), findsOneWidget);
+
+        // Tokens 129..135 fall back to merged TextSpans (zero inline-code pill
+        // DecoratedBox wrappers) while keeping parent-relative size/weight and fill.
+        for (var i = 129; i <= 135; i++) {
+          final match = find.textContaining(tok(i), findRichText: true);
+          expect(match, findsOneWidget);
+          final ancestorPills = tester
+              .widgetList<DecoratedBox>(
+                find.ancestor(of: match, matching: find.byType(DecoratedBox)),
+              )
+              .where((w) {
+                final d = w.decoration;
+                return d is BoxDecoration && d.borderRadius == pillRadius;
+              });
+          expect(ancestorPills, isEmpty);
+        }
+
+        for (final (token, expectedBaseSize, expectedWeight) in [
+          (tok(129), bodySize, FontWeight.w400),
+          (tok(130), bodySize, FontWeight.w400),
+          (tok(131), bodySize, FontWeight.w400),
+          (tok(132), bodySize * 1.5, FontWeight.w600),
+          (tok(133), tableSize, FontWeight.w600),
+          (tok(135), tableSize, FontWeight.w400),
+        ]) {
+          final span = findSpanInTree(token);
+          expect(span, isNotNull, reason: 'Missing fallback TextSpan $token');
+          expect(span!.style!.backgroundColor, expectedFill);
+          expect(
+            span.style!.fontSize,
+            closeTo(
+              expectedBaseSize * OfficialCodexTheme.inlineCodeFontScale,
+              0.01,
+            ),
+          );
+          expect(span.style!.fontWeight, expectedWeight);
+        }
+
+        final linkedSpan130 = findSpanInTree(tok(130))!;
+        final linkedSpan131 = findSpanInTree(tok(131))!;
+        expect(linkedSpan130.style!.decoration, TextDecoration.underline);
+        expect(
+          linkedSpan130.style!.decorationStyle,
+          TextDecorationStyle.dotted,
+        );
+        expect(linkedSpan130.recognizer, isA<TapGestureRecognizer>());
+        expect(linkedSpan131.recognizer, isA<TapGestureRecognizer>());
+      }
+
+      // Enclosing link activation + cached callback-only update on over-budget spans.
+      launched.clear();
+      (findSpanInTree(tok(130))!.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      (findSpanInTree(tok(131))!.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      expect(launched, [
+        Uri.parse('https://example.invalid/over'),
+        Uri.parse('https://example.invalid/mixed-over'),
+      ]);
+
+      final beforeBody = tester.widget<DesktopMarkdownBody>(
+        find.byType(DesktopMarkdownBody),
+      );
+      final beforeSpan130 = findSpanInTree(tok(130))!;
+      final updatedLaunched = <Uri>[];
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.dark,
+          data: overBudgetSource,
+          launcher: (uri) async {
+            updatedLaunched.add(uri);
+            return true;
+          },
+        ),
+      );
+      final afterBody = tester.widget<DesktopMarkdownBody>(
+        find.byType(DesktopMarkdownBody),
+      );
+      final afterSpan130 = findSpanInTree(tok(130))!;
+      expect(afterBody.styleSheet, equals(beforeBody.styleSheet));
+      expect(identical(afterSpan130, beforeSpan130), isTrue);
+      (afterSpan130.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      expect(updatedLaunched, [Uri.parse('https://example.invalid/over')]);
+
+      // Clipboard copy preserves document order across pill 128 -> fallback 129..135.
+      String? copiedText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedText =
+                (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final selectableState = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
+      );
+      selectableState.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(
+        tester.element(find.text(tok(1))),
+        CopySelectionTextIntent.copy,
+      );
+      await tester.pump();
+      expect(copiedText, isNotNull);
+      var prevIndex = -1;
+      for (final marker in [
+        tok(1),
+        tok(5),
+        tok(128),
+        tok(129),
+        tok(130),
+        'See ${tok(131)} here',
+        tok(132),
+        tok(133),
+        tok(134),
+        tok(135),
+      ]) {
+        final idx = copiedText!.indexOf(marker);
+        expect(idx, greaterThan(prevIndex), reason: 'Out-of-order $marker');
+        prevIndex = idx;
+      }
+
+      // Rebuilding with a normal <= 128 message resets the counter cleanly.
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: 'Normal `r_1`, `r_2`, and `r_3`.',
+          launcher: (_) async => true,
+        ),
+      );
+      expect(find.text('r_1'), findsOneWidget);
+      expect(find.text('r_2'), findsOneWidget);
+      expect(find.text('r_3'), findsOneWidget);
+
+      // Dense 16 KiB (4,096 inline-code tokens) stays strictly O(1) element-bounded
+      // and returns to exact baseline element count on unmount.
+      await tester.pumpWidget(_app(const SizedBox.shrink()));
+      final emptyShellElements = tester.allElements.length;
+
+      final dense16KiB = List.filled(4096, '`a`').join(' ');
+      expect(
+        dense16KiB.length,
+        lessThanOrEqualTo(AssistantMarkdown.maxSourceCharacters),
+      );
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: dense16KiB,
+          launcher: (_) async => true,
+        ),
+      );
+      final denseElementCount = tester.allElements.length;
+      expect(denseElementCount - emptyShellElements, lessThan(2000));
+
+      await tester.pumpWidget(_app(const SizedBox.shrink()));
+      await tester.pump();
+      expect(tester.allElements.length, emptyShellElements);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Widget _app(Widget child) => MaterialApp(home: Scaffold(body: child));

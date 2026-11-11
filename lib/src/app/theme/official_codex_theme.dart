@@ -149,6 +149,11 @@ abstract final class OfficialCodexTheme {
   /// Desktop Markdown inline code relative font scale (`.InlineCode`: `font-size: .92em`).
   static const double inlineCodeFontScale = 0.92;
 
+  /// Maximum rich `WidgetSpan` inline-code pills rendered per Desktop Markdown
+  /// message before remaining inline-code tokens fall back to merged styled
+  /// `TextSpan`s (`ADR-058`).
+  static const int maxInlineCodePills = 128;
+
   /// Thread reading canvas horizontal gutters (24px).
   static const double threadBodyInlinePadding = 24.0;
 

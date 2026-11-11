@@ -159,6 +159,7 @@ class AssistantMarkdown extends StatelessWidget {
               inlineCodeVerticalPadding:
                   OfficialCodexTheme.inlineCodeVerticalPadding,
               inlineCodeFontScale: OfficialCodexTheme.inlineCodeFontScale,
+              maxInlineCodePills: OfficialCodexTheme.maxInlineCodePills,
               extensionSet: _safeExtensions,
               builders: {
                 'pre': _CodeBlockBuilder(desktop: true, bodyFontSize: fontSize),
