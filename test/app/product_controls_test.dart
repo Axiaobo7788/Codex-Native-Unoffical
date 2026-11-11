@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
@@ -105,7 +106,7 @@ void main() {
     final project = find.widgetWithText(CodexSidebarRow, 'workspace');
     final action = find.byKey(const ValueKey('project-new-thread-/workspace'));
     final visibility = find.byKey(
-      const ValueKey('project-new-thread-visibility-/workspace'),
+      const ValueKey('project-actions-visibility-/workspace'),
     );
     expect(project, findsOneWidget);
     expect(tester.widget<Opacity>(visibility).opacity, 0);
@@ -124,6 +125,26 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pumpAndSettle();
     expect(tester.widget<Opacity>(visibility).opacity, 1);
+    if (Platform.isLinux || Platform.isMacOS) {
+      final item = find.text(
+        Platform.isMacOS ? 'Reveal in Finder' : 'Open in File Manager',
+      );
+      final menu = find.byKey(const ValueKey('project-menu-/workspace'));
+      expect(tester.getCenter(menu).dx, lessThan(tester.getCenter(action).dx));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(item, findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<VoidCallback>)).dx,
+        closeTo(tester.getTopLeft(menu).dx, 1),
+      );
+      expect(tester.widget<Opacity>(visibility).opacity, 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(item, findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+    }
     final actionFocus = Focus.of(
       tester.element(
         find

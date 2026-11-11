@@ -761,6 +761,15 @@ class _ThreadPanelState extends State<_ThreadPanel> {
             onNewThreadInProject: controller.mutating
                 ? null
                 : () => _startThreadInDirectory(row.directory),
+            onRevealDirectory:
+                widget.hasNavigationRail &&
+                    !widget.runtimeController.usesRemote &&
+                    (Platform.isLinux ||
+                        Platform.isMacOS ||
+                        Platform.isWindows) &&
+                    Directory(row.directory).isAbsolute
+                ? () => _revealProjectDirectory(row.directory)
+                : null,
           );
         }
         final thread = row as ThreadSummary;
@@ -904,6 +913,25 @@ class _ThreadPanelState extends State<_ThreadPanel> {
     await widget.controller.startThread(
       widget.settingsController.threadOptions(cwd),
     );
+  }
+
+  Future<void> _revealProjectDirectory(String path) async {
+    try {
+      if (await Directory(path).exists() &&
+          await launchUrl(
+            Uri.directory(path, windows: Platform.isWindows),
+            mode: LaunchMode.externalApplication,
+          )) {
+        return;
+      }
+    } on Exception {
+      // An unavailable directory or platform handler uses the same UI error.
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the project folder.')),
+      );
+    }
   }
 
   Future<void> _chooseDirectory() async {
@@ -1671,18 +1699,27 @@ class _ProjectHeadingRow extends StatefulWidget {
     required this.heading,
     required this.onToggleCollapse,
     this.onNewThreadInProject,
+    this.onRevealDirectory,
   });
 
   final _ProjectHeading heading;
   final VoidCallback onToggleCollapse;
   final VoidCallback? onNewThreadInProject;
+  final VoidCallback? onRevealDirectory;
 
   @override
   State<_ProjectHeadingRow> createState() => _ProjectHeadingRowState();
 }
 
 class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
+  final _menuController = CodexPopoverController();
   var _focusWithin = false;
+
+  @override
+  void dispose() {
+    _menuController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1712,41 +1749,96 @@ class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
               ),
               onTap: widget.onToggleCollapse,
               trailingBuilder: (context, hovered) {
-                final showAction = hovered || _focusWithin;
                 final count = Text(
                   '${heading.count}',
                   style: Theme.of(context).textTheme.labelSmall,
                 );
-                if (widget.onNewThreadInProject == null) {
+                final reveal = widget.onRevealDirectory;
+                final newThread = widget.onNewThreadInProject;
+                if (reveal == null && newThread == null) {
                   return heading.collapsed ? count : const SizedBox.shrink();
                 }
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (heading.collapsed && !showAction) count,
-                    Opacity(
-                      key: ValueKey(
-                        'project-new-thread-visibility-${heading.directory}',
-                      ),
-                      opacity: showAction ? 1 : 0,
-                      alwaysIncludeSemantics: true,
-                      child: IgnorePointer(
-                        ignoring: !showAction,
-                        child: FocusTraversalOrder(
+                return ListenableBuilder(
+                  listenable: _menuController,
+                  builder: (context, actions) {
+                    final showActions =
+                        hovered || _focusWithin || _menuController.isOpen;
+                    return Stack(
+                      alignment: Alignment.centerRight,
+                      children: [
+                        if (heading.collapsed && !showActions) count,
+                        Opacity(
+                          key: ValueKey(
+                            'project-actions-visibility-${heading.directory}',
+                          ),
+                          opacity: showActions ? 1 : 0,
+                          alwaysIncludeSemantics: true,
+                          child: IgnorePointer(
+                            ignoring: !showActions,
+                            child: actions,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (reveal != null)
+                        FocusTraversalOrder(
                           order: const NumericFocusOrder(1),
+                          child: CodexPopoverAnchor(
+                            controller: _menuController,
+                            width: 216,
+                            popoverBuilder: (context, close) =>
+                                CodexMenu<VoidCallback>(
+                                  items: [
+                                    CodexMenuItem(
+                                      value: reveal,
+                                      label: Platform.isMacOS
+                                          ? 'Reveal in Finder'
+                                          : Platform.isWindows
+                                          ? 'Open in Explorer'
+                                          : 'Open in File Manager',
+                                      icon: const Icon(
+                                        Icons.folder_open_outlined,
+                                      ),
+                                    ),
+                                  ],
+                                  onSelected: (action) {
+                                    close();
+                                    action();
+                                  },
+                                ),
+                            child: CodexIconButton(
+                              key: ValueKey(
+                                'project-menu-${heading.directory}',
+                              ),
+                              tooltip: 'Project actions',
+                              size: 22,
+                              onPressed: _menuController.toggle,
+                              icon: const Icon(
+                                Icons.more_horiz_rounded,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (newThread != null)
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(2),
                           child: CodexIconButton(
                             key: ValueKey(
                               'project-new-thread-${heading.directory}',
                             ),
                             tooltip: 'New chat in project',
                             size: 22,
-                            onPressed: widget.onNewThreadInProject,
+                            onPressed: newThread,
                             icon: const Icon(Icons.add_rounded, size: 15),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
