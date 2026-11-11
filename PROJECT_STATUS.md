@@ -140,6 +140,34 @@ action reachable by Tab. Home, open Changes, Review, expanded activity,
 compact and dark variants have separate evidence gates.
 [Hosted CI for `c42eac5`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42947793108)
 
+## Active peer round
+
+- Base `165d7c5` is pushed and its exact hosted CI passed all three jobs.
+  Gemini owns the coherent A9–A11 bottom-stack presentation cluster in
+  `agent/gemini-golden-a-bottom-stack`. Codex owns the independent request
+  operation-lifetime correction in `agent/codex-input-operation`, actual-diff
+  review, real-stock validation and shared integration. Presentation and
+  controller/test write surfaces are separate.
+- The request controller's old completion could clear the next submission,
+  overwrite its error or remove a reused request ID after authoritative
+  resolution. Four new typed controller regressions fail on the base. One
+  bounded operation token and captured request identity protect submit,
+  cancellation and MCP responses. Disposal invalidates pending operations.
+  Strict ASCII analysis, 31 controller/widget cases and 26 protocol/simulated
+  cross-feature cases passed. The specific delayed-completion race is typed
+  test evidence. Real-stock walkthrough and shared gates belong to the
+  integrated checkpoint.
+- Peer review accepted the typed operation-kind correction. An unrelated
+  resolved event cannot retire another request kind with the same ID. A typed
+  authoritative resolution still retires an active write after its row leaves
+  the bounded projection. The cross-kind regression fails at `c910a97` and
+  passes with the correction. The suggested retirement on arbitrary same-ID
+  replacement or projection eviction was reclassified NOT REPRODUCED for the
+  supported adapter. It suppresses in-flight duplicate IDs, emits typed
+  resolution on close and shares a 32-request upstream budget. Local row
+  eviction preserves write serialization. The operation record remains one
+  slot and compares its child Object token, preserving the public getters.
+
 ## Current checkpoint
 
 - `0378125` integrates Gemini's A2–A3 presentation commits `d74cb39` and
@@ -238,9 +266,9 @@ remain available as history.
 - The pure-Dart boundary checked 65 roots. The history benchmark retained
   100 of 1,000 turns while exercising ten 3 MiB command payloads. The
   unchanged Rust tree passed formatting, Clippy and 100 tests.
-- The latest confirmed shared CI checkpoint is `c42eac5`.
+- The latest confirmed shared CI checkpoint is `165d7c5`.
   Later exact-HEAD runs remain separate until their results are read.
-  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42947793108)
+  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42956195792)
 - Signed-in official live captures, subjective interaction acceptance
   and unavailable physical devices remain evidence gates on their own
   surfaces. The primary UI has machine-actionable rows in Golden State A.
