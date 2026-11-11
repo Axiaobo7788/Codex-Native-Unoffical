@@ -4428,6 +4428,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                             size: 34,
                             shape: BoxShape.circle,
                             variant: CodexButtonVariant.primary,
+                            disabledOpacity: 0.5,
                             onPressed: enabled && (!desktopComposer || hasDraft)
                                 ? _send
                                 : null,

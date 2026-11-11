@@ -102,20 +102,32 @@ class _DesktopGoalEditor extends StatefulWidget {
   State<_DesktopGoalEditor> createState() => _DesktopGoalEditorState();
 }
 
-class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
+class _DesktopGoalEditorState extends State<_DesktopGoalEditor>
+    with WidgetsBindingObserver {
   late String _sourceObjective =
       widget.initialDraft?.sourceObjective ?? widget.goal.objective;
   late final _draft = TextEditingController.fromValue(
     widget.initialDraft?.value ?? TextEditingValue(text: _sourceObjective),
   );
   final _focus = FocusNode();
+  Timer? _updatedClock;
+
+  bool get _clockPaused => switch (WidgetsBinding.instance.lifecycleState) {
+    AppLifecycleState.hidden ||
+    AppLifecycleState.paused ||
+    AppLifecycleState.detached => true,
+    _ => false,
+  };
 
   String get sourceObjective => _sourceObjective;
 
   void recordSavedObjective(String objective) {
     _sourceObjective = objective;
     if (_draft.text.trim() == objective && _draft.text != objective) {
-      _draft.text = objective;
+      _draft.value = TextEditingValue(
+        text: objective,
+        selection: TextSelection.collapsed(offset: objective.length),
+      );
     }
   }
 
@@ -123,6 +135,39 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
     sourceObjective: _sourceObjective,
     value: _draft.value.copyWith(composing: TextRange.empty),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _syncClock();
+  }
+
+  void _syncClock() {
+    _updatedClock?.cancel();
+    _updatedClock = _clockPaused
+        ? null
+        : Timer.periodic(const Duration(minutes: 1), (_) {
+            if (mounted) {
+              setState(() {});
+            }
+          });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_clockPaused) {
+      _updatedClock?.cancel();
+      _updatedClock = null;
+      return;
+    }
+    if (_updatedClock == null) {
+      _syncClock();
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
 
   @override
   void didUpdateWidget(covariant _DesktopGoalEditor oldWidget) {
@@ -136,6 +181,8 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _updatedClock?.cancel();
     _draft.dispose();
     _focus.dispose();
     super.dispose();
@@ -143,7 +190,10 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
 
   void _revert() {
     _sourceObjective = widget.goal.objective;
-    _draft.text = _sourceObjective;
+    _draft.value = TextEditingValue(
+      text: _sourceObjective,
+      selection: TextSelection.collapsed(offset: _sourceObjective.length),
+    );
   }
 
   Future<void> _save(String objective) async {
