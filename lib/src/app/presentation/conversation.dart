@@ -17,6 +17,1264 @@ typedef _CommandOutputPresentation = ({
   String? previewTooltip,
 });
 
+enum _ActivityGroupability { standalone, groupable, omitted }
+
+enum _ActivityGroupSegmentKind {
+  none,
+  mcpNamed,
+  mcpUnnamed,
+  fileEdit,
+  exploration,
+  runCommand,
+  webSearch,
+  dynamicTool,
+}
+
+typedef _ResolvedInlineActivity = ({
+  String caption,
+  int? verbLength,
+  IconData icon,
+  bool isError,
+  bool isWarning,
+  String? statusBadge,
+  _ActivityGroupability groupability,
+  _ActivityGroupSegmentKind segmentKind,
+  String? mcpSourceDisplay,
+  int editedFileCount,
+  String? dynamicToolLeading,
+  String? dynamicToolFollowing,
+  String? activeHeaderLabel,
+  bool completed,
+});
+
+typedef _ActivityGroupSummary = ({String label, IconData icon});
+
+typedef _LiveActivityProjection = ({
+  List<ConversationEntry> visibleEntries,
+  Set<String> representedIds,
+  Map<String, List<ConversationEntry>> groups,
+  Map<String, _ActivityGroupSummary> tailInlineSummaries,
+});
+
+final RegExp _fileChangesCountPattern = RegExp(
+  r'^File changes:\s*(\d+)\s+update\(s\)',
+);
+final RegExp _identifierSplitPattern = RegExp(r'[-_\s./]+');
+final RegExp _camelBoundaryPattern = RegExp(r'([a-z0-9])([A-Z])');
+
+const Map<String, String> _knownMcpBrandCasing = <String, String>{
+  'api': 'API',
+  'chatgpt': 'ChatGPT',
+  'ci': 'CI',
+  'db': 'DB',
+  'devops': 'DevOps',
+  'github': 'GitHub',
+  'gitlab': 'GitLab',
+  'graphql': 'GraphQL',
+  'id': 'ID',
+  'ids': 'IDs',
+  'json': 'JSON',
+  'mcp': 'MCP',
+  'oauth': 'OAuth',
+  'openai': 'OpenAI',
+  'postgresql': 'PostgreSQL',
+  'pr': 'PR',
+  'prs': 'PRs',
+  'sql': 'SQL',
+  'sqlite': 'SQLite',
+  'ui': 'UI',
+  'url': 'URL',
+  'urls': 'URLs',
+};
+
+const Set<String> _uppercaseToolAcronyms = <String>{
+  'api',
+  'ci',
+  'db',
+  'id',
+  'ids',
+  'json',
+  'mcp',
+  'pr',
+  'prs',
+  'sql',
+  'ui',
+  'url',
+  'urls',
+};
+
+List<String> _tokenizeIdentifier(String raw) {
+  final decamelized = raw.replaceAllMapped(
+    _camelBoundaryPattern,
+    (match) => '${match[1]} ${match[2]}',
+  );
+  return decamelized
+      .split(_identifierSplitPattern)
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+}
+
+({String display, List<String> tokens}) _humanizeMcpServer(String rawServer) {
+  var tokens = _tokenizeIdentifier(rawServer);
+  while (tokens.length > 1) {
+    final last = tokens.last.toLowerCase();
+    if (last == 'mcp' || last == 'server') {
+      tokens = tokens.sublist(0, tokens.length - 1);
+    } else {
+      break;
+    }
+  }
+  if (tokens.isEmpty) {
+    return (display: rawServer.trim(), tokens: const <String>[]);
+  }
+  final formatted = tokens
+      .map((token) {
+        final lower = token.toLowerCase();
+        final brand = _knownMcpBrandCasing[lower];
+        if (brand != null) {
+          return brand;
+        }
+        return '${token[0].toUpperCase()}${token.substring(1).toLowerCase()}';
+      })
+      .join(' ');
+  return (
+    display: formatted,
+    tokens: tokens.map((t) => t.toLowerCase()).toList(growable: false),
+  );
+}
+
+String _humanizeMcpTool(String rawTool, List<String> serverTokens) {
+  var tokens = _tokenizeIdentifier(rawTool);
+  if (tokens.isEmpty) {
+    return '';
+  }
+  if (serverTokens.isNotEmpty && tokens.length > serverTokens.length) {
+    var matchesPrefix = true;
+    for (var i = 0; i < serverTokens.length; i++) {
+      if (tokens[i].toLowerCase() != serverTokens[i]) {
+        matchesPrefix = false;
+        break;
+      }
+    }
+    if (matchesPrefix) {
+      tokens = tokens.sublist(serverTokens.length);
+    }
+  }
+  if (tokens.length > 1 && tokens.first.toLowerCase() == 'mcp') {
+    tokens = tokens.sublist(1);
+  }
+  return _formatTokensSentenceCase(tokens);
+}
+
+String _humanizeIdentifierSentence(String raw) {
+  final tokens = _tokenizeIdentifier(raw);
+  if (tokens.isEmpty) {
+    return '';
+  }
+  return _formatTokensSentenceCase(tokens);
+}
+
+String _formatTokensSentenceCase(List<String> tokens) {
+  if (tokens.isEmpty) {
+    return '';
+  }
+  final words = <String>[];
+  for (var i = 0; i < tokens.length; i++) {
+    final token = tokens[i];
+    final lower = token.toLowerCase();
+    if (_uppercaseToolAcronyms.contains(lower)) {
+      words.add(_knownMcpBrandCasing[lower] ?? token.toUpperCase());
+    } else if (i == 0) {
+      final brand = _knownMcpBrandCasing[lower];
+      words.add(
+        brand ?? '${token[0].toUpperCase()}${token.substring(1).toLowerCase()}',
+      );
+    } else {
+      words.add(lower);
+    }
+  }
+  return words.join(' ');
+}
+
+String _joinEnglishConjunction(List<String> items) {
+  if (items.isEmpty) {
+    return '';
+  }
+  if (items.length == 1) {
+    return items.single;
+  }
+  if (items.length == 2) {
+    return '${items[0]} and ${items[1]}';
+  }
+  return '${items.sublist(0, items.length - 1).join(', ')}, and ${items.last}';
+}
+
+_ResolvedInlineActivity? _resolveHistoryInlineActivity(
+  HistoryItem item, {
+  required bool inlineActivity,
+  required PresentationDetailMode detailMode,
+}) {
+  if (!inlineActivity || detailMode != PresentationDetailMode.commands) {
+    return null;
+  }
+  if (item.kind != HistoryItemKind.activity &&
+      item.kind != HistoryItemKind.unknown) {
+    return null;
+  }
+  if ((item.isCommand || item.text.startsWith('Command: ')) &&
+      item.status == null) {
+    return null;
+  }
+  return _resolveInlineActivityCore(
+    rawText: item.text,
+    status: item.status,
+    completed: true,
+    isCommand: item.isCommand,
+    historyCommandAction: item.commandAction,
+    liveCommandActions: const <CommandActionKind>{},
+    canReadMcpText: item.canReadMcpText,
+  );
+}
+
+_ResolvedInlineActivity? _resolveLiveInlineActivity(
+  ConversationEntry entry, {
+  required bool inlineActivity,
+  required PresentationDetailMode detailMode,
+  bool searchOpen = false,
+}) {
+  if (!inlineActivity || detailMode != PresentationDetailMode.commands) {
+    return null;
+  }
+  if (entry.kind != ConversationEntryKind.activity) {
+    return null;
+  }
+  if (entry.text == 'Reasoning') {
+    if (entry.completed && !searchOpen) {
+      return (
+        caption: 'Thought',
+        verbLength: null,
+        icon: Icons.psychology_outlined,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.omitted,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: true,
+      );
+    }
+    return null;
+  }
+  if (entry.text.startsWith('Reasoning: ')) {
+    return null;
+  }
+  return _resolveInlineActivityCore(
+    rawText: entry.text,
+    status: entry.status,
+    completed: entry.completed,
+    isCommand:
+        entry.text.startsWith('Command: ') ||
+        entry.commandActions.isNotEmpty ||
+        entry.commandOutput != null,
+    historyCommandAction: null,
+    liveCommandActions: entry.commandActions,
+    canReadMcpText: false,
+  );
+}
+
+_ResolvedInlineActivity _resolveInlineActivityCore({
+  required String rawText,
+  required String? status,
+  required bool completed,
+  required bool isCommand,
+  required HistoryCommandAction? historyCommandAction,
+  required Set<CommandActionKind> liveCommandActions,
+  required bool canReadMcpText,
+}) {
+  final statusNorm = status?.trim() ?? '';
+  final isFailed = statusNorm == 'failed';
+  final isDeclined = statusNorm == 'declined';
+  final isInterrupted = statusNorm == 'interrupted';
+  final nonNominal = _nonNominalStatus(status);
+
+  if (isCommand || rawText.startsWith('Command: ')) {
+    final cmd = rawText.startsWith('Command: ')
+        ? rawText.substring('Command: '.length).trim()
+        : rawText.trim();
+    if (isDeclined) {
+      return (
+        caption: cmd.isNotEmpty ? 'Command declined: $cmd' : 'Command declined',
+        verbLength: null,
+        icon: Icons.shield_outlined,
+        isError: false,
+        isWarning: true,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (historyCommandAction != null &&
+        historyCommandAction.kind != CommandActionKind.run &&
+        !isFailed &&
+        !isInterrupted) {
+      final (:kind, :name, :path, :query) = historyCommandAction;
+      final (
+        String caption,
+        int? verbLength,
+        IconData icon,
+        String activeHdr,
+      ) = switch (kind) {
+        CommandActionKind.read => () {
+          final target = (name ?? path)?.trim() ?? '';
+          if (completed) {
+            const verb = 'Read';
+            return target.isNotEmpty
+                ? (
+                    '$verb $target',
+                    verb.length,
+                    Icons.menu_book_outlined,
+                    'Reading files',
+                  )
+                : (
+                    'Read files',
+                    null,
+                    Icons.menu_book_outlined,
+                    'Reading files',
+                  );
+          }
+          const verb = 'Reading';
+          return target.isNotEmpty
+              ? (
+                  '$verb $target',
+                  verb.length,
+                  Icons.menu_book_outlined,
+                  'Reading files',
+                )
+              : (
+                  'Reading files',
+                  null,
+                  Icons.menu_book_outlined,
+                  'Reading files',
+                );
+        }(),
+        CommandActionKind.listFiles => () {
+          final target = path?.trim() ?? '';
+          if (completed) {
+            const verb = 'Listed files in';
+            return target.isNotEmpty
+                ? (
+                    '$verb $target',
+                    verb.length,
+                    Icons.folder_open_outlined,
+                    'Listing files',
+                  )
+                : (
+                    'Listed files',
+                    null,
+                    Icons.folder_open_outlined,
+                    'Listing files',
+                  );
+          }
+          const verb = 'Listing files in';
+          return target.isNotEmpty
+              ? (
+                  '$verb $target',
+                  verb.length,
+                  Icons.folder_open_outlined,
+                  'Listing files',
+                )
+              : (
+                  'Listing files',
+                  null,
+                  Icons.folder_open_outlined,
+                  'Listing files',
+                );
+        }(),
+        CommandActionKind.search => () {
+          final q = query?.trim() ?? '';
+          final p = path?.trim() ?? '';
+          final detail = q.isNotEmpty && p.isNotEmpty ? '$q in $p' : q;
+          if (completed) {
+            const verb = 'Searched for';
+            return detail.isNotEmpty
+                ? (
+                    '$verb $detail',
+                    verb.length,
+                    Icons.search_rounded,
+                    'Searching for files',
+                  )
+                : (
+                    'Searched for files',
+                    null,
+                    Icons.search_rounded,
+                    'Searching for files',
+                  );
+          }
+          const verb = 'Searching for';
+          return detail.isNotEmpty
+              ? (
+                  '$verb $detail',
+                  verb.length,
+                  Icons.search_rounded,
+                  'Searching for files',
+                )
+              : (
+                  'Searching for files',
+                  null,
+                  Icons.search_rounded,
+                  'Searching for files',
+                );
+        }(),
+        CommandActionKind.run => (
+          'Ran command',
+          null,
+          Icons.terminal_rounded,
+          'Running command',
+        ),
+      };
+      return (
+        caption: caption,
+        verbLength: verbLength,
+        icon: icon,
+        isError: false,
+        isWarning: false,
+        statusBadge: nonNominal,
+        groupability: nonNominal == null
+            ? _ActivityGroupability.groupable
+            : _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.exploration,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: activeHdr,
+        completed: completed,
+      );
+    }
+    if (liveCommandActions.isNotEmpty &&
+        !liveCommandActions.contains(CommandActionKind.run) &&
+        !isFailed &&
+        !isInterrupted) {
+      final singleKind = liveCommandActions.length == 1
+          ? liveCommandActions.single
+          : CommandActionKind.read;
+      final (
+        String caption,
+        IconData icon,
+        String activeHdr,
+      ) = switch (singleKind) {
+        CommandActionKind.listFiles => (
+          completed ? 'Listed files' : 'Listing files',
+          Icons.folder_open_outlined,
+          'Listing files',
+        ),
+        CommandActionKind.search => (
+          completed ? 'Searched for files' : 'Searching for files',
+          Icons.search_rounded,
+          'Searching for files',
+        ),
+        CommandActionKind.read || CommandActionKind.run => (
+          completed ? 'Read files' : 'Reading files',
+          Icons.menu_book_outlined,
+          'Reading files',
+        ),
+      };
+      return (
+        caption: caption,
+        verbLength: null,
+        icon: icon,
+        isError: false,
+        isWarning: false,
+        statusBadge: nonNominal,
+        groupability: nonNominal == null
+            ? _ActivityGroupability.groupable
+            : _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.exploration,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: activeHdr,
+        completed: completed,
+      );
+    }
+    if (isInterrupted) {
+      const verb = 'Stopped';
+      return (
+        caption: cmd.isNotEmpty ? '$verb $cmd' : 'Stopped command',
+        verbLength: cmd.isNotEmpty ? verb.length : null,
+        icon: Icons.terminal_rounded,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (!completed) {
+      const verb = 'Running';
+      return (
+        caption: cmd.isNotEmpty ? '$verb $cmd' : 'Running command',
+        verbLength: cmd.isNotEmpty ? verb.length : null,
+        icon: Icons.terminal_rounded,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.groupable,
+        segmentKind: _ActivityGroupSegmentKind.runCommand,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: 'Running command',
+        completed: false,
+      );
+    }
+    if (nonNominal != null) {
+      return (
+        caption: cmd.isNotEmpty ? 'Ran $cmd' : 'Ran command',
+        verbLength: null,
+        icon: Icons.terminal_rounded,
+        isError: true,
+        isWarning: false,
+        statusBadge: nonNominal,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: true,
+      );
+    }
+    const verb = 'Ran';
+    return (
+      caption: cmd.isNotEmpty ? '$verb $cmd' : 'Ran command',
+      verbLength: cmd.isNotEmpty ? verb.length : null,
+      icon: Icons.terminal_rounded,
+      isError: false,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.groupable,
+      segmentKind: _ActivityGroupSegmentKind.runCommand,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: 'Running command',
+      completed: true,
+    );
+  }
+
+  if (rawText.startsWith('File changes:')) {
+    final match = _fileChangesCountPattern.firstMatch(rawText);
+    final count = int.tryParse(match?.group(1) ?? '') ?? 0;
+    if (isDeclined) {
+      return (
+        caption: 'File changes declined',
+        verbLength: null,
+        icon: Icons.shield_outlined,
+        isError: false,
+        isWarning: true,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (isInterrupted) {
+      return (
+        caption: count == 1
+            ? 'Stopped editing a file'
+            : 'Stopped editing files',
+        verbLength: null,
+        icon: Icons.difference_outlined,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (nonNominal != null) {
+      return (
+        caption: count == 1 ? 'Failed to edit a file' : 'Failed to edit files',
+        verbLength: null,
+        icon: Icons.difference_outlined,
+        isError: true,
+        isWarning: false,
+        statusBadge: isFailed ? null : nonNominal,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    final normalizedCount = count == 1 ? 1 : (count > 1 ? count : 2);
+    if (!completed) {
+      return (
+        caption: 'Editing files',
+        verbLength: null,
+        icon: Icons.difference_outlined,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.groupable,
+        segmentKind: _ActivityGroupSegmentKind.fileEdit,
+        mcpSourceDisplay: null,
+        editedFileCount: normalizedCount,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: 'Editing files',
+        completed: false,
+      );
+    }
+    return (
+      caption: count == 1
+          ? 'Edited a file'
+          : count > 1
+          ? 'Edited $count files'
+          : 'Edited files',
+      verbLength: null,
+      icon: Icons.difference_outlined,
+      isError: false,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.groupable,
+      segmentKind: _ActivityGroupSegmentKind.fileEdit,
+      mcpSourceDisplay: null,
+      editedFileCount: normalizedCount,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: 'Editing files',
+      completed: true,
+    );
+  }
+
+  if (rawText == 'Web search' || rawText.startsWith('Web search: ')) {
+    final query = rawText.startsWith('Web search: ')
+        ? rawText.substring('Web search: '.length).trim()
+        : '';
+    if (isInterrupted) {
+      const prefix = 'Stopped searching the web for';
+      return (
+        caption: query.isNotEmpty
+            ? '$prefix $query'
+            : 'Stopped searching the web',
+        verbLength: query.isNotEmpty ? prefix.length : null,
+        icon: Icons.language_rounded,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (nonNominal != null) {
+      return (
+        caption: query.isNotEmpty
+            ? 'Failed to search the web for $query'
+            : 'Failed to search the web',
+        verbLength: null,
+        icon: Icons.language_rounded,
+        isError: true,
+        isWarning: false,
+        statusBadge: isFailed ? null : nonNominal,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (!completed) {
+      const prefix = 'Searching the web for';
+      return (
+        caption: query.isNotEmpty ? '$prefix $query' : 'Searching the web',
+        verbLength: query.isNotEmpty ? prefix.length : null,
+        icon: Icons.language_rounded,
+        isError: false,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.groupable,
+        segmentKind: _ActivityGroupSegmentKind.webSearch,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: 'Searching the web',
+        completed: false,
+      );
+    }
+    const prefix = 'Searched the web for';
+    return (
+      caption: query.isNotEmpty ? '$prefix $query' : 'Searched the web',
+      verbLength: query.isNotEmpty ? prefix.length : null,
+      icon: Icons.language_rounded,
+      isError: false,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.groupable,
+      segmentKind: _ActivityGroupSegmentKind.webSearch,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: 'Searching the web',
+      completed: true,
+    );
+  }
+
+  if (rawText == 'MCP' ||
+      rawText.startsWith('MCP — ') ||
+      rawText.startsWith('MCP: ')) {
+    final dashIdx = rawText.indexOf(' — ');
+    final head = dashIdx >= 0 ? rawText.substring(0, dashIdx).trim() : rawText;
+    final progress = dashIdx >= 0 ? rawText.substring(dashIdx + 3).trim() : '';
+    var rawServer = '';
+    var rawTool = '';
+    if (head.startsWith('MCP: ')) {
+      final rest = head.substring('MCP: '.length).trim();
+      final slashIdx = rest.indexOf('/');
+      rawServer = slashIdx >= 0 ? rest.substring(0, slashIdx).trim() : rest;
+      rawTool = slashIdx >= 0 ? rest.substring(slashIdx + 1).trim() : '';
+    }
+    final unnamed = rawServer.isEmpty || rawServer.toLowerCase() == 'mcp';
+    final String caption;
+    final int? verbLength;
+    final String? mcpSource;
+    final _ActivityGroupSegmentKind segKind;
+    final String activeHdr;
+    if (unnamed) {
+      caption = isFailed
+          ? 'Tool call failed'
+          : isInterrupted
+          ? 'Stopped tool call'
+          : !completed
+          ? 'Calling a tool'
+          : 'Called a tool';
+      verbLength = null;
+      mcpSource = null;
+      segKind = _ActivityGroupSegmentKind.mcpUnnamed;
+      activeHdr = 'Calling a tool';
+    } else {
+      final (:display, :tokens) = _humanizeMcpServer(rawServer);
+      final toolDisplay = _humanizeMcpTool(rawTool, tokens);
+      caption = toolDisplay.isNotEmpty ? '$display · $toolDisplay' : display;
+      verbLength = toolDisplay.isNotEmpty ? display.length : null;
+      mcpSource = display;
+      segKind = _ActivityGroupSegmentKind.mcpNamed;
+      activeHdr = 'Using $display integration';
+    }
+    if (isDeclined) {
+      return (
+        caption: caption,
+        verbLength: null,
+        icon: Icons.shield_outlined,
+        isError: false,
+        isWarning: true,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    if (nonNominal != null) {
+      return (
+        caption: caption,
+        verbLength: isInterrupted ? verbLength : null,
+        icon: Icons.extension_outlined,
+        isError: !isInterrupted,
+        isWarning: false,
+        statusBadge: isInterrupted
+            ? null
+            : (unnamed && isFailed ? null : nonNominal),
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    return (
+      caption: caption,
+      verbLength: verbLength,
+      icon: Icons.extension_outlined,
+      isError: false,
+      isWarning: false,
+      statusBadge: progress.isNotEmpty ? progress : null,
+      groupability: canReadMcpText
+          ? _ActivityGroupability.standalone
+          : _ActivityGroupability.groupable,
+      segmentKind: segKind,
+      mcpSourceDisplay: mcpSource,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: activeHdr,
+      completed: completed,
+    );
+  }
+
+  if (rawText.startsWith('Tool: ')) {
+    final rawTool = rawText.substring('Tool: '.length).trim();
+    final toolKey = rawTool
+        .replaceAllMapped(_camelBoundaryPattern, (m) => '${m[1]}_${m[2]}')
+        .toLowerCase();
+    final String caption;
+    final String leading;
+    final String following;
+    final String activeHdr;
+    if (toolKey == 'read_task_terminal') {
+      caption = isFailed
+          ? 'Failed to read chat terminal'
+          : isInterrupted
+          ? 'Stopped reading chat terminal'
+          : !completed
+          ? 'Reading chat terminal'
+          : 'Read chat terminal';
+      leading = 'Read chat terminal';
+      following = 'read chat terminal';
+      activeHdr = 'Reading chat terminal';
+    } else {
+      final sentence = _humanizeIdentifierSentence(rawTool);
+      caption = sentence.isEmpty
+          ? (!completed ? 'Calling a tool' : 'Called a tool')
+          : sentence;
+      leading = sentence.isEmpty ? 'Called a tool' : sentence;
+      following = sentence.isEmpty
+          ? 'called a tool'
+          : '${sentence[0].toLowerCase()}${sentence.substring(1)}';
+      activeHdr = caption;
+    }
+    if (nonNominal != null) {
+      return (
+        caption: caption,
+        verbLength: null,
+        icon: isDeclined ? Icons.shield_outlined : Icons.handyman_outlined,
+        isError: !isInterrupted && !isDeclined,
+        isWarning: isDeclined,
+        statusBadge:
+            isInterrupted || isDeclined || toolKey == 'read_task_terminal'
+            ? null
+            : nonNominal,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    return (
+      caption: caption,
+      verbLength: null,
+      icon: Icons.handyman_outlined,
+      isError: false,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.groupable,
+      segmentKind: _ActivityGroupSegmentKind.dynamicTool,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: leading,
+      dynamicToolFollowing: following,
+      activeHeaderLabel: activeHdr,
+      completed: completed,
+    );
+  }
+
+  if (rawText == 'Viewed image' || rawText == 'Image view') {
+    return (
+      caption: !completed
+          ? 'Viewing an image'
+          : isFailed
+          ? 'Failed to view image'
+          : 'Viewed an image',
+      verbLength: null,
+      icon: Icons.image_outlined,
+      isError: isFailed,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.standalone,
+      segmentKind: _ActivityGroupSegmentKind.none,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: null,
+      completed: completed,
+    );
+  }
+
+  if (rawText == 'Generated image' || rawText == 'Image generation') {
+    return (
+      caption: !completed
+          ? 'Generating an image'
+          : isInterrupted
+          ? 'Stopped generating an image'
+          : isFailed
+          ? 'Failed to generate an image'
+          : 'Generated an image',
+      verbLength: null,
+      icon: Icons.image_outlined,
+      isError: isFailed,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.standalone,
+      segmentKind: _ActivityGroupSegmentKind.none,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: null,
+      completed: completed,
+    );
+  }
+
+  if (rawText == 'Context compacted') {
+    return (
+      caption: !completed
+          ? 'Compacting context'
+          : isInterrupted
+          ? 'Compaction interrupted'
+          : isFailed
+          ? 'Context compaction failed'
+          : 'Context compacted',
+      verbLength: null,
+      icon: Icons.compress_rounded,
+      isError: isFailed,
+      isWarning: false,
+      statusBadge: null,
+      groupability: _ActivityGroupability.standalone,
+      segmentKind: _ActivityGroupSegmentKind.none,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: null,
+      completed: completed,
+    );
+  }
+
+  if (rawText == 'Sub-agent activity' ||
+      rawText.startsWith('Collaboration: ')) {
+    if (rawText == 'Sub-agent activity') {
+      return (
+        caption: !completed
+            ? 'Running agent'
+            : isFailed
+            ? 'Agent failed'
+            : 'Agent completed',
+        verbLength: null,
+        icon: Icons.hub_outlined,
+        isError: isFailed,
+        isWarning: false,
+        statusBadge: null,
+        groupability: _ActivityGroupability.standalone,
+        segmentKind: _ActivityGroupSegmentKind.none,
+        mcpSourceDisplay: null,
+        editedFileCount: 0,
+        dynamicToolLeading: null,
+        dynamicToolFollowing: null,
+        activeHeaderLabel: null,
+        completed: completed,
+      );
+    }
+    final rawTool = rawText.substring('Collaboration: '.length).trim();
+    final key = rawTool
+        .replaceAllMapped(_camelBoundaryPattern, (m) => '${m[1]}_${m[2]}')
+        .toLowerCase();
+    int? verbLen;
+    final caption = switch (key) {
+      'spawn_agent' || 'spawn_worker' || 'create_agent' =>
+        !completed
+            ? 'Creating agent'
+            : isFailed
+            ? 'Failed to create agent'
+            : isInterrupted
+            ? 'Stopped creating agent'
+            : 'Created agent',
+      'send_input' || 'message_agent' || 'send_message' =>
+        !completed
+            ? 'Messaging agent'
+            : isFailed
+            ? 'Failed to message agent'
+            : isInterrupted
+            ? 'Stopped messaging agent'
+            : 'Messaged agent',
+      'resume_agent' =>
+        !completed
+            ? 'Resuming agent'
+            : isFailed
+            ? 'Failed to resume agent'
+            : 'Resumed agent',
+      'close_agent' =>
+        !completed
+            ? 'Closing agent'
+            : isFailed
+            ? 'Failed to close agent'
+            : 'Closed agent',
+      'wait' || 'wait_agent' =>
+        !completed
+            ? 'Waiting for agent'
+            : isFailed
+            ? 'Failed waiting for agent'
+            : isInterrupted
+            ? 'Stopped waiting for agent'
+            : 'Waited for agent',
+      'interrupt' || 'interrupt_agent' =>
+        !completed
+            ? 'Interrupting agent'
+            : isFailed
+            ? 'Failed to interrupt agent'
+            : 'Interrupted agent',
+      'list' || 'list_agents' =>
+        !completed
+            ? 'Listing agents'
+            : isFailed
+            ? 'Failed to list agents'
+            : 'Listed agents',
+      _ => () {
+        final sentence = _humanizeIdentifierSentence(rawTool);
+        if (sentence.isEmpty) {
+          return 'Agent activity';
+        }
+        if (!isFailed) {
+          verbLen = 'Agent'.length;
+        }
+        return 'Agent · $sentence';
+      }(),
+    };
+    return (
+      caption: caption,
+      verbLength: verbLen,
+      icon: Icons.hub_outlined,
+      isError: nonNominal != null && !isInterrupted && !isDeclined,
+      isWarning: isDeclined,
+      statusBadge: null,
+      groupability: _ActivityGroupability.standalone,
+      segmentKind: _ActivityGroupSegmentKind.none,
+      mcpSourceDisplay: null,
+      editedFileCount: 0,
+      dynamicToolLeading: null,
+      dynamicToolFollowing: null,
+      activeHeaderLabel: null,
+      completed: completed,
+    );
+  }
+
+  final fallbackIcon = rawText.startsWith('Plan')
+      ? Icons.checklist_rounded
+      : rawText.startsWith('Hook:')
+      ? Icons.bolt_outlined
+      : !completed
+      ? Icons.terminal_rounded
+      : Icons.check_circle_outline_rounded;
+  return (
+    caption: rawText,
+    verbLength: null,
+    icon: fallbackIcon,
+    isError: nonNominal != null && !isDeclined && !isInterrupted,
+    isWarning: isDeclined,
+    statusBadge: nonNominal,
+    groupability: _ActivityGroupability.standalone,
+    segmentKind: _ActivityGroupSegmentKind.none,
+    mcpSourceDisplay: null,
+    editedFileCount: 0,
+    dynamicToolLeading: null,
+    dynamicToolFollowing: null,
+    activeHeaderLabel: null,
+    completed: completed,
+  );
+}
+
+_ActivityGroupSummary _summarizeActivityGroup(
+  List<_ResolvedInlineActivity> items,
+) {
+  for (var i = items.length - 1; i >= 0; i--) {
+    final item = items[i];
+    if (!item.completed) {
+      return (label: item.activeHeaderLabel ?? item.caption, icon: item.icon);
+    }
+  }
+  final mcpSources = <String>[];
+  var unnamedMcpCount = 0;
+  var editedFiles = 0;
+  var hasExploration = false;
+  var runCount = 0;
+  var hasWebSearch = false;
+  final dynamicTools = <({String leading, String following})>[];
+
+  for (final item in items) {
+    switch (item.segmentKind) {
+      case _ActivityGroupSegmentKind.mcpNamed:
+        final src = item.mcpSourceDisplay;
+        if (src != null && src.isNotEmpty && !mcpSources.contains(src)) {
+          mcpSources.add(src);
+        }
+      case _ActivityGroupSegmentKind.mcpUnnamed:
+        unnamedMcpCount += 1;
+      case _ActivityGroupSegmentKind.fileEdit:
+        editedFiles += item.editedFileCount > 0 ? item.editedFileCount : 1;
+      case _ActivityGroupSegmentKind.exploration:
+        hasExploration = true;
+      case _ActivityGroupSegmentKind.runCommand:
+        runCount += 1;
+      case _ActivityGroupSegmentKind.webSearch:
+        hasWebSearch = true;
+      case _ActivityGroupSegmentKind.dynamicTool:
+        final leading = item.dynamicToolLeading;
+        final following = item.dynamicToolFollowing;
+        if (leading != null &&
+            following != null &&
+            !dynamicTools.any((d) => d.leading == leading)) {
+          dynamicTools.add((leading: leading, following: following));
+        }
+      case _ActivityGroupSegmentKind.none:
+        break;
+    }
+  }
+
+  final segments = <({String leading, String following, IconData icon})>[];
+  if (mcpSources.isNotEmpty) {
+    final list = _joinEnglishConjunction(mcpSources);
+    final noun = mcpSources.length == 1 ? 'integration' : 'integrations';
+    segments.add((
+      leading: 'Used $list $noun',
+      following: 'used $list $noun',
+      icon: Icons.extension_outlined,
+    ));
+  }
+  if (unnamedMcpCount > 0) {
+    segments.add(
+      unnamedMcpCount == 1
+          ? (
+              leading: 'Called a tool',
+              following: 'called a tool',
+              icon: Icons.extension_outlined,
+            )
+          : (
+              leading: 'Called tools',
+              following: 'called tools',
+              icon: Icons.extension_outlined,
+            ),
+    );
+  }
+  if (editedFiles > 0) {
+    segments.add(
+      editedFiles == 1
+          ? (
+              leading: 'Edited a file',
+              following: 'edited a file',
+              icon: Icons.difference_outlined,
+            )
+          : (
+              leading: 'Edited files',
+              following: 'edited files',
+              icon: Icons.difference_outlined,
+            ),
+    );
+  }
+  if (hasExploration) {
+    segments.add((
+      leading: 'Read files',
+      following: 'read files',
+      icon: Icons.menu_book_outlined,
+    ));
+  }
+  if (runCount > 0) {
+    segments.add(
+      runCount == 1
+          ? (
+              leading: 'Ran a command',
+              following: 'ran a command',
+              icon: Icons.terminal_rounded,
+            )
+          : (
+              leading: 'Ran commands',
+              following: 'ran commands',
+              icon: Icons.terminal_rounded,
+            ),
+    );
+  }
+  if (hasWebSearch) {
+    segments.add((
+      leading: 'Searched the web',
+      following: 'searched the web',
+      icon: Icons.language_rounded,
+    ));
+  }
+  for (final tool in dynamicTools) {
+    segments.add((
+      leading: tool.leading,
+      following: tool.following,
+      icon: Icons.handyman_outlined,
+    ));
+  }
+
+  if (segments.isEmpty) {
+    return (label: 'Worked', icon: Icons.terminal_rounded);
+  }
+  final parts = <String>[
+    segments.first.leading,
+    for (final seg in segments.skip(1)) seg.following,
+  ];
+  return (label: _joinEnglishConjunction(parts), icon: segments.first.icon);
+}
+
 class _ConversationPanel extends StatefulWidget {
   const _ConversationPanel({
     super.key,
@@ -154,6 +1412,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   ({_CommandOutputPreviewKey key, OutputViewerController viewer})?
   _commandOutputPreview;
   var _commandPreviewReading = false;
+  final Set<String> _expandedLiveActivityGroupIds = <String>{};
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
   final _timelineDetailsPopoverController = CodexPopoverController();
@@ -3512,40 +4771,12 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final rawLiveEntries = showLiveEntries
         ? controller.entries
         : const <ConversationEntry>[];
-    final latestActivity = _detailMode == PresentationDetailMode.commands
-        ? _latestLiveActivity(rawLiveEntries)
-        : null;
-    final collapsedActivitySummary = widget.hasDesktopShell && controller.busy
-        ? _collapsedLiveCommandSummary(rawLiveEntries, latestActivity)
-        : null;
-    final liveEntries = switch (_detailMode) {
-      PresentationDetailMode.prose =>
-        rawLiveEntries
-            .where(
-              (e) =>
-                  e.kind == ConversationEntryKind.user ||
-                  e.kind == ConversationEntryKind.assistant ||
-                  e.kind == ConversationEntryKind.review ||
-                  e.kind == ConversationEntryKind.error,
-            )
-            .toList(growable: false),
-      PresentationDetailMode.commands =>
-        rawLiveEntries
-            .where(
-              (e) =>
-                  e.kind == ConversationEntryKind.user ||
-                  e.kind == ConversationEntryKind.assistant ||
-                  e.kind == ConversationEntryKind.review ||
-                  e.kind == ConversationEntryKind.error ||
-                  !e.completed ||
-                  identical(e, latestActivity),
-            )
-            .toList(growable: false),
-      PresentationDetailMode.execution => rawLiveEntries,
-    };
-    final liveIds = liveEntries
-        .map((entry) => entry.stockItemId ?? entry.id)
-        .toSet();
+    final liveProjection = _projectLiveEntries(
+      rawLiveEntries,
+      busy: controller.busy,
+    );
+    final liveEntries = liveProjection.visibleEntries;
+    final liveIds = liveProjection.representedIds;
     final rawHistoryItems = widget.historyController.timelineItems
         .where((item) => !liveIds.contains(item.id))
         .toList(growable: false);
@@ -3644,18 +4875,27 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final activeDag = _threadChatDags[activeThreadId];
 
     String effectiveHistoryText(HistoryItem item) {
+      final resolved = _resolveHistoryInlineActivity(
+        item,
+        inlineActivity: widget.hasDesktopShell,
+        detailMode: _detailMode,
+      );
+      String withCaption(String text) =>
+          resolved == null || resolved.caption == text
+          ? text
+          : '$text\n${resolved.caption}';
       if (!_activeCapabilities.supportsBranchNavigation ||
           item.turnId.isEmpty ||
           activeDag == null) {
-        return item.text;
+        return withCaption(item.text);
       }
       final activeSibling = activeDag.activeSiblingForTurn(item.turnId);
       if (activeSibling == null) {
-        return item.text;
+        return withCaption(item.text);
       }
       final siblingInfo = activeDag.siblingInfoFor(activeSibling.id);
       if (siblingInfo == null || !siblingInfo.hasMultipleBranches) {
-        return item.text;
+        return withCaption(item.text);
       }
       if (item.kind == HistoryItemKind.user) {
         return activeSibling.text;
@@ -3666,27 +4906,45 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           return asstNode.text;
         }
       }
-      return item.text;
+      return withCaption(item.text);
     }
 
     String effectiveLiveText(ConversationEntry entry) {
-      if (collapsedActivitySummary != null &&
-          identical(entry, latestActivity)) {
-        return '${entry.text}\n$collapsedActivitySummary';
+      final tailSummary = liveProjection.tailInlineSummaries[entry.id];
+      final resolved = _resolveLiveInlineActivity(
+        entry,
+        inlineActivity: widget.hasDesktopShell,
+        detailMode: _detailMode,
+        searchOpen: _searchOpen,
+      );
+      String withCaption(String text) {
+        final buf = StringBuffer(text);
+        if (resolved != null && resolved.caption != text) {
+          buf
+            ..write('\n')
+            ..write(resolved.caption);
+        }
+        if (tailSummary != null && tailSummary.label != text) {
+          buf
+            ..write('\n')
+            ..write(tailSummary.label);
+        }
+        return buf.toString();
       }
+
       final liveTurnId = entry.turnId ?? '';
       if (!_activeCapabilities.supportsBranchNavigation ||
           liveTurnId.isEmpty ||
           activeDag == null) {
-        return entry.text;
+        return withCaption(entry.text);
       }
       final activeSibling = activeDag.activeSiblingForTurn(liveTurnId);
       if (activeSibling == null) {
-        return entry.text;
+        return withCaption(entry.text);
       }
       final siblingInfo = activeDag.siblingInfoFor(activeSibling.id);
       if (siblingInfo == null || !siblingInfo.hasMultipleBranches) {
-        return entry.text;
+        return withCaption(entry.text);
       }
       if (entry.kind == ConversationEntryKind.user) {
         return activeSibling.text;
@@ -3697,7 +4955,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           return asstNode.text;
         }
       }
-      return entry.text;
+      return withCaption(entry.text);
     }
 
     final searchQuery = _searchOpen
@@ -3965,6 +5223,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final entry = liveEntries[liveIndex];
                   final itemKey = 'live-${entry.id}';
                   final liveTurnId = entry.turnId ?? '';
+                  if (liveProjection.groups[entry.id] case final liveGroup?) {
+                    return _MeasuredTimelineItem(
+                      key: ValueKey('measured-$itemKey'),
+                      itemKey: itemKey,
+                      turnId: liveTurnId,
+                      onMeasured: _recordItemMeasurement,
+                      onUnmount: _unregisterItemBox,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: OfficialCodexTheme.maxContentWidth,
+                          ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: _liveActivityGroupView(liveGroup),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
                   final canMutateLiveTurn =
                       entry.kind == ConversationEntryKind.user &&
                       liveTurnId.isNotEmpty &&
@@ -4036,6 +5314,31 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final useInlinePreviewDisclosure =
                       widget.hasDesktopShell &&
                       (commandOutput?.hasInlinePreview ?? false);
+                  final tailSummary =
+                      liveProjection.tailInlineSummaries[entry.id];
+                  final resolvedLiveActivity = tailSummary != null
+                      ? (
+                          caption: tailSummary.label,
+                          verbLength: null,
+                          icon: tailSummary.icon,
+                          isError: false,
+                          isWarning: false,
+                          statusBadge: null,
+                          groupability: _ActivityGroupability.standalone,
+                          segmentKind: _ActivityGroupSegmentKind.none,
+                          mcpSourceDisplay: null,
+                          editedFileCount: 0,
+                          dynamicToolLeading: null,
+                          dynamicToolFollowing: null,
+                          activeHeaderLabel: null,
+                          completed: entry.completed,
+                        )
+                      : _resolveLiveInlineActivity(
+                          effectiveEntry,
+                          inlineActivity: widget.hasDesktopShell,
+                          detailMode: _detailMode,
+                          searchOpen: _searchOpen,
+                        );
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -4048,9 +5351,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       detailMode: _detailMode,
                       inlineActivity: widget.hasDesktopShell,
                       revealAssistantCopy: liveTurnId != latestTurnId,
-                      activitySummary: identical(entry, latestActivity)
-                          ? collapsedActivitySummary
-                          : null,
+                      resolvedActivity: resolvedLiveActivity,
                       trailingAction: useInlinePreviewDisclosure
                           ? null
                           : commandOutput?.action,
@@ -5348,6 +6649,153 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           .where((entry) => entry.kind == ConversationEntryKind.activity)
           .firstOrNull;
 
+  _LiveActivityProjection _projectLiveEntries(
+    List<ConversationEntry> rawLiveEntries, {
+    required bool busy,
+  }) {
+    if (rawLiveEntries.isEmpty) {
+      return (
+        visibleEntries: const <ConversationEntry>[],
+        representedIds: const <String>{},
+        groups: const <String, List<ConversationEntry>>{},
+        tailInlineSummaries: const <String, _ActivityGroupSummary>{},
+      );
+    }
+    if (_detailMode == PresentationDetailMode.prose) {
+      final visible = rawLiveEntries
+          .where(
+            (e) =>
+                e.kind == ConversationEntryKind.user ||
+                e.kind == ConversationEntryKind.assistant ||
+                e.kind == ConversationEntryKind.review ||
+                e.kind == ConversationEntryKind.error,
+          )
+          .toList(growable: false);
+      return (
+        visibleEntries: visible,
+        representedIds: visible
+            .map((entry) => entry.stockItemId ?? entry.id)
+            .toSet(),
+        groups: const <String, List<ConversationEntry>>{},
+        tailInlineSummaries: const <String, _ActivityGroupSummary>{},
+      );
+    }
+    if (_detailMode == PresentationDetailMode.execution ||
+        (widget.hasDesktopShell && _searchOpen)) {
+      return (
+        visibleEntries: rawLiveEntries,
+        representedIds: rawLiveEntries
+            .map((entry) => entry.stockItemId ?? entry.id)
+            .toSet(),
+        groups: const <String, List<ConversationEntry>>{},
+        tailInlineSummaries: const <String, _ActivityGroupSummary>{},
+      );
+    }
+    if (!widget.hasDesktopShell) {
+      final latestActivity = _latestLiveActivity(rawLiveEntries);
+      final visible = rawLiveEntries
+          .where(
+            (e) =>
+                e.kind == ConversationEntryKind.user ||
+                e.kind == ConversationEntryKind.assistant ||
+                e.kind == ConversationEntryKind.review ||
+                e.kind == ConversationEntryKind.error ||
+                !e.completed ||
+                identical(e, latestActivity),
+          )
+          .toList(growable: false);
+      return (
+        visibleEntries: visible,
+        representedIds: visible
+            .map((entry) => entry.stockItemId ?? entry.id)
+            .toSet(),
+        groups: const <String, List<ConversationEntry>>{},
+        tailInlineSummaries: const <String, _ActivityGroupSummary>{},
+      );
+    }
+
+    final visible = <ConversationEntry>[];
+    final representedIds = <String>{};
+    final groups = <String, List<ConversationEntry>>{};
+    final tailSummaries = <String, _ActivityGroupSummary>{};
+    final headPossiblyClipped =
+        rawLiveEntries.length >= widget.controller.maxEntries;
+
+    var run = <ConversationEntry>[];
+    var runResolved = <_ResolvedInlineActivity>[];
+    var runStartIndex = -1;
+    String? runTurnId;
+
+    void flushRun({required bool isUnclosedTail}) {
+      if (run.isEmpty) {
+        return;
+      }
+      for (final entry in run) {
+        representedIds.add(entry.stockItemId ?? entry.id);
+      }
+      if (run.length == 1 || (runStartIndex == 0 && headPossiblyClipped)) {
+        visible.addAll(run);
+      } else if (busy &&
+          isUnclosedTail &&
+          run.every((e) => e.completed) &&
+          (run.last.commandOutput?.available ?? false)) {
+        visible.add(run.last);
+        tailSummaries[run.last.id] = _summarizeActivityGroup(runResolved);
+      } else {
+        visible.add(run.first);
+        groups[run.first.id] = List<ConversationEntry>.unmodifiable(run);
+      }
+      run = <ConversationEntry>[];
+      runResolved = <_ResolvedInlineActivity>[];
+      runStartIndex = -1;
+      runTurnId = null;
+    }
+
+    for (var i = 0; i < rawLiveEntries.length; i++) {
+      final entry = rawLiveEntries[i];
+      if (entry.kind != ConversationEntryKind.activity) {
+        flushRun(isUnclosedTail: false);
+        visible.add(entry);
+        representedIds.add(entry.stockItemId ?? entry.id);
+        continue;
+      }
+      final resolved = _resolveLiveInlineActivity(
+        entry,
+        inlineActivity: true,
+        detailMode: PresentationDetailMode.commands,
+      );
+      if (resolved != null &&
+          resolved.groupability == _ActivityGroupability.omitted) {
+        representedIds.add(entry.stockItemId ?? entry.id);
+        continue;
+      }
+      if (resolved != null &&
+          resolved.groupability == _ActivityGroupability.groupable) {
+        if (run.isNotEmpty && entry.turnId != runTurnId) {
+          flushRun(isUnclosedTail: false);
+        }
+        if (run.isEmpty) {
+          runStartIndex = i;
+          runTurnId = entry.turnId;
+        }
+        run.add(entry);
+        runResolved.add(resolved);
+        continue;
+      }
+      flushRun(isUnclosedTail: false);
+      visible.add(entry);
+      representedIds.add(entry.stockItemId ?? entry.id);
+    }
+    flushRun(isUnclosedTail: true);
+
+    return (
+      visibleEntries: visible,
+      representedIds: representedIds,
+      groups: groups,
+      tailInlineSummaries: tailSummaries,
+    );
+  }
+
   Map<String, List<HistoryItem>> _savedCommandGroups(List<HistoryItem> items) {
     final history = widget.historyController;
     final turnId = history.selectedTurnId;
@@ -5361,8 +6809,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return const {};
     }
 
-    bool groupable(HistoryItem item) =>
-        item.turnId == turnId && item.isCommand && item.status == 'completed';
+    bool groupable(HistoryItem item) {
+      if (item.turnId != turnId) {
+        return false;
+      }
+      final resolved = _resolveHistoryInlineActivity(
+        item,
+        inlineActivity: true,
+        detailMode: _detailMode,
+      );
+      return resolved != null &&
+          resolved.groupability == _ActivityGroupability.groupable;
+    }
 
     final groups = <String, List<HistoryItem>>{};
     var start = 0;
@@ -5388,11 +6846,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   Widget _savedCommandGroupView(List<HistoryItem> items) {
-    final runs = items.where((item) => item.commandAction == null).length;
-    final includesExploration = runs < items.length;
-    final label = includesExploration
-        ? _mixedCommandSummary(runs)
-        : 'Ran commands';
+    final summary = _summarizeActivityGroup([
+      for (final item in items)
+        _resolveHistoryInlineActivity(
+          item,
+          inlineActivity: true,
+          detailMode: _detailMode,
+        )!,
+    ]);
     bool containsPreview() {
       final key = _commandOutputPreview?.key;
       return key != null &&
@@ -5403,8 +6864,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
 
     return _SavedCommandGroup(
       key: ValueKey('saved-command-group-${items.first.id}'),
-      label: label,
-      includesExploration: includesExploration,
+      label: summary.label,
+      iconData: summary.icon,
       itemCount: items.length,
       initiallyExpanded: containsPreview(),
       onCollapse: () {
@@ -5414,7 +6875,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       },
       itemBuilder: (context, index) {
         final item = items[index];
-        final command = item.text;
         return _HistoryEntryView(
           key: ValueKey(item.id),
           item: item,
@@ -5424,65 +6884,115 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           bottomGap: index + 1 < items.length
               ? OfficialCodexTheme.conversationGroupedItemGap
               : 0.0,
-          overrideEntryText:
-              item.commandAction == null && command.startsWith('Command: ')
-              ? 'Ran ${command.substring('Command: '.length)}'
+          commandOutput: item.isCommand
+              ? _commandOutputFor(
+                  context,
+                  itemId: item.id,
+                  turnId: item.turnId,
+                  output: item.output,
+                  saved: true,
+                )
               : null,
-          commandOutput: _commandOutputFor(
-            context,
-            itemId: item.id,
-            turnId: item.turnId,
-            output: item.output,
-            saved: true,
-          ),
         );
       },
     );
   }
 
-  String _mixedCommandSummary(int runCount) => switch (runCount) {
-    0 => 'Read files',
-    1 => 'Read files and ran a command',
-    _ => 'Read files and ran commands',
-  };
+  Widget _liveActivityGroupView(List<ConversationEntry> entries) {
+    final groupId = entries.first.id;
+    final summary = _summarizeActivityGroup([
+      for (final entry in entries)
+        _resolveLiveInlineActivity(
+          entry,
+          inlineActivity: true,
+          detailMode: PresentationDetailMode.commands,
+        )!,
+    ]);
+    bool containsPreview() {
+      final key = _commandOutputPreview?.key;
+      return key != null &&
+          !key.saved &&
+          entries.any(
+            (entry) =>
+                entry.id == key.itemId && (entry.turnId ?? '') == key.turnId,
+          );
+    }
 
-  String? _collapsedLiveCommandSummary(
-    List<ConversationEntry> entries,
-    ConversationEntry? latest,
-  ) {
-    if (latest == null ||
-        !latest.completed ||
-        !latest.text.startsWith('Command: ') ||
-        _nonNominalStatus(latest.status) != null) {
-      return null;
-    }
-    final actions = <CommandActionKind>{};
-    var runCount = 0;
-    for (var index = entries.lastIndexOf(latest); index >= 0; index--) {
-      final entry = entries[index];
-      if (entry.turnId != latest.turnId ||
-          entry.kind != ConversationEntryKind.activity ||
-          !entry.completed ||
-          _nonNominalStatus(entry.status) != null) {
-        break;
-      }
-      if (entry.text == 'Reasoning' || entry.text.startsWith('Reasoning: ')) {
-        continue;
-      }
-      if (!entry.text.startsWith('Command: ')) break;
-      final commandActions = entry.commandActions.isEmpty
-          ? const {CommandActionKind.run}
-          : entry.commandActions;
-      actions.addAll(commandActions);
-      if (commandActions.contains(CommandActionKind.run)) runCount += 1;
-    }
-    if (actions.length < 2) return null;
-    // The desktop renderer groups read, search and list into one
-    // exploration segment and pluralizes the separate command segment.
-    return _mixedCommandSummary(runCount);
+    final expanded = _expandedLiveActivityGroupIds.contains(groupId);
+    return _SavedCommandGroup(
+      key: ValueKey('live-activity-group-$groupId'),
+      listKey: ValueKey('live-activity-group-items-$groupId'),
+      label: summary.label,
+      iconData: summary.icon,
+      itemCount: entries.length,
+      controlledExpanded: expanded,
+      onExpansionChanged: (next) {
+        setState(() {
+          if (next) {
+            _expandedLiveActivityGroupIds.add(groupId);
+          } else {
+            _expandedLiveActivityGroupIds.remove(groupId);
+            if (containsPreview()) {
+              _clearCommandOutputPreview();
+            }
+          }
+        });
+      },
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        final liveTurnId = entry.turnId ?? '';
+        final resolved = _resolveLiveInlineActivity(
+          entry,
+          inlineActivity: true,
+          detailMode: PresentationDetailMode.commands,
+        );
+        final commandOutput = _commandOutputFor(
+          context,
+          itemId: entry.id,
+          turnId: liveTurnId,
+          output: entry.completed ? entry.commandOutput : null,
+          saved: false,
+        );
+        final useInlinePreviewDisclosure =
+            widget.hasDesktopShell &&
+            (commandOutput?.hasInlinePreview ?? false);
+        return _ConversationEntryView(
+          key: ValueKey(entry.id),
+          entry: entry,
+          detailMode: _detailMode,
+          inlineActivity: true,
+          revealAssistantCopy: false,
+          bottomGap: index + 1 < entries.length
+              ? OfficialCodexTheme.conversationGroupedItemGap
+              : 0.0,
+          resolvedActivity: resolved,
+          trailingAction: useInlinePreviewDisclosure
+              ? null
+              : commandOutput?.action,
+          activityDetail: commandOutput?.detail,
+          hasActivityDisclosure: useInlinePreviewDisclosure,
+          activityExpanded:
+              useInlinePreviewDisclosure &&
+              (commandOutput?.previewExpanded ?? false),
+          onToggleActivity: useInlinePreviewDisclosure
+              ? commandOutput?.onTogglePreview
+              : null,
+          activityDisclosureTooltip: useInlinePreviewDisclosure
+              ? commandOutput?.previewTooltip
+              : null,
+          turnId: liveTurnId.isEmpty ? null : liveTurnId,
+        );
+      },
+    );
   }
 
   void _reconcileLiveOutputPreview() {
+    if (_expandedLiveActivityGroupIds.isNotEmpty) {
+      final currentIds = widget.controller.entries.map((e) => e.id).toSet();
+      _expandedLiveActivityGroupIds.removeWhere(
+        (id) => !currentIds.contains(id),
+      );
+    }
     final key = _commandOutputPreview?.key;
     if (key != null && !key.saved && !_keepsLiveOutputPreview(key)) {
       _clearCommandOutputPreview();
@@ -5494,19 +7004,43 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return false;
     }
     final entries = widget.controller.entries;
-    final latest = _detailMode == PresentationDetailMode.commands
-        ? _latestLiveActivity(entries)
-        : null;
-    return entries.any(
-      (entry) =>
-          entry.id == key.itemId &&
-          entry.turnId == key.turnId &&
-          entry.completed &&
-          entry.commandOutput?.reference == key.reference &&
-          entry.commandOutput?.available == true &&
-          (_detailMode == PresentationDetailMode.execution ||
-              identical(entry, latest)),
+    final matching = entries
+        .where(
+          (entry) =>
+              entry.id == key.itemId &&
+              entry.turnId == key.turnId &&
+              entry.completed &&
+              entry.commandOutput?.reference == key.reference &&
+              entry.commandOutput?.available == true,
+        )
+        .firstOrNull;
+    if (matching == null) {
+      return false;
+    }
+    if (_detailMode == PresentationDetailMode.execution) {
+      return true;
+    }
+    if (_detailMode != PresentationDetailMode.commands) {
+      return false;
+    }
+    if (!widget.hasDesktopShell) {
+      return identical(matching, _latestLiveActivity(entries));
+    }
+    final projection = _projectLiveEntries(
+      entries,
+      busy: widget.controller.busy,
     );
+    if (projection.visibleEntries.any((e) => identical(e, matching)) &&
+        !projection.groups.containsKey(matching.id)) {
+      return true;
+    }
+    for (final entry in projection.groups.entries) {
+      if (_expandedLiveActivityGroupIds.contains(entry.key) &&
+          entry.value.any((e) => identical(e, matching))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _syncActiveThreadSelection() {
@@ -5520,6 +7054,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
     _activeThreadId = nextThreadId;
     _interruptingQuestion.value = null;
+    _expandedLiveActivityGroupIds.clear();
     _clearCommandOutputPreview();
     _showChanges = false;
     _goalEditorThreadId = null;
@@ -6158,7 +7693,7 @@ class _ConversationEntryView extends StatelessWidget {
     this.inlineActivity = false,
     this.revealAssistantCopy = false,
     this.bottomGap,
-    this.activitySummary,
+    this.resolvedActivity,
     this.activityDetail,
     this.hasActivityDisclosure = false,
     this.activityExpanded = false,
@@ -6187,7 +7722,7 @@ class _ConversationEntryView extends StatelessWidget {
   final bool inlineActivity;
   final bool revealAssistantCopy;
   final double? bottomGap;
-  final String? activitySummary;
+  final _ResolvedInlineActivity? resolvedActivity;
   final Widget? activityDetail;
   final bool hasActivityDisclosure;
   final bool activityExpanded;
@@ -6342,7 +7877,7 @@ class _ConversationEntryView extends StatelessWidget {
                             entry: entry,
                             isCommand: isCommand,
                             inline: !hasActivitySurface,
-                            collapsedSummary: activitySummary,
+                            resolvedActivity: resolvedActivity,
                             trailingAction: trailingAction,
                             hasDisclosure: hasActivityDisclosure,
                             isExpanded: activityExpanded,
@@ -7336,7 +8871,7 @@ class _ActivityContent extends StatelessWidget {
     required this.entry,
     this.isCommand = false,
     required this.inline,
-    this.collapsedSummary,
+    this.resolvedActivity,
     this.trailingAction,
     this.hasDisclosure = false,
     this.isExpanded = false,
@@ -7347,7 +8882,7 @@ class _ActivityContent extends StatelessWidget {
   final ConversationEntry entry;
   final bool isCommand;
   final bool inline;
-  final String? collapsedSummary;
+  final _ResolvedInlineActivity? resolvedActivity;
   final Widget? trailingAction;
   final bool hasDisclosure;
   final bool isExpanded;
@@ -7356,6 +8891,25 @@ class _ActivityContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (inline && resolvedActivity != null) {
+      final resolved = resolvedActivity!;
+      return CodexActivityRow(
+        summary: resolved.caption,
+        verbLength: resolved.verbLength,
+        icon: Icon(resolved.icon, size: 14),
+        statusText: resolved.statusBadge,
+        isRunning: !entry.completed,
+        isError: resolved.isError,
+        isWarning: resolved.isWarning,
+        trailingAction: trailingAction,
+        inline: true,
+        hasDisclosure: hasDisclosure,
+        isExpanded: isExpanded,
+        onToggle: onToggle,
+        disclosureTooltip: disclosureTooltip,
+      );
+    }
+
     final palette = ThemeTokens.of(context);
     final effectiveCommand = isCommand || entry.text.startsWith('Command: ');
     final isFileChange = entry.text.startsWith('File changes:');
@@ -7387,9 +8941,7 @@ class _ActivityContent extends StatelessWidget {
         : !entry.completed
         ? Icons.terminal_rounded
         : Icons.check_circle_outline_rounded;
-    final icon = collapsedSummary != null
-        ? Icons.menu_book_outlined
-        : !entry.completed && !inline
+    final icon = !entry.completed && !inline
         ? Icons.hourglass_top_rounded
         : categoryIcon;
     final iconColor = !entry.completed
@@ -7406,9 +8958,8 @@ class _ActivityContent extends StatelessWidget {
         ? palette.textSecondary
         : palette.success;
 
-    final summary = collapsedSummary ?? entry.text;
     return CodexActivityRow(
-      summary: summary,
+      summary: entry.text,
       icon: Icon(icon, size: 14, color: iconColor),
       statusText: statusBadge,
       isRunning: !entry.completed,

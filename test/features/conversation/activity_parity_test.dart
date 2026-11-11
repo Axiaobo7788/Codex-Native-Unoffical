@@ -293,6 +293,280 @@ void main() {
     await tester.pump();
     expect(toggled, 2);
   });
+
+  testWidgets(
+    'A7 saved turns translate official 25894 typed captions, dual-tone ink, NKAf mixed group headers, and Execution raw fallback',
+    (tester) async {
+      final harness = _A7TypedActivityHarness();
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(1191, 865),
+      );
+      await tester.tap(find.text('A7 typed activity thread'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('turn-work-a7-typed-turn')));
+      await tester.pumpAndSettle();
+
+      // Mixed contiguous nominal groupable items collapse into a single NKAf conjunction header.
+      const expectedGroupLabel =
+          'Used GitHub and Linear integrations, edited a file, read files, '
+          'ran a command, searched the web, and read chat terminal';
+      expect(find.text(expectedGroupLabel), findsOneWidget);
+
+      // Standalone items break out of groups and render typed 25894 captions/icons/tones.
+      expect(
+        find.text('Command declined: rm -rf /tmp/scratch'),
+        findsOneWidget,
+      );
+      expect(find.text('File changes declined'), findsOneWidget);
+      final declinedIcon = tester.widget<Icon>(
+        find.byIcon(Icons.shield_outlined).first,
+      );
+      expect(declinedIcon.color, OfficialCodexThemeData.light.warning);
+
+      expect(find.text('Stopped sleep 30'), findsOneWidget);
+      expect(find.text('Ran false'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('Ran false')).style?.color,
+        OfficialCodexThemeData.light.danger,
+      );
+      expect(find.text('Viewed an image'), findsOneWidget);
+      expect(find.text('Generated an image'), findsOneWidget);
+      expect(find.text('Context compacted'), findsOneWidget);
+      expect(find.text('Created agent'), findsOneWidget);
+
+      // Expand the NKAf group and verify child typed captions + dual-tone spans.
+      await tester.tap(find.text(expectedGroupLabel));
+      await tester.pumpAndSettle();
+
+      expect(find.text('GitHub · List pull requests'), findsOneWidget);
+      final githubText = tester.widget<Text>(
+        find.text('GitHub · List pull requests'),
+      );
+      final githubSpan = githubText.textSpan! as TextSpan;
+      expect(githubSpan.text, 'GitHub');
+      expect(
+        (githubSpan.children!.single as TextSpan).style?.color,
+        OfficialCodexThemeData.light.activityChildText,
+      );
+
+      expect(find.text('Linear · Update issue'), findsOneWidget);
+      expect(find.text('Edited a file'), findsOneWidget);
+      expect(
+        find.text('Searched for ConversationEntry in lib/src'),
+        findsOneWidget,
+      );
+      expect(find.text('Listed files in lib/src/app'), findsOneWidget);
+      expect(find.text('Ran dart test'), findsOneWidget);
+
+      final groupList = find.byKey(const ValueKey('saved-command-group-items'));
+      await tester.drag(groupList, const Offset(0, -180));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Searched the web for flutter customscrollview'),
+        findsOneWidget,
+      );
+      expect(find.text('Read chat terminal'), findsOneWidget);
+
+      // Switching to Execution mode preserves raw protocol strings ungrouped.
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Execution'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(expectedGroupLabel), findsNothing);
+      expect(
+        find.text('MCP: github_mcp/github_list_pull_requests'),
+        findsOneWidget,
+      );
+      expect(find.text('File changes: 1 update(s) (+8 -2)'), findsOneWidget);
+      expect(find.text('Tool: read_task_terminal'), findsOneWidget);
+      expect(find.text('Collaboration: spawn_agent'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'A7 live turns group contiguous groupable activity with progressive I3PO headers, 224px lazy expansion, output preview lifecycle, and Ctrl+F flatten',
+    (tester) async {
+      final harness = _A7ParityHarness(reasoningText: 'Brief summary.');
+      harness.storeOutput(
+        'live-cmd-out',
+        'live preview line 1\nlive preview line 2',
+      );
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(1191, 865),
+      );
+      await tester.tap(find.text('A7 parity thread'));
+      await tester.pumpAndSettle();
+
+      // 1. Singleton live MCP item unwraps (`I3PO.Pq`) with humanized caption + progress badge.
+      harness.customTurnEvents
+        ..add(
+          const TurnStartedEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+          ),
+        )
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-mcp-1',
+            summary: 'MCP: github/list_pull_requests',
+            status: 'inProgress',
+            completed: false,
+          ),
+        )
+        ..add(
+          const McpToolCallProgressEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-mcp-1',
+            message: 'Fetching page 1',
+          ),
+        );
+      await tester.pump(const Duration(milliseconds: 60));
+
+      expect(find.text('GitHub · List pull requests'), findsOneWidget);
+      expect(find.text('Fetching page 1'), findsOneWidget);
+
+      // 2. Completing MCP and starting a command forms a 2-item active group (`I3PO.U6` -> "Running command").
+      harness.customTurnEvents
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-mcp-1',
+            summary: 'MCP: github/list_pull_requests',
+            status: 'completed',
+            completed: true,
+          ),
+        )
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-cmd-1',
+            summary: 'Command: flutter analyze',
+            status: 'inProgress',
+            completed: false,
+            commandActions: {CommandActionKind.run},
+          ),
+        );
+      await tester.pump(const Duration(milliseconds: 60));
+
+      expect(
+        find.byKey(const ValueKey('live-activity-group-live-mcp-1')),
+        findsOneWidget,
+      );
+      expect(find.text('Running command'), findsOneWidget);
+
+      // 3. Complete command (with output) + webSearch + standalone collaboration item closing the group, then finish turn.
+      harness.customTurnEvents
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-cmd-1',
+            summary: 'Command: flutter analyze',
+            status: 'completed',
+            completed: true,
+            commandActions: {CommandActionKind.run},
+            commandOutput: OutputDescriptor(
+              reference: 'live-cmd-out',
+              bytes: 39,
+              storedBytes: 39,
+              truncated: false,
+              available: true,
+            ),
+          ),
+        )
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-web-1',
+            summary: 'Web search: dart records',
+            status: 'completed',
+            completed: true,
+          ),
+        )
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            itemId: 'live-collab-1',
+            summary: 'Collaboration: wait',
+            status: 'completed',
+            completed: true,
+          ),
+        )
+        ..add(
+          const TurnCompletedEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-group-turn',
+            status: TurnRuntimeStatus.completed,
+          ),
+        );
+      await tester.pumpAndSettle();
+
+      const liveSummary =
+          'Used GitHub integration, ran a command, and searched the web';
+      expect(find.text(liveSummary), findsOneWidget);
+      expect(find.text('Waited for agent'), findsOneWidget);
+
+      // 4. Expanding live group opens 224px bounded ListView, allows inline command preview, and disposes preview on collapse.
+      await tester.tap(find.text(liveSummary));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('live-activity-group-items-live-mcp-1')),
+        findsOneWidget,
+      );
+      expect(find.text('Ran flutter analyze'), findsOneWidget);
+      expect(find.text('Searched the web for dart records'), findsOneWidget);
+
+      await tester.tap(find.text('Ran flutter analyze'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('command-output-preview-surface')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('live preview line 1\nlive preview line 2'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text(liveSummary));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('command-output-preview-surface')),
+        findsNothing,
+      );
+
+      // 5. Ctrl+F flattens live groups and matches translated captions.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('conversation-search-field')),
+        'List pull requests',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('conversation-search-count')),
+            )
+            .data,
+        startsWith('1 of 1'),
+      );
+      expect(find.text('GitHub · List pull requests'), findsOneWidget);
+    },
+  );
 }
 
 class _A7ParityHarness extends SimulatedRuntimeHarness {
@@ -378,5 +652,174 @@ class _A7ParityHarness extends SimulatedRuntimeHarness {
     turnId: 'a7-turn-1',
     kind: HistoryItemKind.assistant,
     text: 'Completed A7 answer.',
+  );
+}
+
+class _A7TypedActivityHarness extends SimulatedRuntimeHarness {
+  _A7TypedActivityHarness()
+    : super(
+        initialThreads: [
+          createTestThread(
+            id: 'a7-typed-thread',
+            preview: 'A7 typed activity thread',
+          ),
+        ],
+        initialHistoryTurns: [
+          HistoryTurn(
+            id: 'a7-typed-turn',
+            status: TurnRuntimeStatus.completed,
+            startedAt: DateTime.utc(2026),
+            completedAt: DateTime.utc(2026).add(const Duration(seconds: 9)),
+            items: const [_user, _assistant],
+          ),
+        ],
+        initialHistoryItems: const [
+          _user,
+          HistoryItem(
+            id: 'typed-mcp-gh',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'MCP: github_mcp/github_list_pull_requests',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-mcp-lin',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'MCP: linear-server/update_issue',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-edit-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'File changes: 1 update(s) (+8 -2)',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-search-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Command: rg ConversationEntry lib/src',
+            status: 'completed',
+            isCommand: true,
+            commandAction: (
+              kind: CommandActionKind.search,
+              name: null,
+              path: 'lib/src',
+              query: 'ConversationEntry',
+            ),
+          ),
+          HistoryItem(
+            id: 'typed-list-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Command: ls lib/src/app',
+            status: 'completed',
+            isCommand: true,
+            commandAction: (
+              kind: CommandActionKind.listFiles,
+              name: null,
+              path: 'lib/src/app',
+              query: null,
+            ),
+          ),
+          HistoryItem(
+            id: 'typed-run-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Command: dart test',
+            status: 'completed',
+            isCommand: true,
+          ),
+          HistoryItem(
+            id: 'typed-web-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Web search: flutter customscrollview',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-dyn-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Tool: read_task_terminal',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-declined-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Command: rm -rf /tmp/scratch',
+            status: 'declined',
+            isCommand: true,
+          ),
+          HistoryItem(
+            id: 'typed-patch-declined-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'File changes: 1 update(s) (+2 -1)',
+            status: 'declined',
+          ),
+          HistoryItem(
+            id: 'typed-stopped-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Command: sleep 30',
+            status: 'interrupted',
+            isCommand: true,
+          ),
+          HistoryItem(
+            id: 'typed-failed-1',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Command: false',
+            status: 'failed',
+            isCommand: true,
+          ),
+          HistoryItem(
+            id: 'typed-img-view',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.unknown,
+            text: 'Image view',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-img-gen',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.unknown,
+            text: 'Image generation',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-compact',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Context compacted',
+            status: 'completed',
+          ),
+          HistoryItem(
+            id: 'typed-collab',
+            turnId: 'a7-typed-turn',
+            kind: HistoryItemKind.activity,
+            text: 'Collaboration: spawn_agent',
+            status: 'completed',
+          ),
+          _assistant,
+        ],
+      );
+
+  static const _user = HistoryItem(
+    id: 'typed-user',
+    turnId: 'a7-typed-turn',
+    kind: HistoryItemKind.user,
+    text: 'Exercise all A7 typed activity surfaces.',
+  );
+
+  static const _assistant = HistoryItem(
+    id: 'typed-assistant',
+    turnId: 'a7-typed-turn',
+    kind: HistoryItemKind.assistant,
+    text: 'All typed activity items completed.',
   );
 }
