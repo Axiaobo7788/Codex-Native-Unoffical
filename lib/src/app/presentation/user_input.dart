@@ -578,7 +578,9 @@ class _UserInputCardState extends State<_UserInputCard> {
     _otherAnswerFocusNodes = {
       for (final question in widget.request.questions)
         if (question.options.isNotEmpty && question.allowsOther)
-          question.id: FocusNode(),
+          question.id: FocusNode(
+            onKeyEvent: (node, event) => _handleOtherUp(question, node, event),
+          ),
     };
     _focusCurrentChoices();
   }
@@ -619,15 +621,53 @@ class _UserInputCardState extends State<_UserInputCard> {
     });
   }
 
-  KeyEventResult _handleChoiceKey(FocusNode node, KeyEvent event) {
+  bool _canHandleChoiceKey(KeyEvent event) {
     final keyboard = HardwareKeyboard.instance;
-    if (!widget.autoAdvance ||
-        event is! KeyDownEvent ||
-        keyboard.isAltPressed ||
-        keyboard.isControlPressed ||
-        keyboard.isMetaPressed ||
-        keyboard.isShiftPressed ||
-        widget.controller.isSubmitting(widget.request.requestId)) {
+    return widget.autoAdvance &&
+        event is KeyDownEvent &&
+        !keyboard.isAltPressed &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isShiftPressed &&
+        !widget.controller.isSubmitting(widget.request.requestId);
+  }
+
+  KeyEventResult _handleOtherUp(
+    UserInputQuestion question,
+    FocusNode node,
+    KeyEvent event,
+  ) {
+    if (event.logicalKey != LogicalKeyboardKey.arrowUp ||
+        !_canHandleChoiceKey(event) ||
+        widget.request.questions[_questionIndex].id != question.id) {
+      return KeyEventResult.ignored;
+    }
+    final value = _textControllers[question.id]!.value;
+    if (value.composing.isValid && !value.composing.isCollapsed) {
+      return KeyEventResult.ignored;
+    }
+
+    final editable = node.context
+        ?.findAncestorStateOfType<EditableTextState>()
+        ?.renderEditable;
+    if (editable == null ||
+        !editable.hasSize ||
+        (value.text.isNotEmpty &&
+            editable.getLineAtOffset(const TextPosition(offset: 0)).end <
+                value.text.length)) {
+      return KeyEventResult.ignored;
+    }
+
+    _cancelChoiceAdvance();
+    final label = question.options.last.label;
+    _setSelectedOption(question, label);
+    _choiceNavigationFocus.requestFocus();
+    _revealChoice(question, label, down: true);
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _handleChoiceKey(FocusNode node, KeyEvent event) {
+    if (!_canHandleChoiceKey(event)) {
       return KeyEventResult.ignored;
     }
     final question = widget.request.questions.elementAtOrNull(_questionIndex);
@@ -714,9 +754,16 @@ class _UserInputCardState extends State<_UserInputCard> {
     _cancelChoiceAdvance();
     final label = options[next].label;
     _setSelectedOption(question, label);
-    final focus = _optionFocus(question, label);
-    focus.requestFocus();
-    if (focus.context case final target?) {
+    _optionFocus(question, label).requestFocus();
+    _revealChoice(question, label, down: down);
+  }
+
+  void _revealChoice(
+    UserInputQuestion question,
+    String label, {
+    required bool down,
+  }) {
+    if (_optionFocus(question, label).context case final target?) {
       unawaited(
         Scrollable.ensureVisible(
           target,

@@ -824,6 +824,34 @@ void main() {
     await tester.tap(previous);
     await tester.pumpAndSettle();
 
+    await chooseOther('first', 'Single line');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    final firstEditor = tester.widget<TextField>(field('first'));
+    final scope = find.byKey(const ValueKey('user-input-choice-scope'));
+    expect(firstEditor.focusNode!.hasFocus, isFalse);
+    expect(tester.widget<Focus>(scope).focusNode!.hasPrimaryFocus, isTrue);
+    expect(firstEditor.controller!.text, 'Single line');
+
+    await tester.tap(field('first'));
+    await tester.pumpAndSettle();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Composing',
+        selection: TextSelection.collapsed(offset: 9),
+        composing: TextRange(start: 0, end: 9),
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(firstEditor.focusNode!.hasFocus, isTrue);
+
+    await chooseOther('first', 'Long wrapped draft ' * 35);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(firstEditor.focusNode!.hasFocus, isTrue);
+
     await chooseOther('first', 'First custom draft');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
