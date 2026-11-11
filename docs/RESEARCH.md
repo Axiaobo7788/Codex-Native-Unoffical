@@ -4830,7 +4830,7 @@ and the remaining Goal state gaps are recorded in the
 
 ## Desktop UI verification — hosted Ubuntu mirror failures
 
-On 2026-11-11, run `43033221454` at `ea4eb1a` did not reach project checks
+On 2026-11-11 UTC, run `43033221454` at `ea4eb1a` did not reach project checks
 on either Linux attempt: one was cancelled after the stall, and the other
 hit the job deadline. Run `43047223523` at documentation-only `03ecc21`
 reproduced the same `azure.archive.ubuntu.com` DNS failures and reached the
@@ -4847,13 +4847,30 @@ and [accepted retry/failover correction](https://github.com/actions/runner-image
 explain why a failing first mirror can consume the job before checks begin.
 The pinned image already includes that upstream timeout configuration.
 
-The scoped recovery removes only the Azure entry from this ephemeral job's
-existing mirror list, leaving the vendor's Canonical HTTPS fallbacks and
-normal APT signature checks in place. The same required package install has a
-five-minute step deadline. Runner generation, Ubuntu version, package list,
-permissions and subsequent checks are unchanged. This remains a candidate
-until a real hosted run verifies it; YAML parsing and shell syntax alone do
-not prove remote connectivity or CI success.
+The raw update trace also attempted the priority-2 archive and priority-3
+security mirrors unsuccessfully. Its final diagnostic retained the Azure
+hostname; that message does not isolate the fault to the first mirror.
+Update then returned warnings with the image's older lists, and install spent
+most of the remaining job retrying package downloads.
+
+The first scoped experiment, `2e1df69` / run `43053753441`, removed only the
+Azure entry and retained the vendor's Canonical HTTPS fallbacks. Linux still
+reported `Temporary failure resolving 'archive.ubuntu.com'` and hit the new
+five-minute step deadline before project checks. The experiment did not
+restore Hosted CI and is not merged into main. Its negative decoded log is
+`ci-2e1df69-linux-candidate-failure.log` under the same private artifact root.
+YAML parsing and shell syntax did not predict remote reachability.
+
+A second bounded experiment uses the [Linux Kernel Archives Ubuntu mirror](https://mirrors.kernel.org/)
+as priority 1 while retaining the image's two Canonical fallback entries.
+The operator publishes Ubuntu archives; local DNS resolved its separate
+domain, and HTTPS probes actually downloaded the signed-format Jammy,
+Jammy-updates and Jammy-security indexes (HTTP 200). The latter two carried
+Ubuntu suite metadata dated 2026-11-11 UTC. These are transport/metadata
+observations, not local cryptographic verification or evidence of GitHub
+connectivity. The real runner's unchanged APT trust verification and package
+install must succeed before this candidate can be accepted. The only
+workflow change remains the existing install step and five-minute deadline.
 
 Local resolution is separate evidence: an eight-second probe resolved Azure
 but timed out for the two Canonical names, while the web tool could read

@@ -29,10 +29,10 @@ jobs:
       - name: Install Linux build dependencies
         timeout-minutes: 5
         run: |
-          # Repeated Azure mirror DNS failures exhausted the UI verification job.
-          # Use its existing Canonical HTTPS fallbacks with normal APT trust checks.
+          # Ubuntu archive DNS failures prevented the Desktop UI gates from starting.
+          # This public Ubuntu mirror retains normal Ubuntu signature verification.
           if [[ -f /etc/apt/apt-mirrors.txt ]]; then
-            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            sudo sed -i 's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|' /etc/apt/apt-mirrors.txt
           fi
           sudo apt-get update
           sudo apt-get install -y binutils libgtk-3-dev libsecret-1-dev ninja-build

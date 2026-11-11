@@ -99,11 +99,15 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   own run [43047223523](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43047223523):
   Windows/macOS passed; Linux again exhausted the 20-minute limit on the
   same Azure mirror DNS failure before project checks. The published A7
-  integration has exact run [43051090054](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43051090054)
-  in progress. A separate Codex slice is testing a minimal recovery of the
-  existing Linux dependency-install step: use the image's existing Canonical
-  HTTPS fallbacks and a five-minute step deadline, with required installs and
-  normal APT trust checks retained. This has not yet proved Hosted CI recovery.
+  integration has exact run [43051090054](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43051090054):
+  Windows/macOS passed and Linux again hit the dependency-install deadline.
+  A separate Codex recovery slice first tried the image's Canonical fallbacks
+  (`2e1df69`); its Linux run also failed on archive-host DNS within five minutes.
+  A second bounded candidate substitutes the public Linux Kernel Archives
+  Ubuntu mirror for the first entry, keeping Canonical fallbacks, required
+  packages, Ubuntu 22.04 and normal APT trust checks. Hosted recovery is still
+  unproved; the first candidate is not merged into main. Gemini independently
+  owns the next A6 user-bubble/attachment presentation slice and heavy slot.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak
