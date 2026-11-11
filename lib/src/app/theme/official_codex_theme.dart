@@ -137,6 +137,23 @@ abstract final class OfficialCodexTheme {
   /// Desktop Markdown fenced code block action bar minimum height (`min-h-12`: `48px`).
   static const double codeBlockHeaderHeight = 48.0;
 
+  /// Desktop Markdown inline code pill corner radius (`.InlineCode`: `border-radius: 6px`).
+  static const double inlineCodeRadius = 6.0;
+
+  /// Desktop Markdown inline code pill horizontal padding (`.InlineCode`: `padding-inline: 6px`).
+  static const double inlineCodeHorizontalPadding = 6.0;
+
+  /// Desktop Markdown inline code pill vertical padding (`.InlineCode`: `padding-block: 1px`).
+  static const double inlineCodeVerticalPadding = 1.0;
+
+  /// Desktop Markdown inline code relative font scale (`.InlineCode`: `font-size: .92em`).
+  static const double inlineCodeFontScale = 0.92;
+
+  /// Maximum rich `WidgetSpan` inline-code pills rendered per Desktop Markdown
+  /// message before remaining inline-code tokens fall back to merged styled
+  /// `TextSpan`s (`ADR-058`).
+  static const int maxInlineCodePills = 128;
+
   /// Thread reading canvas horizontal gutters (24px).
   static const double threadBodyInlinePadding = 24.0;
 
@@ -187,6 +204,9 @@ abstract final class OfficialCodexTheme {
   static const Color darkDiffRemovedFill = Color(0xFF5A1E1E);
   static const Color darkDiffRemovedText = Color(0xFFF87171);
   static const Color darkChangesSummarySurface = Color(0xFF414141);
+  // `color-mix(in srgb, var(--color-background-primary-ghost-hover) 60%, var(--color-text) 6%)`
+  // -> `color(srgb 0.930283 0.930283 0.930283 / 0.108)` in dark mode.
+  static const Color darkInlineCodeBackground = Color(0x1CEDEDED);
 
   // Light Mode Surface Hierarchy
   static const Color lightShellBackground = Color(0xFFF9F9F9); // Tier 0
@@ -199,6 +219,9 @@ abstract final class OfficialCodexTheme {
   static const Color lightUserBubbleTranslucent = Color(
     0x0D000000,
   ); // ~5% black
+  // `color-mix(in srgb, var(--color-background-primary-ghost-hover) 60%, var(--color-text) 6%)`
+  // -> `color(srgb 0.101961 0.109804 0.121569 / 0.09)` in light mode.
+  static const Color lightInlineCodeBackground = Color(0x171A1C1F);
   static const Color lightHairlineBorder = Color(
     0x14000000,
   ); // rgba(0,0,0,0.08)
@@ -238,6 +261,7 @@ final class OfficialCodexThemeData {
     required this.elevatedSurface,
     required this.modalSurface,
     required this.userBubbleBackground,
+    required this.inlineCodeBackground,
     required this.hairlineBorder,
     required this.focusRing,
     required this.accent,
@@ -262,6 +286,7 @@ final class OfficialCodexThemeData {
   final Color elevatedSurface;
   final Color modalSurface;
   final Color userBubbleBackground;
+  final Color inlineCodeBackground;
   final Color hairlineBorder;
   final Color focusRing;
   final Color accent;
@@ -288,6 +313,7 @@ final class OfficialCodexThemeData {
     elevatedSurface: OfficialCodexTheme.darkElevatedSurface,
     modalSurface: OfficialCodexTheme.darkModalSurface,
     userBubbleBackground: OfficialCodexTheme.darkUserBubbleBackground,
+    inlineCodeBackground: OfficialCodexTheme.darkInlineCodeBackground,
     hairlineBorder: OfficialCodexTheme.darkHairlineBorder,
     focusRing: OfficialCodexTheme.darkFocusRing,
     accent: OfficialCodexTheme.darkAccent,
@@ -313,6 +339,7 @@ final class OfficialCodexThemeData {
     elevatedSurface: OfficialCodexTheme.lightElevatedSurface,
     modalSurface: OfficialCodexTheme.lightModalSurface,
     userBubbleBackground: OfficialCodexTheme.lightUserBubbleBackground,
+    inlineCodeBackground: OfficialCodexTheme.lightInlineCodeBackground,
     hairlineBorder: OfficialCodexTheme.lightHairlineBorder,
     focusRing: OfficialCodexTheme.lightFocusRing,
     accent: OfficialCodexTheme.lightAccent,

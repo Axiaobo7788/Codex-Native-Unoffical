@@ -2572,3 +2572,111 @@ work on a divergent presentation would increase later rework.
 - New UI work becomes more mechanical: evidence -> mapping -> Flutter
   translation -> screenshot comparison, reducing speculative visual design.
 - Clean-room and licensing restrictions remain unchanged.
+
+---
+
+## ADR-058 — Cap per-message Desktop inline-code WidgetSpan pills at 128 with styled TextSpan fallback
+
+**Date:** 2026-11-11
+
+**Status:** Accepted
+
+### Context
+
+Official Codex Desktop build `25894` (`0040d5ae1a9f.css`) styles non-fenced
+`.InlineCode-Cddi3Y` tokens as `1 px 6 px` padded, `6 px`-rounded pills at
+`0.92 em` container-relative monospace (`0x171A1C1F` light / `0x1CEDEDED` dark).
+Rendering every inline-code token as an uncapped Flutter `WidgetSpan` pill
+(`d9dc65f`) matched ordinary replies in packaged Linux release profiling
+(`40`-code case click-to-pill `1.46 s -> 1.44 s`, app RSS delta `+3.0 MiB ->
++3.3 MiB`) while preserving `SelectionArea` copy order, enclosing link taps, and
+`2×` `TextScaler` geometry. However, each `WidgetSpan` pill mounts an inner
+`DecoratedBox`/`Padding`/`Text` subtree (~`12` `Element`s and an inner
+`RenderParagraph`), causing live element and heap cost to scale linearly with
+backtick density:
+
+- On an external JIT widget corpus, `40`-code warm rebuild shifted `47 ms ->
+  104 ms`, while a worst-case `16 KiB` / `4,096`-code message shifted `2.66 s ->
+  14.71 s`, RSS `239 MB -> 442 MB`, and active `Element`s `224 -> 49,376`.
+- In packaged Linux AOT release profiling
+  (`/var/tmp/native-ui-r0.BbOvHT/a6-release-render-comparison.json`, where
+  `HistoryProtocolAdapter` bounds stored agent text at `8 KiB` plus ellipsis, or
+  `~2,048` inline-code tokens), dense selection shifted `1.38 s / +81.6 MiB`
+  (`5e0996a`) to `2.57 s / +153.5 MiB` and repeat `2.67 s / +139.0 MiB`.
+- In packaged real-use verification of `48ca158`
+  (`/var/tmp/native-integrated-a6-inline-48ca158-r1/`), a single unbroken
+  inline-code path wider than the `640 px` reading column wrapped onto two lines
+  inside one `WidgetSpan` (`PlaceholderAlignment.baseline`) while
+  `flutter_markdown_plus` `StrutStyle(forceStrutHeight: true)` clamped the outer
+  `RichText` line box to `1.0` prose line height; the overflowing second pill
+  line crowded the following prose line (`' ends here.'`) and caused Flutter
+  `_SelectableTextContainerDelegate._compareScreenOrder` (`_compareVertically ==
+  0`, `' ends here.'` `left = outerLeft` < `6 px`-padded pill `Text` `left =
+  outerLeft + 6`) to invert drag+`Ctrl+C` clipboard order (`Path  ends
+  here.src/features/...`).
+- In packaged AOT narrow-resize profiling on `e836769` vs `48ca158`
+  (`/var/tmp/native-ui-r0.BbOvHT/a6-width-release-comparison-r2.json` and repeat
+  run, preserving R1 interior-ROI calibration), narrowing `1012 -> 992` (`640 ->
+  620` reading width) on an `8 KiB`-projected dense thread shifted `~294–334 ms /
+  2` observed frames (`48ca158`) to `~1,007–1,038 ms / 6` frames (`e836769`)
+  because `_lastMaxWidth != maxWidth` re-parsed and rebuilt all blocks on every
+  pixel even when zero pill/flat fit thresholds were crossed.
+
+### Decision
+
+1. Cap rich `WidgetSpan` inline-code pills at
+   `OfficialCodexTheme.maxInlineCodePills = 128` per `DesktopMarkdownBody`
+   message build (`82b9685`, following `d9dc65f`).
+2. Share one document-order counter on `_DesktopMarkdownBodyState` across all
+   paragraph, `h1`–`h6` heading, list, blockquote, and `table` `th`/`td`
+   builders, resetting it at the start of every `_buildBlocks()` pass (excluding
+   fenced `<pre><code>` blocks and caller-supplied custom element builders).
+3. Render inline-code tokens beyond `128`—and any inline-code token whose
+   single-line `WidgetSpan` pill would internally wrap (`> 1` line or embedded
+   `\n`) within its container's actual `LayoutBuilder` / list-gutter /
+   blockquote-inset / `TextScaler`-adjusted available width (`e836769`)—as
+   `Text.rich(TextSpan(...))` so `flutter_markdown_plus` merges them directly
+   into the parent `RichText` with zero extra `WidgetSpan` elements and without
+   consuming one of the `128` single-line pill slots, while preserving exact
+   text, parent-relative `0.92 em` size/weight/line-box height, canonical
+   `OfficialCodexTheme` flat background fill (`lightInlineCodeBackground` /
+   `darkInlineCodeBackground`), enclosing `<a>` dotted underline and
+   late-dispatched `TapGestureRecognizer` lifecycle, and exact `SelectionArea`
+   drag/`selectAll` document order.
+4. Check `!hasPillSlot()` before `TextPainter` width measurement so tokens after
+   the `128` successful single-line pills incur zero layout probes (`129..4,096`
+   in the short-token density specimen). Rejected wrapping tokens do not consume
+   a rich-pill slot, so their measurements are bounded by the `16 KiB` source
+   limit rather than a universal `128`-probe cap. Derive a constant-size
+   per-message root-width validity band `[_minValidRootMaxWidth,
+   _maxValidRootMaxWidth]` from `TextPainter.maxIntrinsicWidth`, scale factor,
+   and local container `widthInset` during that bounded source walk
+   (`40e8aaf`) so `LayoutBuilder` reuses `_children` without AST re-parse or
+   widget rebuild whenever `(data, style/theme inputs, textScaler)` are
+   unchanged and `constraints.maxWidth` crosses no fit/fallback threshold.
+5. Keep `AssistantMarkdown.maxSourceCharacters` (`16 KiB`),
+   `HistoryProtocolAdapter` (`8 KiB`), `!completed` streaming `SelectableText`
+   bypass, and controller/protocol boundaries unchanged without adding a custom
+   inline text-layout engine, per-width cache map, or custom
+   `SelectionContainer` delegate.
+
+### Consequences
+
+- Ordinary single-line inline-code tokens (`<= 128` per message) retain exact
+  `1 px 6 px` / `6 px`-radius pill presentation, while internally wrapping
+  tokens fall back cleanly to continuous flat-tinted `TextSpan`s without
+  vertical line-box crowding or clipboard inversion (verified on the `271`-byte
+  P1 paragraph in `/var/tmp/native-gemini-a6-multiline-copy-r2/` and
+  `/var/tmp/native-gemini-a6-multiline-copy-r3/`, SHA-256
+  `089bf9dc13e93287a15fb2722e2aed1f0e2136ff6a3baff26ddf1c8a2084a467`).
+- Dense backtick dumps cap rich pill subtree fan-out at `O(1)` (`< 2,000` added
+  elements even on `4,096` inline-code tokens in `16 KiB`, returning to exact
+  baseline element count on unmount) and reflow natively across non-crossing
+  window resizes (`213.8 ms` coarse `1012 -> 992` dense resize in
+  `/var/tmp/native-gemini-a6-multiline-copy-r3/`), rebuilding only when root
+  width actually crosses a candidate token's single-line fit threshold or
+  data/style/text-scale inputs change.
+- Both the `128`-pill cap and the internally wrapping flat-span fallback are
+  deliberate Native bounded-presentation safeguards, tracked separately from the
+  active `RESEARCH_MORE` CSS `box-decoration-break: clone` per-line fragment
+  rounding gap on single unbroken inline-code tokens wider than their container.

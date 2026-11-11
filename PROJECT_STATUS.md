@@ -62,45 +62,57 @@ and deferred unless they expose a material defect.
 The wide shell, supported stock conversation controls, lazy activity/output,
 Goal side tab and question/composer stack have working source translations.
 Current deltas remain row-scoped in the Golden-State matrix. The rich-prose
-cluster and ordinary composer action have current source translations.
-Routed Customize destination/sidebar/focus structure now has a source
-translation and packaged-stock replay. Inline-code pill rendering remains
-the next concrete machine-actionable research candidate.
+cluster, inline-code pills and ordinary composer action have current source
+translations. Routed Customize destination/sidebar/focus structure also has a
+source translation and packaged-stock replay.
 Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- The A1 candidate contains Gemini's source `ea267d3` and evidence commits
-  `c8d3bd3` / `17d201c`. Actual-diff and packaged review returned the delayed
-  Back-navigation race, partial-catalog wording, nested search borders and
-  hidden tooltip leakage to the owner. Those corrections passed the shared
-  gates and independent replay. Documentation now matches the unchanged
-  32-entry navigation cap. Gemini released all six surfaces and the runtime
-  slot; Codex owns this integration checkpoint.
-- The exact published `22c1136` checkpoint passed all three hosted CI jobs
-  ([42976181660](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42976181660)).
-  The new candidate separately passed 553 default Flutter cases, five
-  direct-stock cases, strict ASCII analysis, pure-Dart boundary, history
-  benchmark, Rust gates, a clean Linux release/83-library closure and
-  pure-Dart MCP smoke. Its independent packaged MCP replay recorded one
-  resource read and one tool call on the selected stock thread.
-- On 2026-11-11 at 15:54, the host kernel reported global OOM and killed the
-  ChatGPT process. Codex and Gemini validation overlapped; the kernel snapshot
-  included two Flutter compiler pipelines and six test runners. The interrupted
-  Codex batch has no completion result. Its old workers are gone. A subsequent
-  four-file batch passed 69 cases serially; later owner edits have separate
-  pending validation. This does not establish a Native memory-leak diagnosis
-  or fix. Both peers now share one heavy validation/build/capture slot and use
-  `flutter test --concurrency=1` and `CARGO_BUILD_JOBS=2`. Installed Flutter
-  invokes Ninja directly: setting `CMAKE_BUILD_PARALLEL_LEVEL=2` alone did not
-  cap those jobs. Subsequent Linux builds use Flutter `--config-only`
-  followed by `cmake --build … --target install --parallel 2`; the independent
-  rebuild observed `ninja -j 2`. No user desktop
-  applications, swap configuration or account settings were changed.
+- Gemini's A6 source commits `d9dc65f`, `82b9685`, `e836769` and `40e8aaf`,
+  with evidence through `48659f3`, are being integrated normally. Codex owns
+  independent shared verification and integration; all seven surfaces and the
+  single heavy runtime slot have been released by the peer.
+- The independent ASCII snapshot matches all 195 source/test/tool files.
+  Format, strict analysis, 65-root pure-Dart boundary, 555 default Flutter
+  cases, five separately enabled direct-stock cases, the 100/1,000-turn history
+  benchmark with ten 3 MiB outputs, and 100 Rust tests/fmt/Clippy passed.
+  The clean two-job Linux release/83-library closure and pure-Dart MCP smoke
+  also passed. Independent packaged verification retained exact clipboard order,
+  ordinary and over-budget links, and zero tested image-sentinel GETs after exit.
+- Previous published checkpoint `5e0996aee18363845b628b1e50ef5b3bb73c4b30` passed
+  all three hosted jobs in [43007725868](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43007725868).
+  The current integration's publication and exact-HEAD CI remain pending.
+- The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
+  the kernel snapshot included two Flutter compiler pipelines and six test
+  runners. Those old workers are gone. This is not a Native memory-leak
+  diagnosis or fix. Peers now serialize heavy work, use Flutter test
+  `--concurrency=1`, and cap Cargo at two jobs. Installed Flutter invokes Ninja
+  directly, so builds use `--config-only` followed by `cmake --build … --target
+  install --parallel 2`; `ninja -j 2` was observed. No subsequent kernel OOM was
+  found during verification. User desktop applications, swap and account
+  settings were not changed.
 
 ## Current checkpoints
 
-- `ea267d3` adds wide inline Customize navigation with contextual Plugins,
+- A6 sources through `40e8aaf` translate measured inline-code geometry,
+  container-relative type and light/dark fills with at most 128 rich pills per
+  message. Over-budget and internally wrapping tokens use styled, linked flat
+  spans. One scalar width interval reuses blocks across resizes that change no
+  fit decision. Source/history limits, streaming bypass, single-pass lazy
+  Markdown, safe links and blocked images remain intact. Independent JIT dense
+  reflow returned from about 3 seconds to 43–49 ms. Peer packaged replay `r3`
+  verified the exact 271-character clipboard, all four link variants and zero
+  image-sentinel requests after exit. Independent final-release checks passed:
+  dense narrow resize measured 330.7 ms / two sampled frames (baseline
+  294–334 ms / two; rejected `e836769` 1,007–1,038 ms / six). These timings
+  include screenshot sampling, and saved history is still capped at 8 KiB
+  plus ellipsis. The separate dense JIT specimen contains 16,384 characters.
+  The density, copy-order, resize and helper-calibration negatives are
+  preserved in the [current A6 evidence](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+  and ADR-058. Golden State A remains `PARTIAL`; cloned per-line code rounding,
+  matched signed-in fonts, attachments and user bubbles retain separate gaps.
+- `ea267d3` (`5e0996a`) adds wide inline Customize navigation with contextual Plugins,
   Skills, Apps and MCP, Installed search and bounded Back/Forward. The active
   conversation stays mounted; catalog state is lazy and scoped to the current
   `(cwd, threadId)`. Compact retains its dialog. The independent replay

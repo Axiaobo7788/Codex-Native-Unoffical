@@ -1,5 +1,7 @@
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
+import 'package:codex_native_unofficial/src/features/conversation/desktop_markdown_body.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -874,6 +876,827 @@ Final paragraph. A remote image stays an explicit blocked preview.
 
       await tester.pumpWidget(_app(const SizedBox.shrink()));
       await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'desktop inline code pills translate geometry, container scaling, links, selection order, wrapping, and 2x scale',
+    (tester) async {
+      final launched = <Uri>[];
+      const allContainersSource = '''# Heading `h1_code` pill
+
+Paragraph with `body_code`, [`linked_code()`](https://example.invalid/code), [See `mixed_code` here](https://example.invalid/mixed), [](https://example.invalid/empty) `unlinked_code`, and [`unsafe_code`](javascript:void(0)).
+
+## Subheading `h2_code`
+
+- Tight item `list_code`
+
+> Quoted `quote_code`
+
+| Header `th_code` | Value |
+| :--- | :--- |
+| Row | `td_code` |
+
+```dart
+const fenced = 'not_inline_pill';
+```''';
+
+      Widget buildThemed({
+        required Brightness brightness,
+        required String data,
+        double scale = 1.0,
+        double width = 640,
+      }) {
+        final themeData = brightness == Brightness.dark
+            ? OfficialCodexThemeData.dark
+            : OfficialCodexThemeData.light;
+        return MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          home: OfficialCodexThemeProvider(
+            data: themeData,
+            child: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: SizedBox(
+                    width: width,
+                    child: AssistantMarkdown(
+                      data: data,
+                      completed: true,
+                      proseLineHeight:
+                          OfficialCodexTheme.assistantProseLineHeight,
+                      externalLinkLauncher: (uri) async {
+                        launched.add(uri);
+                        return true;
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      for (final (brightness, expectedFill) in [
+        (Brightness.light, OfficialCodexTheme.lightInlineCodeBackground),
+        (Brightness.dark, OfficialCodexTheme.darkInlineCodeBackground),
+      ]) {
+        await tester.pumpWidget(
+          buildThemed(brightness: brightness, data: allContainersSource),
+        );
+        final root = find.byKey(const ValueKey('assistant-markdown'));
+        final bodySize = Theme.of(tester.element(root))
+            .textTheme
+            .bodyMedium!
+            .fontSize!;
+        final tableSize = bodySize * 0.875 < 12.0 ? 12.0 : bodySize * 0.875;
+
+        for (final (token, expectedBaseSize, expectedWeight) in [
+          ('h1_code', bodySize * 1.5, FontWeight.w600),
+          ('body_code', bodySize, FontWeight.w400),
+          ('h2_code', bodySize * 1.25, FontWeight.w600),
+          ('list_code', bodySize, FontWeight.w400),
+          ('quote_code', bodySize, FontWeight.w400),
+          ('th_code', tableSize, FontWeight.w600),
+          ('td_code', tableSize, FontWeight.w400),
+        ]) {
+          final textFinder = find.text(token);
+          expect(textFinder, findsOneWidget);
+          final textWidget = tester.widget<Text>(textFinder);
+          expect(textWidget.textDirection, TextDirection.ltr);
+          expect(
+            textWidget.style!.fontSize,
+            closeTo(
+              expectedBaseSize * OfficialCodexTheme.inlineCodeFontScale,
+              0.01,
+            ),
+          );
+          expect(textWidget.style!.fontWeight, expectedWeight);
+          expect(textWidget.style!.backgroundColor, isNull);
+
+          final paddingWidget = tester.widget<Padding>(
+            find.ancestor(of: textFinder, matching: find.byType(Padding)).first,
+          );
+          expect(
+            paddingWidget.padding,
+            const EdgeInsets.symmetric(
+              horizontal: OfficialCodexTheme.inlineCodeHorizontalPadding,
+              vertical: OfficialCodexTheme.inlineCodeVerticalPadding,
+            ),
+          );
+
+          final decoratedWidget = tester.widget<DecoratedBox>(
+            find
+                .ancestor(of: textFinder, matching: find.byType(DecoratedBox))
+                .first,
+          );
+          final box = decoratedWidget.decoration as BoxDecoration;
+          expect(box.color, expectedFill);
+          expect(
+            box.borderRadius,
+            BorderRadius.circular(OfficialCodexTheme.inlineCodeRadius),
+          );
+        }
+
+        // Multi-span H1 preserves full H1 line-box height (`2.0 * bodySize`).
+        final h1RichText = find
+            .ancestor(of: find.text('h1_code'), matching: find.byType(RichText))
+            .last;
+        expect(
+          tester.getSize(h1RichText).height,
+          greaterThanOrEqualTo(bodySize * 2 - 0.5),
+        );
+
+        // Fenced code content is not wrapped in an inline-code pill padding/box.
+        expect(
+          find.textContaining('not_inline_pill', findRichText: true),
+          findsOneWidget,
+        );
+      }
+
+      // Enclosing link styling + tap activation + empty-link isolation + scheme guard.
+      final linkedText = tester.widget<Text>(find.text('linked_code()'));
+      expect(linkedText.style!.decoration, TextDecoration.underline);
+      expect(linkedText.style!.decorationStyle, TextDecorationStyle.dotted);
+
+      launched.clear();
+      await tester.tap(find.text('linked_code()'));
+      await tester.pump();
+      await tester.tap(find.text('mixed_code'));
+      await tester.pump();
+      await tester.tap(find.text('unlinked_code'));
+      await tester.pump();
+      expect(launched, [
+        Uri.parse('https://example.invalid/code'),
+        Uri.parse('https://example.invalid/mixed'),
+      ]);
+
+      await tester.tap(find.text('unsafe_code'));
+      await tester.pump();
+      expect(launched, hasLength(2));
+      expect(
+        find.text('Only http and https links can be opened.'),
+        findsOneWidget,
+      );
+
+      // Updating only externalLinkLauncher keeps an equal MarkdownStyleSheet and
+      // identical cached pill widget while dispatching through the latest callback.
+      final beforeBody = tester.widget<DesktopMarkdownBody>(
+        find.byType(DesktopMarkdownBody),
+      );
+      final beforeLinkedText = tester.widget<Text>(find.text('linked_code()'));
+      final updatedLaunched = <Uri>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: Brightness.dark),
+          home: OfficialCodexThemeProvider(
+            data: OfficialCodexThemeData.dark,
+            child: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(1.0)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: SizedBox(
+                    width: 640,
+                    child: AssistantMarkdown(
+                      data: allContainersSource,
+                      completed: true,
+                      proseLineHeight:
+                          OfficialCodexTheme.assistantProseLineHeight,
+                      externalLinkLauncher: (uri) async {
+                        updatedLaunched.add(uri);
+                        return true;
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final afterBody = tester.widget<DesktopMarkdownBody>(
+        find.byType(DesktopMarkdownBody),
+      );
+      final afterLinkedText = tester.widget<Text>(find.text('linked_code()'));
+      expect(afterBody.styleSheet, equals(beforeBody.styleSheet));
+      expect(identical(afterLinkedText, beforeLinkedText), isTrue);
+      await tester.tap(find.text('linked_code()'));
+      await tester.pump();
+      expect(updatedLaunched, [Uri.parse('https://example.invalid/code')]);
+      expect(launched, hasLength(2));
+
+      // Built-in SelectionArea clipboard order (selectAll + mouse drag) across wrapped 640px prose.
+      String? copiedSelection;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedSelection =
+                (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      const wrappedSelectionMarkdown =
+          'First `alpha` with prose that wraps onto line two before `beta` and wraps again onto line three with `gamma` at the end.';
+      const expectedPlain =
+          'First alpha with prose that wraps onto line two before beta and wraps again onto line three with gamma at the end.';
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: wrappedSelectionMarkdown,
+        ),
+      );
+      final selectableState = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
+      );
+      final selectionActionContext = tester.element(find.text('alpha'));
+      selectableState.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(selectionActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedPlain);
+
+      copiedSelection = null;
+      selectableState.clearSelection();
+      await tester.pump();
+      final markdownRect = tester.getRect(
+        find.byKey(const ValueKey('assistant-markdown')),
+      );
+      final drag = await tester.startGesture(
+        markdownRect.topLeft + const Offset(2, 6),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await drag.moveTo(markdownRect.bottomRight - const Offset(2, 6));
+      await tester.pump();
+      await drag.up();
+      await tester.pump();
+      Actions.invoke(selectionActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedPlain);
+
+      // Exact P1 repro: three short pills + a single >640px unbroken path must
+      // fall back to a merged styled TextSpan for the internally-wrapping token
+      // while keeping short WidgetSpan pills and exact clipboard document order.
+      const longWrappingToken =
+          'src/features/conversation/a_descriptive_configuration_filename_used_for_inline_wrapping_verification.dart';
+      const fixtureParagraph =
+          'Before `alpha` between [`linked.cfg`](https://example.invalid/native-inline-code) and `beta_gamma`, followed by enough ordinary prose to wrap the trailing fragment onto the next line in document order. Path `$longWrappingToken` ends here.';
+      const expectedFixtureClipboard =
+          'Before alpha between linked.cfg and beta_gamma, followed by enough ordinary prose to wrap the trailing fragment onto the next line in document order. Path $longWrappingToken ends here.';
+      await tester.pumpWidget(
+        buildThemed(brightness: Brightness.light, data: fixtureParagraph),
+      );
+      expect(find.text('alpha'), findsOneWidget);
+      expect(find.text('linked.cfg'), findsOneWidget);
+      expect(find.text('beta_gamma'), findsOneWidget);
+      expect(find.text(longWrappingToken), findsNothing);
+      expect(
+        find.textContaining(longWrappingToken, findRichText: true),
+        findsOneWidget,
+      );
+
+      final fixtureSelectable = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
+      );
+      final fixtureActionContext = tester.element(find.text('alpha'));
+      copiedSelection = null;
+      final fixtureRect = tester.getRect(
+        find.byKey(const ValueKey('assistant-markdown')),
+      );
+      final fixtureDrag = await tester.startGesture(
+        fixtureRect.topLeft + const Offset(2, 6),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      for (var step = 1; step <= 8; step++) {
+        await fixtureDrag.moveTo(
+          Offset(
+            fixtureRect.left + 2 + (198 * step / 8),
+            fixtureRect.top + 6 + ((fixtureRect.height + 18) * step / 8),
+          ),
+        );
+        await tester.pump();
+      }
+      await fixtureDrag.up();
+      await tester.pump();
+      Actions.invoke(fixtureActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedFixtureClipboard);
+
+      copiedSelection = null;
+      fixtureSelectable.clearSelection();
+      await tester.pump();
+      fixtureSelectable.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(fixtureActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedFixtureClipboard);
+
+      // Enclosing link on an internally-wrapping inline-code token keeps dotted
+      // underline, link tap dispatch, and exact copy order.
+      launched.clear();
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data:
+              'Open [`$longWrappingToken`](https://example.invalid/long-wrapped) next.',
+        ),
+      );
+      TextSpan? wrappedLinkSpan;
+      for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+        rich.text.visitChildren((span) {
+          if (span is TextSpan && span.text == longWrappingToken) {
+            wrappedLinkSpan = span;
+            return false;
+          }
+          return true;
+        });
+      }
+      expect(wrappedLinkSpan, isNotNull);
+      expect(
+        wrappedLinkSpan!.style!.backgroundColor,
+        OfficialCodexTheme.lightInlineCodeBackground,
+      );
+      expect(wrappedLinkSpan!.style!.decoration, TextDecoration.underline);
+      expect(
+        wrappedLinkSpan!.style!.decorationStyle,
+        TextDecorationStyle.dotted,
+      );
+      (wrappedLinkSpan!.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      expect(launched, [Uri.parse('https://example.invalid/long-wrapped')]);
+
+      // Actual-width-aware + container-inset + 2x TextScaler adaptation:
+      // a medium token fits as a pill at 640px (1x) and inside horizontally
+      // scrollable table cells, but falls back to a flat TextSpan when narrowed,
+      // scaled to 2x beyond container width, or inset inside blockquote/list.
+      const mediumToken = 'medium_width_inline_code_token';
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 640,
+        ),
+      );
+      final pillAt640 = tester.widget<Text>(find.text(mediumToken));
+
+      // Non-threshold width change (640 -> 620) reuses cached block widgets.
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 620,
+        ),
+      );
+      expect(
+        identical(tester.widget<Text>(find.text(mediumToken)), pillAt640),
+        isTrue,
+      );
+
+      // Crossing below the fit threshold (620 -> 300) switches to flat TextSpan,
+      // and non-threshold narrowing (300 -> 280) reuses that RichText subtree.
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 300,
+        ),
+      );
+      expect(find.text(mediumToken), findsNothing);
+      final flatRichAt300 = tester.widget<RichText>(
+        find.textContaining(mediumToken, findRichText: true),
+      );
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 280,
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<RichText>(
+            find.textContaining(mediumToken, findRichText: true),
+          ),
+          flatRichAt300,
+        ),
+        isTrue,
+      );
+
+      // Widening back across the threshold (280 -> 640) restores the rich pill.
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 640,
+        ),
+      );
+      expect(find.text(mediumToken), findsOneWidget);
+
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 640,
+          scale: 2.0,
+        ),
+      );
+      expect(find.text(mediumToken), findsNothing);
+
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data:
+              '> See `$mediumToken`.\n\n| Col |\n| :--- |\n| See `$mediumToken`. |',
+          width: 405,
+        ),
+      );
+      // Blockquote subtracts `6 * space`, pushing `mediumToken` to flat TextSpan,
+      // while the horizontally scrollable table cell keeps its single-line pill.
+      expect(find.text(mediumToken), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text(mediumToken), matching: find.byType(Table)),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+
+      // Painted global 2x TextScaler check (verifies exact 2x, not 1x frozen or 4x double-scaled).
+      for (final sample in ['Text `scale_token` end.', '`scale_token`']) {
+        await tester.pumpWidget(
+          buildThemed(brightness: Brightness.light, data: sample, scale: 1.0),
+        );
+        final rect1x = tester.getRect(
+          find
+              .ancestor(
+                of: find.text('scale_token'),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        );
+        await tester.pumpWidget(
+          buildThemed(brightness: Brightness.light, data: sample, scale: 2.0),
+        );
+        final rect2x = tester.getRect(
+          find
+              .ancestor(
+                of: find.text('scale_token'),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        );
+        expect(rect2x.width, closeTo(rect1x.width * 2, 1.0));
+        expect(rect2x.height, closeTo(rect1x.height * 2, 1.0));
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'desktop inline code enforces shared 128-pill budget with styled linked TextSpan fallback',
+    (tester) async {
+      final launched = <Uri>[];
+      String tok(int n) => 'tok_${n.toString().padLeft(3, '0')}';
+
+      final bodyPills = [for (var i = 8; i <= 128; i++) '`${tok(i)}`']
+          .join(' ');
+      final overBudgetSource =
+          '''# Heading `${tok(1)}`
+
+| Header `${tok(2)}` | `${tok(3)}` |
+| :--- | :--- |
+| `${tok(4)}` | `${tok(5)}` |
+
+- Bullet `${tok(6)}`
+
+> Quote `${tok(7)}`
+
+$bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${tok(131)}` here](https://example.invalid/mixed-over).
+
+# Over heading `${tok(132)}`
+
+| Over `${tok(133)}` | `${tok(134)}` |
+| :--- | :--- |
+| Row | `${tok(135)}` |''';
+
+      Widget buildBudgetApp({
+        required Brightness brightness,
+        required String data,
+        required ExternalLinkLauncher launcher,
+        double width = 640,
+      }) {
+        final themeData = brightness == Brightness.dark
+            ? OfficialCodexThemeData.dark
+            : OfficialCodexThemeData.light;
+        return MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          home: OfficialCodexThemeProvider(
+            data: themeData,
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: SizedBox(
+                  width: width,
+                  child: AssistantMarkdown(
+                    data: data,
+                    completed: true,
+                    proseLineHeight:
+                        OfficialCodexTheme.assistantProseLineHeight,
+                    externalLinkLauncher: launcher,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      TextSpan? findSpanByText(InlineSpan rootSpan, String target) {
+        TextSpan? found;
+        rootSpan.visitChildren((span) {
+          if (span is TextSpan && span.text == target) {
+            found = span;
+            return false;
+          }
+          return true;
+        });
+        if (found != null) {
+          return found;
+        }
+        if (rootSpan is TextSpan && rootSpan.text == target) {
+          return rootSpan;
+        }
+        return null;
+      }
+
+      TextSpan? findSpanInTree(String target) {
+        for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+          final match = findSpanByText(rich.text, target);
+          if (match != null) {
+            return match;
+          }
+        }
+        return null;
+      }
+
+      for (final (brightness, expectedFill) in [
+        (Brightness.light, OfficialCodexTheme.lightInlineCodeBackground),
+        (Brightness.dark, OfficialCodexTheme.darkInlineCodeBackground),
+      ]) {
+        await tester.pumpWidget(
+          buildBudgetApp(
+            brightness: brightness,
+            data: overBudgetSource,
+            launcher: (uri) async {
+              launched.add(uri);
+              return true;
+            },
+          ),
+        );
+
+        final root = find.byKey(const ValueKey('assistant-markdown'));
+        final bodySize = Theme.of(tester.element(root))
+            .textTheme
+            .bodyMedium!
+            .fontSize!;
+        final tableSize = bodySize * 0.875 < 12.0 ? 12.0 : bodySize * 0.875;
+
+        // Exactly 128 rich WidgetSpan pills are created across heading + table +
+        // list + blockquote + paragraph.
+        final pillRadius = BorderRadius.circular(
+          OfficialCodexTheme.inlineCodeRadius,
+        );
+        final pillDecoratedCount = tester
+            .widgetList<DecoratedBox>(
+              find.descendant(of: root, matching: find.byType(DecoratedBox)),
+            )
+            .where((w) {
+              final d = w.decoration;
+              return d is BoxDecoration && d.borderRadius == pillRadius;
+            })
+            .length;
+        expect(pillDecoratedCount, OfficialCodexTheme.maxInlineCodePills);
+        expect(find.text(tok(1)), findsOneWidget);
+        expect(find.text(tok(5)), findsOneWidget);
+        expect(find.text(tok(128)), findsOneWidget);
+
+        // Tokens 129..135 fall back to merged TextSpans (zero inline-code pill
+        // DecoratedBox wrappers) while keeping parent-relative size/weight and fill.
+        for (var i = 129; i <= 135; i++) {
+          final match = find.textContaining(tok(i), findRichText: true);
+          expect(match, findsOneWidget);
+          final ancestorPills = tester
+              .widgetList<DecoratedBox>(
+                find.ancestor(of: match, matching: find.byType(DecoratedBox)),
+              )
+              .where((w) {
+                final d = w.decoration;
+                return d is BoxDecoration && d.borderRadius == pillRadius;
+              });
+          expect(ancestorPills, isEmpty);
+        }
+
+        for (final (token, expectedBaseSize, expectedWeight) in [
+          (tok(129), bodySize, FontWeight.w400),
+          (tok(130), bodySize, FontWeight.w400),
+          (tok(131), bodySize, FontWeight.w400),
+          (tok(132), bodySize * 1.5, FontWeight.w600),
+          (tok(133), tableSize, FontWeight.w600),
+          (tok(135), tableSize, FontWeight.w400),
+        ]) {
+          final span = findSpanInTree(token);
+          expect(span, isNotNull, reason: 'Missing fallback TextSpan $token');
+          expect(span!.style!.backgroundColor, expectedFill);
+          expect(
+            span.style!.fontSize,
+            closeTo(
+              expectedBaseSize * OfficialCodexTheme.inlineCodeFontScale,
+              0.01,
+            ),
+          );
+          expect(span.style!.fontWeight, expectedWeight);
+        }
+
+        final linkedSpan130 = findSpanInTree(tok(130))!;
+        final linkedSpan131 = findSpanInTree(tok(131))!;
+        expect(linkedSpan130.style!.decoration, TextDecoration.underline);
+        expect(
+          linkedSpan130.style!.decorationStyle,
+          TextDecorationStyle.dotted,
+        );
+        expect(linkedSpan130.recognizer, isA<TapGestureRecognizer>());
+        expect(linkedSpan131.recognizer, isA<TapGestureRecognizer>());
+      }
+
+      // Enclosing link activation + cached callback-only update on over-budget spans.
+      launched.clear();
+      (findSpanInTree(tok(130))!.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      (findSpanInTree(tok(131))!.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      expect(launched, [
+        Uri.parse('https://example.invalid/over'),
+        Uri.parse('https://example.invalid/mixed-over'),
+      ]);
+
+      final beforeBody = tester.widget<DesktopMarkdownBody>(
+        find.byType(DesktopMarkdownBody),
+      );
+      final beforeSpan130 = findSpanInTree(tok(130))!;
+      final updatedLaunched = <Uri>[];
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.dark,
+          data: overBudgetSource,
+          launcher: (uri) async {
+            updatedLaunched.add(uri);
+            return true;
+          },
+        ),
+      );
+      final afterBody = tester.widget<DesktopMarkdownBody>(
+        find.byType(DesktopMarkdownBody),
+      );
+      final afterSpan130 = findSpanInTree(tok(130))!;
+      expect(afterBody.styleSheet, equals(beforeBody.styleSheet));
+      expect(identical(afterSpan130, beforeSpan130), isTrue);
+      (afterSpan130.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      expect(updatedLaunched, [Uri.parse('https://example.invalid/over')]);
+
+      // Clipboard copy preserves document order across pill 128 -> fallback 129..135.
+      String? copiedText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedText =
+                (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final selectableState = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
+      );
+      selectableState.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(
+        tester.element(find.text(tok(1))),
+        CopySelectionTextIntent.copy,
+      );
+      await tester.pump();
+      expect(copiedText, isNotNull);
+      var prevIndex = -1;
+      for (final marker in [
+        tok(1),
+        tok(5),
+        tok(128),
+        tok(129),
+        tok(130),
+        'See ${tok(131)} here',
+        tok(132),
+        tok(133),
+        tok(134),
+        tok(135),
+      ]) {
+        final idx = copiedText!.indexOf(marker);
+        expect(idx, greaterThan(prevIndex), reason: 'Out-of-order $marker');
+        prevIndex = idx;
+      }
+
+      // Rebuilding with an internally-wrapping flat TextSpan plus 128 short
+      // tokens keeps all 128 short tokens as rich WidgetSpan pills before #129.
+      final nonConsumingSource = [
+        '`${'w' * 80}`',
+        for (var i = 1; i <= 129; i++) '`s_$i`',
+      ].join(' ');
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: nonConsumingSource,
+          launcher: (_) async => true,
+        ),
+      );
+      expect(find.text('w' * 80), findsNothing);
+      expect(find.text('s_1'), findsOneWidget);
+      expect(find.text('s_128'), findsOneWidget);
+      expect(find.text('s_129'), findsNothing);
+      expect(find.textContaining('s_129', findRichText: true), findsOneWidget);
+
+      // Dense 16 KiB (4,096 inline-code tokens) stays strictly O(1) element-bounded
+      // and returns to exact baseline element count on unmount.
+      await tester.pumpWidget(_app(const SizedBox.shrink()));
+      final emptyShellElements = tester.allElements.length;
+
+      final dense16KiB = List.filled(4096, '`a`').join(' ');
+      expect(
+        dense16KiB.length,
+        lessThanOrEqualTo(AssistantMarkdown.maxSourceCharacters),
+      );
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: dense16KiB,
+          launcher: (_) async => true,
+          width: 640,
+        ),
+      );
+      final denseElementCount = tester.allElements.length;
+      expect(denseElementCount - emptyShellElements, lessThan(2000));
+      final denseFirstPillAt640 = tester.widget<Text>(find.text('a').first);
+
+      // Narrowing 640 -> 620 -> 640 crosses zero pill fit thresholds and reuses
+      // the built subtree without re-parsing or rebuilding the 4,096 spans.
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: dense16KiB,
+          launcher: (_) async => true,
+          width: 620,
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<Text>(find.text('a').first),
+          denseFirstPillAt640,
+        ),
+        isTrue,
+      );
+      await tester.pumpWidget(
+        buildBudgetApp(
+          brightness: Brightness.light,
+          data: dense16KiB,
+          launcher: (_) async => true,
+          width: 640,
+        ),
+      );
+      expect(
+        identical(
+          tester.widget<Text>(find.text('a').first),
+          denseFirstPillAt640,
+        ),
+        isTrue,
+      );
+
+      await tester.pumpWidget(_app(const SizedBox.shrink()));
+      await tester.pump();
+      expect(tester.allElements.length, emptyShellElements);
       expect(tester.takeException(), isNull);
     },
   );
