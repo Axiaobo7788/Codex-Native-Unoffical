@@ -131,10 +131,15 @@ action footer. Direct choices advance or submit by click or digit
 in the active Desktop request. A project row keeps its New chat
 action reachable by Tab. Home, open Changes, Review, expanded activity,
 compact and dark variants have separate evidence gates.
-[Hosted CI for `9315a5e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42937867643)
+[Hosted CI for `3be9a8e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42944063808)
 
 ## Current checkpoint
 
+- `4d379ed` maps Goal status, objective, bullet and usage into the same
+  click target with the measured compact actions. The peer comparison
+  corrected short-goal flex and horizontal insets. The exact Linux package
+  opened the persisted stock Goal by clicking its elapsed text. Editor
+  toolbar, shortcuts and external-dirty closure remain actionable in A9.
 - `599605c` maps the single stock question title to the same measured
   header as multiple questions. Paired release replay submitted the selected
   answer and all three processes exited. The peer identified the extra
@@ -194,9 +199,9 @@ remain available as history.
 - The pure-Dart boundary checked 65 roots. The history benchmark retained
   100 of 1,000 turns while exercising ten 3 MiB command payloads. The
   unchanged Rust tree passed formatting, Clippy and 100 tests.
-- The latest confirmed shared CI checkpoint is `9315a5e`.
+- The latest confirmed shared CI checkpoint is `3be9a8e`.
   Later exact-HEAD runs remain separate until their results are read.
-  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42937867643)
+  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42944063808)
 - Signed-in official live captures, subjective interaction acceptance
   and unavailable physical devices remain evidence gates on their own
   surfaces. The primary UI has machine-actionable rows in Golden State A.
