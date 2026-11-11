@@ -6,11 +6,13 @@ class _UserInputBanner extends StatelessWidget {
     required this.controller,
     required this.desktop,
     this.activeThreadId,
+    this.autofocusChoices = false,
   });
 
   final UserInputController controller;
   final bool desktop;
   final String? activeThreadId;
+  final bool autofocusChoices;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +45,7 @@ class _UserInputBanner extends StatelessWidget {
             errorMessage: error,
           );
         }
+        final isCurrentDesktop = desktop && request.threadId == activeThreadId;
         return _UserInputCard(
           key: ValueKey('user-input-${request.requestId}'),
           controller: controller,
@@ -50,7 +53,8 @@ class _UserInputBanner extends StatelessWidget {
           pendingCount: controller.pending.length,
           errorMessage: error,
           desktop: desktop,
-          autoAdvance: desktop && request.threadId == activeThreadId,
+          autoAdvance: isCurrentDesktop,
+          autofocusChoices: isCurrentDesktop && autofocusChoices,
         );
       },
     );
@@ -531,6 +535,7 @@ class _UserInputCard extends StatefulWidget {
     required this.errorMessage,
     required this.desktop,
     required this.autoAdvance,
+    required this.autofocusChoices,
   });
 
   final UserInputController controller;
@@ -539,6 +544,7 @@ class _UserInputCard extends StatefulWidget {
   final String? errorMessage;
   final bool desktop;
   final bool autoAdvance;
+  final bool autofocusChoices;
 
   @override
   State<_UserInputCard> createState() => _UserInputCardState();
@@ -549,6 +555,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   final Map<String, String?> _selectedOptions = {};
   final Set<String> _otherSelections = {};
   final _questionScroll = ScrollController();
+  final _choiceNavigationFocus = FocusNode(skipTraversal: true);
   late final Map<String, FocusNode> _otherAnswerFocusNodes;
   Timer? _choiceAdvanceTimer;
   var _questionIndex = 0;
@@ -572,6 +579,7 @@ class _UserInputCardState extends State<_UserInputCard> {
         if (question.options.isNotEmpty && question.allowsOther)
           question.id: FocusNode(),
     };
+    _focusCurrentChoices();
   }
 
   @override
@@ -583,6 +591,75 @@ class _UserInputCardState extends State<_UserInputCard> {
         oldWidget.request.turnId != widget.request.turnId) {
       _cancelChoiceAdvance();
     }
+    if (!oldWidget.autofocusChoices && widget.autofocusChoices) {
+      _focusCurrentChoices();
+    }
+  }
+
+  void _focusCurrentChoices() {
+    if (!widget.autofocusChoices ||
+        widget.request.questions
+                .elementAtOrNull(_questionIndex)
+                ?.options
+                .isNotEmpty !=
+            true) {
+      return;
+    }
+    final index = _questionIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          widget.autofocusChoices &&
+          _questionIndex == index &&
+          TickerMode.valuesOf(context).enabled &&
+          ModalRoute.of(context)?.isCurrent != false &&
+          !widget.controller.isSubmitting(widget.request.requestId)) {
+        _choiceNavigationFocus.requestFocus();
+      }
+    });
+  }
+
+  KeyEventResult _handleChoiceKey(FocusNode node, KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (!widget.autoAdvance ||
+        event is! KeyDownEvent ||
+        keyboard.isAltPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isShiftPressed ||
+        widget.controller.isSubmitting(widget.request.requestId)) {
+      return KeyEventResult.ignored;
+    }
+    final question = widget.request.questions.elementAtOrNull(_questionIndex);
+    if (question == null ||
+        question.options.isEmpty ||
+        _otherAnswerFocusNodes[question.id]?.hasFocus == true) {
+      return KeyEventResult.ignored;
+    }
+    if (node.hasPrimaryFocus &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      if (_answerFor(question) != null) {
+        if (_questionIndex + 1 < widget.request.questions.length) {
+          _showQuestion(_questionIndex + 1);
+        } else {
+          _submit();
+        }
+      }
+      return KeyEventResult.handled;
+    }
+    final digit = int.tryParse(event.character ?? event.logicalKey.keyLabel);
+    if (digit == null || digit < 1 || digit > 9) {
+      return KeyEventResult.ignored;
+    }
+    if (digit <= question.options.length) {
+      _selectOption(question, question.options[digit - 1].label);
+      return KeyEventResult.handled;
+    }
+    if (digit == question.options.length + 1 && question.allowsOther) {
+      _selectOtherAnswer(question);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _handleAnswerChanged() {
@@ -594,6 +671,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   @override
   void dispose() {
     _cancelChoiceAdvance();
+    _choiceNavigationFocus.dispose();
     _questionScroll.dispose();
     for (final focus in _otherAnswerFocusNodes.values) {
       focus.dispose();
@@ -620,7 +698,7 @@ class _UserInputCardState extends State<_UserInputCard> {
     final canContinue = hasNext
         ? _answerFor(questions[_questionIndex]) != null
         : _isComplete;
-    return Center(
+    final card = Center(
       heightFactor: 1,
       child: Container(
         key: const ValueKey('user-input-card'),
@@ -749,6 +827,13 @@ class _UserInputCardState extends State<_UserInputCard> {
           },
         ),
       ),
+    );
+    return Focus(
+      key: const ValueKey('user-input-choice-scope'),
+      focusNode: _choiceNavigationFocus,
+      canRequestFocus: widget.autoAdvance,
+      onKeyEvent: _handleChoiceKey,
+      child: card,
     );
   }
 
@@ -1021,6 +1106,7 @@ class _UserInputCardState extends State<_UserInputCard> {
       _questionScroll.jumpTo(0);
     }
     setState(() => _questionIndex = index);
+    _focusCurrentChoices();
   }
 
   String? _answerFor(UserInputQuestion question) {

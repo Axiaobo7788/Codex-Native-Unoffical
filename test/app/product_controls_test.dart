@@ -827,16 +827,19 @@ void main() {
     expect(tester.getCenter(other).dy, closeTo(tester.getCenter(next).dy, 1));
     expect(tester.getTopRight(other).dx, lessThan(tester.getTopLeft(next).dx));
     expect(runtime.userInputSubmissions, isEmpty);
-    await tester.tap(
-      find.byKey(const ValueKey('user-input-approach-Incremental')),
-    );
+    final scope = find.byKey(const ValueKey('user-input-choice-scope'));
+    expect(tester.widget<Focus>(scope).focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pump(const Duration(milliseconds: 70));
-    await tester.tap(other);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 180));
     expect(find.text('Question 1 of 2'), findsOneWidget);
     expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
     expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text('Question 1 of 2'), findsOneWidget);
 
     FocusNode optionFocus(String label) => Focus.of(
       tester.element(
@@ -918,6 +921,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Controls thread'));
     await tester.pumpAndSettle();
+    runtime.emitApproval(
+      ApprovalRequest(
+        requestId: 'choice-focus-approval',
+        kind: ApprovalKind.command,
+        threadId: runtime.thread.id,
+        turnId: 'turn-1',
+        itemId: 'approval-item',
+        summary: 'Confirm the fixture.',
+        approveSupported: true,
+      ),
+    );
     runtime.emitUserInput(
       UserInputRequest(
         requestId: 'choice-thread-scope',
@@ -938,7 +952,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('user-input-approach-Default')));
+    final scope = find.byKey(const ValueKey('user-input-choice-scope'));
+    expect(tester.widget<Focus>(scope).focusNode!.hasPrimaryFocus, isFalse);
+    await tester.tap(find.text('Reject'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Focus>(scope).focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pump(const Duration(milliseconds: 70));
     await tester.tap(find.text('Alternate thread'));
     await tester.pumpAndSettle();
@@ -947,7 +966,8 @@ void main() {
 
     await tester.tap(find.text('Controls thread'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('user-input-submit')));
+    expect(tester.widget<Focus>(scope).focusNode!.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(runtime.userInputSubmissions.single.$2.values, {
       'approach': ['Default'],
