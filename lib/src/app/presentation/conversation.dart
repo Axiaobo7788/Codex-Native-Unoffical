@@ -3420,6 +3420,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         controller.activeTurnId ??
         rawLiveEntries.lastOrNull?.turnId ??
         rawHistoryItems.lastOrNull?.turnId;
+    final savedCommandGroups = _savedCommandGroups(rawHistoryItems);
+    final nestedCommandIds = {
+      for (final group in savedCommandGroups.values)
+        for (final item in group.skip(1)) item.id,
+    };
     final historyItems = switch (_detailMode) {
       PresentationDetailMode.prose =>
         rawHistoryItems
@@ -3433,6 +3438,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       PresentationDetailMode.commands =>
         rawHistoryItems
             .where((item) {
+              if (nestedCommandIds.contains(item.id)) {
+                return false;
+              }
               if (item.kind == HistoryItemKind.user ||
                   item.kind == HistoryItemKind.assistant ||
                   item.kind == HistoryItemKind.review) {
@@ -3654,6 +3662,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       : _threadChatDags[activeThread.id];
                   if (chronologicalIndex < historyItems.length) {
                     final item = historyItems[chronologicalIndex];
+                    final commandGroup = savedCommandGroups[item.id];
                     final itemKey = 'history-${item.id}';
                     final canMutateTurn =
                         item.kind == HistoryItemKind.user &&
@@ -3730,7 +3739,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         inlineActivity: widget.hasDesktopShell,
                         revealAssistantCopy:
                             !showLiveEntries || item.turnId != latestTurnId,
-                        commandOutput: item.isCommand
+                        groupedCommands: commandGroup == null
+                            ? null
+                            : _savedCommandGroupView(commandGroup),
+                        commandOutput: item.isCommand && commandGroup == null
                             ? _commandOutputFor(
                                 context,
                                 itemId: item.id,
@@ -5073,6 +5085,101 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           .where((entry) => entry.kind == ConversationEntryKind.activity)
           .firstOrNull;
 
+  Map<String, List<HistoryItem>> _savedCommandGroups(List<HistoryItem> items) {
+    final history = widget.historyController;
+    final turnId = history.selectedTurnId;
+    if (!widget.hasDesktopShell ||
+        _detailMode != PresentationDetailMode.commands ||
+        _searchOpen ||
+        turnId == null ||
+        history.loadingItems ||
+        history.selectedTurnDetailsLoadFailed ||
+        history.turnForId(turnId)?.status != TurnRuntimeStatus.completed) {
+      return const {};
+    }
+
+    bool groupable(HistoryItem item) =>
+        item.turnId == turnId && item.isCommand && item.status == 'completed';
+
+    final groups = <String, List<HistoryItem>>{};
+    var start = 0;
+    while (start < items.length) {
+      if (!groupable(items[start])) {
+        start++;
+        continue;
+      }
+      var end = start + 1;
+      while (end < items.length && groupable(items[end])) {
+        end++;
+      }
+      // A visible same-turn boundary proves the run ends within the loaded
+      // page. A clipped run stays flat so a partial page cannot imply a count.
+      if (end - start > 1 &&
+          end < items.length &&
+          items[end].turnId == turnId) {
+        groups[items[start].id] = items.sublist(start, end);
+      }
+      start = end;
+    }
+    return groups;
+  }
+
+  Widget _savedCommandGroupView(List<HistoryItem> items) {
+    final runs = items.where((item) => item.commandAction == null).length;
+    final includesExploration = runs < items.length;
+    final label = includesExploration
+        ? _mixedCommandSummary(runs)
+        : 'Ran commands';
+    bool containsPreview() {
+      final key = _commandOutputPreview?.key;
+      return key != null &&
+          key.saved &&
+          key.turnId == items.first.turnId &&
+          items.any((item) => item.id == key.itemId);
+    }
+
+    return _SavedCommandGroup(
+      key: ValueKey('saved-command-group-${items.first.id}'),
+      label: label,
+      includesExploration: includesExploration,
+      itemCount: items.length,
+      initiallyExpanded: containsPreview(),
+      onCollapse: () {
+        if (containsPreview()) {
+          setState(_clearCommandOutputPreview);
+        }
+      },
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final command = item.text;
+        return _HistoryEntryView(
+          key: ValueKey(item.id),
+          item: item,
+          historyController: widget.historyController,
+          inlineActivity: true,
+          showDetailsHeader: false,
+          overrideEntryText:
+              item.commandAction == null && command.startsWith('Command: ')
+              ? 'Ran ${command.substring('Command: '.length)}'
+              : null,
+          commandOutput: _commandOutputFor(
+            context,
+            itemId: item.id,
+            turnId: item.turnId,
+            output: item.output,
+            saved: true,
+          ),
+        );
+      },
+    );
+  }
+
+  String _mixedCommandSummary(int runCount) => switch (runCount) {
+    0 => 'Read files',
+    1 => 'Read files and ran a command',
+    _ => 'Read files and ran commands',
+  };
+
   String? _collapsedLiveCommandSummary(
     List<ConversationEntry> entries,
     ConversationEntry? latest,
@@ -5106,11 +5213,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (actions.length < 2) return null;
     // The desktop renderer groups read, search and list into one
     // exploration segment and pluralizes the separate command segment.
-    return switch (runCount) {
-      0 => 'Read files',
-      1 => 'Read files and ran a command',
-      _ => 'Read files and ran commands',
-    };
+    return _mixedCommandSummary(runCount);
   }
 
   void _reconcileLiveOutputPreview() {

@@ -420,6 +420,8 @@ class _HistoryEntryView extends StatelessWidget {
     this.inlineActivity = false,
     this.revealAssistantCopy = false,
     this.commandOutput,
+    this.groupedCommands,
+    this.showDetailsHeader = true,
     this.onForkFromTurn,
     this.onRevertFromTurn,
     this.onEditFromTurn,
@@ -440,6 +442,8 @@ class _HistoryEntryView extends StatelessWidget {
   final bool inlineActivity;
   final bool revealAssistantCopy;
   final _CommandOutputPresentation? commandOutput;
+  final Widget? groupedCommands;
+  final bool showDetailsHeader;
   final VoidCallback? onForkFromTurn;
   final VoidCallback? onRevertFromTurn;
   final VoidCallback? onEditFromTurn;
@@ -466,6 +470,7 @@ class _HistoryEntryView extends StatelessWidget {
     final turn = historyController.turnForId(item.turnId);
     final durationLabel = turn?.formattedWorkDuration;
     final showDetails =
+        showDetailsHeader &&
         historyController.isTurnDetailsAnchor(item) &&
         (detailMode != PresentationDetailMode.prose ||
             (durationLabel != null && item.kind != HistoryItemKind.user));
@@ -473,6 +478,32 @@ class _HistoryEntryView extends StatelessWidget {
     final loadFailed =
         selected && historyController.selectedTurnDetailsLoadFailed;
     final expanded = selected && !loadFailed;
+    final detailsHeader = showDetails
+        ? _TurnWorkDivider(
+            actionKey: ValueKey('turn-work-${item.turnId}'),
+            label: loadFailed
+                ? 'Retry turn details'
+                : durationLabel ?? 'Turn details',
+            expanded: expanded,
+            inline: inlineActivity,
+            loading: selected && historyController.loadingItems,
+            onTap: historyController.loadingItems
+                ? null
+                : () {
+                    if (expanded) {
+                      historyController.collapseTurnItems();
+                    } else {
+                      unawaited(historyController.loadTurnItems(item.turnId));
+                    }
+                  },
+          )
+        : null;
+    if (groupedCommands case final group?) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [?detailsHeader, group],
+      );
+    }
     final effectiveAttachments = overrideAttachments ?? item.attachments;
     return _ConversationEntryView(
       entry: ConversationEntry(
@@ -501,26 +532,7 @@ class _HistoryEntryView extends StatelessWidget {
       revealAssistantCopy: revealAssistantCopy,
       activitySummary: _explorationCaption(),
       activityDetail: commandOutput?.detail,
-      leadingHeader: showDetails
-          ? _TurnWorkDivider(
-              actionKey: ValueKey('turn-work-${item.turnId}'),
-              label: loadFailed
-                  ? 'Retry turn details'
-                  : durationLabel ?? 'Turn details',
-              expanded: expanded,
-              inline: inlineActivity,
-              loading: selected && historyController.loadingItems,
-              onTap: historyController.loadingItems
-                  ? null
-                  : () {
-                      if (expanded) {
-                        historyController.collapseTurnItems();
-                      } else {
-                        unawaited(historyController.loadTurnItems(item.turnId));
-                      }
-                    },
-            )
-          : null,
+      leadingHeader: detailsHeader,
       trailingAction: item.isCommand
           ? commandOutput?.action ?? _commandOutputFallback(context)
           : _savedMcpTextAction(context),
@@ -814,6 +826,90 @@ class _SavedMcpTextDialogState extends State<_SavedMcpTextDialog> {
 }
 
 enum _SavedMcpTextFailure { unsupported, retryable }
+
+class _SavedCommandGroup extends StatefulWidget {
+  const _SavedCommandGroup({
+    super.key,
+    required this.label,
+    required this.includesExploration,
+    required this.itemCount,
+    required this.initiallyExpanded,
+    required this.itemBuilder,
+    required this.onCollapse,
+  });
+
+  final String label;
+  final bool includesExploration;
+  final int itemCount;
+  final bool initiallyExpanded;
+  final IndexedWidgetBuilder itemBuilder;
+  final VoidCallback onCollapse;
+
+  @override
+  State<_SavedCommandGroup> createState() => _SavedCommandGroupState();
+}
+
+class _SavedCommandGroupState extends State<_SavedCommandGroup> {
+  late var _expanded = widget.initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          expanded: _expanded,
+          child: CodexButton(
+            label: widget.label,
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
+            icon: Icon(
+              widget.includesExploration
+                  ? Icons.menu_book_outlined
+                  : Icons.terminal_rounded,
+              color: theme.textSecondary,
+            ),
+            trailingIcon: Icon(
+              _expanded
+                  ? Icons.expand_more_rounded
+                  : Icons.chevron_right_rounded,
+              color: theme.textSecondary,
+            ),
+            child: Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            onPressed: () {
+              setState(() => _expanded = !_expanded);
+              if (!_expanded) {
+                widget.onCollapse();
+              }
+            },
+          ),
+        ),
+        if (_expanded)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 224),
+            child: ListView.builder(
+              key: const ValueKey('saved-command-group-items'),
+              primary: false,
+              shrinkWrap: true,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+              padding: const EdgeInsetsDirectional.only(
+                start: ThemeTokens.space2,
+              ),
+              itemCount: widget.itemCount,
+              itemBuilder: widget.itemBuilder,
+            ),
+          ),
+        const SizedBox(height: ThemeTokens.space2),
+      ],
+    );
+  }
+}
 
 class _TurnWorkDivider extends StatelessWidget {
   const _TurnWorkDivider({

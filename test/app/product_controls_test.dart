@@ -14,6 +14,7 @@ import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
+import 'package:codex_native_unofficial/src/domain/output_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
@@ -1514,6 +1515,142 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('saved command group opens lazily and keeps loaded item search', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const turnId = 'grouped-turn';
+    const user = HistoryItem(
+      id: 'group-prompt',
+      turnId: turnId,
+      kind: HistoryItemKind.user,
+      text: 'Inspect disposable files.',
+    );
+    const answer = HistoryItem(
+      id: 'group-answer',
+      turnId: turnId,
+      kind: HistoryItemKind.assistant,
+      text: 'Inspection complete.',
+    );
+    final runtime = _ProductRuntimeController()
+      ..historyTurns = const [
+        HistoryTurn(
+          id: turnId,
+          status: TurnRuntimeStatus.completed,
+          reportedWorkDuration: Duration(seconds: 1),
+          items: [user, answer],
+        ),
+      ]
+      ..expandedTurnItems = [
+        user,
+        for (var index = 1; index <= 12; index++)
+          HistoryItem(
+            id: 'group-read-$index',
+            turnId: turnId,
+            kind: HistoryItemKind.activity,
+            text: 'Command: cat fixture-$index',
+            isCommand: true,
+            status: 'completed',
+            output: index == 1
+                ? const OutputDescriptor(
+                    reference: 'group-preview',
+                    bytes: 12,
+                    storedBytes: 12,
+                    truncated: false,
+                    available: true,
+                  )
+                : null,
+            commandAction: (
+              kind: CommandActionKind.read,
+              name: 'fixture-$index',
+              path: null,
+              query: null,
+            ),
+          ),
+        const HistoryItem(
+          id: 'group-tail',
+          turnId: turnId,
+          kind: HistoryItemKind.activity,
+          text: 'Command: printf group-tail',
+          isCommand: true,
+          status: 'completed',
+        ),
+        answer,
+      ];
+    addTearDown(runtime.closeStreams);
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controls thread'));
+    await tester.pumpAndSettle();
+
+    final turn = find.byKey(const ValueKey('turn-work-grouped-turn'));
+    final group = find.text('Read files and ran a command');
+    final inner = find.byKey(const ValueKey('saved-command-group-items'));
+    final read = find.text('Read fixture-1');
+    final tail = find.text('Ran printf group-tail');
+    expect(turn, findsOneWidget);
+    expect(group, findsNothing);
+    expect(runtime.historyItemReads, 0);
+
+    await tester.tap(turn);
+    await tester.pumpAndSettle();
+    expect(group, findsOneWidget);
+    expect(read, findsNothing);
+    expect(runtime.historyItemReads, 1);
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(inner).height, 224);
+    expect(read, findsOneWidget);
+    expect(tail, findsNothing);
+    await tester.drag(inner, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(tail, findsOneWidget);
+    expect(runtime.historyItemReads, 1);
+
+    await tester.drag(inner, const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(runtime.outputTailReads, isEmpty);
+    await tester.tap(find.byTooltip('Show output preview'));
+    await tester.pumpAndSettle();
+    expect(find.text('group output'), findsOneWidget);
+    expect(runtime.outputTailReads, [12]);
+
+    await tester.tap(find.byKey(const ValueKey('thread-actions-menu-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Find in conversation'));
+    await tester.pumpAndSettle();
+    final search = find.byKey(const ValueKey('conversation-search-field'));
+    await tester.enterText(search, 'printf group-tail');
+    await tester.pumpAndSettle();
+    expect(group, findsNothing);
+    final count = tester.widget<Text>(
+      find.byKey(const ValueKey('conversation-search-count')),
+    );
+    expect(count.data, '1 of 1');
+    await tester.tap(find.byKey(const ValueKey('conversation-search-next')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('active-search-match-group-tail')),
+      findsOneWidget,
+    );
+    expect(runtime.historyItemReads, 1);
+    await tester.tap(find.byKey(const ValueKey('conversation-search-close')));
+    await tester.pumpAndSettle();
+    expect(inner, findsOneWidget);
+    expect(find.text('group output'), findsOneWidget);
+    expect(runtime.outputTailReads, [12]);
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    expect(inner, findsNothing);
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    expect(find.text('group output'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<_ProductRuntimeController> _pumpSelectedApp(WidgetTester tester) async {
@@ -1577,6 +1714,8 @@ class _ProductRuntimeController extends RuntimeController {
   final List<String> startedThreadCwds = [];
   List<HistoryTurn> historyTurns = const [];
   List<HistoryItem> expandedTurnItems = const [];
+  var historyItemReads = 0;
+  final List<int> outputTailReads = [];
   final List<({Object requestId, ApprovalDecision decision})>
   approvalDecisions = [];
   final List<(Object, UserInputAnswers)> userInputSubmissions = [];
@@ -1679,8 +1818,27 @@ class _ProductRuntimeController extends RuntimeController {
       HistoryTurnPage(turns: historyTurns, nextCursor: null);
 
   @override
-  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async =>
-      HistoryItemPage(items: expandedTurnItems, nextCursor: null);
+  Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) async {
+    historyItemReads++;
+    return HistoryItemPage(items: expandedTurnItems, nextCursor: null);
+  }
+
+  @override
+  Future<OutputChunk> readOutputTail({
+    required String reference,
+    required int length,
+  }) async {
+    outputTailReads.add(length);
+    return OutputChunk(
+      reference: reference,
+      offset: 0,
+      data: Uint8List.fromList('group output'.codeUnits),
+      bytes: 12,
+      storedBytes: 12,
+      truncated: false,
+      eof: true,
+    );
+  }
 
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) async {
