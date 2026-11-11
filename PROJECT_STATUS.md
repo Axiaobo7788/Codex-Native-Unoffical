@@ -135,6 +135,10 @@ compact and dark variants have separate evidence gates.
 
 ## Current checkpoint
 
+- `599605c` maps the single stock question title to the same measured
+  header as multiple questions. Paired release replay submitted the selected
+  answer and all three processes exited. The peer identified the extra
+  queued/submitting header as a remaining machine-actionable A10 delta.
 - Desktop remains in Golden State A reconstruction. `55541ea` adds
   tight-list flow to the root adjacency translation in `f7144df`.
   The parser runs once, and the standard Markdown builder renders each
