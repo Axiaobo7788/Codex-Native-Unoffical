@@ -128,11 +128,18 @@ composer retains its neutral border. Desktop assistant Markdown uses
 the measured body-relative heading proportions. Desktop stock choices
 preselect the first answer. Wide stock questions show Other in the
 action footer. Direct choices advance or submit by click or digit
-in the active Desktop request. Home, open Changes,
-Review, expanded activity, compact and dark variants have separate
-evidence gates. [Hosted CI for `f61b80e`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42920092547)
+in the active Desktop request. A project row keeps its New chat
+action reachable by Tab. Home, open Changes, Review, expanded activity,
+compact and dark variants have separate evidence gates.
+[Hosted CI for `22ee7c3`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42924141648)
 
 ## Current checkpoint
+
+- `0c45b67` gives the project New chat action stable keyboard traversal.
+  A Linux stock session verified creation and a turn in the second
+  disposable project. The 530-case Flutter suite and ASCII-path
+  analysis passed. The local project menu remains in the A2 queue.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
 
 - `9402faa` and `8b9fe5c` translate the stock question default and
   custom-answer focus. Linux release runs sent both default selections
