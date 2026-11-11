@@ -69,8 +69,8 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- Gemini's A7 source `ff931b9` and formatting-only child `7012dd3` are being
-  integrated normally onto the published documentation checkpoint `03ecc21`.
+- Gemini's A7 source `ff931b9` and formatting-only child `7012dd3` landed in
+  the normal published merge `1ec254dc4e7466f7598acc0a13aab784abf72ad8`.
   Codex independently reviewed the source and packaged behavior. Gemini has
   released all seven file surfaces and the heavy slot, retaining ownership
   for concrete presentation findings. No controller/protocol/history change
@@ -97,9 +97,22 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   This is preserved external negative evidence, not a passing Linux gate or
   a demonstrated UI regression. Documentation checkpoint `03ecc21` has its
   own run [43047223523](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43047223523):
-  Windows/macOS passed and Linux remains in dependency installation. The A7
-  integration's publication and exact-HEAD CI are pending. No workflow or
-  package-source configuration was changed in this slice.
+  Windows/macOS passed; Linux again exhausted the 20-minute limit on the
+  same Azure mirror DNS failure before project checks. The published A7
+  integration has exact run [43051090054](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43051090054):
+  Windows/macOS passed and Linux again hit the dependency-install deadline.
+  A separate Codex recovery slice first tried the image's Canonical fallbacks
+  (`2e1df69`); its Linux run also failed on archive-host DNS within five minutes.
+  A second bounded candidate substitutes the public Linux Kernel Archives
+  Ubuntu mirror for the first entry, keeping Canonical fallbacks, required
+  packages, Ubuntu 22.04 and normal APT trust checks. Exact recovery candidate
+  `ae3be852c6ec6ffa21391fdf866aeccf6872356e` passed all three hosted jobs in
+  [43056716141](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43056716141),
+  including the full Linux verification and build chain. The failed first
+  experiment remains negative evidence; its history is preserved by ordinary
+  commits. The integration HEAD requires its own exact-HEAD CI result.
+  Gemini independently owns the active A6 user-bubble/attachment presentation
+  slice and heavy slot; Codex continues light review and integration work.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak

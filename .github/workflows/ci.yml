@@ -27,7 +27,15 @@ jobs:
           java-version: '17'
 
       - name: Install Linux build dependencies
-        run: sudo apt-get update && sudo apt-get install -y binutils libgtk-3-dev libsecret-1-dev ninja-build
+        timeout-minutes: 5
+        run: |
+          # Ubuntu archive DNS failures prevented the Desktop UI gates from starting.
+          # This public Ubuntu mirror retains normal Ubuntu signature verification.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://mirrors.kernel.org/ubuntu/|' /etc/apt/apt-mirrors.txt
+          fi
+          sudo apt-get update
+          sudo apt-get install -y binutils libgtk-3-dev libsecret-1-dev ninja-build
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
