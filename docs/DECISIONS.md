@@ -2602,6 +2602,17 @@ backtick density:
   `HistoryProtocolAdapter` bounds stored agent text at `8 KiB` plus ellipsis, or
   `~2,048` inline-code tokens), dense selection shifted `1.38 s / +81.6 MiB`
   (`5e0996a`) to `2.57 s / +153.5 MiB` and repeat `2.67 s / +139.0 MiB`.
+- In packaged real-use verification of `48ca158`
+  (`/var/tmp/native-integrated-a6-inline-48ca158-r1/`), a single unbroken
+  inline-code path wider than the `640 px` reading column wrapped onto two lines
+  inside one `WidgetSpan` (`PlaceholderAlignment.baseline`) while
+  `flutter_markdown_plus` `StrutStyle(forceStrutHeight: true)` clamped the outer
+  `RichText` line box to `1.0` prose line height; the overflowing second pill
+  line crowded the following prose line (`' ends here.'`) and caused Flutter
+  `_SelectableTextContainerDelegate._compareScreenOrder` (`_compareVertically ==
+  0`, `' ends here.'` `left = outerLeft` < `6 px`-padded pill `Text` `left =
+  outerLeft + 6`) to invert drag+`Ctrl+C` clipboard order (`Path  ends
+  here.src/features/...`).
 
 ### Decision
 
@@ -2612,27 +2623,41 @@ backtick density:
    paragraph, `h1`–`h6` heading, list, blockquote, and `table` `th`/`td`
    builders, resetting it at the start of every `_buildBlocks()` pass (excluding
    fenced `<pre><code>` blocks and caller-supplied custom element builders).
-3. Render inline-code tokens beyond `128` as `Text.rich(TextSpan(...))` so
-   `flutter_markdown_plus` merges them directly into the parent `RichText` with
-   zero extra `WidgetSpan` elements while preserving exact text, parent-relative
-   `0.92 em` size/weight/line-box height, canonical `OfficialCodexTheme` flat
-   background fill (`lightInlineCodeBackground` / `darkInlineCodeBackground`),
-   enclosing `<a>` dotted underline and late-dispatched `TapGestureRecognizer`
-   lifecycle, and `SelectionArea` copy order.
-4. Keep `AssistantMarkdown.maxSourceCharacters` (`16 KiB`),
+3. Render inline-code tokens beyond `128`—and any inline-code token whose
+   single-line `WidgetSpan` pill would internally wrap (`> 1` line or embedded
+   `\n`) within its container's actual `LayoutBuilder` / list-gutter /
+   blockquote-inset / `TextScaler`-adjusted available width (`e836769`)—as
+   `Text.rich(TextSpan(...))` so `flutter_markdown_plus` merges them directly
+   into the parent `RichText` with zero extra `WidgetSpan` elements and without
+   consuming one of the `128` single-line pill slots, while preserving exact
+   text, parent-relative `0.92 em` size/weight/line-box height, canonical
+   `OfficialCodexTheme` flat background fill (`lightInlineCodeBackground` /
+   `darkInlineCodeBackground`), enclosing `<a>` dotted underline and
+   late-dispatched `TapGestureRecognizer` lifecycle, and exact `SelectionArea`
+   drag/`selectAll` document order.
+4. Check `!hasPillSlot()` before `TextPainter` width measurement so over-budget
+   tokens (`129..4,096`) incur zero layout probes, and cache built block
+   subtrees across parent rebuilds whenever `(data, style/theme inputs,
+   constraints.maxWidth, MediaQuery.textScalerOf(context))` are unchanged.
+5. Keep `AssistantMarkdown.maxSourceCharacters` (`16 KiB`),
    `HistoryProtocolAdapter` (`8 KiB`), `!completed` streaming `SelectableText`
    bypass, and controller/protocol boundaries unchanged without adding a custom
-   inline text-layout engine.
+   inline text-layout engine or custom `SelectionContainer` delegate.
 
 ### Consequences
 
-- Ordinary assistant messages (`<= 128` inline-code tokens) retain exact
-  `1 px 6 px` / `6 px`-radius pill presentation.
+- Ordinary single-line inline-code tokens (`<= 128` per message) retain exact
+  `1 px 6 px` / `6 px`-radius pill presentation, while internally wrapping
+  tokens fall back cleanly to continuous flat-tinted `TextSpan`s without
+  vertical line-box crowding or clipboard inversion (verified on the `271`-byte
+  P1 paragraph in `/var/tmp/native-gemini-a6-multiline-copy-r2/`, SHA-256
+  `089bf9dc13e93287a15fb2722e2aed1f0e2136ff6a3baff26ddf1c8a2084a467`).
 - Dense backtick dumps cap rich pill subtree fan-out at `O(1)` (`< 2,000` added
   elements even on `4,096` inline-code tokens in `16 KiB`, returning to exact
-  baseline element count on unmount) while keeping tinted monospace styling,
-  working links, and complete document-order selection.
-- This per-message pill cap is a deliberate Native bounded-projection safeguard,
-  tracked separately from the active `RESEARCH_MORE` CSS
-  `box-decoration-break: clone` per-line fragment rounding gap on single
-  unbroken `> 640 px` inline-code tokens.
+  baseline element count on unmount) while width/text-scale changes reclassify
+  container-fitting vs wrapping tokens and unrelated parent rebuilds reuse
+  cached subtrees.
+- Both the `128`-pill cap and the internally wrapping flat-span fallback are
+  deliberate Native bounded-presentation safeguards, tracked separately from the
+  active `RESEARCH_MORE` CSS `box-decoration-break: clone` per-line fragment
+  rounding gap on single unbroken inline-code tokens wider than their container.
