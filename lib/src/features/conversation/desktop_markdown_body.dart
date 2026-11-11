@@ -75,12 +75,17 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   final _activeLinks = <_ActiveMarkdownLink>[];
   var _preDepth = 0;
   var _inlineCodePillCount = 0;
+  var _needsRebuild = true;
+  double? _lastMaxWidth;
+  TextScaler? _lastTextScaler;
+  var _currentAvailableWidth = double.infinity;
+  var _currentTextScaler = TextScaler.noScaling;
   List<Widget> _children = const [];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _buildBlocks();
+    _needsRebuild = true;
   }
 
   @override
@@ -99,15 +104,46 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
             oldWidget.inlineCodeVerticalPadding ||
         widget.inlineCodeFontScale != oldWidget.inlineCodeFontScale ||
         widget.maxInlineCodePills != oldWidget.maxInlineCodePills) {
-      _buildBlocks();
+      _needsRebuild = true;
     }
   }
 
-  void _buildBlocks() {
+  T _withAvailableWidth<T>(double width, T Function() action) {
+    final previous = _currentAvailableWidth;
+    _currentAvailableWidth = width;
+    try {
+      return action();
+    } finally {
+      _currentAvailableWidth = previous;
+    }
+  }
+
+  double _measureSingleLineWidth(
+    String text,
+    TextStyle style,
+    TextScaler textScaler,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  void _buildBlocks({
+    required double maxWidth,
+    required TextScaler textScaler,
+  }) {
     _disposeRecognizers();
     _activeLinks.clear();
     _preDepth = 0;
     _inlineCodePillCount = 0;
+    _currentAvailableWidth = maxWidth;
+    _currentTextScaler = textScaler;
     if (widget.data.isEmpty) {
       _children = const [];
       return;
@@ -153,6 +189,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
       md.Node node, {
       required int listDepth,
       required bool insideBlockquote,
+      required double availableWidth,
     }) {
       if (node is md.Element) {
         switch (node.tag) {
@@ -161,6 +198,8 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
               node,
               listDepth: listDepth,
               insideBlockquote: insideBlockquote,
+              availableWidth: availableWidth,
+              textScaler: textScaler,
               buildChildNode: buildNode,
             );
           case 'blockquote':
@@ -169,27 +208,51 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
               node,
               index: currentIndex,
               listDepth: listDepth,
+              availableWidth: availableWidth,
               buildChildNode: buildNode,
             );
           case 'table':
             final currentIndex = tableIndex++;
-            return _buildTable(node, index: currentIndex);
+            return _withAvailableWidth(
+              double.infinity,
+              () => _buildTable(node, index: currentIndex),
+            );
           case 'hr':
             final currentIndex = hrIndex++;
             return _buildHorizontalRule(index: currentIndex);
           case 'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6':
-            return _wrapBuilt(getHeadingBuilder(node.tag).build([node]));
+            return _wrapBuilt(
+              _withAvailableWidth(
+                availableWidth,
+                () => getHeadingBuilder(node.tag).build([node]),
+              ),
+            );
           case 'p' when insideBlockquote:
-            return _wrapBuilt(getBlockquoteParagraphBuilder().build([node]));
+            return _wrapBuilt(
+              _withAvailableWidth(
+                availableWidth,
+                () => getBlockquoteParagraphBuilder().build([node]),
+              ),
+            );
         }
       }
       final normalized = node is md.Text ? md.Element('p', [node]) : node;
-      return _wrapBuilt(zeroBuilder.build([normalized]));
+      return _wrapBuilt(
+        _withAvailableWidth(
+          availableWidth,
+          () => zeroBuilder.build([normalized]),
+        ),
+      );
     }
 
     final blocks = <Widget>[
       for (final node in nodes)
-        buildNode(node, listDepth: 0, insideBlockquote: false),
+        buildNode(
+          node,
+          listDepth: 0,
+          insideBlockquote: false,
+          availableWidth: maxWidth,
+        ),
     ];
     final tags = nodes.map(_nodeTag).toList(growable: false);
 
@@ -225,10 +288,13 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     md.Element listElement, {
     required int listDepth,
     required bool insideBlockquote,
+    required double availableWidth,
+    required TextScaler textScaler,
     required Widget Function(
       md.Node node, {
       required int listDepth,
       required bool insideBlockquote,
+      required double availableWidth,
     })
     buildChildNode,
   }) {
@@ -255,6 +321,53 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     for (var itemIndex = 0; itemIndex < rawItems.length; itemIndex++) {
       final item = rawItems[itemIndex];
       final (:blocks, :taskChecked) = _normalizeListItemBlocks(item);
+
+      final Widget marker;
+      final double markerBoxWidth;
+      if (taskChecked != null) {
+        final topInset = math.max(
+          0.0,
+          (widget.bodyEm * 1.625 - widget.bodyEm) / 2,
+        );
+        marker = Padding(
+          padding: EdgeInsets.only(top: topInset),
+          child: Icon(
+            taskChecked
+                ? Icons.check_box_rounded
+                : Icons.check_box_outline_blank_rounded,
+            size: widget.bodyEm,
+            color: taskChecked ? baseStyle.color : widget.borderMedium,
+          ),
+        );
+        markerBoxWidth = math.max(markerGutterWidth, widget.bodyEm);
+      } else if (isOrdered) {
+        final markerLabel = '${start + itemIndex}.';
+        marker = Text(
+          markerLabel,
+          textAlign: TextAlign.right,
+          style: markerStyle,
+        );
+        markerBoxWidth = math.max(
+          markerGutterWidth,
+          _measureSingleLineWidth(markerLabel, markerStyle, textScaler),
+        );
+      } else {
+        final bullet = switch (listDepth) {
+          0 => '•',
+          1 => '◦',
+          _ => '▪',
+        };
+        marker = Text(bullet, textAlign: TextAlign.right, style: markerStyle);
+        markerBoxWidth = math.max(
+          markerGutterWidth,
+          _measureSingleLineWidth(bullet, markerStyle, textScaler),
+        );
+      }
+
+      final itemAvailableWidth = availableWidth.isFinite
+          ? math.max(0.0, availableWidth - markerBoxWidth - markerGap)
+          : double.infinity;
+
       final itemWidgets = <Widget>[];
       final childTags = blocks.map(_nodeTag).toList(growable: false);
       for (var childIdx = 0; childIdx < blocks.length; childIdx++) {
@@ -276,39 +389,9 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
             childNode,
             listDepth: isNestedList ? listDepth + 1 : listDepth,
             insideBlockquote: insideBlockquote,
+            availableWidth: itemAvailableWidth,
           ),
         );
-      }
-
-      final Widget marker;
-      if (taskChecked != null) {
-        final topInset = math.max(
-          0.0,
-          (widget.bodyEm * 1.625 - widget.bodyEm) / 2,
-        );
-        marker = Padding(
-          padding: EdgeInsets.only(top: topInset),
-          child: Icon(
-            taskChecked
-                ? Icons.check_box_rounded
-                : Icons.check_box_outline_blank_rounded,
-            size: widget.bodyEm,
-            color: taskChecked ? baseStyle.color : widget.borderMedium,
-          ),
-        );
-      } else if (isOrdered) {
-        marker = Text(
-          '${start + itemIndex}.',
-          textAlign: TextAlign.right,
-          style: markerStyle,
-        );
-      } else {
-        final bullet = switch (listDepth) {
-          0 => '•',
-          1 => '◦',
-          _ => '▪',
-        };
-        marker = Text(bullet, textAlign: TextAlign.right, style: markerStyle);
       }
 
       // `.ListItem + .ListItem { margin-top: 0 }` holds for both tight and loose lists.
@@ -444,14 +527,19 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     md.Element blockquote, {
     required int index,
     required int listDepth,
+    required double availableWidth,
     required Widget Function(
       md.Node node, {
       required int listDepth,
       required bool insideBlockquote,
+      required double availableWidth,
     })
     buildChildNode,
   }) {
     final space = widget.bodyEm / 4;
+    final childAvailableWidth = availableWidth.isFinite
+        ? math.max(0.0, availableWidth - space * 6)
+        : double.infinity;
     final blocks = _normalizeContainerChildren(
       blockquote.children ?? const <md.Node>[],
     );
@@ -474,7 +562,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         }
       }
       children.add(
-        buildChildNode(blocks[i], listDepth: listDepth, insideBlockquote: true),
+        buildChildNode(
+          blocks[i],
+          listDepth: listDepth,
+          insideBlockquote: true,
+          availableWidth: childAvailableWidth,
+        ),
       );
     }
 
@@ -727,13 +820,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
       'code': _DesktopInlineCodeBuilder(
         delegate: widget.builders['code'],
         isInsidePre: () => _preDepth > 0,
+        hasPillSlot: () => _inlineCodePillCount < widget.maxInlineCodePills,
         consumePillSlot: () {
-          if (_inlineCodePillCount >= widget.maxInlineCodePills) {
-            return false;
-          }
           _inlineCodePillCount++;
-          return true;
         },
+        availableWidth: () => _currentAvailableWidth,
+        textScaler: () => _currentTextScaler,
         currentLink: () => _activeLinks.isEmpty ? null : _activeLinks.last,
         obtainLinkRecognizer: (link) =>
             link.recognizer ??= createLink(link.text, link.href, link.title),
@@ -850,11 +942,27 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: _children,
-  );
+  Widget build(BuildContext context) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        if (_needsRebuild ||
+            _lastMaxWidth != maxWidth ||
+            _lastTextScaler != textScaler) {
+          _needsRebuild = false;
+          _lastMaxWidth = maxWidth;
+          _lastTextScaler = textScaler;
+          _buildBlocks(maxWidth: maxWidth, textScaler: textScaler);
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _children,
+        );
+      },
+    );
+  }
 }
 
 final class _ActiveMarkdownLink {
@@ -959,7 +1067,10 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
   _DesktopInlineCodeBuilder({
     required this.delegate,
     required this.isInsidePre,
+    required this.hasPillSlot,
     required this.consumePillSlot,
+    required this.availableWidth,
+    required this.textScaler,
     required this.currentLink,
     required this.obtainLinkRecognizer,
     required this.onTapLink,
@@ -973,7 +1084,10 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
 
   final MarkdownElementBuilder? delegate;
   final bool Function() isInsidePre;
-  final bool Function() consumePillSlot;
+  final bool Function() hasPillSlot;
+  final VoidCallback consumePillSlot;
+  final double Function() availableWidth;
+  final TextScaler Function() textScaler;
   final _ActiveMarkdownLink? Function() currentLink;
   final GestureRecognizer Function(_ActiveMarkdownLink link)
   obtainLinkRecognizer;
@@ -984,6 +1098,89 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
   final double horizontalPadding;
   final double verticalPadding;
   final double fontScale;
+
+  Widget _buildFlatSpanFallback({
+    required String codeText,
+    required TextStyle effectiveParent,
+    required TextStyle? preferredStyle,
+    required double baseFontSize,
+    required _ActiveMarkdownLink? activeLink,
+  }) {
+    final recognizer = activeLink != null
+        ? obtainLinkRecognizer(activeLink)
+        : null;
+    final parentHeight = effectiveParent.height;
+    final fallbackSpanStyle = TextStyle(
+      inherit: true,
+      color: effectiveParent.color ?? preferredStyle?.color,
+      backgroundColor: backgroundColor,
+      fontFamily: preferredStyle?.fontFamily ?? 'monospace',
+      fontFamilyFallback:
+          preferredStyle?.fontFamilyFallback ??
+          effectiveParent.fontFamilyFallback,
+      fontSize: baseFontSize * fontScale,
+      height: parentHeight != null && fontScale > 0
+          ? parentHeight / fontScale
+          : null,
+      fontWeight: effectiveParent.fontWeight,
+      fontStyle: effectiveParent.fontStyle,
+      letterSpacing: effectiveParent.letterSpacing,
+      decoration: effectiveParent.decoration,
+      decorationColor: effectiveParent.decorationColor,
+      decorationStyle: effectiveParent.decorationStyle,
+      decorationThickness: effectiveParent.decorationThickness,
+      fontFeatures: effectiveParent.fontFeatures,
+      textBaseline: TextBaseline.alphabetic,
+    );
+    return Text.rich(
+      TextSpan(
+        text: codeText,
+        style: fallbackSpanStyle,
+        recognizer: recognizer,
+        mouseCursor: recognizer != null
+            ? SystemMouseCursors.click
+            : MouseCursor.defer,
+      ),
+    );
+  }
+
+  bool _fitsSingleLinePill({
+    required BuildContext context,
+    required String codeText,
+    required TextStyle pillTextStyle,
+    required double scaleBaseFontSize,
+  }) {
+    if (codeText.contains('\n')) {
+      return false;
+    }
+    final containerWidth = availableWidth();
+    if (!containerWidth.isFinite) {
+      return true;
+    }
+    final scaler = textScaler();
+    final scaleFactor = scaleBaseFontSize > 0
+        ? scaler.scale(scaleBaseFontSize) / scaleBaseFontSize
+        : 1.0;
+    if (scaleFactor <= 0 || !scaleFactor.isFinite) {
+      return false;
+    }
+    final maxInnerTextWidth =
+        (containerWidth / scaleFactor) - horizontalPadding * 2;
+    if (maxInnerTextWidth <= 0) {
+      return false;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: codeText, style: pillTextStyle),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout(maxWidth: maxInnerTextWidth);
+    final fits =
+        painter.computeLineMetrics().length <= 1 &&
+        painter.width <= maxInnerTextWidth + 0.01;
+    painter.dispose();
+    return fits;
+  }
 
   @override
   Widget? visitElementAfterWithContext(
@@ -1005,6 +1202,7 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
       return custom;
     }
 
+    final codeText = element.textContent;
     final defaultStyle = DefaultTextStyle.of(context).style;
     final effectiveParent = defaultStyle
         .merge(fallbackStyle)
@@ -1013,42 +1211,13 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
         effectiveParent.fontSize ?? preferredStyle?.fontSize ?? 14.0;
     final activeLink = currentLink();
 
-    if (!consumePillSlot()) {
-      final recognizer = activeLink != null
-          ? obtainLinkRecognizer(activeLink)
-          : null;
-      final parentHeight = effectiveParent.height;
-      final fallbackSpanStyle = TextStyle(
-        inherit: true,
-        color: effectiveParent.color ?? preferredStyle?.color,
-        backgroundColor: backgroundColor,
-        fontFamily: preferredStyle?.fontFamily ?? 'monospace',
-        fontFamilyFallback:
-            preferredStyle?.fontFamilyFallback ??
-            effectiveParent.fontFamilyFallback,
-        fontSize: baseFontSize * fontScale,
-        height: parentHeight != null && fontScale > 0
-            ? parentHeight / fontScale
-            : null,
-        fontWeight: effectiveParent.fontWeight,
-        fontStyle: effectiveParent.fontStyle,
-        letterSpacing: effectiveParent.letterSpacing,
-        decoration: effectiveParent.decoration,
-        decorationColor: effectiveParent.decorationColor,
-        decorationStyle: effectiveParent.decorationStyle,
-        decorationThickness: effectiveParent.decorationThickness,
-        fontFeatures: effectiveParent.fontFeatures,
-        textBaseline: TextBaseline.alphabetic,
-      );
-      return Text.rich(
-        TextSpan(
-          text: element.textContent,
-          style: fallbackSpanStyle,
-          recognizer: recognizer,
-          mouseCursor: recognizer != null
-              ? SystemMouseCursors.click
-              : MouseCursor.defer,
-        ),
+    if (!hasPillSlot()) {
+      return _buildFlatSpanFallback(
+        codeText: codeText,
+        effectiveParent: effectiveParent,
+        preferredStyle: preferredStyle,
+        baseFontSize: baseFontSize,
+        activeLink: activeLink,
       );
     }
 
@@ -1071,6 +1240,23 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
       textBaseline: TextBaseline.alphabetic,
     );
 
+    if (!_fitsSingleLinePill(
+      context: context,
+      codeText: codeText,
+      pillTextStyle: pillTextStyle,
+      scaleBaseFontSize: defaultStyle.fontSize ?? baseFontSize,
+    )) {
+      return _buildFlatSpanFallback(
+        codeText: codeText,
+        effectiveParent: effectiveParent,
+        preferredStyle: preferredStyle,
+        baseFontSize: baseFontSize,
+        activeLink: activeLink,
+      );
+    }
+
+    consumePillSlot();
+
     Widget pill = DecoratedBox(
       decoration: BoxDecoration(
         color: backgroundColor,
@@ -1082,7 +1268,7 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
           vertical: verticalPadding,
         ),
         child: Text(
-          element.textContent,
+          codeText,
           textDirection: TextDirection.ltr,
           textScaler: TextScaler.noScaling,
           style: pillTextStyle,

@@ -906,6 +906,7 @@ const fenced = 'not_inline_pill';
         required Brightness brightness,
         required String data,
         double scale = 1.0,
+        double width = 640,
       }) {
         final themeData = brightness == Brightness.dark
             ? OfficialCodexThemeData.dark
@@ -919,7 +920,7 @@ const fenced = 'not_inline_pill';
               child: Scaffold(
                 body: SingleChildScrollView(
                   child: SizedBox(
-                    width: 640,
+                    width: width,
                     child: AssistantMarkdown(
                       data: data,
                       completed: true,
@@ -1144,23 +1145,150 @@ const fenced = 'not_inline_pill';
       await tester.pump();
       expect(copiedSelection, expectedPlain);
 
-      // Single unbroken path > 640px wraps within one 640px-bounded pill box
-      // without overflow (distinct from CSS box-decoration-break: clone per-line rounding).
-      const longPath =
-          'lib/src/features/conversation/very_long_subdirectory_for_layout_check/desktop_markdown_body_inline_code_pill.dart';
+      // Exact P1 repro: three short pills + a single >640px unbroken path must
+      // fall back to a merged styled TextSpan for the internally-wrapping token
+      // while keeping short WidgetSpan pills and exact clipboard document order.
+      const longWrappingToken =
+          'src/features/conversation/a_descriptive_configuration_filename_used_for_inline_wrapping_verification.dart';
+      const fixtureParagraph =
+          'Before `alpha` between [`linked.cfg`](https://example.invalid/native-inline-code) and `beta_gamma`, followed by enough ordinary prose to wrap the trailing fragment onto the next line in document order. Path `$longWrappingToken` ends here.';
+      const expectedFixtureClipboard =
+          'Before alpha between linked.cfg and beta_gamma, followed by enough ordinary prose to wrap the trailing fragment onto the next line in document order. Path $longWrappingToken ends here.';
+      await tester.pumpWidget(
+        buildThemed(brightness: Brightness.light, data: fixtureParagraph),
+      );
+      expect(find.text('alpha'), findsOneWidget);
+      expect(find.text('linked.cfg'), findsOneWidget);
+      expect(find.text('beta_gamma'), findsOneWidget);
+      expect(find.text(longWrappingToken), findsNothing);
+      expect(
+        find.textContaining(longWrappingToken, findRichText: true),
+        findsOneWidget,
+      );
+
+      final fixtureSelectable = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
+      );
+      final fixtureActionContext = tester.element(find.text('alpha'));
+      copiedSelection = null;
+      final fixtureRect = tester.getRect(
+        find.byKey(const ValueKey('assistant-markdown')),
+      );
+      final fixtureDrag = await tester.startGesture(
+        fixtureRect.topLeft + const Offset(2, 6),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      for (var step = 1; step <= 8; step++) {
+        await fixtureDrag.moveTo(
+          Offset(
+            fixtureRect.left + 2 + (198 * step / 8),
+            fixtureRect.top + 6 + ((fixtureRect.height + 18) * step / 8),
+          ),
+        );
+        await tester.pump();
+      }
+      await fixtureDrag.up();
+      await tester.pump();
+      Actions.invoke(fixtureActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedFixtureClipboard);
+
+      copiedSelection = null;
+      fixtureSelectable.clearSelection();
+      await tester.pump();
+      fixtureSelectable.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(fixtureActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedFixtureClipboard);
+
+      // Enclosing link on an internally-wrapping inline-code token keeps dotted
+      // underline, link tap dispatch, and exact copy order.
+      launched.clear();
       await tester.pumpWidget(
         buildThemed(
           brightness: Brightness.light,
-          data: 'Inspect `$longPath` after.',
+          data:
+              'Open [`$longWrappingToken`](https://example.invalid/long-wrapped) next.',
         ),
       );
-      final longPillBox = find
-          .ancestor(
-            of: find.text(longPath),
-            matching: find.byType(DecoratedBox),
-          )
-          .first;
-      expect(tester.getRect(longPillBox).width, lessThanOrEqualTo(640.01));
+      TextSpan? wrappedLinkSpan;
+      for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+        rich.text.visitChildren((span) {
+          if (span is TextSpan && span.text == longWrappingToken) {
+            wrappedLinkSpan = span;
+            return false;
+          }
+          return true;
+        });
+      }
+      expect(wrappedLinkSpan, isNotNull);
+      expect(
+        wrappedLinkSpan!.style!.backgroundColor,
+        OfficialCodexTheme.lightInlineCodeBackground,
+      );
+      expect(wrappedLinkSpan!.style!.decoration, TextDecoration.underline);
+      expect(
+        wrappedLinkSpan!.style!.decorationStyle,
+        TextDecorationStyle.dotted,
+      );
+      (wrappedLinkSpan!.recognizer! as TapGestureRecognizer).onTap!();
+      await tester.pump();
+      expect(launched, [Uri.parse('https://example.invalid/long-wrapped')]);
+
+      // Actual-width-aware + container-inset + 2x TextScaler adaptation:
+      // a medium token fits as a pill at 640px (1x) and inside horizontally
+      // scrollable table cells, but falls back to a flat TextSpan when narrowed,
+      // scaled to 2x beyond container width, or inset inside blockquote/list.
+      const mediumToken = 'medium_width_inline_code_token';
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 640,
+        ),
+      );
+      expect(find.text(mediumToken), findsOneWidget);
+
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 300,
+        ),
+      );
+      expect(find.text(mediumToken), findsNothing);
+      expect(
+        find.textContaining(mediumToken, findRichText: true),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data: 'Check `$mediumToken` end.',
+          width: 640,
+          scale: 2.0,
+        ),
+      );
+      expect(find.text(mediumToken), findsNothing);
+
+      await tester.pumpWidget(
+        buildThemed(
+          brightness: Brightness.light,
+          data:
+              '> See `$mediumToken`.\n\n| Col |\n| :--- |\n| See `$mediumToken`. |',
+          width: 405,
+        ),
+      );
+      // Blockquote subtracts `6 * space`, pushing `mediumToken` to flat TextSpan,
+      // while the horizontally scrollable table cell keeps its single-line pill.
+      expect(find.text(mediumToken), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text(mediumToken), matching: find.byType(Table)),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
 
       // Painted global 2x TextScaler check (verifies exact 2x, not 1x frozen or 4x double-scaled).
@@ -1451,17 +1579,24 @@ $bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${t
         prevIndex = idx;
       }
 
-      // Rebuilding with a normal <= 128 message resets the counter cleanly.
+      // Rebuilding with an internally-wrapping flat TextSpan plus 128 short
+      // tokens keeps all 128 short tokens as rich WidgetSpan pills before #129.
+      final nonConsumingSource = [
+        '`${'w' * 80}`',
+        for (var i = 1; i <= 129; i++) '`s_$i`',
+      ].join(' ');
       await tester.pumpWidget(
         buildBudgetApp(
           brightness: Brightness.light,
-          data: 'Normal `r_1`, `r_2`, and `r_3`.',
+          data: nonConsumingSource,
           launcher: (_) async => true,
         ),
       );
-      expect(find.text('r_1'), findsOneWidget);
-      expect(find.text('r_2'), findsOneWidget);
-      expect(find.text('r_3'), findsOneWidget);
+      expect(find.text('w' * 80), findsNothing);
+      expect(find.text('s_1'), findsOneWidget);
+      expect(find.text('s_128'), findsOneWidget);
+      expect(find.text('s_129'), findsNothing);
+      expect(find.textContaining('s_129', findRichText: true), findsOneWidget);
 
       // Dense 16 KiB (4,096 inline-code tokens) stays strictly O(1) element-bounded
       // and returns to exact baseline element count on unmount.
