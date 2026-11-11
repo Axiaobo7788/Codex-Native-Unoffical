@@ -874,3 +874,28 @@ to `Updated 1 min ago` (`07`), persisted a `Ctrl+S` stock update (`08`,
 (`09`–`10`), and exited app, Host and stock cleanly (`MACHINE VERIFIED`
 + `AGENT REAL-USE VERIFIED`, `NOT YET HUMAN VERIFIED`; signed-in official
 live capture remains unavailable).
+
+## Integrated bottom-stack verification
+
+Shared source `53a76d5` combines `d09fe2e` with the peer-audited request
+operation-lifetime corrections in `c910a97` and `7d416aa`. The full default
+Flutter suite passed 547 cases with five opt-in stock cases run separately.
+Formatting, strict ASCII-path analysis, the 65-root pure-Dart boundary,
+bounded history/output benchmark, Rust formatting/Clippy/100 tests and
+Linux release with its 83-library runtime closure passed.
+
+The integrated release replay at 1191×865 submitted both structured answers,
+showed the recommendation/hover/footer states, changed the mounted Goal
+timestamp to one minute with no input, persisted a Ctrl+S update and reverted
+the draft. App, Host and stock exited. The pure-Dart runtime smoke also
+passed. Its independent captures are under
+`/var/tmp/native-integrated-bottom-stack-53a76d5/captures/`. This replay
+refuses reuse of its output directory, preserving the calibrated peer run.
+
+The disposable model profile emits a model-metadata fallback warning, which
+remains visible in both capture sets. The early uncalibrated clock capture
+was overwritten at the original path by the peer fixture's directory reset.
+The recorded timing observation and its phase-offset explanation remain
+above. A separate original PNG has not been established in the shared
+artifact directories. These limits remain separate from the successful
+integrated replay, signed-in official comparison and Human acceptance.

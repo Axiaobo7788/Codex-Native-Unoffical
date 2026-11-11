@@ -16,6 +16,12 @@ collapsed project status and `189497.rmk3` pointer/keyboard menu coordinates.
 The same pass verified the `309406.Ceox.e9` Goal saved-source closure rule
 against Native notification-before-ack ordering. The matrix records current
 implementation commits, negative tests, release evidence and remaining deltas.
+The subsequent A9–A11 cluster maps `100921.Y5qM` question headers,
+`381170.Qr2V` choices, `42793.vMUJ.N` inline Other and `100921.WNfT`
+return badges. `182735.KIKs` samples wall time on an existing minute
+interval. A save just after mount can remain below one elapsed minute at
+the first tick. The matrix keeps that timing observation alongside the
+calibrated autonomous-tick capture and the supported Revert selection rule.
 
 ### Evidence boundary and sources
 
