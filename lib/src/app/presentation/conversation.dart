@@ -134,6 +134,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   String? _goalEditorThreadId;
   final _goalEditorKey = GlobalKey<_DesktopGoalEditorState>();
   _GoalEditorDraft? _goalEditorDraft;
+  ({String threadId, String objective})? _pendingGoalSave;
   var _reopenGoalFromHeader = false;
   var _usingGoalEditorSidePane = false;
   bool? _usingChangesSidePane;
@@ -972,17 +973,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                 saving: threadController.mutating,
                 onClose: _closeGoalEditor,
                 onSave: (objective) async {
-                  await _applyThreadGoalChange(
-                    context,
-                    threadController,
-                    threadId,
-                    goal,
-                    (objective: objective, status: null, clear: false),
-                    canContinue: () =>
-                        controller.thread?.id == threadId &&
-                        _goalEditorThreadId == threadId &&
-                        threadController.canManageGoal(threadId),
-                  );
+                  if (_pendingGoalSave != null || threadController.mutating) {
+                    return;
+                  }
+                  final pending = (threadId: threadId, objective: objective);
+                  _pendingGoalSave = pending;
+                  try {
+                    await _applyThreadGoalChange(
+                      context,
+                      threadController,
+                      threadId,
+                      goal,
+                      (objective: objective, status: null, clear: false),
+                      canContinue: () =>
+                          controller.thread?.id == threadId &&
+                          _goalEditorThreadId == threadId &&
+                          threadController.canManageGoal(threadId),
+                    );
+                  } finally {
+                    _pendingGoalSave = null;
+                  }
                 },
               )
             : null;
@@ -4926,10 +4936,37 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (threadController == null) {
       return;
     }
+    final pending = _pendingGoalSave;
+    if (pending != null && pending.threadId == _activeThreadId) {
+      final saved = threadController.goalForThread(pending.threadId);
+      if (saved?.objective == pending.objective) {
+        if (_goalEditorThreadId == pending.threadId) {
+          _goalEditorKey.currentState?.recordSavedObjective(pending.objective);
+        }
+        if (_goalEditorDraft case final parked?) {
+          _goalEditorDraft = (
+            sourceObjective: pending.objective,
+            value: parked.value.text.trim() == pending.objective
+                ? TextEditingValue(
+                    text: pending.objective,
+                    selection: TextSelection.collapsed(
+                      offset: pending.objective.length,
+                    ),
+                  )
+                : parked.value,
+          );
+        }
+      }
+    }
     if (_goalEditorThreadId case final id?) {
       final goal = threadController.goalForThread(id);
-      if (goal == null || goal.status == ThreadGoalStatus.complete) {
+      final source = _goalEditorKey.currentState?.sourceObjective;
+      if (goal == null ||
+          goal.status == ThreadGoalStatus.complete ||
+          (source != null && source != goal.objective)) {
         _goalEditorThreadId = null;
+        _goalEditorDraft = null;
+        _reopenGoalFromHeader = false;
         _restoreReadingPosition();
       }
     }

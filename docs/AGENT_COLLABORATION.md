@@ -284,12 +284,16 @@ preference above:
 
 For official-fidelity work, neither peer invents a new visual direction.
 
-- Gemini preferentially gathers and refreshes current official visual/structural
-  evidence through the official app, DevTools, screenshots, ASAR/CSS/component
-  inspection, and measured states.
-- Codex preferentially translates that evidence into Flutter while preserving
-  bounded state, virtualization, focus/semantics, controller boundaries, and
-  regression coverage.
+- Gemini owns the default end-to-end presentation loop during Golden-State
+  reconstruction. It refreshes evidence through the official app, DevTools,
+  screenshots, ASAR/CSS/component inspection and measured states, translates
+  the mapping into Flutter, captures Native and corrects measured divergence
+  in its own worktree.
+- Codex preferentially protects bounded state, virtualization, async lifecycle,
+  focus/semantics, controller and protocol boundaries. It reviews the actual
+  implementation, adds targeted regressions, exercises real stock paths and
+  owns integration and shared gates. Presentation findings return to the
+  current owner under the phase-specific ownership rules above.
 - This remains peer collaboration, not a manager/worker hierarchy. Either agent
   may challenge the other's claim with stronger evidence.
 - The loop is: official evidence -> explicit mapping -> Flutter translation ->

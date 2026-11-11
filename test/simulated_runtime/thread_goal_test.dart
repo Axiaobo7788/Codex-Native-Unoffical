@@ -272,6 +272,81 @@ void main() {
     );
   });
 
+  testWidgets('Goal source changes close the editor while own saves survive', (
+    tester,
+  ) async {
+    final harness = _GoalHarness()
+      ..goal = const ThreadGoal(
+        objective: 'Original goal',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 1,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    await tester.tap(find.text('Goal thread'));
+    await tester.pumpAndSettle();
+    final title = find.byKey(const ValueKey('desktop-thread-goal-title'));
+    final editor = find.byKey(const ValueKey('desktop-goal-editor-objective'));
+    final toggle = find.byKey(const ValueKey('workspace-side-panel-toggle'));
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    await tester.enterText(editor, 'Unsaved old-source draft');
+    harness.emitGoalUpdate(objective: 'External source');
+    await tester.pumpAndSettle();
+    expect(editor, findsNothing);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'External source',
+    );
+
+    final gate = Completer<void>();
+    harness
+      ..notifySaveBeforeAck = true
+      ..saveGate = gate.future;
+    await tester.enterText(editor, 'Own accepted source');
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(editor, findsOneWidget);
+    expect(tester.widget<TextField>(editor).readOnly, isTrue);
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(editor, findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(editor, findsOneWidget);
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Own accepted source',
+    );
+    expect(tester.widget<TextField>(editor).readOnly, isFalse);
+    await tester.enterText(editor, 'Draft after own save');
+    harness.emitGoalUpdate(status: ThreadGoalStatus.blocked);
+    await tester.pumpAndSettle();
+    expect(editor, findsOneWidget);
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Draft after own save',
+    );
+    harness.emitGoalUpdate(objective: 'Another external source');
+    await tester.pumpAndSettle();
+    expect(editor, findsNothing);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(editor).controller!.text,
+      'Another external source',
+    );
+  });
+
   testWidgets('Goal toolbar saves through the guarded keyboard path', (
     tester,
   ) async {
@@ -389,6 +464,34 @@ class _GoalHarness extends SimulatedRuntimeHarness {
   var goalReads = 0;
   var goalWrites = 0;
   Future<void>? saveGate;
+  var notifySaveBeforeAck = false;
+  final _goalEvents = StreamController<ThreadLifecycleEvent>.broadcast(
+    sync: true,
+  );
+
+  @override
+  Stream<ThreadLifecycleEvent> get threadEvents => _goalEvents.stream;
+
+  void emitGoalUpdate({String? objective, ThreadGoalStatus? status}) {
+    goal = ThreadGoal(
+      objective: objective ?? goal!.objective,
+      status: status ?? goal!.status,
+      createdAtSeconds: goal!.createdAtSeconds,
+      updatedAtSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      tokensUsed: goal!.tokensUsed,
+      timeUsedSeconds: goal!.timeUsedSeconds,
+      tokenBudget: goal!.tokenBudget,
+    );
+    _goalEvents.add(
+      ThreadGoalUpdatedEvent(threadId: 'goal-thread', goal: goal!),
+    );
+  }
+
+  @override
+  Future<void> disposeHarness() async {
+    await _goalEvents.close();
+    await super.disposeHarness();
+  }
 
   @override
   bool get supportsThreadGoals => true;
@@ -406,8 +509,7 @@ class _GoalHarness extends SimulatedRuntimeHarness {
     ThreadGoalStatus? status,
   }) async {
     goalWrites += 1;
-    await saveGate;
-    return goal = ThreadGoal(
+    final saved = ThreadGoal(
       objective: objective ?? goal!.objective,
       status: status ?? goal!.status,
       createdAtSeconds: 1,
@@ -415,6 +517,13 @@ class _GoalHarness extends SimulatedRuntimeHarness {
       tokensUsed: 0,
       timeUsedSeconds: 0,
     );
+    if (notifySaveBeforeAck) {
+      goal = saved;
+      _goalEvents.add(ThreadGoalUpdatedEvent(threadId: threadId, goal: saved));
+    }
+    await saveGate;
+    if (!notifySaveBeforeAck) goal = saved;
+    return saved;
   }
 
   @override
