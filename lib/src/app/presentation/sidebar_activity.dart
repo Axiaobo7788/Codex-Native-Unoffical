@@ -2651,6 +2651,7 @@ class _EcosystemController extends ChangeNotifier {
     this.userInputController,
     this.mcpOauthController,
     required this.isModal,
+    this.mcpOauthReadbackEnabled = true,
     _EcosystemSection initialSection = _EcosystemSection.skills,
   }) : _section = initialSection {
     threadController?.addListener(_handleThreadControllerChanged);
@@ -2715,17 +2716,36 @@ class _EcosystemController extends ChangeNotifier {
   String? _mcpNotice;
   var _mcpOauthCompletionRevision = 0;
   var _mcpOauthRefreshPending = false;
+  bool mcpOauthReadbackEnabled;
+
+  void setMcpOauthReadbackEnabled(bool enabled) {
+    if (_disposed || mcpOauthReadbackEnabled == enabled) return;
+    mcpOauthReadbackEnabled = enabled;
+    if (enabled) {
+      // Visibility can change during layout. Reconcile after that build, and
+      // retain the catalog/mutation controller rather than recreating it.
+      scheduleMicrotask(_handleMcpOauthChanged);
+    }
+  }
 
   void _handleMcpOauthChanged() {
     if (_disposed) return;
+    if (!mcpOauthReadbackEnabled) {
+      // A retained surface can still be mounted behind a dialog: stop its
+      // pending animation/update the notice, but leave status readback deferred.
+      _notify();
+      return;
+    }
     final revision = mcpOauthController?.completionRevision ?? 0;
     if (revision != _mcpOauthCompletionRevision) {
       _mcpOauthCompletionRevision = revision;
-      if (_mcpRefreshInFlight != null || _reloadingMcp) {
-        _mcpOauthRefreshPending = true;
-      } else {
-        unawaited(_refreshMcp(forceRefetch: true));
-      }
+      _mcpOauthRefreshPending = true;
+    }
+    if (_mcpOauthRefreshPending &&
+        _mcpRefreshInFlight == null &&
+        !_reloadingMcp) {
+      _mcpOauthRefreshPending = false;
+      unawaited(_refreshMcp(forceRefetch: true));
     }
     _notify();
   }
@@ -3170,7 +3190,7 @@ class _EcosystemController extends ChangeNotifier {
           _mcpLoading = false;
           _notify();
         }
-        if (!_disposed && _mcpOauthRefreshPending) {
+        if (!_disposed && mcpOauthReadbackEnabled && _mcpOauthRefreshPending) {
           _mcpOauthRefreshPending = false;
           unawaited(_refreshMcp(forceRefetch: true));
         }
@@ -3427,7 +3447,7 @@ class _EcosystemController extends ChangeNotifier {
       if (!_disposed) {
         _reloadingMcp = false;
         _notify();
-        if (_mcpOauthRefreshPending) {
+        if (mcpOauthReadbackEnabled && _mcpOauthRefreshPending) {
           _mcpOauthRefreshPending = false;
           unawaited(_refreshMcp(forceRefetch: true));
         }

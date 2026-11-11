@@ -124,10 +124,16 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   var _activeDestination = _DesktopShellDestination.home;
   var _activeCustomizeSection = _EcosystemSection.plugins;
   var _isCompactLayout = false;
+  var _hasCurrentRoute = true;
   var _desktopLeftPanelWidth = OfficialCodexTheme.desktopLeftPanelWidth;
   late String _workingDirectory;
   _EcosystemController? _customizeController;
   _EcosystemContextKey? _customizeControllerKey;
+
+  bool get _canObserveMcpOauthReadback =>
+      !_isCompactLayout &&
+      _hasCurrentRoute &&
+      _activeDestination == _DesktopShellDestination.customize;
 
   @override
   void initState() {
@@ -178,6 +184,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
     final key = _currentEcosystemContextKey;
     final existing = _customizeController;
     if (existing != null && _customizeControllerKey == key) {
+      existing.setMcpOauthReadbackEnabled(_canObserveMcpOauthReadback);
       return existing;
     }
     existing?.dispose();
@@ -188,6 +195,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
       threadController: widget.threadController,
       userInputController: widget.userInputController,
       mcpOauthController: widget.mcpOauthController,
+      mcpOauthReadbackEnabled: _canObserveMcpOauthReadback,
       isModal: false,
       initialSection: _activeCustomizeSection,
     );
@@ -445,6 +453,10 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < _desktopSplitMinimumWidth;
         _isCompactLayout = compact;
+        _hasCurrentRoute = ModalRoute.isCurrentOf(context) ?? true;
+        _customizeController?.setMcpOauthReadbackEnabled(
+          _canObserveMcpOauthReadback,
+        );
         if (compact) {
           final hasActiveConversation =
               widget.threadController.selectedThread != null ||
@@ -662,7 +674,10 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
 
   void _requestCustomizeFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _isCustomize && !_customizeFocusNode.hasFocus) {
+      if (mounted &&
+          _isCustomize &&
+          (ModalRoute.of(context)?.isCurrent ?? true) &&
+          !_customizeFocusNode.hasFocus) {
         _customizeFocusNode.requestFocus();
       }
     });
@@ -670,7 +685,9 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
 
   void _restoreHomeFocusIfDetached() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _isCustomize) {
+      if (!mounted ||
+          _isCustomize ||
+          !(ModalRoute.of(context)?.isCurrent ?? true)) {
         return;
       }
       final primary = FocusManager.instance.primaryFocus;

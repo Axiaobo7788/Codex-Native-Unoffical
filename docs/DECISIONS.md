@@ -2693,9 +2693,9 @@ backtick density:
 - **Decision:** Add an optional local `McpOauthGateway` with typed attempts and
   events. Keep wire parsing in the protocol adapter and preserve pure-Dart
   domain/transport. One app-scoped controller retains one bounded authorization
-  handoff/early completion and observes local runtime invalidation. Wide and
+  handoff/eight-ID early-completion buffer and observes local runtime invalidation. Wide and
   compact surfaces share it; navigation does not own or restart authentication.
-  Match server, global scope and login ID, with the older-stock omitted-ID
+  Match server, global scope and exact opaque login ID, with the older-stock omitted-ID
   fallback. Read server status after matching completion and coalesce readback
   behind an existing status/reload flight. Hold one transport start slot until
   the actual request settles, regardless of a presentation deadline. Cache only

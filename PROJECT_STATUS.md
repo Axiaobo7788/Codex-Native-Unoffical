@@ -121,6 +121,13 @@ permission to lower the engineering or visual quality bar.
   smoke passes both versions. Packaged browser/navigation replay and targeted
   peer review remain pending, so the functional row is PARTIAL.
   [Evidence](docs/reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
+- MCP peer review found no P0/P1 at `beac41f`. Two reproduced P2s now have
+  followup corrections: eight-ID early completion correlation and visible-route
+  readback ownership. A directly coupled resize/modal keyboard-focus defect was
+  also reproduced and corrected. Strict analysis and 42 focused MCP/runtime/
+  navigation cases pass; fresh full shared gates and packaged replay remain.
+  Earlier red outcomes, the intermediate stale animation timeout and the full
+  601-case/five-skip result at `0ecb27d` remain separately source-bound evidence.
 - **Track U2 / Gemini:** `/var/tmp/native-gemini-u2-a7-activity`, branch
   `agent/gemini-golden-ui-u2-a7-activity`, base `9a75ddc`. The six negotiated
   writable surfaces are `conversation.dart`, `diff_approval_output.dart`,

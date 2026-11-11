@@ -129,6 +129,31 @@ void main() {
     },
   );
 
+  test(
+    'late old completion cannot overwrite the current early completion',
+    () async {
+      final start = controller.signIn('mcp');
+      gateway.events.add(
+        const McpOauthCompleted(
+          serverName: 'mcp',
+          success: true,
+          loginId: 'current',
+        ),
+      );
+      gateway.events.add(
+        const McpOauthCompleted(
+          serverName: 'mcp',
+          success: false,
+          loginId: 'old',
+        ),
+      );
+      gateway.starts.single.complete(_attempt());
+      await start;
+      expect(controller.phase, McpOauthPhase.succeeded);
+      expect(opened, isEmpty);
+    },
+  );
+
   test('late browser failure cannot overwrite successful completion', () async {
     final browserResult = Completer<bool>();
     final actor = McpOauthController(
@@ -155,6 +180,31 @@ void main() {
       actor.dispose();
     }
   });
+
+  test(
+    'opaque login ids are not normalized into a different identity',
+    () async {
+      final start = controller.signIn('mcp');
+      gateway.starts.single.complete(_attempt(loginId: ' current '));
+      await start;
+      gateway.events.add(
+        const McpOauthCompleted(
+          serverName: 'mcp',
+          success: true,
+          loginId: 'current',
+        ),
+      );
+      expect(controller.phase, McpOauthPhase.waiting);
+      gateway.events.add(
+        const McpOauthCompleted(
+          serverName: 'mcp',
+          success: true,
+          loginId: ' current ',
+        ),
+      );
+      expect(controller.phase, McpOauthPhase.succeeded);
+    },
+  );
 
   test('legacy global completion works without a login id', () async {
     final start = controller.signIn('mcp');

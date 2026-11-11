@@ -45,8 +45,8 @@ contract from the client projection and each validation level.
 - The protocol adapter owns wire names/validation. Domain/transport stay pure
   Dart. Runtime relays typed completion plus a distinct client invalidation
   event; widgets do not parse JSON.
-- One app-scoped controller owns at most one pending handoff, one early
-  completion, one deadline and scalar state. Wide Customize and the compact
+- One app-scoped controller owns at most one pending handoff, eight early
+  outcomes keyed by exact login ID, one deadline and scalar state. Wide Customize and the compact
   dialog observe it without owning its lifetime. Navigation/resize does not
   create a second flow. Runtime invalidation and app disposal make late
   responses/browser results ineligible to update it.
@@ -92,3 +92,39 @@ production route change. Corrected product `r2` and full focused `r3` pass.
 
 Heavy validation remains serialized. Gemini explicitly released its U2 slot;
 Codex now owns it while Gemini performs light-only peer review.
+
+## Targeted peer review and corrections
+
+Gemini independently reviewed source `beac41f` through the official `agy` TUI.
+No P0/P1 was found. Two P2s were reproduced with red tests before correction:
+
+1. A late old login completion overwrote the current early completion, leaving
+   the controller waiting and reopening a consumed handoff. A fixed eight-ID
+   buffer now selects the response's exact ID and clears on response/finish.
+2. A retained wide Customize controller and compact dialog both refreshed MCP
+   status on completion. Readback now belongs to the visible/current-route
+   surface. Hidden state remains alive, including mutation ownership; reactivation
+   reconciles its missed completion. A modal remains open when resized wide.
+
+That replay exposed a directly coupled keyboard defect: constructing the wide
+shell behind the modal requested background Customize focus, so Escape did not
+close the dialog. A separate red test reproduced it. Post-frame focus restoration
+now checks route ownership. Hidden notices still update so a completed login
+cannot leave a stale loading animation running behind the modal. The first
+correction exposed that animation timeout and is retained as negative evidence.
+
+Strict analysis and 42 focused MCP/runtime/navigation cases pass after these
+corrections. The full 601-case + five-skip pass at `0ecb27d` predates them; a fresh
+shared gate and packaged walkthrough remain pending. Logs are under
+`/var/tmp/native-ui-r0.BbOvHT/mcp-oauth-peer-*` and
+`mcp-oauth-wide-modal-focus-red-r1.log`.
+
+The suggested login-ID trimming change was rejected: IDs are opaque and must
+match exactly. A focused test confirms that differently padded IDs cannot grant
+success, while identical opaque IDs can. Stock's generated response/completion
+IDs correlate in both live smoke runs. Malformed completion notifications remain
+typed protocol errors and conservatively make the active flow unconfirmed; the
+client does not infer authentication success from invalid wire data. A legitimate
+stock cross-scope notification that contradicts this policy has not been observed.
+That evidence boundary stays explicit rather than adding a scoped-error framework
+from synthetic malformed notifications alone.

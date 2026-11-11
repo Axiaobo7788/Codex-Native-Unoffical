@@ -33,7 +33,8 @@ class McpOauthController extends ChangeNotifier {
   late final StreamSubscription<McpOauthEvent> _subscription;
   Timer? _deadline;
   McpOauthLoginAttempt? _attempt;
-  McpOauthCompleted? _earlyCompletion;
+  static const _maxEarlyCompletions = 8;
+  final Map<String?, McpOauthCompleted> _earlyCompletions = {};
   String? _serverName;
   String? _message;
   var _phase = McpOauthPhase.idle;
@@ -72,7 +73,7 @@ class McpOauthController extends ChangeNotifier {
     final generation = ++_generation;
     _serverName = name;
     _attempt = null;
-    _earlyCompletion = null;
+    _earlyCompletions.clear();
     _message = 'Starting sign-in…';
     _phase = McpOauthPhase.starting;
     _deadline?.cancel();
@@ -118,8 +119,8 @@ class McpOauthController extends ChangeNotifier {
           );
         }
       });
-      final early = _earlyCompletion;
-      _earlyCompletion = null;
+      final early = _earlyCompletions[attempt.loginId];
+      _earlyCompletions.clear();
       if (early != null && _matches(early)) {
         _complete(early);
         return;
@@ -193,9 +194,13 @@ class McpOauthController extends ChangeNotifier {
         event.serverName == _serverName &&
         event.threadId == null) {
       if (_phase == McpOauthPhase.starting) {
-        // At most one early completion is retained before the response gives
-        // us its loginId. Unknown/stale ids can never grant success.
-        _earlyCompletion = event;
+        // A late prior attempt must not overwrite the current early result.
+        // The response selects its exact id from this constant-size buffer.
+        if (!_earlyCompletions.containsKey(event.loginId) &&
+            _earlyCompletions.length >= _maxEarlyCompletions) {
+          _earlyCompletions.remove(_earlyCompletions.keys.first);
+        }
+        _earlyCompletions[event.loginId] = event;
       } else if (_matches(event)) {
         _complete(event);
       }
@@ -231,7 +236,7 @@ class McpOauthController extends ChangeNotifier {
     _phase = phase;
     _message = message;
     _attempt = null;
-    _earlyCompletion = null;
+    _earlyCompletions.clear();
     _openingBrowser = false;
     if (!_disposed) {
       notifyListeners();
@@ -254,7 +259,7 @@ class McpOauthController extends ChangeNotifier {
     _generation += 1;
     _deadline?.cancel();
     _attempt = null;
-    _earlyCompletion = null;
+    _earlyCompletions.clear();
     _serverName = null;
     unawaited(_subscription.cancel());
     super.dispose();

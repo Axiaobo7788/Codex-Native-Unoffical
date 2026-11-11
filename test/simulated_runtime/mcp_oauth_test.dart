@@ -199,8 +199,19 @@ void main() {
         findsOneWidget,
       );
       expect(harness.starts, hasLength(1));
+      tester.view.physicalSize = const Size(1191, 865);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(Dialog), findsOneWidget);
+      final readsBeforeCompletion = harness.statusReads;
       harness.completeLogin();
       await tester.pumpAndSettle();
+      expect(harness.statusReads, readsBeforeCompletion + 1);
+      expect(find.text('Auth: oAuth'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      expect(harness.statusReads, readsBeforeCompletion + 2);
       expect(find.text('Auth: oAuth'), findsOneWidget);
       expect(harness.resumedThreadIds, isEmpty);
       expect(tester.takeException(), isNull);
