@@ -1164,11 +1164,27 @@ class _UserInputCardState extends State<_UserInputCard> {
           const SizedBox(height: ThemeTokens.space1),
         ],
         if (showTitle) ...[
-          Text(
-            question.question,
-            style: Theme.of(context).textTheme.bodyMedium,
+          Padding(
+            padding: widget.desktop
+                ? const EdgeInsetsDirectional.only(
+                    start: ThemeTokens.space1,
+                    top: ThemeTokens.space1,
+                  )
+                : EdgeInsets.zero,
+            child: Text(
+              question.question,
+              style: widget.desktop
+                  ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 14,
+                      height: 20 / 14,
+                      fontWeight: FontWeight.w500,
+                    )
+                  : Theme.of(context).textTheme.bodyMedium,
+            ),
           ),
-          const SizedBox(height: ThemeTokens.space2),
+          SizedBox(
+            height: widget.desktop ? ThemeTokens.space3 : ThemeTokens.space2,
+          ),
         ],
         if (question.options.isNotEmpty) ...[
           for (final (index, option) in question.options.indexed) ...[

@@ -1094,6 +1094,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final singleTitle = tester.widget<Text>(
+      find.text('Choose the fixture option.'),
+    );
+    expect(singleTitle.style!.fontSize, 14);
+    expect(singleTitle.style!.fontWeight, FontWeight.w500);
+    expect(singleTitle.style!.height! * singleTitle.style!.fontSize!, 20);
     final scope = find.byKey(const ValueKey('user-input-choice-scope'));
     expect(tester.widget<Focus>(scope).focusNode!.hasPrimaryFocus, isFalse);
     await tester.tap(find.text('Reject'));
