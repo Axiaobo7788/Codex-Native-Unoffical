@@ -241,13 +241,40 @@ void main() {
       await tester.pump();
       expect(find.text('Rename thread'), findsNothing);
 
-      // ContextMenu key on focused thread row opens anchored menu.
+      // ContextMenu and Shift+F10 on focused thread row open menu at row bottomLeft.
       final threadFocus = Focus.of(tester.element(threadRow));
       threadFocus.requestFocus();
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
       await tester.pump();
       expect(find.text('Rename thread'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dx,
+        closeTo(tester.getBottomLeft(threadRow).dx, 1.0),
+      );
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dy,
+        closeTo(tester.getBottomLeft(threadRow).dy, 1.0),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsNothing);
+
+      threadFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(find.text('Rename thread'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dx,
+        closeTo(tester.getBottomLeft(threadRow).dx, 1.0),
+      );
+      expect(
+        tester.getTopLeft(find.byType(CodexMenu<String>)).dy,
+        closeTo(tester.getBottomLeft(threadRow).dy, 1.0),
+      );
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       expect(find.text('Rename thread'), findsNothing);

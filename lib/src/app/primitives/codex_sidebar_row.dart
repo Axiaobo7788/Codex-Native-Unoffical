@@ -65,6 +65,24 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
     }
   }
 
+  void _invokeContextMenu() {
+    final onSecondaryTapDown = widget.onSecondaryTapDown;
+    if (onSecondaryTapDown != null) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        final localOffset = Offset(0, box.size.height);
+        onSecondaryTapDown(
+          TapDownDetails(
+            globalPosition: box.localToGlobal(localOffset),
+            localPosition: localOffset,
+          ),
+        );
+        return;
+      }
+    }
+    widget.onSecondaryTap?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
@@ -162,9 +180,10 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) => widget.onTap?.call(),
           ),
-          if (widget.onSecondaryTap != null)
+          if (widget.onSecondaryTap != null ||
+              widget.onSecondaryTapDown != null)
             _ContextMenuIntent: CallbackAction<_ContextMenuIntent>(
-              onInvoke: (_) => widget.onSecondaryTap?.call(),
+              onInvoke: (_) => _invokeContextMenu(),
             ),
         },
         shortcuts: {
@@ -172,7 +191,8 @@ class _CodexSidebarRowState extends State<CodexSidebarRow> {
               const ActivateIntent(),
           const SingleActivator(LogicalKeyboardKey.space):
               const ActivateIntent(),
-          if (widget.onSecondaryTap != null) ...{
+          if (widget.onSecondaryTap != null ||
+              widget.onSecondaryTapDown != null) ...{
             const SingleActivator(LogicalKeyboardKey.contextMenu):
                 const _ContextMenuIntent(),
             const SingleActivator(LogicalKeyboardKey.f10, shift: true):
