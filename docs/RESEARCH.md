@@ -9,6 +9,14 @@ authoritative.
 
 _Reviewed: 2026-11-06_
 
+The current Golden-State implementation and comparison contract is maintained
+in [Golden State A](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md). The 2026-11-11
+A2–A3 pass rechecked build `25894` grouped row slots, shared label alignment,
+collapsed project status and `189497.rmk3` pointer/keyboard menu coordinates.
+The same pass verified the `309406.Ceox.e9` Goal saved-source closure rule
+against Native notification-before-ack ordering. The matrix records current
+implementation commits, negative tests, release evidence and remaining deltas.
+
 ### Evidence boundary and sources
 
 The official Codex Desktop UI is not published as an open Flutter or reusable UI

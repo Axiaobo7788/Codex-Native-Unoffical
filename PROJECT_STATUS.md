@@ -138,22 +138,47 @@ action footer. Direct choices advance or submit by click or digit
 in the active Desktop request. A project row keeps its New chat
 action reachable by Tab. Home, open Changes, Review, expanded activity,
 compact and dark variants have separate evidence gates.
-[Hosted CI for `29fa508`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42946327809)
+[Hosted CI for `c42eac5`](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42947793108)
 
 ## Current checkpoint
 
+- `0378125` integrates Gemini's A2–A3 presentation commits `d74cb39` and
+  `f1e2fbb` with the Goal lifecycle slice. Wide New chat, project and thread
+  labels share one axis. Thread selection uses the full row. Collapsed
+  projects show loaded-thread status. Context menus use pointer coordinates,
+  focused-row bottom-left keyboard coordinates or the ellipsis anchor.
+  The owner corrected compact geometry drift, viewport clipping and the
+  independently reproduced 52 px keyboard-menu displacement before
+  integration. The integrated release exercised both pointer menus and the
+  sequential Goal saves/external replacement through bundled Host and stock.
+  Shared format, strict ASCII analysis, 538 default Flutter cases, five
+  direct-stock cases, bounded-memory benchmark, pure-Dart boundary, Rust
+  gates and Linux release/runtime closure passed. Golden State A remains
+  active. The next presentation cluster is being evaluated through agy.
+- `d3bf1d0` and `481788f`, integrated in `c241269`, preserve the Goal
+  editor's saved-source identity across notification-before-ack ordering.
+  External objective replacement closes the old editor. Own saves adopt
+  the accepted source before the closure check, including a parked draft.
+  The pending save is serialized and cleared without relying on Dart record
+  identity. Twenty Goal/history/layout cases and strict ASCII analysis
+  passed. A release replay persisted two consecutive keyboard saves,
+  closed after a separate stock source update and exited the process tree.
+  The baseline reproduced the stale dirty editor. Gemini's actual-diff
+  audit returned no P0/P1/P2 findings. The shared integration above preserves
+  that behavior.
 - `c8e96a0` translates the Goal editor toolbar and guarded save shortcut.
   The font runtime/CSS chain corrected the initial body-size inference.
   The real Linux package saved through Ctrl+S, retained an unsaved draft
-  across 950/1191 px resizing and discarded it on explicit close. External
-  source-change closure, minute refresh and Revert focus remain active A9
-  checks. The matrix preserves the initial saved-only resize observation
+  across 950/1191 px resizing and discarded it on explicit close. Minute
+  refresh and Revert focus remain active A9 checks. The matrix preserves
+  the initial saved-only resize observation
   and the pre-existing isolated-Xvfb frame warning.
 - `4d379ed` maps Goal status, objective, bullet and usage into the same
   click target with the measured compact actions. The peer comparison
   corrected short-goal flex and horizontal insets. The exact Linux package
-  opened the persisted stock Goal by clicking its elapsed text. Editor
-  toolbar, shortcuts and external-dirty closure remain actionable in A9.
+  opened the persisted stock Goal by clicking its elapsed text. The editor
+  toolbar, shortcuts and external-source closure are covered by the later
+  checkpoints above.
 - `599605c` maps the single stock question title to the same measured
   header as multiple questions. Paired release replay submitted the selected
   answer and all three processes exited. The peer identified the extra
@@ -202,7 +227,7 @@ remain available as history.
 
 ## Verification and pending gates
 
-- The current presentation source passed 536 default Flutter cases and
+- The current presentation source at `0378125` passed 538 default Flutter cases and
   five separately enabled direct-stock integration cases. Dart format and
   strict analysis passed in an ASCII physical-path source copy. This does
   not fix the recorded Unicode-path Flutter LSP framing failure.
@@ -213,9 +238,9 @@ remain available as history.
 - The pure-Dart boundary checked 65 roots. The history benchmark retained
   100 of 1,000 turns while exercising ten 3 MiB command payloads. The
   unchanged Rust tree passed formatting, Clippy and 100 tests.
-- The latest confirmed shared CI checkpoint is `29fa508`.
+- The latest confirmed shared CI checkpoint is `c42eac5`.
   Later exact-HEAD runs remain separate until their results are read.
-  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42946327809)
+  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42947793108)
 - Signed-in official live captures, subjective interaction acceptance
   and unavailable physical devices remain evidence gates on their own
   surfaces. The primary UI has machine-actionable rows in Golden State A.
