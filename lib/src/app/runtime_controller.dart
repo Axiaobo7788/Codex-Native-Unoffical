@@ -10,6 +10,8 @@ import '../domain/ecosystem_gateway.dart';
 import '../domain/ecosystem_models.dart';
 import '../domain/history_gateway.dart';
 import '../domain/history_models.dart';
+import '../domain/mcp_oauth_gateway.dart';
+import '../domain/mcp_oauth_models.dart';
 import '../domain/model_gateway.dart';
 import '../domain/model_models.dart';
 import '../domain/output_gateway.dart';
@@ -70,6 +72,7 @@ class RuntimeController extends ChangeNotifier
         EcosystemGateway,
         EcosystemCatalogGateway,
         McpCapabilityGateway,
+        McpOauthGateway,
         RuntimeDiagnosticsGateway {
   RuntimeController({
     this.locator = const CodexExecutableLocator(),
@@ -127,6 +130,7 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<ApprovalEvent>? _approvalEventSubscription;
   StreamSubscription<UserInputEvent>? _userInputEventSubscription;
   StreamSubscription<McpElicitationEvent>? _mcpElicitationEventSubscription;
+  StreamSubscription<McpOauthEvent>? _mcpOauthEventSubscription;
   StreamSubscription<RuntimeDiagnosticsEvent>?
   _runtimeDiagnosticsEventSubscription;
   StreamSubscription<ThreadAttachmentEvent>? _threadAttachmentEventSubscription;
@@ -142,6 +146,8 @@ class RuntimeController extends ChangeNotifier
       StreamController<UserInputEvent>.broadcast();
   final StreamController<McpElicitationEvent> _mcpElicitationEvents =
       StreamController<McpElicitationEvent>.broadcast();
+  final StreamController<McpOauthEvent> _mcpOauthEvents =
+      StreamController<McpOauthEvent>.broadcast();
   final StreamController<RuntimeDiagnosticsEvent> _runtimeDiagnosticsEvents =
       StreamController<RuntimeDiagnosticsEvent>.broadcast();
   final StreamController<ThreadAttachmentEvent> _threadAttachmentEvents =
@@ -179,6 +185,37 @@ class RuntimeController extends ChangeNotifier
 
   @override
   bool get supportsMcpCapabilities => !_usesRemote;
+
+  @override
+  bool get supportsMcpOauth =>
+      !_usesRemote &&
+      !_stopping &&
+      !_disposed &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      (_transport?.supportsMcpOauth ?? false);
+
+  @override
+  Stream<McpOauthEvent> get mcpOauthEvents => _mcpOauthEvents.stream;
+
+  @override
+  Future<McpOauthLoginAttempt> startMcpOauthLogin({
+    required String serverName,
+    int timeoutSeconds = 180,
+  }) {
+    if (!supportsMcpOauth) {
+      throw UnsupportedError('MCP sign-in requires a connected local runtime.');
+    }
+    return _connectedTransport().startMcpOauthLogin(
+      serverName: serverName,
+      timeoutSeconds: timeoutSeconds,
+    );
+  }
+
+  void _invalidateMcpOauth() {
+    if (!_mcpOauthEvents.isClosed) {
+      _mcpOauthEvents.add(const McpOauthInvalidated());
+    }
+  }
 
   @override
   Stream<McpElicitationEvent> get mcpElicitationEvents =>
@@ -946,6 +983,11 @@ class RuntimeController extends ChangeNotifier
         _mcpElicitationEvents.add,
         onError: _mcpElicitationEvents.addError,
       );
+      _mcpOauthEventSubscription = transport.mcpOauthEvents.listen(
+        _mcpOauthEvents.add,
+        onError: _mcpOauthEvents.addError,
+        onDone: _invalidateMcpOauth,
+      );
       _runtimeDiagnosticsEventSubscription = transport.runtimeDiagnosticsEvents
           .listen(
             _runtimeDiagnosticsEvents.add,
@@ -1073,6 +1115,7 @@ class RuntimeController extends ChangeNotifier
     if (_stopping || _disposed) {
       return;
     }
+    _invalidateMcpOauth();
     _setSnapshot(
       RuntimeSnapshot(
         state: RuntimeConnectionState.processExited,
@@ -1091,6 +1134,7 @@ class RuntimeController extends ChangeNotifier
     if (_stopping || _disposed) {
       return;
     }
+    _invalidateMcpOauth();
     _setSnapshot(
       RuntimeSnapshot(
         state: RuntimeConnectionState.error,
@@ -1121,6 +1165,7 @@ class RuntimeController extends ChangeNotifier
       return;
     }
     _stopping = true;
+    _invalidateMcpOauth();
     await _exitSubscription?.cancel();
     await _protocolErrorSubscription?.cancel();
     await _turnEventSubscription?.cancel();
@@ -1128,6 +1173,7 @@ class RuntimeController extends ChangeNotifier
     await _approvalEventSubscription?.cancel();
     await _userInputEventSubscription?.cancel();
     await _mcpElicitationEventSubscription?.cancel();
+    await _mcpOauthEventSubscription?.cancel();
     await _runtimeDiagnosticsEventSubscription?.cancel();
     await _threadAttachmentEventSubscription?.cancel();
     await _remoteOnboarding?.stop();
@@ -1140,6 +1186,7 @@ class RuntimeController extends ChangeNotifier
     await _approvalEvents.close();
     await _userInputEvents.close();
     await _mcpElicitationEvents.close();
+    await _mcpOauthEvents.close();
     await _runtimeDiagnosticsEvents.close();
     await _threadAttachmentEvents.close();
     if (!_disposed) {

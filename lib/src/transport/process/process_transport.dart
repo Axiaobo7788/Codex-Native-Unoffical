@@ -7,6 +7,8 @@ import '../../domain/ecosystem_gateway.dart';
 import '../../domain/ecosystem_models.dart';
 import '../../domain/history_gateway.dart';
 import '../../domain/history_models.dart';
+import '../../domain/mcp_oauth_gateway.dart';
+import '../../domain/mcp_oauth_models.dart';
 import '../../domain/model_models.dart';
 import '../../domain/output_models.dart';
 import '../../domain/remote_admin_models.dart';
@@ -22,6 +24,7 @@ import '../../protocol/ecosystem_protocol.dart';
 import '../../protocol/history_protocol.dart';
 import '../../protocol/json_rpc_peer.dart';
 import '../../protocol/jsonl_decoder.dart';
+import '../../protocol/mcp_oauth_protocol.dart';
 import '../../protocol/model_protocol.dart';
 import '../../protocol/output_protocol.dart';
 import '../../protocol/protocol_models.dart';
@@ -53,6 +56,7 @@ class ProcessTransport
         ThreadAttachmentGateway,
         EcosystemCatalogGateway,
         McpCapabilityGateway,
+        McpOauthGateway,
         RuntimeDiagnosticsGateway {
   ProcessTransport._({
     required this.executablePath,
@@ -79,6 +83,10 @@ class ProcessTransport
     _outputProtocol = OutputProtocolAdapter(request: _request);
     _remoteAdminProtocol = RemoteAdminProtocolAdapter(request: _request);
     _ecosystemProtocol = EcosystemProtocolAdapter(request: _request);
+    _mcpOauthProtocol = McpOauthProtocolAdapter(
+      request: _request,
+      notifications: _peer.notifications,
+    );
     _runtimeDiagnosticsProtocol = RuntimeDiagnosticsProtocolAdapter(
       request: _request,
       notifications: _peer.notifications,
@@ -115,6 +123,7 @@ class ProcessTransport
   late final OutputProtocolAdapter _outputProtocol;
   late final RemoteAdminProtocolAdapter _remoteAdminProtocol;
   late final EcosystemProtocolAdapter _ecosystemProtocol;
+  late final McpOauthProtocolAdapter _mcpOauthProtocol;
   late final RuntimeDiagnosticsProtocolAdapter _runtimeDiagnosticsProtocol;
   late final TurnProtocolAdapter _turnProtocol;
   late final ServerRequestProtocolAdapter _serverRequestProtocol;
@@ -127,6 +136,8 @@ class ProcessTransport
   var _threadAttachmentWritesUnsupported = false;
   var _threadReceiptWritesUnsupported = false;
   var _queuePresenceRequestInFlight = false;
+  var _mcpOauthStartInFlight = false;
+  var _mcpOauthUnsupported = false;
 
   static Future<ProcessTransport> start({
     required String executablePath,
@@ -190,6 +201,42 @@ class ProcessTransport
 
   @override
   bool get supportsMcpCapabilities => true;
+
+  @override
+  bool get supportsMcpOauth => !_closing && !_mcpOauthUnsupported;
+
+  @override
+  Stream<McpOauthEvent> get mcpOauthEvents => _mcpOauthProtocol.events;
+
+  @override
+  Future<McpOauthLoginAttempt> startMcpOauthLogin({
+    required String serverName,
+    int timeoutSeconds = 180,
+  }) async {
+    if (_closing) {
+      throw const TransportClosedException();
+    }
+    if (_mcpOauthUnsupported) {
+      throw const McpOauthNotSupportedException();
+    }
+    if (_mcpOauthStartInFlight) {
+      throw const McpOauthStartPendingException();
+    }
+    // Hold the transport slot until the actual RPC finishes. A caller timeout
+    // or navigation must not accumulate unbounded pending discovery requests.
+    _mcpOauthStartInFlight = true;
+    try {
+      return await _mcpOauthProtocol.start(
+        serverName: serverName,
+        timeoutSeconds: timeoutSeconds,
+      );
+    } on McpOauthNotSupportedException {
+      _mcpOauthUnsupported = true;
+      rethrow;
+    } finally {
+      _mcpOauthStartInFlight = false;
+    }
+  }
 
   @override
   Stream<McpElicitationEvent> get mcpElicitationEvents =>

@@ -4946,3 +4946,17 @@ Copy; it is a calibrated selection difference. Plain user text vs the official
 user-message Markdown/directive variant and attachment thumbnails/hover cards
 remain open. Implementation, source-bound verification, private paired captures,
 negative evidence and remaining corrections belong in the [A6 contract](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md#a6-user-bubble-and-externalized-attachments).
+
+## Desktop global MCP authentication access
+
+The current build-25894 MCP settings manager exposes Authenticate only for
+`notLoggedIn` and reuses a retained browser handoff. Installed/public stable
+schemas and independent loopback OAuth preflights confirm stock-owned exchange,
+optional login-ID correlation and authenticated status readback. The Native
+access checkpoint adds a typed optional local gateway and app-scoped projection;
+33 focused cases, strict analysis, 68-root pure-Dart compilation and new typed
+Host-backed OAuth smoke on installed `0.167.0-alpha.3.2` / public `0.167.1` pass.
+Packaged replay and targeted peer review remain open. [Current evidence and
+limits](reverse/MCP_OAUTH_ACCESS_EVIDENCE.md) distinguish these checks from the
+earlier raw preflight and future external-provider/Human acceptance; ADR-059
+records lifecycle and credential ownership.

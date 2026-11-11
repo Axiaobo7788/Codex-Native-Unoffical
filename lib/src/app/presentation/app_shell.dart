@@ -13,6 +13,7 @@ class RuntimeStatusScreen extends StatelessWidget {
     required this.diffController,
     required this.defaultWorkingDirectory,
     this.remotePairingScannerLauncher,
+    this.mcpOauthController,
   });
 
   final RuntimeController controller;
@@ -25,6 +26,7 @@ class RuntimeStatusScreen extends StatelessWidget {
   final DiffController diffController;
   final String defaultWorkingDirectory;
   final RemotePairingScannerLauncher? remotePairingScannerLauncher;
+  final McpOauthController? mcpOauthController;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +51,7 @@ class RuntimeStatusScreen extends StatelessWidget {
         userInputController: userInputController,
         settingsController: settingsController,
         diffController: diffController,
+        mcpOauthController: mcpOauthController,
         defaultWorkingDirectory: defaultWorkingDirectory,
       ),
       RuntimeConnectionState.remoteReadOnly => _StandaloneSurface(
@@ -83,6 +86,7 @@ class _ConnectedWorkspace extends StatefulWidget {
     required this.settingsController,
     required this.diffController,
     required this.defaultWorkingDirectory,
+    this.mcpOauthController,
   });
 
   final RuntimeController runtimeController;
@@ -94,6 +98,7 @@ class _ConnectedWorkspace extends StatefulWidget {
   final ExecutionSettingsController settingsController;
   final DiffController diffController;
   final String defaultWorkingDirectory;
+  final McpOauthController? mcpOauthController;
 
   @override
   State<_ConnectedWorkspace> createState() => _ConnectedWorkspaceState();
@@ -140,6 +145,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
     }
     if (oldWidget.threadController != widget.threadController ||
         oldWidget.runtimeController != widget.runtimeController ||
+        oldWidget.mcpOauthController != widget.mcpOauthController ||
         oldWidget.userInputController != widget.userInputController) {
       oldWidget.threadController.removeListener(_handleThreadControllerChanged);
       _disposeCustomizeController();
@@ -181,6 +187,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
       threadId: key.threadId,
       threadController: widget.threadController,
       userInputController: widget.userInputController,
+      mcpOauthController: widget.mcpOauthController,
       isModal: false,
       initialSection: _activeCustomizeSection,
     );
@@ -447,6 +454,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
             threadController: widget.threadController,
             initialShowSidebar: !hasActiveConversation,
             sidebarBuilder: (onThreadSelected) => _ThreadPanel(
+              mcpOauthController: widget.mcpOauthController,
               controller: widget.threadController,
               settingsController: widget.settingsController,
               runtimeController: widget.runtimeController,
@@ -524,6 +532,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
           userInputController: widget.userInputController,
           settingsController: widget.settingsController,
           diffController: widget.diffController,
+          mcpOauthController: widget.mcpOauthController,
           defaultWorkingDirectory: _workingDirectory,
           onWorkingDirectoryChanged: _handleWorkingDirectoryChanged,
         );
@@ -567,6 +576,7 @@ class _DesktopSplitWorkspace extends StatefulWidget {
     required this.diffController,
     required this.defaultWorkingDirectory,
     required this.onWorkingDirectoryChanged,
+    this.mcpOauthController,
   });
 
   final GlobalKey<_ConversationPanelState> conversationKey;
@@ -589,6 +599,7 @@ class _DesktopSplitWorkspace extends StatefulWidget {
   final DiffController diffController;
   final String defaultWorkingDirectory;
   final ValueChanged<String> onWorkingDirectoryChanged;
+  final McpOauthController? mcpOauthController;
 
   @override
   State<_DesktopSplitWorkspace> createState() => _DesktopSplitWorkspaceState();
@@ -777,6 +788,8 @@ class _DesktopSplitWorkspaceState extends State<_DesktopSplitWorkspace> {
                                                 child: ExcludeFocus(
                                                   excluding: isCustomize,
                                                   child: _ThreadPanel(
+                                                    mcpOauthController: widget
+                                                        .mcpOauthController,
                                                     key: _threadPanelKey,
                                                     controller:
                                                         widget.threadController,

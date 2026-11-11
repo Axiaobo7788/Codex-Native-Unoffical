@@ -2680,3 +2680,31 @@ backtick density:
   deliberate Native bounded-presentation safeguards, tracked separately from the
   active `RESEARCH_MORE` CSS `box-decoration-break: clone` per-line fragment
   rounding gap on single unbroken inline-code tokens wider than their container.
+
+## ADR-059 — Keep MCP OAuth stock-owned and app-scoped
+
+- **Status:** Accepted; packaged verification and targeted peer findings are
+  tracked separately in [MCP access evidence](reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
+- **Context:** Desktop already displays configured MCP authentication state,
+  but URL elicitation is not an MCP OAuth login flow. Stock provides a stable
+  login request/completion contract and owns PKCE, callbacks and credential
+  persistence. Login can outlive the Customize widget and completion can precede
+  the response that supplies its correlation ID.
+- **Decision:** Add an optional local `McpOauthGateway` with typed attempts and
+  events. Keep wire parsing in the protocol adapter and preserve pure-Dart
+  domain/transport. One app-scoped controller retains one bounded authorization
+  handoff/early completion and observes local runtime invalidation. Wide and
+  compact surfaces share it; navigation does not own or restart authentication.
+  Match server, global scope and login ID, with the older-stock omitted-ID
+  fallback. Read server status after matching completion and coalesce readback
+  behind an existing status/reload flight. Hold one transport start slot until
+  the actual request settles, regardless of a presentation deadline. Cache only
+  an explicit method-not-found as unsupported for that transport instance.
+- **Consequences:** Stock remains the credential authority. The client opens a
+  bounded HTTP(S) browser handoff, can retry that same handoff, and does not
+  persist URLs/tokens or echo provider errors. Expiry/connection loss is
+  unconfirmed, not a fabricated cancellation. There is no invented MCP OAuth
+  cancel/logout RPC. Remote stays read-only; the first Desktop path is global
+  configured-server login, without implicitly loading a thread. Custom scopes,
+  registration controls and per-thread overrides need their own supported
+  product evidence before being claimed.

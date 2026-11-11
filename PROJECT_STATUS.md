@@ -113,7 +113,14 @@ permission to lower the engineering or visual quality bar.
   cold-resume correction preserves `aba5feb` through `a0d2a05`. Both have
   independent real-stock evidence. The next active functional slice is supported
   stock-owned MCP OAuth access; local installed/public probes pass, Native UI
-  start/completion wiring remains missing. [Fresh audit](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md).
+  start/completion wiring is in progress on
+  `agent/codex-desktop-mcp-oauth` (`/var/tmp/native-codex-desktop-mcp-oauth`).
+  Typed local protocol/runtime projection and app-scoped wide/compact browser
+  handoff pass strict analysis, 68-root pure-Dart compilation and 33 focused
+  cases. The new real ProcessTransport → Host → installed/public stock OAuth
+  smoke passes both versions. Packaged browser/navigation replay and targeted
+  peer review remain pending, so the functional row is PARTIAL.
+  [Evidence](docs/reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
 - **Track U2 / Gemini:** `/var/tmp/native-gemini-u2-a7-activity`, branch
   `agent/gemini-golden-ui-u2-a7-activity`, base `9a75ddc`. The six negotiated
   writable surfaces are `conversation.dart`, `diff_approval_output.dart`,
@@ -123,8 +130,12 @@ permission to lower the engineering or visual quality bar.
   build-25894 typed captions and supported live/expanded activity grouping;
   bounded retention/output, raw Execution/search and controllers remain intact.
   Codex owns ecosystem/protocol/runtime surfaces and shared checkpoint docs.
-- Heavy validation is **Gemini-owned** after Codex's completed combined replay;
-  Codex remains source/docs-only until an explicit slot handoff. Flutter tests
+- U2 source `d725eba` is committed with its six file locks released; Codex has
+  independently read the diff, checked the final AOT and inspected r3 captures.
+  A concrete denial-attribution P2 was confirmed and corrected by the owner.
+  Integration/shared validation and current matrix update remain pending.
+- Heavy validation is **Codex-owned** following Gemini's explicit release and
+  owned process teardown. Gemini remains light-only. Flutter tests
   use `--concurrency=1`, Cargo uses two jobs, and Linux release uses
   `--config-only` then `cmake --build … --target install --parallel 2` (actual
   Ninja `-j 2`). This recovers from host compiler/test overlap, not a proven
@@ -136,10 +147,11 @@ permission to lower the engineering or visual quality bar.
   main `993a700`, and Gemini `dc96f3e` + `b247e07` initialized 14px chat / 12px
   code / foreground and bounded Markdown-context corrections. It preserves all
   original peer commits. Local shared gates and independent Linux replay pass;
-  exact hosted CI for the next main publication is still pending.
-- **Last hosted-verified main `993a7001ff47d7a99a2769c1cf8e4864749076e5`:**
-  [43081894366](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43081894366)
-  passed Linux, Windows and macOS. Source `a0d2a05` verifies visible cold-resume
+  published as documentation checkpoint `deb7076`.
+- **Last hosted-verified main `deb70761f3ebbe32de878b3cd7bc0ff5da400a5c`:**
+  [43092114873](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43092114873)
+  passed Linux, Windows and macOS at that exact HEAD. The duplicate branch run
+  was intentionally cancelled in favor of the main run. Source `a0d2a05` verifies visible cold-resume
   failures, preserved draft/file, dismissal and exactly one successful retry.
 - Older A6/A7/Customize/question/Goal narratives and earlier CI counts remain in
   [checkpoint history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md).
@@ -150,6 +162,12 @@ permission to lower the engineering or visual quality bar.
 ## Current product and architecture
 
 - Desktop uses the bundled Rust `codex-native-host` and stock `codex app-server`. The local workflow includes thread management, turn streaming and steering, approvals, model and execution controls, bounded diff/output, stock review, and supported Skills/Plugins/Apps/MCP administration. Availability can depend on installed stock version, configuration and account.
+- Local startup/crash recovery is a newly reopened functional gap: the start
+  Future is cached and the disconnected page has no retry/restart action.
+  Previous stop/restart MATCH wording was corrected. The dedicated real-process
+  failure/recovery replay is pending; recovery must preserve thread/draft
+  identity and retire old runtime-generation projections without running queued
+  work implicitly.
 - The wide native desktop shell has a 52 logical px navigation rail and a 288 px contextual sidebar by default. The 340 px total left area is resizable, and the reading and composer column is capped at 672 px. Plugins opens an inline Customize destination on wide Desktop. Below 760 px Native uses compact Threads navigation and retains the ecosystem dialog. `OfficialCodexTheme` owns the geometry and colors, and the responsive shell keeps one active conversation state.
 - Codex is the only wired product. Prose, Commands and Execution are timeline detail choices. The internal Work and Chat capability profiles and backend interfaces are compatibility seams. Independent ChatGPT Chat, Work orchestration and Responses backends are absent.
 - App-server owns persisted conversation state. Flutter retains bounded thread/history/active-turn projections, virtualizes lists, coalesces streaming, evicts inactive history, and lazily loads bounded output and diffs. Host spooling keeps large command payloads off the Flutter heap and preserves opaque MCP result fields with the same key name. Installed stock and public stable `0.167.0` returned the sampled command output inline. Public alpha `0.169.0-alpha.7` deferred eligible commands through the existing Native fetch path. Experimental `thread/items/read` returns the stored item.
@@ -169,6 +187,13 @@ permission to lower the engineering or visual quality bar.
 
 ## Verification and pending gates
 
+- MCP access source checkpoint: format 203 files/0 changes, strict analysis,
+  pure-Dart 68 roots and 33 focused cases pass. New pure-Dart OAuth smoke passes
+  installed `0.167.0-alpha.3.2` and public `0.167.1`, including actual PKCE,
+  correlated typed completion and authenticated readback. The first strict
+  analysis lint and compact test's missing post-build pump were corrected;
+  negative logs remain under `/var/tmp/native-ui-r0.BbOvHT/mcp-oauth-*-r1.log`.
+  These checks do not establish packaged browser behavior or Human acceptance.
 - Source `9a75ddc`: all 365 tracked source files byte-matched in the auxiliary
   ASCII tree. Format (0 changes), strict analysis and 65-root pure-Dart boundary
   pass; 577 default Flutter cases (five opt-in skips), five separately enabled

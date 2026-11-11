@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
+import 'package:codex_native_unofficial/src/domain/mcp_oauth_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
@@ -95,6 +96,60 @@ void main() {
 
     final initialized = jsonDecode(child.writes.last) as Map<String, Object?>;
     expect(initialized, {'method': 'initialized', 'params': {}});
+  });
+
+  test(
+    'MCP sign-in holds one raw request slot until the response settles',
+    () async {
+      final first = transport.startMcpOauthLogin(serverName: 'mcp');
+      await pumpEventQueue();
+      final request = jsonDecode(child.writes.single) as Map<String, Object?>;
+      expect(request['method'], 'mcpServer/oauth/login');
+      for (var i = 0; i < 20; i++) {
+        await expectLater(
+          transport.startMcpOauthLogin(serverName: 'other'),
+          throwsA(isA<McpOauthStartPendingException>()),
+        );
+      }
+      expect(child.writes, hasLength(1));
+      child.addStdout({
+        'id': request['id'],
+        'result': {
+          'authorizationUrl': 'https://auth.example.test/',
+          'loginId': 'one',
+        },
+      });
+      expect((await first).loginId, 'one');
+      final next = transport.startMcpOauthLogin(serverName: 'other');
+      await pumpEventQueue();
+      final second = jsonDecode(child.writes.last) as Map<String, Object?>;
+      child.addStdout({
+        'id': second['id'],
+        'error': {'code': -32601, 'message': 'Method not found'},
+      });
+      await expectLater(next, throwsA(isA<McpOauthNotSupportedException>()));
+      expect(transport.supportsMcpOauth, isFalse);
+      await expectLater(
+        transport.startMcpOauthLogin(serverName: 'mcp'),
+        throwsA(isA<McpOauthNotSupportedException>()),
+      );
+      expect(child.writes, hasLength(2));
+    },
+  );
+
+  test('shutdown settles pending MCP sign-in and rejects new starts', () async {
+    final start = transport.startMcpOauthLogin(serverName: 'mcp');
+    final failed = expectLater(start, throwsA(isA<TransportClosedException>()));
+    await pumpEventQueue();
+    child.exitWhenInputCloses = true;
+    await transport.close();
+    await failed;
+    expect(transport.supportsMcpOauth, isFalse);
+    await expectLater(
+      transport.startMcpOauthLogin(serverName: 'mcp'),
+      throwsA(isA<TransportClosedException>()),
+    );
+    expect(child.writes, hasLength(1));
   });
 
   test('reports abnormal process exit with bounded stderr context', () async {

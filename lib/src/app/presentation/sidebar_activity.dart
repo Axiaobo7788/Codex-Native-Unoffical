@@ -9,6 +9,7 @@ class _ThreadPanel extends StatefulWidget {
     required this.defaultWorkingDirectory,
     this.onWorkingDirectoryChanged,
     this.userInputController,
+    this.mcpOauthController,
     this.hasNavigationRail = false,
     this.onThreadSelected,
   });
@@ -19,6 +20,7 @@ class _ThreadPanel extends StatefulWidget {
   final String defaultWorkingDirectory;
   final ValueChanged<String>? onWorkingDirectoryChanged;
   final UserInputController? userInputController;
+  final McpOauthController? mcpOauthController;
   final bool hasNavigationRail;
   final VoidCallback? onThreadSelected;
 
@@ -898,6 +900,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
   Future<void> _openEcosystem() => showDialog<void>(
     context: context,
     builder: (context) => _EcosystemDialog(
+      mcpOauthController: widget.mcpOauthController,
       gateway: widget.runtimeController,
       threadController: widget.controller,
       userInputController: widget.userInputController,
@@ -2646,10 +2649,13 @@ class _EcosystemController extends ChangeNotifier {
     this.threadId,
     this.threadController,
     this.userInputController,
+    this.mcpOauthController,
     required this.isModal,
     _EcosystemSection initialSection = _EcosystemSection.skills,
   }) : _section = initialSection {
     threadController?.addListener(_handleThreadControllerChanged);
+    _mcpOauthCompletionRevision = mcpOauthController?.completionRevision ?? 0;
+    mcpOauthController?.addListener(_handleMcpOauthChanged);
     unawaited(refresh());
   }
 
@@ -2661,6 +2667,7 @@ class _EcosystemController extends ChangeNotifier {
   final String? threadId;
   final ThreadListController? threadController;
   final UserInputController? userInputController;
+  final McpOauthController? mcpOauthController;
   final bool isModal;
 
   var _disposed = false;
@@ -2706,6 +2713,22 @@ class _EcosystemController extends ChangeNotifier {
   Set<Object> _mcpExcludedElicitationIds = const <Object>{};
   var _reloadingMcp = false;
   String? _mcpNotice;
+  var _mcpOauthCompletionRevision = 0;
+  var _mcpOauthRefreshPending = false;
+
+  void _handleMcpOauthChanged() {
+    if (_disposed) return;
+    final revision = mcpOauthController?.completionRevision ?? 0;
+    if (revision != _mcpOauthCompletionRevision) {
+      _mcpOauthCompletionRevision = revision;
+      if (_mcpRefreshInFlight != null || _reloadingMcp) {
+        _mcpOauthRefreshPending = true;
+      } else {
+        unawaited(_refreshMcp(forceRefetch: true));
+      }
+    }
+    _notify();
+  }
 
   final Set<String> _mutatingSkillPaths = <String>{};
   final Set<String> _expandedPluginIds = <String>{};
@@ -2884,6 +2907,7 @@ class _EcosystemController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     threadController?.removeListener(_handleThreadControllerChanged);
+    mcpOauthController?.removeListener(_handleMcpOauthChanged);
     super.dispose();
   }
 
@@ -3146,6 +3170,10 @@ class _EcosystemController extends ChangeNotifier {
           _mcpLoading = false;
           _notify();
         }
+        if (!_disposed && _mcpOauthRefreshPending) {
+          _mcpOauthRefreshPending = false;
+          unawaited(_refreshMcp(forceRefetch: true));
+        }
       }
     });
     _mcpRefreshInFlight = future;
@@ -3364,6 +3392,7 @@ class _EcosystemController extends ChangeNotifier {
     final mcp = mcpGateway;
     if (_disposed ||
         mcp == null ||
+        (mcpOauthController?.busy ?? false) ||
         _reloadingMcp ||
         _mcpLoading ||
         _mcpRefreshInFlight != null) {
@@ -3398,6 +3427,10 @@ class _EcosystemController extends ChangeNotifier {
       if (!_disposed) {
         _reloadingMcp = false;
         _notify();
+        if (_mcpOauthRefreshPending) {
+          _mcpOauthRefreshPending = false;
+          unawaited(_refreshMcp(forceRefetch: true));
+        }
       }
     }
   }
@@ -4636,6 +4669,7 @@ class _EcosystemDialog extends StatefulWidget {
     this.threadId,
     this.threadController,
     this.userInputController,
+    this.mcpOauthController,
   });
 
   final EcosystemGateway gateway;
@@ -4643,6 +4677,7 @@ class _EcosystemDialog extends StatefulWidget {
   final String? threadId;
   final ThreadListController? threadController;
   final UserInputController? userInputController;
+  final McpOauthController? mcpOauthController;
 
   @override
   State<_EcosystemDialog> createState() => _EcosystemDialogState();
@@ -4660,6 +4695,7 @@ class _EcosystemDialogState extends State<_EcosystemDialog> {
       threadId: widget.threadId,
       threadController: widget.threadController,
       userInputController: widget.userInputController,
+      mcpOauthController: widget.mcpOauthController,
       isModal: true,
       initialSection: _EcosystemSection.skills,
     );
@@ -6049,6 +6085,7 @@ class _EcosystemSectionBody extends StatelessWidget {
     final palette = ThemeTokens.of(context);
     final gateway = controller.mcpGateway;
     final servers = controller.mcpServers;
+    final oauth = controller.mcpOauthController;
     final query = _normalizedQuery;
     final filtered = query.isEmpty
         ? servers
@@ -6083,6 +6120,7 @@ class _EcosystemSectionBody extends StatelessWidget {
               onPressed:
                   gateway == null ||
                       controller.reloadingMcp ||
+                      (oauth?.busy ?? false) ||
                       controller.mcpLoading
                   ? null
                   : controller.reloadMcpServers,
@@ -6091,6 +6129,58 @@ class _EcosystemSectionBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: ThemeTokens.space3),
+        if (oauth?.message case final message?) ...[
+          Semantics(
+            liveRegion: true,
+            child: KeyedSubtree(
+              key: const ValueKey('mcp-oauth-notice'),
+              child: _InlineNotice(
+                icon: Icons.open_in_browser_rounded,
+                color: oauth!.phase == McpOauthPhase.failed
+                    ? palette.danger
+                    : palette.textSecondary,
+                text: oauth.serverName == null
+                    ? message
+                    : '${oauth.serverName}: $message',
+              ),
+            ),
+          ),
+          const SizedBox(height: ThemeTokens.space2),
+          Wrap(
+            spacing: ThemeTokens.space2,
+            runSpacing: ThemeTokens.space2,
+            children: [
+              if (oauth.busy)
+                CodexButton(
+                  key: const ValueKey('mcp-oauth-open-browser'),
+                  variant: CodexButtonVariant.secondary,
+                  size: CodexButtonSize.sm,
+                  loading: oauth.openingBrowser,
+                  onPressed: oauth.canOpenBrowser ? oauth.openBrowser : null,
+                  label: 'Open browser',
+                ),
+              CodexButton(
+                key: const ValueKey('mcp-oauth-refresh-status'),
+                variant: CodexButtonVariant.secondary,
+                size: CodexButtonSize.sm,
+                loading: controller.mcpLoading,
+                onPressed: controller.mcpLoading
+                    ? null
+                    : () => controller._refreshMcp(forceRefetch: true),
+                label: 'Refresh status',
+              ),
+              if (!oauth.busy)
+                CodexButton(
+                  key: const ValueKey('mcp-oauth-dismiss'),
+                  variant: CodexButtonVariant.ghost,
+                  size: CodexButtonSize.sm,
+                  onPressed: oauth.clearNotice,
+                  label: 'Dismiss',
+                ),
+            ],
+          ),
+          const SizedBox(height: ThemeTokens.space3),
+        ],
         if (servers.isEmpty)
           if (controller.mcpLoading)
             Row(
@@ -6197,6 +6287,23 @@ class _EcosystemSectionBody extends StatelessWidget {
                         spacing: ThemeTokens.space2,
                         runSpacing: ThemeTokens.space2,
                         children: [
+                          if (oauth != null &&
+                              oauth.available &&
+                              authStatus == 'notLoggedIn')
+                            CodexButton(
+                              key: ValueKey('mcp-oauth-sign-in-${server.name}'),
+                              variant: CodexButtonVariant.secondary,
+                              size: CodexButtonSize.sm,
+                              loading:
+                                  oauth.busy && oauth.serverName == server.name,
+                              onPressed:
+                                  oauth.busy ||
+                                      controller.mcpLoading ||
+                                      controller.reloadingMcp
+                                  ? null
+                                  : () => oauth.signIn(server.name),
+                              label: 'Authenticate',
+                            ),
                           CodexButton(
                             key: ValueKey('mcp-read-resource-${server.name}'),
                             variant: CodexButtonVariant.secondary,

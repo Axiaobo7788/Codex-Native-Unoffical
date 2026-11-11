@@ -35,6 +35,7 @@ import '../features/conversation/history_controller.dart';
 import '../features/conversation/output_viewer_controller.dart';
 import '../features/conversation/user_input_controller.dart';
 import '../features/diff/diff_controller.dart';
+import '../features/mcp/mcp_oauth_controller.dart';
 import '../features/settings/execution_settings_controller.dart';
 import '../features/settings/remote_admin_controller.dart';
 import '../features/settings/remote_pairing_qr.dart';
@@ -73,11 +74,13 @@ class CodexNativeApp extends StatefulWidget {
     this.runtimeController,
     this.shutdownHandler,
     this.remotePairingScannerLauncher,
+    this.mcpOauthBrowserLauncher,
   });
 
   final RuntimeController? runtimeController;
   final Future<void> Function()? shutdownHandler;
   final RemotePairingScannerLauncher? remotePairingScannerLauncher;
+  final McpOauthBrowserLauncher? mcpOauthBrowserLauncher;
 
   @override
   State<CodexNativeApp> createState() => _CodexNativeAppState();
@@ -92,6 +95,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   late final DiffController _diffController;
   late final ApprovalController _approvalController;
   late final UserInputController _userInputController;
+  late final McpOauthController _mcpOauthController;
   late final bool _ownsController;
   AppLifecycleListener? _lifecycleListener;
   var _requestedInitialThreads = false;
@@ -116,6 +120,12 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
       gateway: _controller,
       mcpGateway: _controller,
     );
+    _mcpOauthController = McpOauthController(
+      gateway: _controller,
+      launchBrowser: (uri) =>
+          widget.mcpOauthBrowserLauncher?.call(uri) ??
+          launchUrl(uri, mode: LaunchMode.externalApplication),
+    );
     _lastRevertVersion = _threadController.revertVersion;
     _controller.addListener(_handleRuntimeState);
     _threadController.addListener(_handleThreadSelection);
@@ -135,6 +145,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     _threadController.removeListener(_handleThreadSelection);
     _approvalController.dispose();
     _userInputController.dispose();
+    _mcpOauthController.dispose();
     _conversationController.dispose();
     _historyController.dispose();
     _diffController.dispose();
@@ -169,6 +180,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
         userInputController: _userInputController,
         settingsController: _settingsController,
         diffController: _diffController,
+        mcpOauthController: _mcpOauthController,
         defaultWorkingDirectory: Directory.current.path,
         remotePairingScannerLauncher:
             widget.remotePairingScannerLauncher ??
