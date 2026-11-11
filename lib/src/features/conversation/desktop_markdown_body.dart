@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../../app/theme/official_codex_theme.dart';
+
 /// Renders bounded Desktop Markdown in a single AST pass using the official
 /// Codex Desktop screen-CSS geometry for root edges, block adjacency, tight
 /// and loose lists, blockquotes, tables, horizontal rules, and code blocks.
@@ -19,8 +21,15 @@ class DesktopMarkdownBody extends StatefulWidget {
     required this.imageBuilder,
     required this.onTapLink,
     required this.bodyEm,
-    this.borderMedium = const Color(0xFFD4D4D4),
-    this.borderLight = const Color(0xFFE5E5E5),
+    this.borderMedium = OfficialCodexTheme.lightControlBorderStrong,
+    this.borderLight = OfficialCodexTheme.lightControlBorder,
+    this.inlineCodeBackground = OfficialCodexTheme.lightInlineCodeBackground,
+    this.inlineCodeRadius = OfficialCodexTheme.inlineCodeRadius,
+    this.inlineCodeHorizontalPadding =
+        OfficialCodexTheme.inlineCodeHorizontalPadding,
+    this.inlineCodeVerticalPadding =
+        OfficialCodexTheme.inlineCodeVerticalPadding,
+    this.inlineCodeFontScale = OfficialCodexTheme.inlineCodeFontScale,
   });
 
   final String data;
@@ -32,6 +41,11 @@ class DesktopMarkdownBody extends StatefulWidget {
   final double bodyEm;
   final Color borderMedium;
   final Color borderLight;
+  final Color inlineCodeBackground;
+  final double inlineCodeRadius;
+  final double inlineCodeHorizontalPadding;
+  final double inlineCodeVerticalPadding;
+  final double inlineCodeFontScale;
 
   @override
   State<DesktopMarkdownBody> createState() => _DesktopMarkdownBodyState();
@@ -56,6 +70,8 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
   };
 
   final _recognizers = <TapGestureRecognizer>[];
+  final _activeLinks = <_ActiveMarkdownLink>[];
+  var _preDepth = 0;
   List<Widget> _children = const [];
 
   @override
@@ -71,13 +87,22 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
         widget.styleSheet != oldWidget.styleSheet ||
         widget.bodyEm != oldWidget.bodyEm ||
         widget.borderMedium != oldWidget.borderMedium ||
-        widget.borderLight != oldWidget.borderLight) {
+        widget.borderLight != oldWidget.borderLight ||
+        widget.inlineCodeBackground != oldWidget.inlineCodeBackground ||
+        widget.inlineCodeRadius != oldWidget.inlineCodeRadius ||
+        widget.inlineCodeHorizontalPadding !=
+            oldWidget.inlineCodeHorizontalPadding ||
+        widget.inlineCodeVerticalPadding !=
+            oldWidget.inlineCodeVerticalPadding ||
+        widget.inlineCodeFontScale != oldWidget.inlineCodeFontScale) {
       _buildBlocks();
     }
   }
 
   void _buildBlocks() {
     _disposeRecognizers();
+    _activeLinks.clear();
+    _preDepth = 0;
     if (widget.data.isEmpty) {
       _children = const [];
       return;
@@ -95,6 +120,17 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     }
 
     final zeroBuilder = _builder(widget.styleSheet.copyWith(blockSpacing: 0));
+    final headingBuilders = <String, MarkdownBuilder>{};
+    MarkdownBuilder getHeadingBuilder(String tag) =>
+        headingBuilders.putIfAbsent(
+          tag,
+          () => _builder(
+            widget.styleSheet.copyWith(
+              blockSpacing: 0,
+              p: widget.styleSheet.styles[tag] ?? widget.styleSheet.p,
+            ),
+          ),
+        );
     MarkdownBuilder? blockquoteParagraphBuilder;
     MarkdownBuilder getBlockquoteParagraphBuilder() =>
         blockquoteParagraphBuilder ??= _builder(
@@ -136,6 +172,8 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
           case 'hr':
             final currentIndex = hrIndex++;
             return _buildHorizontalRule(index: currentIndex);
+          case 'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6':
+            return _wrapBuilt(getHeadingBuilder(node.tag).build([node]));
           case 'p' when insideBlockquote:
             return _wrapBuilt(getBlockquoteParagraphBuilder().build([node]));
         }
@@ -522,7 +560,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final inlineCodeStyle = widget.styleSheet.code?.copyWith(
-      fontSize: smallFontSize * 0.92,
+      fontSize: smallFontSize * widget.inlineCodeFontScale,
     );
     final linkStyle = widget.styleSheet.a?.copyWith(fontSize: smallFontSize);
 
@@ -669,19 +707,48 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     child: DecoratedBox(decoration: BoxDecoration(color: widget.borderMedium)),
   );
 
-  MarkdownBuilder _builder(MarkdownStyleSheet styleSheet) => MarkdownBuilder(
-    delegate: this,
-    selectable: false,
-    styleSheet: styleSheet,
-    imageDirectory: null,
-    checkboxBuilder: null,
-    bulletBuilder: null,
-    listItemCrossAxisAlignment: MarkdownListItemCrossAxisAlignment.baseline,
-    builders: widget.builders,
-    paddingBuilders: const {},
-    imageBuilder: widget.imageBuilder,
-    fitContent: true,
-  );
+  MarkdownBuilder _builder(MarkdownStyleSheet styleSheet) {
+    final mergedBuilders = <String, MarkdownElementBuilder>{
+      ...widget.builders,
+      'pre': _PreScopeElementBuilder(
+        delegate: widget.builders['pre'],
+        onEnter: () => _preDepth++,
+        onExit: () {
+          if (_preDepth > 0) {
+            _preDepth--;
+          }
+        },
+      ),
+      'code': _DesktopInlineCodeBuilder(
+        delegate: widget.builders['code'],
+        isInsidePre: () => _preDepth > 0,
+        currentLink: () => _activeLinks.isEmpty ? null : _activeLinks.last,
+        onTapLink: (text, href, title) => widget.onTapLink(text, href, title),
+        fallbackStyle: styleSheet.p,
+        backgroundColor: widget.inlineCodeBackground,
+        borderRadius: widget.inlineCodeRadius,
+        horizontalPadding: widget.inlineCodeHorizontalPadding,
+        verticalPadding: widget.inlineCodeVerticalPadding,
+        fontScale: widget.inlineCodeFontScale,
+      ),
+    };
+    return MarkdownBuilder(
+      delegate: this,
+      selectable: false,
+      styleSheet: styleSheet,
+      imageDirectory: null,
+      checkboxBuilder: null,
+      bulletBuilder: null,
+      listItemCrossAxisAlignment: MarkdownListItemCrossAxisAlignment.baseline,
+      builders: mergedBuilders,
+      paddingBuilders: {
+        if (!widget.builders.containsKey('a'))
+          'a': _LinkScopePaddingBuilder(activeLinks: _activeLinks),
+      },
+      imageBuilder: widget.imageBuilder,
+      fitContent: true,
+    );
+  }
 
   String? _nodeTag(md.Node node) {
     if (node is md.Element) {
@@ -765,4 +832,213 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     crossAxisAlignment: CrossAxisAlignment.start,
     children: _children,
   );
+}
+
+final class _ActiveMarkdownLink {
+  const _ActiveMarkdownLink({
+    required this.text,
+    required this.href,
+    required this.title,
+  });
+
+  final String text;
+  final String? href;
+  final String title;
+}
+
+final class _LinkScopePaddingBuilder extends MarkdownPaddingBuilder {
+  _LinkScopePaddingBuilder({required this.activeLinks});
+
+  final List<_ActiveMarkdownLink> activeLinks;
+
+  static String? _extractLinkText(md.Node element) {
+    if (element is md.Element && (element.children?.isNotEmpty ?? false)) {
+      return element.children!
+          .map(
+            (child) =>
+                child is md.Text ? child.text : _extractLinkText(child) ?? '',
+          )
+          .join();
+    }
+    if (element is md.Element && element.attributes.isNotEmpty) {
+      return element.attributes['alt'];
+    }
+    return '';
+  }
+
+  @override
+  void visitElementBefore(md.Element element) {
+    final text = _extractLinkText(element);
+    if (text == null) {
+      return;
+    }
+    activeLinks.add(
+      _ActiveMarkdownLink(
+        text: text,
+        href: element.attributes['href'],
+        title: element.attributes['title'] ?? '',
+      ),
+    );
+  }
+
+  @override
+  EdgeInsets getPadding() {
+    if (activeLinks.isNotEmpty) {
+      activeLinks.removeLast();
+    }
+    return EdgeInsets.zero;
+  }
+}
+
+final class _PreScopeElementBuilder extends MarkdownElementBuilder {
+  _PreScopeElementBuilder({
+    required this.delegate,
+    required this.onEnter,
+    required this.onExit,
+  });
+
+  final MarkdownElementBuilder? delegate;
+  final VoidCallback onEnter;
+  final VoidCallback onExit;
+
+  @override
+  bool isBlockElement() => delegate?.isBlockElement() ?? true;
+
+  @override
+  void visitElementBefore(md.Element element) {
+    onEnter();
+    delegate?.visitElementBefore(element);
+  }
+
+  @override
+  Widget? visitText(md.Text text, TextStyle? preferredStyle) =>
+      delegate?.visitText(text, preferredStyle);
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    onExit();
+    return delegate?.visitElementAfterWithContext(
+      context,
+      element,
+      preferredStyle,
+      parentStyle,
+    );
+  }
+}
+
+final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
+  _DesktopInlineCodeBuilder({
+    required this.delegate,
+    required this.isInsidePre,
+    required this.currentLink,
+    required this.onTapLink,
+    required this.fallbackStyle,
+    required this.backgroundColor,
+    required this.borderRadius,
+    required this.horizontalPadding,
+    required this.verticalPadding,
+    required this.fontScale,
+  });
+
+  final MarkdownElementBuilder? delegate;
+  final bool Function() isInsidePre;
+  final _ActiveMarkdownLink? Function() currentLink;
+  final MarkdownTapLinkCallback onTapLink;
+  final TextStyle? fallbackStyle;
+  final Color backgroundColor;
+  final double borderRadius;
+  final double horizontalPadding;
+  final double verticalPadding;
+  final double fontScale;
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    if (isInsidePre()) {
+      return null;
+    }
+    final custom = delegate?.visitElementAfterWithContext(
+      context,
+      element,
+      preferredStyle,
+      parentStyle,
+    );
+    if (custom != null) {
+      return custom;
+    }
+
+    final defaultStyle = DefaultTextStyle.of(context).style;
+    final effectiveParent = defaultStyle
+        .merge(fallbackStyle)
+        .merge(parentStyle);
+    final baseFontSize =
+        effectiveParent.fontSize ?? preferredStyle?.fontSize ?? 14.0;
+    final pillTextStyle = TextStyle(
+      inherit: false,
+      color: effectiveParent.color ?? preferredStyle?.color,
+      fontFamily: preferredStyle?.fontFamily ?? 'monospace',
+      fontFamilyFallback:
+          preferredStyle?.fontFamilyFallback ??
+          effectiveParent.fontFamilyFallback,
+      fontSize: baseFontSize * fontScale,
+      fontWeight: effectiveParent.fontWeight,
+      fontStyle: effectiveParent.fontStyle,
+      letterSpacing: effectiveParent.letterSpacing,
+      decoration: effectiveParent.decoration,
+      decorationColor: effectiveParent.decorationColor,
+      decorationStyle: effectiveParent.decorationStyle,
+      decorationThickness: effectiveParent.decorationThickness,
+      fontFeatures: effectiveParent.fontFeatures,
+      textBaseline: TextBaseline.alphabetic,
+    );
+
+    Widget pill = DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
+        child: Text(
+          element.textContent,
+          textDirection: TextDirection.ltr,
+          textScaler: TextScaler.noScaling,
+          style: pillTextStyle,
+        ),
+      ),
+    );
+
+    final activeLink = currentLink();
+    if (activeLink != null) {
+      pill = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () =>
+              onTapLink(activeLink.text, activeLink.href, activeLink.title),
+          child: pill,
+        ),
+      );
+    }
+
+    return Text.rich(
+      WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: pill,
+      ),
+    );
+  }
 }

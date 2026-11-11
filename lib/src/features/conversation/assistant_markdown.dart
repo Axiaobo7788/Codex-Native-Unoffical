@@ -87,9 +87,6 @@ class AssistantMarkdown extends StatelessWidget {
       );
     }
 
-    final inlineCodeBackground = codexTheme.isDark
-        ? const Color(0x21FFFFFF)
-        : const Color(0x171A1C1F);
     final styleSheet = baseStyleSheet.copyWith(
       a: isDesktop
           ? bodyStyle?.copyWith(
@@ -106,11 +103,11 @@ class AssistantMarkdown extends StatelessWidget {
       p: bodyStyle,
       code: bodyStyle?.copyWith(
         color: palette.textPrimary,
-        backgroundColor: isDesktop
-            ? inlineCodeBackground
-            : palette.surfaceRaised,
+        backgroundColor: isDesktop ? null : palette.surfaceRaised,
         fontFamily: 'monospace',
-        fontSize: isDesktop ? fontSize * 0.92 : 12.5,
+        fontSize: isDesktop
+            ? fontSize * OfficialCodexTheme.inlineCodeFontScale
+            : 12.5,
       ),
       h1:
           desktopHeading(1.5, 2) ??
@@ -155,6 +152,13 @@ class AssistantMarkdown extends StatelessWidget {
               bodyEm: MediaQuery.textScalerOf(context).scale(fontSize),
               borderMedium: palette.borderStrong,
               borderLight: codexTheme.hairlineBorder,
+              inlineCodeBackground: codexTheme.inlineCodeBackground,
+              inlineCodeRadius: OfficialCodexTheme.inlineCodeRadius,
+              inlineCodeHorizontalPadding:
+                  OfficialCodexTheme.inlineCodeHorizontalPadding,
+              inlineCodeVerticalPadding:
+                  OfficialCodexTheme.inlineCodeVerticalPadding,
+              inlineCodeFontScale: OfficialCodexTheme.inlineCodeFontScale,
               extensionSet: _safeExtensions,
               builders: {
                 'pre': _CodeBlockBuilder(desktop: true, bodyFontSize: fontSize),
