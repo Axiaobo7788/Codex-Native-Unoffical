@@ -135,6 +135,16 @@ compact and dark variants have separate evidence gates.
 
 ## Current checkpoint
 
+- `a3bcd98` adds the bounded nested disclosure for verified saved
+  Desktop command groups. The packaged Linux app expanded a stock
+  read/search/list/run group, restored the real preview across
+  Commands and Execution and released it on collapse. Search
+  remains on individual loaded items. All 531 default Flutter tests,
+  ASCII-path analysis, 100 Rust tests and the bounded-history gate
+  passed. Signed-in expanded comparison and mixed-tool or declined
+  command groups remain in A7.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+
 - `f772470` translates the stock Other editor's ArrowUp behavior.
   The packaged Linux run verified last-option selection, restoration
   of the short draft and normal caret movement in the wrapped draft.
