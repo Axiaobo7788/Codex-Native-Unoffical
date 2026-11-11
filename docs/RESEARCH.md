@@ -4987,3 +4987,21 @@ identical. ADR-060 records the bounded typed reasoning seam; its shared machine 
 [Reasoning evidence](reverse/REASONING_PROJECTION_EVIDENCE.md) preserves the
 before/after, model-fixture boundary and peer red outcomes. First-part emphasis
 remains the independent presentation follow-up.
+
+
+## Known-empty new-thread history admission
+
+Real packaged public `0.167.1` returned -32600 for premature `thread/turns/list`
+before the first user message. Current public source `c875667e` corroborates this
+boundary and initializes thread watch state silently. Native already tracks
+known newly created IDs for fork/compact admission; the focused correction
+reuses that marker for history instead of adding a message-string exception.
+Unknown or ordinary failing history reads remain errors.
+
+The old-source app regression reproduces the premature read. Corrected strict
+analysis, 37 history/thread cases and one lifecycle-complete product case pass.
+The first product test lacked a post-input frame, and its next version waited for
+an intentionally active sidebar animation; both negative logs remain under
+`/var/tmp/native-ui-r0.BbOvHT/new-thread-history-*`. Actual-stock after-fix,
+shared release and targeted peer review remain pending. This is a typed simulated
+product test result, not a full-process E2E or real-account claim.

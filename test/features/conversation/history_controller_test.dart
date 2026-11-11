@@ -10,6 +10,41 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'defers only known unmaterialized history and hydrates when readable',
+    () async {
+      final gateway = _KnownEmptyHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      final thread = _thread('new');
+      await controller.bindThread(thread, knownUnmaterialized: true);
+      await controller.refresh();
+      await controller.bindThread(thread, knownUnmaterialized: true);
+      expect(gateway.turnCalls, 0);
+      expect(controller.errorMessage, isNull);
+      expect(controller.turns, isEmpty);
+      expect(controller.supportsOccurrenceSearch, isFalse);
+
+      await controller.bindThread(thread);
+      await controller.bindThread(thread);
+      expect(gateway.turnCalls, 1);
+      expect(controller.turns, hasLength(1));
+      expect(controller.supportsOccurrenceSearch, isTrue);
+    },
+  );
+
+  test(
+    'ordinary history failures remain visible instead of becoming empty',
+    () async {
+      final gateway = _KnownEmptyHistoryGateway()..failRead = true;
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('ordinary'));
+      expect(gateway.turnCalls, 1);
+      expect(controller.errorMessage, contains('not materialized yet'));
+    },
+  );
+
+  test(
     'saved MCP reads are single-flight and discard old turn results',
     () async {
       final gateway = _McpTextHistoryGateway();
@@ -521,3 +556,25 @@ ThreadSummary _thread(String id) => ThreadSummary(
   status: ThreadRuntimeStatus.idle,
   ephemeral: false,
 );
+
+class _KnownEmptyHistoryGateway extends _HistoryGateway
+    implements HistoryOccurrenceGateway {
+  _KnownEmptyHistoryGateway() : super(turnCount: 1, itemsPerTurn: 1);
+  var failRead = false;
+  @override
+  bool get supportsHistoryOccurrences => true;
+  @override
+  Future<HistoryOccurrencePage> listHistoryOccurrences(
+    HistoryOccurrenceQuery query,
+  ) async => const HistoryOccurrencePage(occurrences: [], nextCursor: null);
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) {
+    if (failRead) {
+      turnCalls++;
+      throw StateError(
+        'not materialized yet: ordinary read failure must stay visible',
+      );
+    }
+    return super.listHistoryTurns(query);
+  }
+}

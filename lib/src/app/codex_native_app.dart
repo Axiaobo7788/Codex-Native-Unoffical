@@ -211,6 +211,15 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     }
     _conversationController.bindThread(selected);
     _diffController.bindThread(selected);
-    unawaited(_historyController.bindThread(selected));
+    // A just-created stock thread has no persisted history before its first
+    // turn. Reuse the catalog's existing admission marker; never reinterpret
+    // arbitrary history RPC failures as an empty conversation.
+    unawaited(
+      _historyController.bindThread(
+        selected,
+        knownUnmaterialized:
+            selected != null && !_threadController.isMaterialized(selected.id),
+      ),
+    );
   }
 }

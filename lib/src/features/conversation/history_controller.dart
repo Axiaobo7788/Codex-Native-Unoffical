@@ -26,6 +26,7 @@ class HistoryController extends ChangeNotifier {
   final List<HistoryTurn> _turns = [];
   final List<HistoryItem> _selectedTurnItems = [];
   ThreadSummary? _thread;
+  var _knownUnmaterialized = false;
   String? _turnCursor;
   String? _itemCursor;
   String? _selectedTurnId;
@@ -73,6 +74,7 @@ class HistoryController extends ChangeNotifier {
   };
 
   bool get supportsOccurrenceSearch =>
+      !_knownUnmaterialized &&
       _thread?.ephemeral == false &&
       (_occurrenceGateway?.supportsHistoryOccurrences ?? false);
   bool get occurrenceUnsupported => _occurrenceUnsupported;
@@ -300,13 +302,18 @@ class HistoryController extends ChangeNotifier {
     return List.unmodifiable(items);
   }
 
-  Future<void> bindThread(ThreadSummary? thread) async {
-    if (_thread?.id == thread?.id) {
+  Future<void> bindThread(
+    ThreadSummary? thread, {
+    bool knownUnmaterialized = false,
+  }) async {
+    final deferHistory = thread != null && knownUnmaterialized;
+    if (_thread?.id == thread?.id && _knownUnmaterialized == deferHistory) {
       _thread = thread;
       return;
     }
     _generation += 1;
     _thread = thread;
+    _knownUnmaterialized = deferHistory;
     _turns.clear();
     _clearSelectedItems();
     _resetOccurrenceSearch();
@@ -318,14 +325,14 @@ class HistoryController extends ChangeNotifier {
     _windowShifted = false;
     _lastEvictedItemIds = const [];
     _notify();
-    if (thread != null) {
+    if (thread != null && !_knownUnmaterialized) {
       await refresh();
     }
   }
 
   Future<void> refresh() async {
     final thread = _thread;
-    if (thread == null || _loadingTurns) {
+    if (thread == null || _knownUnmaterialized || _loadingTurns) {
       return;
     }
     final generation = _generation;

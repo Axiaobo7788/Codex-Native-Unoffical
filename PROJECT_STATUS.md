@@ -113,33 +113,38 @@ permission to lower the engineering or visual quality bar.
   `22bf94e` through normal merges. Shared gates and a fresh packaged public
   stock authentication/reload replay pass. The supported global authentication
   subset is MATCH; parallel/scoped/custom MCP workflows remain separate research.
-- **Active functional correction:**
-  `/var/tmp/native-codex-desktop-reasoning-stream`, branch
-  `agent/codex-desktop-reasoning-stream`, base `03b23c4`. The actual U3 replay
-  revealed live reasoning flattened to 240 characters before presentation.
-  Codex owns protocol/domain/controller/history adapters and related tests.
-  The 8 KiB/32-part coalesced projection now passes 615 default Flutter cases
-  (five opt-in skips), five enabled actual-stock cases, strict analysis,
-  68-root pure-Dart compilation, memory benchmark and two-job Linux release.
-  Three old-source red cases reproduce body/part/snapshot loss. Both peer P2s
-  (UTF-16 clipping and saved multipart boundaries) have red-before-green
-  evidence. Optional bounded `reasoningParts` preserves the presentation seam;
-  raw text gains no synthetic emphasis. The source-bound real packaged before/
-  after replay now passes: [evidence](docs/reverse/REASONING_PROJECTION_EVIDENCE.md).
-  No presentation file is rewritten for this systems correction.
-- **Track U / Gemini:** U3 `22bf94e` released its six presentation/test surfaces
-  after official-TUI handoff. Codex independently reviewed the diff and light/dark
-  captures, then merged it. Reasoning Markdown uses the measured 14 px hierarchy,
-  4/8 px rhythm and 140 px scroll cap; live observed duration has a completed
-  header while saved items without stock duration remain simply Thought.
-  The live projection correction above and signed-in comparison remain open;
-  Golden State A7 is still PARTIAL. Gemini accepted the A7 presentation follow-up
-  before A6 in `/var/tmp/native-gemini-u4-a6-user-markdown`, now based on
-  `0286a4d`. Its five locks are `diff_approval_output.dart`, `conversation.dart`,
-  `assistant_markdown.dart`, `activity_parity_test.dart` and
-  `assistant_markdown_test.dart`. It consumes typed parts for official first-part
-  emphasis while preserving raw Execution/search and all controller/protocol
-  surfaces. Shared checkpoint docs remain Codex-owned.
+- **Track F / Codex active correction:**
+  `/var/tmp/native-codex-desktop-new-thread-history`, branch
+  `agent/codex-desktop-new-thread-history`, base `27db663`. It reuses the
+  existing ThreadList materialization marker to defer history for a known new
+  empty thread and hydrate on the first readable transition. Ordinary history
+  RPC failures remain visible. The old-source app regression reproduces one
+  premature read; 37 history/thread cases, the lifecycle-complete product
+  regression and strict analysis pass. The product test's missing input frame
+  and incomplete active-to-idle lifecycle were corrected, with both negative
+  logs retained. The final case verifies zero premature reads, one first-turn
+  hydration and visible user input. Shared gates, real-stock before/after,
+  targeted peer audit and integration remain pending.
+- **Published reasoning data correction:** `0286a4d`, integrated in main
+  `27db663`, passes 615 default cases/five skips, five enabled stock cases,
+  analysis/pure-Dart/memory/release and source-bound actual-stock comparison.
+  The former 240-character loss is closed. [Evidence](docs/reverse/REASONING_PROJECTION_EVIDENCE.md)
+  keeps peer P2s and test/build negatives distinct from Human acceptance.
+- **Track U / Gemini:** U3 `22bf94e` is integrated. A7 follow-up commits
+  `8f2baaa` + `17619b9` retain provenance; the latter corrects an independently
+  revalidated current-ASAR predicate discrepancy. The owner reports 15 focused
+  passes. Root read the actual diff; final integrated/runtime verification is
+  still separate. Current A6 source is in
+  `/var/tmp/native-gemini-u4-a6-user-markdown`, covering conversation/message
+  bubble/theme/Markdown and related tests. It preserves the 16 KiB/128-pill
+  Markdown bounds. An encoded-image P1 blocks that slice's integration:
+  ResizeImage alone limits pixels, not full-file input. Gemini owns the bounded
+  provider correction; the encoded-read bound is now present, and a remaining
+  unbounded pending-load queue must be capped/retired before integration. Root
+  is reviewing the actual path and lifecycle.
+  Parent app import-header ownership is released to Gemini only for required
+  provider imports; Root's selection/history hook stays frozen and disjoint.
+  Shared checkpoint docs remain Codex-owned. Golden State A remains PARTIAL.
 - Heavy validation is **Gemini-owned** after Codex's explicit release and verified
   replay teardown. Codex is source/docs-only until the next lease handoff. Flutter tests use
   `--concurrency=1`; Cargo uses two jobs; Linux release uses `--config-only`
@@ -154,31 +159,26 @@ permission to lower the engineering or visual quality bar.
 
 ## Current checkpoints
 
-- **Current functional source `0286a4dfbc99390f7ad9c35d6e74920ae25b2d64`:**
-  bounded reasoning projection, peer P2 corrections, shared/release gates and
-  source-bound actual-stock before/after pass. Published on
-  `agent/codex-desktop-reasoning-stream`; exact branch CI
-  [43115598909](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43115598909)
-  remains in progress at this checkpoint. Main has not integrated it yet.
-- **Published combined source `03b23c44206ef9d38a580af28ee8158cc9ad1e43`:**
-  preserves MCP `beac41f`, peer corrections `0cdf0e8`, timeout `0943cd9`,
-  Gemini U2 `d725eba` and U3 `22bf94e`. All 376 tracked files were hashed
-  before/after shared validation; 607 default Flutter cases plus five opt-in
-  skips and five enabled actual-stock cases pass. Exact branch CI
-  [43111251522](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43111251522)
-  passed all three platforms. Main now includes it through `abd0e41`.
-- Previous branch `0cdf0e8` passed all three hosted platforms at
-  [43101623112](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43101623112).
-- **Last hosted-verified main `abd0e413222994cc8961f2dd75c08ad7dad99083`:**
+Git is canonical for the current HEAD and working tree. These are immutable
+source/validation checkpoints, rather than a second branch-state database.
+
+- **Current verified main `27db663b8a4d29b658401d7c03abf6b4f37d09ec`:**
+  [main CI43119069301](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43119069301)
+  and [branch CI43116961616](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43116961616)
+  both passed all three platforms at the exact SHA. It contains reasoning
+  source `0286a4d`, MCP authentication/timeouts, U2/U3, and all earlier catalog,
+  typography and cold-resume corrections. New-thread admission and U4 are not
+  integrated into that checkpoint.
+- **Previous combined source `03b23c4` / main `abd0e41`:** shared 607-case
+  checkpoint and actual global MCP login/reload pass; exact main
   [43113451050](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43113451050)
-  passed Linux verification, Windows and macOS. It includes MCP/U2/U3 and
-  preserves prior catalog, typography and cold-resume corrections. The current
-  reasoning systems slice is not yet integrated into that checkpoint.
-- Older A6/A7/Customize/question/Goal narratives and prior CI counts remain in
-  [checkpoint history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md).
+  passed all platforms. Detailed source-bound results remain in
+  [MCP evidence](docs/reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
+- Older A6/A7/Customize/question/Goal narratives remain in
+  [history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md).
   [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) remains the visual
-  contract. A6/A7 and the overall primary screen remain `PARTIAL`; a local
-  checkpoint does not establish Human acceptance or Desktop completion.
+  contract. A6/A7 and the overall primary screen remain PARTIAL. A green source
+  checkpoint is not Human acceptance or Desktop completion.
 
 ## Current product and architecture
 
