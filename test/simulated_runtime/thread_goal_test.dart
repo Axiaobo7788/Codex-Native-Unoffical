@@ -12,7 +12,7 @@ void main() {
   ) async {
     final harness = _GoalHarness()
       ..goal = const ThreadGoal(
-        objective: 'Persisted objective',
+        objective: 'Saved',
         status: ThreadGoalStatus.paused,
         createdAtSeconds: 1,
         updatedAtSeconds: 1,
@@ -29,20 +29,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(badge, findsNothing);
     expect(harness.goalReads, 1);
-    expect(
-      find.textContaining(
-        'Paused goal  Persisted objective',
-        findRichText: true,
-      ),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Saved •', findRichText: true), findsOneWidget);
     expect(find.text('1h 1m 1s'), findsOneWidget);
+    final goalTitle = find.byKey(const ValueKey('desktop-thread-goal-title'));
+    final elapsed = find.text('1h 1m 1s');
+    expect(find.descendant(of: goalTitle, matching: elapsed), findsOneWidget);
+    expect(tester.widget<Text>(elapsed).style!.fontSize, 14);
+    expect(
+      tester.getRect(elapsed).right,
+      lessThan(tester.getRect(goalTitle).right - 32),
+    );
+    expect(
+      tester.widget<Text>(elapsed).style!.height! *
+          tester.widget<Text>(elapsed).style!.fontSize!,
+      20,
+    );
+    for (final key in ['clear', 'status', 'edit']) {
+      expect(
+        tester.getSize(find.byKey(ValueKey('desktop-thread-goal-$key'))),
+        const Size.square(24),
+      );
+    }
     final composer = find.byKey(const ValueKey('floating_composer'));
     final stripRect = tester.getRect(strip);
     final composerRect = tester.getRect(composer);
     expect(stripRect.bottom, lessThan(composerRect.top));
     expect(stripRect.left - composerRect.left, 13);
     expect(composerRect.right - stripRect.right, 13);
+    expect(
+      tester
+              .getRect(
+                find.descendant(
+                  of: goalTitle,
+                  matching: find.byIcon(Icons.track_changes_outlined),
+                ),
+              )
+              .left -
+          stripRect.left,
+      11,
+    );
+    expect(
+      stripRect.right -
+          tester
+              .getRect(find.byKey(const ValueKey('desktop-thread-goal-edit')))
+              .right,
+      11,
+    );
+    await tester.tap(elapsed);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('desktop-goal-editor-objective')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('switching to Changes preserves only the current Goal draft', (

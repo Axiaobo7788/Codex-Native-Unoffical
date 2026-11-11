@@ -2183,30 +2183,30 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         : null;
     final title = Row(
       children: [
-        Icon(Icons.track_changes_outlined, size: 16, color: theme.textMuted),
+        Icon(Icons.track_changes_outlined, size: 14, color: theme.textMuted),
         const SizedBox(width: ThemeTokens.space2),
-        Expanded(
+        Flexible(
           child: Text.rich(
             TextSpan(
               children: [
                 TextSpan(
                   text: status,
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(color: theme.textPrimary),
                 ),
-                TextSpan(
-                  text: '  ${goal.objective}',
-                  style: TextStyle(color: theme.textSecondary),
-                ),
+                const WidgetSpan(child: SizedBox(width: ThemeTokens.space1)),
+                TextSpan(text: '${goal.objective}${showElapsed ? ' •' : ''}'),
               ],
             ),
-            style: Theme.of(context).textTheme.bodySmall,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: theme.textSecondary,
+              fontSize: 14,
+              height: 20 / 14,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        if (showElapsed) _DesktopGoalUsage(goal: goal, budgetText: budgetText),
       ],
     );
     const inlineInset = OfficialCodexTheme.composerTrayInlineInset;
@@ -2226,9 +2226,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             minHeight: OfficialCodexTheme.navRowHeight,
           ),
           padding: EdgeInsetsDirectional.fromSTEB(
-            toggleEditor == null ? 12 : 4,
+            toggleEditor == null ? 10 : 2,
             0,
-            4,
+            10,
             0,
           ),
           decoration: BoxDecoration(
@@ -2254,8 +2254,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         child: title,
                       ),
               ),
-              if (showElapsed)
-                _DesktopGoalUsage(goal: goal, budgetText: budgetText),
               if (canManage) ...[
                 CodexIconButton(
                   key: const ValueKey('desktop-thread-goal-clear'),
@@ -2263,10 +2261,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   onPressed: actionsEnabled
                       ? () => applyChange(clear: true)
                       : null,
-                  size: 28,
-                  icon: const Icon(Icons.delete_outline, size: 16),
+                  size: 24,
+                  icon: const Icon(Icons.delete_outline, size: 14),
                 ),
-                if (nextStatus != null)
+                if (nextStatus != null) ...[
+                  const SizedBox(width: ThemeTokens.space1),
                   CodexIconButton(
                     key: const ValueKey('desktop-thread-goal-status'),
                     tooltip: nextStatus == ThreadGoalStatus.active
@@ -2275,21 +2274,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     onPressed: actionsEnabled
                         ? () => applyChange(status: nextStatus)
                         : null,
-                    size: 28,
+                    size: 24,
                     icon: Icon(
                       nextStatus == ThreadGoalStatus.active
                           ? Icons.play_circle_outline
                           : Icons.pause_circle_outline,
-                      size: 16,
+                      size: 14,
                     ),
                   ),
+                ],
+                const SizedBox(width: ThemeTokens.space1),
                 CodexIconButton(
                   key: const ValueKey('desktop-thread-goal-edit'),
                   tooltip: editorOpen
                       ? 'Close goal editor from strip'
                       : 'Edit goal',
                   onPressed: toggleEditor,
-                  size: 28,
+                  size: 24,
                   icon: const Icon(Icons.open_in_full_rounded, size: 14),
                 ),
               ],

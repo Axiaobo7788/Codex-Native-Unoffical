@@ -67,15 +67,15 @@ class _DesktopGoalUsageState extends State<_DesktopGoalUsage> {
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: ThemeTokens.space2),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 92),
-        child: Text(
-          widget.budgetText ?? _elapsedLabel(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall
-              ?.copyWith(color: theme.textMuted),
+      padding: const EdgeInsetsDirectional.only(start: 6),
+      child: Text(
+        widget.budgetText ?? _elapsedLabel(),
+        maxLines: 1,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: theme.textSecondary,
+          fontSize: 14,
+          height: 20 / 14,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
