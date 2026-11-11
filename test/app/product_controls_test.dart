@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_composer.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_sidebar_row.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_menu.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
@@ -96,6 +97,45 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('project new chat shortcut is reachable from keyboard focus', (
+    tester,
+  ) async {
+    final runtime = await _pumpSelectedApp(tester);
+    final project = find.widgetWithText(CodexSidebarRow, 'workspace');
+    final action = find.byKey(const ValueKey('project-new-thread-/workspace'));
+    final visibility = find.byKey(
+      const ValueKey('project-new-thread-visibility-/workspace'),
+    );
+    expect(project, findsOneWidget);
+    expect(tester.widget<Opacity>(visibility).opacity, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    final projectFocus = Focus.of(
+      tester.element(
+        find
+            .descendant(of: project, matching: find.byType(GestureDetector))
+            .first,
+      ),
+    );
+    projectFocus.requestFocus();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Opacity>(visibility).opacity, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Opacity>(visibility).opacity, 1);
+    final actionFocus = Focus.of(
+      tester.element(
+        find
+            .descendant(of: action, matching: find.byType(GestureDetector))
+            .last,
+      ),
+    );
+    expect(actionFocus.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(runtime.startedThreadCwds, ['/workspace']);
+  });
 
   testWidgets(
     'compact thread selection and reselection open conversation while refresh or failed read keeps Threads open and Escape closes sidebar',

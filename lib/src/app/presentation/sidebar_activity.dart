@@ -749,6 +749,7 @@ class _ThreadPanelState extends State<_ThreadPanel> {
         }
         if (row is _ProjectHeading) {
           return _ProjectHeadingRow(
+            key: ValueKey('project-heading-${row.directory}'),
             heading: row,
             onToggleCollapse: () {
               setState(() {
@@ -1664,8 +1665,9 @@ final class _ProjectHeading {
   final bool collapsed;
 }
 
-class _ProjectHeadingRow extends StatelessWidget {
+class _ProjectHeadingRow extends StatefulWidget {
   const _ProjectHeadingRow({
+    super.key,
     required this.heading,
     required this.onToggleCollapse,
     this.onNewThreadInProject,
@@ -1676,42 +1678,80 @@ class _ProjectHeadingRow extends StatelessWidget {
   final VoidCallback? onNewThreadInProject;
 
   @override
+  State<_ProjectHeadingRow> createState() => _ProjectHeadingRowState();
+}
+
+class _ProjectHeadingRowState extends State<_ProjectHeadingRow> {
+  var _focusWithin = false;
+
+  @override
   Widget build(BuildContext context) {
+    final heading = widget.heading;
     final palette = ThemeTokens.of(context);
     final leadingIcon = heading.collapsed
         ? Icons.folder_outlined
         : Icons.folder_open_outlined;
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 2.0),
-      child: CodexSidebarRow(
-        height: 32.0,
-        tooltip: heading.directory,
-        title: _projectName(heading.directory),
-        leading: Icon(leadingIcon, size: 15, color: palette.textSecondary),
-        onTap: onToggleCollapse,
-        trailingBuilder: (context, isHovered) {
-          if (isHovered && onNewThreadInProject != null) {
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onNewThreadInProject,
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(
-                  Icons.add_rounded,
-                  size: 15,
-                  color: palette.textSecondary,
-                ),
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Focus(
+        canRequestFocus: false,
+        onFocusChange: (focused) => setState(() => _focusWithin = focused),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2.0),
+          child: FocusTraversalOrder(
+            order: const NumericFocusOrder(0),
+            child: CodexSidebarRow(
+              height: 32.0,
+              tooltip: heading.directory,
+              title: _projectName(heading.directory),
+              leading: Icon(
+                leadingIcon,
+                size: 15,
+                color: palette.textSecondary,
               ),
-            );
-          } else if (heading.collapsed) {
-            return Text(
-              '${heading.count}',
-              style: Theme.of(context).textTheme.labelSmall,
-            );
-          }
-          return const SizedBox.shrink();
-        },
+              onTap: widget.onToggleCollapse,
+              trailingBuilder: (context, hovered) {
+                final showAction = hovered || _focusWithin;
+                final count = Text(
+                  '${heading.count}',
+                  style: Theme.of(context).textTheme.labelSmall,
+                );
+                if (widget.onNewThreadInProject == null) {
+                  return heading.collapsed ? count : const SizedBox.shrink();
+                }
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (heading.collapsed && !showAction) count,
+                    Opacity(
+                      key: ValueKey(
+                        'project-new-thread-visibility-${heading.directory}',
+                      ),
+                      opacity: showAction ? 1 : 0,
+                      alwaysIncludeSemantics: true,
+                      child: IgnorePointer(
+                        ignoring: !showAction,
+                        child: FocusTraversalOrder(
+                          order: const NumericFocusOrder(1),
+                          child: CodexIconButton(
+                            key: ValueKey(
+                              'project-new-thread-${heading.directory}',
+                            ),
+                            tooltip: 'New chat in project',
+                            size: 22,
+                            onPressed: widget.onNewThreadInProject,
+                            icon: const Icon(Icons.add_rounded, size: 15),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
