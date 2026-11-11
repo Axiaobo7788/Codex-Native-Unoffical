@@ -156,10 +156,17 @@ Use the official agy TUI only.
 
 Gemini and Codex are equal peers:
 
-- Gemini preferentially owns refreshed official visual/structural evidence;
-- Codex preferentially owns Flutter translation and architecture/regression
-  protection;
+- Gemini is the default end-to-end presentation owner during Golden-State
+  reconstruction. It refreshes official evidence, maps the surface, implements
+  Flutter in its own worktree, captures Native and corrects measured divergence;
+- Codex preferentially owns architecture, state, bounded-memory and protocol
+  integrity, targeted regressions, real stock validation, actual-diff review,
+  integration and shared gates;
 - either may challenge or own a slice when it has stronger current context.
+
+Keep coherent row or screen-impact clusters under one presentation owner.
+Return presentation findings to that owner for correction. Ownership changes
+follow the explicit exceptions in the collaboration contract.
 
 Every loop is:
 
