@@ -961,8 +961,38 @@ fixture image pointed to `https://example.invalid/...` and logged
 fallback text only; loopback network-absence and persisted `turn_aborted`
 proof belong to the peer's instrumented sentinel replay
 (`/var/tmp/native-ui-r0.BbOvHT/integrated-a6-a11-walk-sentinel.sh`).
-Loopback `gpt-5.4` metadata warnings, Xvfb software-GL/initial-resize
-warnings, `640 px` vs `624 px` specimen width, State B Home hero empty-Send
+The minimal loopback `gpt-5.4` profile does not establish account-backed model
+metadata parity. Xvfb software-GL/initial-resize warnings, `640 px` vs `624 px`
+specimen width, State B Home hero empty-Send
 gating and unavailable signed-in official live captures remain recorded
 evidence limits (`MACHINE VERIFIED` + `AGENT REAL-USE VERIFIED`, `NOT YET
 HUMAN VERIFIED`).
+
+## Integrated rich-prose verification
+
+Shared source `2446dd0` integrates `d0882b9`, `316a4f4` and `50bda90` through
+a normal merge. Its exact presentation/test sources match the isolated ASCII
+validation copy. Format (193 files, zero changes), strict Dart analysis, 549
+default Flutter cases, five separately enabled direct-stock cases, the
+65-root pure-Dart boundary, bounded history/output benchmark, Rust
+formatting/Clippy/100 tests and Linux release/83-library closure passed.
+
+The independent packaged replay at
+`/var/tmp/native-integrated-a6-a11-50bda90/` reproduced the rich prose and
+ordinary action states. Its image URL targets a loopback observer whose
+positive-control request was observed before reset. After Native exited,
+the observer count remained zero. This verifies the tested image URL. The
+stock rollout recorded the latest turn as `turn_aborted` / `interrupted`
+before application shutdown. App, bundled Host and stock then exited.
+The independent pure-Dart runtime smoke passed with 36 ms shutdown.
+
+Peer captures, CSS specimen, metrics and helper source are separately
+preserved at `/var/tmp/native-ui-r0.BbOvHT/peer-a6-a11-d0882b9-evidence/`.
+Both replay artifact sets have SHA256 manifests. The original pre-UI image
+counter remains insufficient network evidence. The CSS specimen is manually
+assembled, at 624 px versus Native's 640 px prose width. Prior bottom-stack
+model-metadata fallback warnings remain recorded. The current replay retains
+portal/AT-SPI/PipeWire/DRI3 warnings and the recovered initial OpenGL resize
+timeout. Unicode-path analysis, signed-in official live
+comparison and Human acceptance have separate evidence limits. A6 inline
+pill rendering and A1 destination structure remain machine-actionable.

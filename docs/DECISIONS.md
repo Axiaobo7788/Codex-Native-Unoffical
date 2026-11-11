@@ -2548,10 +2548,13 @@ work on a divergent presentation would increase later rework.
    backlog as DEFERRED_BY_UI_PRIORITY.
 5. Preserve working domain/protocol/controller behavior and bounded-memory
    invariants; prefer presentation recomposition over business-logic rewrites.
-6. Codex and Gemini remain equal peers through the official agy TUI. Gemini
-   preferentially refreshes current official visual/structural evidence and
-   Codex preferentially translates it into Flutter, with evidence-based peer
-   review.
+6. Codex and Gemini remain equal peers through the official agy TUI. During
+   Golden-State reconstruction, the accepted `c42eac5` governance amendment
+   makes Gemini the default end-to-end presentation owner, including Flutter
+   translation and capture. Codex owns systems-integrity review, realistic
+   runtime verification, integration and shared gates. This supersedes the
+   earlier research-only Gemini / Codex-translation routing hint. Ownership
+   exceptions follow [the collaboration contract](AGENT_COLLABORATION.md#golden-state-presentation-owner-mode).
 7. Track each screen in a Golden-State matrix with current official and
    Native evidence, implementation revisions, deltas and next corrections.
    Machine-actionable rows remain active before screen-wide subjective review.

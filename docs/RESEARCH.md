@@ -23,6 +23,15 @@ interval. A save just after mount can remain below one elapsed minute at
 the first tick. The matrix keeps that timing observation alongside the
 calibrated autonomous-tick capture and the supported Revert selection rule.
 
+The subsequent A6/A11 cluster rechecked build `25894` root margins, loose
+lists, quotes, tables, separators and the `23355` / `272587` code card.
+`309406` gates the 36 px dictation override, leaving the supported ordinary
+Electron primary action at 28 px with a 16 px icon. The matrix distinguishes
+the manually assembled Chromium CSS specimen from a signed-in official live
+capture. It also retains the inline-code pill as machine-actionable research
+and separates visual blocked-image evidence from the positively controlled,
+post-Native loopback image-sentinel check.
+
 ### Evidence boundary and sources
 
 The official Codex Desktop UI is not published as an open Flutter or reusable UI

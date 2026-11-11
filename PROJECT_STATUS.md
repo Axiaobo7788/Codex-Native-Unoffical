@@ -61,38 +61,40 @@ and deferred unless they expose a material defect.
 
 The wide shell, supported stock conversation controls, lazy activity/output,
 Goal side tab and question/composer stack have working source translations.
-Current deltas remain row-scoped in the Golden-State matrix. Available
-source for destination/page hierarchy, prose edges, specialized activity and
-composer branch selection is being re-evaluated before the next ownership
-pair. Home, open Changes, Review, compact and dark keep separate state gates.
+Current deltas remain row-scoped in the Golden-State matrix. The rich-prose
+cluster and ordinary composer action have current source translations.
+Routed Customize destination/sidebar/focus structure is the next coherent
+candidate. Inline-code pill rendering remains machine-actionable research.
+Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- Shared source `53a76d5` integrates Gemini's A9–A11 bottom-stack cluster and
-  Codex's request operation-lifetime correction. The previous exact pushed
-  checkpoint `165d7c5` passed all three hosted CI jobs. Current source passed
-  format, strict ASCII analysis, 547 default Flutter cases, five stock cases,
-  pure-Dart boundary, memory benchmark and Rust gates. The integrated Linux
-  release, 83-library closure, timed stock walkthrough and pure-Dart runtime
-  smoke passed before the next push.
-- Gemini is researching the next coherent Golden-State row using current
-  source and evidence. Codex owns shared runtime validation, actual-diff
-  review and integration. Presentation remains Gemini-owned by default.
-- The request controller keeps one typed operation record with a unique
-  Object token. Late completion cannot clear a later submission, overwrite
-  its error or remove a reused ID after resolution. Unknown cross-kind
-  resolution is ignored. Typed authoritative resolution still retires an
-  active write after its row leaves the bounded projection. Seven new
-  controller regressions and the existing widget/protocol/cross-feature
-  cases passed. The delayed race is typed-test evidence.
-- Peer review accepted the operation-kind correction. The proposed retirement
-  on arbitrary same-ID replacement or projection eviction was reclassified
-  NOT REPRODUCED for the supported adapter. It suppresses in-flight duplicate
-  IDs, emits typed resolution on close and shares a 32-request upstream
-  budget. Projection eviction preserves write serialization.
+- Shared source `2446dd0` integrates Gemini's A6/A11 cluster (`d0882b9`,
+  `316a4f4`, `50bda90`). The actual-diff review found no P0/P1. The owner
+  corrected Copy keyboard focus and the code-card border. Inline pill
+  rendering remains a PARTIAL-row machine follow-up.
+- The exact published `245204e` checkpoint passed all three hosted CI jobs.
+  Current source passed format, strict ASCII analysis, 549 default Flutter
+  cases, five direct-stock cases, pure-Dart boundary, memory benchmark and
+  Rust gates. Its independent Linux release/83-library closure, instrumented
+  packaged-stock replay and pure-Dart runtime smoke passed.
+- Gemini released the completed presentation surfaces. Both peers selected
+  A1 routed Customize as the next high-value candidate. Refresh the official
+  agy context and negotiate its writable surfaces after integration/CI.
+  Gemini remains the default presentation writer. Codex owns systems-risk
+  review, realistic runtime validation, integration and shared gates.
 
 ## Current checkpoints
 
+- `2446dd0` adds measured loose-list, quote, table, separator and fenced-code
+  geometry through the bounded single-parse Markdown renderer. The code card
+  has keyboard Copy and timer cleanup. Ordinary Desktop Send/Stop/Steer uses
+  the verified 28 px / 16 px branch, with compact targets preserved. The
+  independent stock replay used a positively tested loopback image sentinel,
+  checked its count after Native exited, and verified persisted interruption
+  before application shutdown. The original peer pre-UI image counter was
+  insufficient network evidence. Both capture sets and that limitation remain
+  recorded in the matrix. This cluster leaves Golden State A active.
 - `53a76d5` integrates `d09fe2e` + `7b30475` and `c910a97` + `7d416aa`.
   Desktop stock questions share one title/status header. Choice rows map the
   recommendation badge, markers, hover transfer and return affordance.
@@ -130,6 +132,7 @@ and [preceding Desktop history](docs/history/DESKTOP_UI_CHECKPOINTS_through_fe67
 - The global sidebar groups and filters loaded threads. Local Section browsing and explicit saved-thread search reuse its 100-thread working-set cap. Section definitions remain capped at 64. Switching scopes preserves the active conversation outside the list. Sidebar, Section rows, and saved-thread search currently use the configured stock provider. Cross-provider visibility and cold resume are separate research questions.
 - Saved local threads can show an unread marker from stock. The sidebar Mark as read and Mark as unread actions use the displayed revision. A conflict refreshes the receipt and requires a fresh user action.
 - Local composer Send checks queue presence before implicitly resuming a cold thread. Pending or inconclusive results offer a separate Resume and retain the draft. Identified local user items appear in the live timeline. Stock IDs drive deduplication, and a local start or steer keeps its existing visual row when echoed.
+- Interactive request submission keeps one typed operation token. Late completion cannot clear another submission or remove a reused ID after authoritative resolution. Typed resolution retires an active write even after projection eviction. The supported adapter suppresses duplicate pending IDs and shares the 32-request budget. Projection eviction preserves serialization.
 - Conversation Find filters loaded messages. A separate action searches saved messages on eligible local stock threads, one 16-hit page at a time. Opening a hit verifies a bounded turn window before replacing the current one. Legacy threads retain loaded-message Find.
 - Stock Pinned is protected by its reserved ID. Eligible unsectioned pins use stock membership after a fresh read. Custom-section threads and runtimes without that built-in retain explicitly labeled session pins.
 - Local Goal actions load the selected thread’s persisted goal on demand and support explicit paused creation, objective changes, pause/resume, and confirmed clear. Stock owns continuation. Desktop Review offers working-tree, base-branch, commit/ref, and custom targets through stock `review/start`. Both Review entry points apply the cold queue admission rule.
@@ -141,20 +144,22 @@ and [preceding Desktop history](docs/history/DESKTOP_UI_CHECKPOINTS_through_fe67
 
 ## Verification and pending gates
 
-- The current presentation source at `53a76d5` passed 547 default Flutter cases and
+- The current presentation source at `2446dd0` passed 549 default Flutter cases and
   five separately enabled direct-stock integration cases. Dart format and
   strict analysis passed in an ASCII physical-path source copy. This does
   not fix the recorded Unicode-path Flutter LSP framing failure.
-- The Linux release and its 83-library runtime closure passed. Packaged
-  walkthroughs exercised local project actions, saved activity/output,
-  question steps, custom answers and pending-turn interruption through
-  bundled Host and installed stock `0.167.0-alpha.3.2`.
+- The Linux release and its 83-library runtime closure passed. The current
+  packaged walkthrough exercised rich prose, Send/Stop/Esc/Steer presentation
+  and persisted interruption through bundled Host and installed stock
+  `0.167.0-alpha.3.2`. The pure-Dart runtime smoke shut down in 36 ms.
+  Earlier checkpoint walkthroughs cover project actions, saved output,
+  structured questions and Goal updates.
 - The pure-Dart boundary checked 65 roots. The history benchmark retained
   100 of 1,000 turns while exercising ten 3 MiB command payloads. The
   unchanged Rust tree passed formatting, Clippy and 100 tests.
-- The latest confirmed shared CI checkpoint is `165d7c5`.
-  Later exact-HEAD runs remain separate until their results are read.
-  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42956195792)
+- The preceding published `245204e` passed all three hosted CI jobs.
+  Each subsequent pushed HEAD requires its own result check.
+  [Hosted CI](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/42965989053)
 - Signed-in official live captures, subjective interaction acceptance
   and unavailable physical devices remain evidence gates on their own
   surfaces. The primary UI has machine-actionable rows in Golden State A.
