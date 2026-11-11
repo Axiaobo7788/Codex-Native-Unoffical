@@ -1,6 +1,7 @@
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -305,17 +306,34 @@ print('bounded');
     await tester.pumpWidget(
       _app(
         const AssistantMarkdown(
-          data: '- First item\n\n- Second item',
+          data:
+              '- First loose paragraph\n\n'
+              '  Continuation paragraph\n\n'
+              '- Second loose item',
           completed: true,
           proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
         ),
       ),
     );
-    final first = find.text('First item', findRichText: true);
-    final second = find.text('Second item', findRichText: true);
+    final first = find.text('First loose paragraph', findRichText: true);
+    final continuation = find.text(
+      'Continuation paragraph',
+      findRichText: true,
+    );
+    final second = find.text('Second loose item', findRichText: true);
+    final bodySize = Theme.of(tester.element(first))
+        .textTheme
+        .bodyMedium!
+        .fontSize!;
+    // Inside a loose list item, `li > p + p` uses `4 * S` (`1.0em`), while
+    // `li + li` keeps zero inter-item margin.
     expect(
-      tester.getTopLeft(second).dy - tester.getTopLeft(first).dy,
-      greaterThan(tester.getSize(first).height),
+      tester.getTopLeft(continuation).dy - tester.getBottomLeft(first).dy,
+      closeTo(bodySize, 0.01),
+    );
+    expect(
+      tester.getTopLeft(second).dy - tester.getBottomLeft(continuation).dy,
+      closeTo(0, 0.01),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(
@@ -477,7 +495,7 @@ Invalid scheme citation [cite: Unsafe](javascript:void).
       );
       expect(find.byKey(const ValueKey('assistant-citation-2')), findsNothing);
 
-      // Verify fenced code block geometry (8px radius, 0.5px hairline border, 32px header)
+      // Verify compact fenced code block geometry (8px radius, 0.5px hairline border, 32px header)
       final codeHeaderLabel = find.text('html');
       expect(codeHeaderLabel, findsOneWidget);
       final headerContainer = tester.widget<Container>(
@@ -486,6 +504,377 @@ Invalid scheme citation [cite: Unsafe](javascript:void).
             .first,
       );
       expect(headerContainer.constraints?.maxHeight, 32.0);
+    },
+  );
+
+  testWidgets(
+    'desktop rich prose translates loose lists, blockquote, fenced code, table, hr, and root edges',
+    (tester) async {
+      final launched = <Uri>[];
+      const fixtureSource = '''# Bounded prose fixture
+
+Opening paragraph with **strong text**, *emphasis* and `inline code`.
+
+Second paragraph establishes consecutive paragraph spacing.
+
+## Loose list
+
+- First list paragraph.
+
+  A second paragraph inside the same item.
+
+- Second item with a [fixture link](https://example.invalid/native-prose).
+
+1. First ordered item.
+
+   Another paragraph within the ordered item.
+
+2. Last ordered item.
+
+### Quoted context
+
+> First quoted paragraph.
+>
+> Second quoted paragraph with `quoted code`.
+>
+> - A nested quoted item.
+
+Paragraph after the quote.
+
+```dart
+int add(int first, int second) {
+  return first + second;
+}
+```
+
+Paragraph after fenced code.
+
+| Surface | State | Evidence |
+| :--- | :---: | ---: |
+| Paragraph | Complete | 1 |
+| [Table link](https://example.invalid/table) | Complete | 2 |
+| Quote and code | Complete | 3 |
+
+Paragraph after the table.
+
+---
+
+Final paragraph. A remote image stays an explicit blocked preview.
+
+![Fixture image](https://example.invalid/never-load-native-prose.png)
+
+<div>Literal HTML remains text.</div>''';
+
+      await tester.pumpWidget(
+        _app(
+          SingleChildScrollView(
+            child: SizedBox(
+              width: 624,
+              child: AssistantMarkdown(
+                data: fixtureSource,
+                completed: true,
+                proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+                externalLinkLauncher: (uri) async {
+                  launched.add(uri);
+                  return true;
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final root = find.byKey(const ValueKey('assistant-markdown'));
+      expect(root, findsOneWidget);
+      final bodySize = Theme.of(tester.element(root))
+          .textTheme
+          .bodyMedium!
+          .fontSize!;
+      final space = bodySize / 4;
+
+      // Root-edge: first child (`h1`) and last child (literal HTML paragraph)
+      // carry zero outer top/bottom margin.
+      final firstHeading = find.text('Bounded prose fixture');
+      final lastLiteral = find.text(
+        '<div>Literal HTML remains text.</div>',
+        findRichText: true,
+      );
+      expect(
+        tester.getTopLeft(firstHeading).dy,
+        closeTo(tester.getTopLeft(root).dy, 0.01),
+      );
+      expect(
+        tester.getBottomLeft(lastLiteral).dy,
+        closeTo(tester.getBottomLeft(root).dy, 0.01),
+      );
+
+      // Loose ordered list: `li > p + p` = `4 * S` (`1.0em`), `li + li` = `0`.
+      final orderedP1 = find.text('First ordered item.', findRichText: true);
+      final orderedP2 = find.text(
+        'Another paragraph within the ordered item.',
+        findRichText: true,
+      );
+      final orderedItem2 = find.text('Last ordered item.', findRichText: true);
+      expect(
+        tester.getTopLeft(orderedP2).dy - tester.getBottomLeft(orderedP1).dy,
+        closeTo(bodySize, 0.01),
+      );
+      expect(
+        tester.getTopLeft(orderedItem2).dy - tester.getBottomLeft(orderedP2).dy,
+        closeTo(0, 0.01),
+      );
+
+      // Blockquote: `2 * S` top/bottom padding, `6 * S` inline-start padding,
+      // `1 * S` vertical bar, `0` internal paragraph/list gap, and `2 * S`
+      // (`0.5em`) collapsed gap before the following paragraph.
+      final blockquote = find.byKey(
+        const ValueKey('desktop-markdown-blockquote-0'),
+      );
+      final quoteP1 = find.text('First quoted paragraph.', findRichText: true);
+      final quoteP2 = find.textContaining(
+        'Second quoted paragraph with',
+        findRichText: true,
+      );
+      final quoteNested = find.text(
+        'A nested quoted item.',
+        findRichText: true,
+      );
+      final afterQuote = find.text(
+        'Paragraph after the quote.',
+        findRichText: true,
+      );
+      expect(
+        tester.getTopLeft(quoteP1).dx - tester.getTopLeft(blockquote).dx,
+        closeTo(space * 6, 0.01),
+      );
+      expect(
+        tester.getTopLeft(quoteP1).dy - tester.getTopLeft(blockquote).dy,
+        closeTo(space * 2, 0.01),
+      );
+      expect(
+        tester.getBottomLeft(blockquote).dy -
+            tester.getBottomLeft(quoteNested).dy,
+        closeTo(space * 2, 0.01),
+      );
+      expect(
+        tester.getTopLeft(quoteP2).dy - tester.getBottomLeft(quoteP1).dy,
+        closeTo(0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(quoteNested).dy - tester.getBottomLeft(quoteP2).dy,
+        closeTo(0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(afterQuote).dy - tester.getBottomLeft(blockquote).dy,
+        closeTo(space * 2, 0.01),
+      );
+
+      // Desktop fenced code block: `20px` radius, `48px` header, `'Dart'` label,
+      // and `5 * S` (`1.25em`) outer top/bottom margins.
+      final codeBlock = find.byKey(
+        const ValueKey('desktop-markdown-code-block'),
+      );
+      final codeContainer = tester.widget<Container>(codeBlock);
+      final codeDecoration = codeContainer.decoration! as BoxDecoration;
+      expect(
+        codeDecoration.borderRadius,
+        BorderRadius.circular(OfficialCodexTheme.codeBlockRadius),
+      );
+      expect(
+        (codeDecoration.border! as Border).top.width,
+        OfficialCodexTheme.codeBlockBorderWidth,
+      );
+      expect(find.text('Dart'), findsOneWidget);
+      final codeCopyButton = find.byKey(
+        const ValueKey('desktop-markdown-code-copy'),
+      );
+      expect(tester.getSize(codeCopyButton), const Size(28, 28));
+      expect(
+        tester.getSize(
+          find.descendant(
+            of: codeCopyButton,
+            matching: find.byIcon(Icons.copy_rounded),
+          ),
+        ),
+        const Size(16, 16),
+      );
+      String? copiedText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedText =
+                (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final codeCopyTarget = find.descendant(
+        of: codeCopyButton,
+        matching: find.byType(GestureDetector),
+      );
+      final codeCopyFocusNode = Focus.of(tester.element(codeCopyTarget.first));
+      codeCopyFocusNode.requestFocus();
+      await tester.pump();
+      expect(codeCopyFocusNode.hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        copiedText,
+        'int add(int first, int second) {\n  return first + second;\n}',
+      );
+      expect(
+        find.descendant(
+          of: codeCopyButton,
+          matching: find.byIcon(Icons.check_rounded),
+        ),
+        findsOneWidget,
+      );
+      final afterCode = find.text(
+        'Paragraph after fenced code.',
+        findRichText: true,
+      );
+      expect(
+        tester.getTopLeft(codeBlock).dy - tester.getBottomLeft(afterQuote).dy,
+        closeTo(space * 5, 0.01),
+      );
+      expect(
+        tester.getTopLeft(afterCode).dy - tester.getBottomLeft(codeBlock).dy,
+        closeTo(space * 5, 0.01),
+      );
+
+      // Table: `4 * S` (`1.0em`) top margin, `2 * S` (`0.5em`) gap before the
+      // following paragraph, borderless outer/vertical grid, strong header
+      // bottom border, light non-last body row borders, no last-row border,
+      // column alignment (`left`, `center`, `right`), and working cell links.
+      final tableFinder = find.byKey(
+        const ValueKey('desktop-markdown-table-0'),
+      );
+      final tableWidget = tester.widget<Table>(tableFinder);
+      expect(tableWidget.border, isNull);
+      expect(tableWidget.children, hasLength(4));
+      expect(
+        (tableWidget.children[0].decoration as BoxDecoration?)?.border,
+        isNotNull,
+      );
+      expect(
+        (tableWidget.children[1].decoration as BoxDecoration?)?.border,
+        isNotNull,
+      );
+      expect(
+        (tableWidget.children[2].decoration as BoxDecoration?)?.border,
+        isNotNull,
+      );
+      expect(tableWidget.children[3].decoration, isNull);
+
+      final afterTable = find.text(
+        'Paragraph after the table.',
+        findRichText: true,
+      );
+      expect(
+        tester.getTopLeft(tableFinder).dy - tester.getBottomLeft(afterCode).dy,
+        closeTo(space * 4, 0.01),
+      );
+      expect(
+        tester.getTopLeft(afterTable).dy - tester.getBottomLeft(tableFinder).dy,
+        closeTo(space * 2, 0.01),
+      );
+
+      final cellLeft = find.text('Paragraph', findRichText: true);
+      final cellCenter = find.text('Complete', findRichText: true).first;
+      final cellRight = find.text('1', findRichText: true);
+      expect(
+        tester.getTopLeft(cellLeft).dx,
+        closeTo(tester.getTopLeft(tableFinder).dx, 0.01),
+      );
+      expect(
+        tester.getCenter(cellCenter).dx,
+        greaterThan(tester.getTopRight(cellLeft).dx),
+      );
+      expect(
+        tester.getTopRight(cellRight).dx,
+        closeTo(tester.getTopRight(tableFinder).dx - space * 6, 0.5),
+      );
+
+      // Horizontal rule: `1px` rule with `7 * S` (`1.75em`) top/bottom margins.
+      final hrFinder = find.byKey(const ValueKey('desktop-markdown-hr-0'));
+      final finalParagraph = find.text(
+        'Final paragraph. A remote image stays an explicit blocked preview.',
+        findRichText: true,
+      );
+      expect(tester.getSize(hrFinder).height, 1.0);
+      expect(
+        tester.getTopLeft(hrFinder).dy - tester.getBottomLeft(afterTable).dy,
+        closeTo(space * 7, 0.01),
+      );
+      expect(
+        tester.getTopLeft(finalParagraph).dy -
+            tester.getBottomLeft(hrFinder).dy,
+        closeTo(space * 7, 0.01),
+      );
+
+      // Safe links (in loose list and table), blocked image, and rebuild/unmount
+      // recognizer lifecycle stay intact.
+      expect(
+        find.byKey(const ValueKey('blocked-markdown-image')),
+        findsOneWidget,
+      );
+      await tester.tapOnText(find.textRange.ofSubstring('fixture link'));
+      await tester.pump();
+      final tableLink = find.text('Table link', findRichText: true);
+      await tester.ensureVisible(tableLink);
+      await tester.pump();
+      await tester.tap(tableLink);
+      await tester.pump();
+      expect(launched, [
+        Uri.parse('https://example.invalid/native-prose'),
+        Uri.parse('https://example.invalid/table'),
+      ]);
+
+      // Rebuild with updated Markdown while the 2-second copy timer is active,
+      // then unmount to verify copied-state reset and recognizer/timer cleanup.
+      await tester.pumpWidget(
+        _app(
+          AssistantMarkdown(
+            data: '```rust\nfn main() {}\n```\n\n[Updated link](https://example.invalid/updated)',
+            completed: true,
+            proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+            externalLinkLauncher: (uri) async {
+              launched.add(uri);
+              return true;
+            },
+          ),
+        ),
+      );
+      expect(find.text('Rust'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: codeCopyButton,
+          matching: find.byIcon(Icons.check_rounded),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: codeCopyButton,
+          matching: find.byIcon(Icons.copy_rounded),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Updated link', findRichText: true));
+      await tester.pump();
+      expect(launched.last, Uri.parse('https://example.invalid/updated'));
+
+      await tester.pumpWidget(_app(const SizedBox.shrink()));
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
     },
   );
 }

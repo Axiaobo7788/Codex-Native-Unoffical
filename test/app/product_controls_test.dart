@@ -2113,6 +2113,112 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'desktop composer primary action uses 28px circle and 16px icon across Send, Stop, Esc, and Steer',
+    (tester) async {
+      tester.view.physicalSize = const Size(1191, 865);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final runtime = _ProductRuntimeController()
+        ..turnStartStatus = TurnRuntimeStatus.inProgress;
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+
+      // Home hero composer Send button: 28x28 with 16px upward arrow.
+      final sendFinder = find.byKey(const ValueKey('composer-send-button'));
+      expect(tester.getSize(sendFinder), const Size(28, 28));
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: sendFinder,
+                matching: find.byIcon(Icons.arrow_upward_rounded),
+              ),
+            )
+            .size,
+        16,
+      );
+
+      // Select active thread: idle disabled Send stays 28x28 / 16px at 0.5 opacity.
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(sendFinder), const Size(28, 28));
+      expect(tester.widget<CodexIconButton>(sendFinder).isEnabled, isFalse);
+      final idleSlotCenter = tester.getCenter(sendFinder);
+
+      // Draft enabled Send: 28x28 / 16px.
+      final composerField = find.byKey(const ValueKey('conversation-composer'));
+      await tester.enterText(composerField, 'Start running turn');
+      await tester.pumpAndSettle();
+      expect(tester.widget<CodexIconButton>(sendFinder).isEnabled, isTrue);
+      expect(tester.getSize(sendFinder), const Size(28, 28));
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: sendFinder,
+                matching: find.byIcon(Icons.arrow_upward_rounded),
+              ),
+            )
+            .size,
+        16,
+      );
+
+      // Active turn Stop: 28x28 / 16px at the exact same slot center.
+      await tester.tap(sendFinder);
+      await tester.pumpAndSettle();
+      final stopFinder = find.byKey(const ValueKey('composer-stop-button'));
+      expect(stopFinder, findsOneWidget);
+      expect(tester.getSize(stopFinder), const Size(28, 28));
+      expect(tester.getCenter(stopFinder), idleSlotCenter);
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: stopFinder,
+                matching: find.byIcon(Icons.stop_rounded),
+              ),
+            )
+            .size,
+        16,
+      );
+
+      // Draft Steer during active turn: 28x28 / 16px upward arrow.
+      await tester.enterText(composerField, 'Steer running turn');
+      await tester.pumpAndSettle();
+      expect(stopFinder, findsNothing);
+      expect(sendFinder, findsOneWidget);
+      expect(tester.getSize(sendFinder), const Size(28, 28));
+      expect(tester.getCenter(sendFinder), idleSlotCenter);
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: sendFinder,
+                matching: find.byIcon(Icons.arrow_upward_rounded),
+              ),
+            )
+            .size,
+        16,
+      );
+
+      // Clear draft and arm Esc confirmation: stays 28x28 without overflow.
+      await tester.enterText(composerField, '');
+      await tester.pumpAndSettle();
+      await tester.tap(composerField);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(tester.getSize(stopFinder), const Size(28, 28));
+      expect(find.text('Esc'), findsOneWidget);
+      expect(tester.getSize(find.text('Esc')).width, lessThanOrEqualTo(28));
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<_ProductRuntimeController> _pumpSelectedApp(WidgetTester tester) async {

@@ -52,10 +52,12 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('dart', findRichText: true), findsOneWidget);
+      expect(find.text('Dart', findRichText: true), findsOneWidget);
 
       // 6. User clicks code block Copy action
-      final copyButtons = find.text('Copy');
+      final copyButtons = find.byKey(
+        const ValueKey('desktop-markdown-code-copy'),
+      );
       expect(copyButtons, findsWidgets);
       await tester.tap(copyButtons.first);
       await tester.pumpAndSettle();
