@@ -135,6 +135,14 @@ compact and dark variants have separate evidence gates.
 
 ## Current checkpoint
 
+- `0e7c46b` aligns the multi-question stock header with the current
+  official title and trailing stepper. The packaged Linux walkthrough
+  moved by chevrons and Left/Right and submitted both retained drafts
+  under the correct stock question IDs. All 530 default Flutter cases,
+  five opt-in stock cases and ASCII-path analysis passed. ArrowUp from
+  Other and the ordinary interrupt route remain separate A10 work.
+  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md)
+
 - `0c45b67` gives project New chat stable keyboard traversal. A Linux
   stock session verified creation and a turn in the second disposable
   project. `a8b2104` adds the start-aligned local project menu. The
