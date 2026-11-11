@@ -705,6 +705,111 @@ void main() {
         }
       },
     );
+
+    testWidgets(
+      'CodexActivityRow dual-tone verbLength and isWarning preserve resting ink, hover promotion, and single semantics label',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          var expanded = false;
+          await tester.pumpWidget(
+            StatefulBuilder(
+              builder: (context, setState) => wrap(
+                brightness: Brightness.light,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CodexActivityRow(
+                      key: const ValueKey('dual-tone-row'),
+                      summary: 'GitHub · List pull requests',
+                      verbLength: 'GitHub'.length,
+                      icon: const Icon(Icons.extension_outlined),
+                      inline: true,
+                      hasDisclosure: true,
+                      isExpanded: expanded,
+                      onToggle: () => setState(() => expanded = !expanded),
+                    ),
+                    const CodexActivityRow(
+                      key: ValueKey('warning-row'),
+                      summary: 'Command declined: rm -rf /tmp/x',
+                      icon: Icon(Icons.shield_outlined),
+                      inline: true,
+                      isWarning: true,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+          final dualText = tester.widget<Text>(
+            find.text('GitHub · List pull requests'),
+          );
+          expect(
+            dualText.style?.color,
+            OfficialCodexThemeData.light.activitySummaryText,
+          );
+          final rootSpan = dualText.textSpan! as TextSpan;
+          expect(rootSpan.text, 'GitHub');
+          final detailSpan = rootSpan.children!.single as TextSpan;
+          expect(detailSpan.text, ' · List pull requests');
+          expect(
+            detailSpan.style?.color,
+            OfficialCodexThemeData.light.activityChildText,
+          );
+
+          // Single accessible button label is preserved across dual-tone spans.
+          expect(
+            find.semantics.byLabel('GitHub · List pull requests'),
+            findsOneWidget,
+          );
+
+          // Warning row tints shield icon with warning token while keeping summary text ink.
+          final warningIcon = tester.widget<Icon>(
+            find.descendant(
+              of: find.byKey(const ValueKey('warning-row')),
+              matching: find.byIcon(Icons.shield_outlined),
+            ),
+          );
+          expect(warningIcon.color, OfficialCodexThemeData.light.warning);
+          expect(
+            tester
+                .widget<Text>(find.text('Command declined: rm -rf /tmp/x'))
+                .style
+                ?.color,
+            OfficialCodexThemeData.light.activitySummaryText,
+          );
+
+          // Hover promotes both leading verb and trailing detail to primary ink.
+          final gesture = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          addTearDown(gesture.removePointer);
+          await gesture.addPointer(
+            location: tester.getCenter(
+              find.text('GitHub · List pull requests'),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final hoveredText = tester.widget<Text>(
+            find.text('GitHub · List pull requests'),
+          );
+          expect(
+            hoveredText.style?.color,
+            OfficialCodexThemeData.light.textPrimary,
+          );
+          final hoveredDetail =
+              (hoveredText.textSpan! as TextSpan).children!.single as TextSpan;
+          expect(
+            hoveredDetail.style?.color,
+            OfficialCodexThemeData.light.textPrimary,
+          );
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
   });
 
   group('CodexSegment', () {

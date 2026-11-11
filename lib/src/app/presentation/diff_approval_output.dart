@@ -514,6 +514,13 @@ class _HistoryEntryView extends StatelessWidget {
       );
     }
     final effectiveAttachments = overrideAttachments ?? item.attachments;
+    final resolvedActivity = overrideEntryText == null
+        ? _resolveHistoryInlineActivity(
+            item,
+            inlineActivity: inlineActivity,
+            detailMode: detailMode,
+          )
+        : null;
     final useInlinePreviewDisclosure =
         inlineActivity &&
         item.isCommand &&
@@ -545,7 +552,7 @@ class _HistoryEntryView extends StatelessWidget {
       inlineActivity: inlineActivity,
       revealAssistantCopy: revealAssistantCopy,
       bottomGap: bottomGap,
-      activitySummary: _explorationCaption(),
+      resolvedActivity: resolvedActivity,
       activityDetail: commandOutput?.detail,
       hasActivityDisclosure: useInlinePreviewDisclosure,
       activityExpanded:
@@ -564,31 +571,6 @@ class _HistoryEntryView extends StatelessWidget {
                 : commandOutput?.action ?? _commandOutputFallback(context))
           : _savedMcpTextAction(context),
     );
-  }
-
-  String? _explorationCaption() {
-    final action = item.commandAction;
-    if (action == null ||
-        !inlineActivity ||
-        detailMode != PresentationDetailMode.commands ||
-        item.status != 'completed') {
-      return null;
-    }
-    final (:kind, :name, :path, :query) = action;
-    return switch (kind) {
-      CommandActionKind.read => switch (name ?? path) {
-        final target? => 'Read $target',
-        null => null,
-      },
-      CommandActionKind.listFiles =>
-        path == null ? 'Listed files' : 'Listed files in $path',
-      CommandActionKind.search => switch ((query, path)) {
-        (final query?, final path?) => 'Searched for $query in $path',
-        (final query?, null) => 'Searched for $query',
-        _ => 'Searched for files',
-      },
-      CommandActionKind.run => null,
-    };
   }
 
   Widget? _commandOutputFallback(BuildContext context) {
@@ -863,19 +845,25 @@ class _SavedCommandGroup extends StatefulWidget {
   const _SavedCommandGroup({
     super.key,
     required this.label,
-    required this.includesExploration,
+    this.iconData,
     required this.itemCount,
-    required this.initiallyExpanded,
+    this.initiallyExpanded = false,
+    this.controlledExpanded,
+    this.onExpansionChanged,
+    this.listKey = const ValueKey('saved-command-group-items'),
     required this.itemBuilder,
-    required this.onCollapse,
+    this.onCollapse,
   });
 
   final String label;
-  final bool includesExploration;
+  final IconData? iconData;
   final int itemCount;
   final bool initiallyExpanded;
+  final bool? controlledExpanded;
+  final ValueChanged<bool>? onExpansionChanged;
+  final Key? listKey;
   final IndexedWidgetBuilder itemBuilder;
-  final VoidCallback onCollapse;
+  final VoidCallback? onCollapse;
 
   @override
   State<_SavedCommandGroup> createState() => _SavedCommandGroupState();
@@ -886,34 +874,37 @@ class _SavedCommandGroupState extends State<_SavedCommandGroup> {
 
   @override
   Widget build(BuildContext context) {
+    final expanded = widget.controlledExpanded ?? _expanded;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CodexInlineActivityHeader(
           label: widget.label,
           leadingIcon: Icon(
-            widget.includesExploration
-                ? Icons.menu_book_outlined
-                : Icons.terminal_rounded,
+            widget.iconData ?? Icons.terminal_rounded,
             size: OfficialCodexTheme.activityInlineIconSize,
           ),
           hasDisclosure: true,
-          isExpanded: _expanded,
+          isExpanded: expanded,
           onToggle: () {
-            setState(() => _expanded = !_expanded);
-            if (!_expanded) {
-              widget.onCollapse();
+            final next = !expanded;
+            if (widget.controlledExpanded == null) {
+              setState(() => _expanded = next);
+            }
+            widget.onExpansionChanged?.call(next);
+            if (!next) {
+              widget.onCollapse?.call();
             }
           },
         ),
-        if (_expanded) ...[
+        if (expanded) ...[
           const SizedBox(height: OfficialCodexTheme.conversationGroupedItemGap),
           ConstrainedBox(
             constraints: const BoxConstraints(
               maxHeight: OfficialCodexTheme.activityGroupMaxHeight,
             ),
             child: ListView.builder(
-              key: const ValueKey('saved-command-group-items'),
+              key: widget.listKey,
               primary: false,
               shrinkWrap: true,
               scrollCacheExtent: const ScrollCacheExtent.pixels(0),

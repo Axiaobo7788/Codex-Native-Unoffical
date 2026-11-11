@@ -16,10 +16,12 @@ class CodexActivityRow extends StatelessWidget {
   const CodexActivityRow({
     super.key,
     required this.summary,
+    this.verbLength,
     this.icon,
     this.statusText,
     this.isRunning = false,
     this.isError = false,
+    this.isWarning = false,
     this.onViewOutput,
     this.actionLabel = 'View output',
     this.trailingAction,
@@ -32,10 +34,12 @@ class CodexActivityRow extends StatelessWidget {
   });
 
   final String summary;
+  final int? verbLength;
   final Widget? icon;
   final String? statusText;
   final bool isRunning;
   final bool isError;
+  final bool isWarning;
   final VoidCallback? onViewOutput;
   final String actionLabel;
   final Widget? trailingAction;
@@ -52,9 +56,14 @@ class CodexActivityRow extends StatelessWidget {
     if (inline) {
       final header = CodexInlineActivityHeader(
         label: summary,
+        verbLength: isError || isWarning ? null : verbLength,
         leadingIcon: icon ?? const Icon(Icons.terminal_rounded),
         restingTextColor: isError ? theme.danger : theme.activitySummaryText,
-        restingIconColor: isError ? theme.danger : theme.activitySummaryText,
+        restingIconColor: isError
+            ? theme.danger
+            : isWarning
+            ? theme.warning
+            : theme.activitySummaryText,
         hoverPromotesToPrimary: !isError,
         statusText: statusText,
         hasDisclosure: hasDisclosure,
@@ -111,6 +120,8 @@ class CodexActivityRow extends StatelessWidget {
         border: Border.all(
           color: isError
               ? theme.danger.withValues(alpha: 0.5)
+              : isWarning
+              ? theme.warning.withValues(alpha: 0.5)
               : theme.hairlineBorder,
           width: OfficialCodexTheme.hairlineBorderWidth,
         ),
@@ -130,7 +141,11 @@ class CodexActivityRow extends StatelessWidget {
             ] else ...[
               IconTheme(
                 data: IconThemeData(
-                  color: isError ? theme.danger : theme.textMuted,
+                  color: isError
+                      ? theme.danger
+                      : isWarning
+                      ? theme.warning
+                      : theme.textMuted,
                   size: 14.0,
                 ),
                 child: icon ?? const Icon(Icons.terminal_rounded),
@@ -199,6 +214,7 @@ class CodexInlineActivityHeader extends StatefulWidget {
   const CodexInlineActivityHeader({
     super.key,
     required this.label,
+    this.verbLength,
     this.leadingIcon,
     this.restingTextColor,
     this.restingIconColor,
@@ -212,6 +228,7 @@ class CodexInlineActivityHeader extends StatefulWidget {
   });
 
   final String label;
+  final int? verbLength;
   final Widget? leadingIcon;
   final Color? restingTextColor;
   final Color? restingIconColor;
@@ -298,16 +315,10 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
           flex: 3,
           child:
               widget.customTextWidget ??
-              Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: OfficialCodexTheme.activityChatFontSize,
-                  height: OfficialCodexTheme.activityChatLineHeight,
-                  fontWeight: FontWeight.w400,
-                  color: effectiveTextColor,
-                ),
+              _buildLabelText(
+                theme: theme,
+                active: active,
+                effectiveTextColor: effectiveTextColor,
               ),
         ),
         if (hasStatus) ...[
@@ -400,6 +411,45 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
       trigger = CodexTooltip(message: tooltip, child: trigger);
     }
     return trigger;
+  }
+
+  Widget _buildLabelText({
+    required OfficialCodexThemeData theme,
+    required bool active,
+    required Color effectiveTextColor,
+  }) {
+    final baseStyle = TextStyle(
+      fontSize: OfficialCodexTheme.activityChatFontSize,
+      height: OfficialCodexTheme.activityChatLineHeight,
+      fontWeight: FontWeight.w400,
+      color: effectiveTextColor,
+    );
+    final splitAt = widget.verbLength;
+    if (splitAt != null && splitAt > 0 && splitAt < widget.label.length) {
+      final detailColor = active && widget.hoverPromotesToPrimary
+          ? theme.textPrimary
+          : theme.activityChildText;
+      return Text.rich(
+        TextSpan(
+          text: widget.label.substring(0, splitAt),
+          children: [
+            TextSpan(
+              text: widget.label.substring(splitAt),
+              style: TextStyle(color: detailColor),
+            ),
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: baseStyle,
+      );
+    }
+    return Text(
+      widget.label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: baseStyle,
+    );
   }
 
   static Widget _recolorIconIfNeeded(Widget icon, Color color) {

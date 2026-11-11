@@ -15,6 +15,7 @@ void main() {
     await _open(tester, harness);
 
     expect(find.text('Worked for 0s'), findsOneWidget);
+    expect(find.text('Ran synthetic fixture'), findsNothing);
     expect(find.text('Command: synthetic fixture'), findsNothing);
     expect(
       find.descendant(
@@ -39,7 +40,8 @@ void main() {
     await tester.tap(_divider);
     await tester.pumpAndSettle();
 
-    expect(find.text('Command: synthetic fixture'), findsOneWidget);
+    expect(find.text('Ran synthetic fixture'), findsOneWidget);
+    expect(find.text('Command: synthetic fixture'), findsNothing);
     expect(
       find.descendant(
         of: _divider,
@@ -66,7 +68,7 @@ void main() {
 
     await tester.tap(_divider);
     await tester.pumpAndSettle();
-    expect(find.text('Command: synthetic fixture'), findsNothing);
+    expect(find.text('Ran synthetic fixture'), findsNothing);
     expect(harness.requests, hasLength(1));
   });
 
@@ -137,7 +139,7 @@ void main() {
       await tester.tap(_divider);
       await tester.pumpAndSettle();
       expect(harness.requests, hasLength(2));
-      expect(find.text('Command: synthetic fixture'), findsOneWidget);
+      expect(find.text('Ran synthetic fixture'), findsOneWidget);
       expect(find.text('Retry turn details'), findsNothing);
     },
   );
@@ -155,7 +157,7 @@ void main() {
     await tester.tap(_divider);
     await tester.pumpAndSettle();
     expect(harness.requests, hasLength(1));
-    expect(find.text('Command: synthetic fixture'), findsOneWidget);
+    expect(find.text('Ran synthetic fixture'), findsOneWidget);
     expect(find.text('Fixture answer'), findsOneWidget);
   });
 
@@ -169,6 +171,7 @@ void main() {
     await tester.tap(_divider);
     await tester.pumpAndSettle();
     expect(harness.mcpRequests, isEmpty);
+    expect(find.text('MCP: fixture/tool'), findsOneWidget);
 
     await tester.tap(find.text('View saved text'));
     await tester.pump();
@@ -213,6 +216,7 @@ void main() {
     await _open(tester, harness);
     await tester.tap(_divider);
     await tester.pumpAndSettle();
+    expect(find.text('Fixture · Tool'), findsOneWidget);
     await tester.tap(find.text('View saved text'));
     await tester.pumpAndSettle();
     expect(find.text('Could not read the saved MCP text.'), findsOneWidget);
@@ -237,6 +241,7 @@ void main() {
     await _open(tester, harness);
     await tester.tap(_divider);
     await tester.pumpAndSettle();
+    expect(find.text('Fixture · Tool'), findsOneWidget);
     await tester.tap(find.text('View saved text'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 16));
