@@ -166,6 +166,109 @@ Raw <em>inline</em> HTML.
     }
   });
 
+  testWidgets(
+    'desktop root block gaps follow screen CSS and retain Markdown interactions',
+    (tester) async {
+      const pairs = <(String, double)>[
+        ('First paragraph.\n\nSecond paragraph.', 1),
+        ('Paragraph.\n\n- List item', 0.25),
+        ('- List item\n\nParagraph.', 0.5),
+        ('# Heading\n\nParagraph.', 0.5),
+        ('## Heading\n\nParagraph.', 0.25),
+        ('### Heading\n\nParagraph.', 0.25),
+        ('#### Heading\n\nParagraph.', 0.5),
+        ('##### Heading\n\nParagraph.', 0.5),
+        ('Paragraph.\n\n# Heading', 1),
+        ('- List item\n\n##### Heading', 1),
+        ('1. List item\n\n###### Heading', 1),
+      ];
+      for (final (source, ratio) in pairs) {
+        await tester.pumpWidget(
+          _app(
+            AssistantMarkdown(
+              data: source,
+              completed: true,
+              proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+            ),
+          ),
+        );
+        final gap = find.byKey(const ValueKey('desktop-markdown-gap-1'));
+        expect(gap, findsOneWidget);
+        final fontSize = Theme.of(tester.element(gap))
+            .textTheme
+            .bodyMedium!
+            .fontSize!;
+        expect(tester.getSize(gap).height, closeTo(fontSize * ratio, 0.01));
+        expect(tester.takeException(), isNull);
+      }
+
+      final launched = <Uri>[];
+      await tester.pumpWidget(
+        _app(
+          SingleChildScrollView(
+            child: AssistantMarkdown(
+              data: '''[link](https://example.com/)
+
+Second paragraph.
+
+- Item
+  - Nested item
+
+```dart
+print('bounded');
+```
+
+| Name | Value |
+| --- | --- |
+| Sample | One |
+''',
+              completed: true,
+              proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+              externalLinkLauncher: (uri) async {
+                launched.add(uri);
+                return true;
+              },
+            ),
+          ),
+        ),
+      );
+      final expandedParagraphGap = find.byKey(
+        const ValueKey('desktop-markdown-gap-2'),
+      );
+      final fontSize = Theme.of(tester.element(expandedParagraphGap))
+          .textTheme
+          .bodyMedium!
+          .fontSize!;
+      expect(tester.getSize(expandedParagraphGap).height, fontSize);
+      expect(find.text('Nested item', findRichText: true), findsOneWidget);
+      expect(
+        find.textContaining("print('bounded');", findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.text('Sample', findRichText: true), findsOneWidget);
+      await tester.tap(find.text('link', findRichText: true));
+      await tester.pump();
+      expect(launched, [Uri.parse('https://example.com/')]);
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(
+        _app(
+          const MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: AssistantMarkdown(
+              data: 'First paragraph.\n\nSecond paragraph.',
+              completed: true,
+              proseLineHeight: OfficialCodexTheme.assistantProseLineHeight,
+            ),
+          ),
+        ),
+      );
+      final scaledGap = find.byKey(const ValueKey('desktop-markdown-gap-1'));
+      expect(tester.getSize(scaledGap).height, fontSize * 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('caps the source passed to the Markdown parser', (tester) async {
     final oversized =
         'prefix-${List.filled(AssistantMarkdown.maxSourceCharacters + 32, 'x').join()}';

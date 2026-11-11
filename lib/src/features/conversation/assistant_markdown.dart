@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/theme/official_codex_theme.dart';
 import '../../app/theme_tokens.dart';
 import '../../domain/assistant_content_blocks.dart';
+import 'desktop_markdown_body.dart';
 
 typedef ExternalLinkLauncher = Future<bool> Function(Uri uri);
 
@@ -127,17 +128,31 @@ class AssistantMarkdown extends StatelessWidget {
     );
 
     Widget buildMarkdown(String markdownData) => SelectionArea(
-      child: MarkdownBody(
-        key: const ValueKey('assistant-markdown'),
-        data: markdownData,
-        selectable: false,
-        extensionSet: _safeExtensions,
-        styleSheet: styleSheet,
-        builders: {'pre': _CodeBlockBuilder()},
-        imageBuilder: (uri, title, alt) =>
-            _blockedImage(context, uri, title, alt),
-        onTapLink: (text, href, title) => unawaited(_openLink(context, href)),
-      ),
+      child: lineHeight != null && fontSize != null
+          ? DesktopMarkdownBody(
+              key: const ValueKey('assistant-markdown'),
+              data: markdownData,
+              styleSheet: styleSheet,
+              bodyEm: MediaQuery.textScalerOf(context).scale(fontSize),
+              extensionSet: _safeExtensions,
+              builders: {'pre': _CodeBlockBuilder()},
+              imageBuilder: (uri, title, alt) =>
+                  _blockedImage(context, uri, title, alt),
+              onTapLink: (text, href, title) =>
+                  unawaited(_openLink(context, href)),
+            )
+          : MarkdownBody(
+              key: const ValueKey('assistant-markdown'),
+              data: markdownData,
+              selectable: false,
+              extensionSet: _safeExtensions,
+              styleSheet: styleSheet,
+              builders: {'pre': _CodeBlockBuilder()},
+              imageBuilder: (uri, title, alt) =>
+                  _blockedImage(context, uri, title, alt),
+              onTapLink: (text, href, title) =>
+                  unawaited(_openLink(context, href)),
+            ),
     );
 
     if (!presentation.hasStructuredBlocks) {
