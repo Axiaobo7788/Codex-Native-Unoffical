@@ -1548,7 +1548,18 @@ contains expanded A7 activity; a peer handoff's claim that r2 04/05 were Home is
 not used as evidence. The current screenshot/hash controls that claim. The CSS
 specimen is manually assembled and is not a matched signed-in official screen.
 
-Combined integration gates and an independent packaged replay remain pending at
-this checkpoint. A6/A7 and Golden State A remain `PARTIAL`: captions/live groups,
+Combined source `9a75ddc` passed 577 default cases, five enabled stock cases,
+65-root boundary, strict analysis, history/output memory, Rust100, Linux83-library
+release and MCP smoke. Independent frozen AOT `a6dfb1cd…` replay through bundled
+Host/public stock0.167.1 renders mixed prose/pills/wrapping fallback/table/code at
+1191×865 and820×865, preserves all40 copied code bytes, completes a normal turn,
+switches/returns threads and observes zero live image-sentinel GETs after exit.
+Only model responses use a loopback fixture; token-stream granularity and real
+account inference are not asserted. Artifact:
+`/var/tmp/native-desktop-f-u-9a75ddc-r1/`. App/Host/stock/Xvfb/model all exited.
+The helper's initial relative Host-path failure, first compact postresize click,
+private graphics/accessibility and stock model-metadata warnings remain recorded;
+no speculative product fix is inferred from them. Current logs have no
+Unhandled/overflow. Exact next-main hosted CI is still pending. A6/A7 and Golden State A remain `PARTIAL`: captions/live groups,
 user Markdown, selection, attachment presentation and matched signed-in evidence
 are separate work, not a generic whole-screen Human gate.

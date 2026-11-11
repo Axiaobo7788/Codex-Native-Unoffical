@@ -115,7 +115,7 @@ next action identifies a real external dependency.
 | Command activity and lazy large output | MATCH | Stable item events; Host output descriptors/range reads; current history/output benchmark and A7 replay | Bounded live/saved activity projection, Host file spool, output viewer | Large command strings stay out of the timeline; saved output is opened on demand. Counts remain loaded-only. | Preserve Host ownership, limits and output availability/error states. |
 | Whole-item deferred output fallback | RESEARCH_MORE | [Measured upstream deferOutput boundary](OUTPUT_DEFERRAL_EVIDENCE.md) | `outputDeferred` metadata is retained; `thread/items/read` fallback remains whole-item | Accepted deferOutput does not prove upstream genuinely deferred sampled output. Host bounding helps but does not establish fully solved upstream laziness. | Keep the negative evidence and re-probe when runtime behavior changes. |
 | Skills list/config and plugin install/read/uninstall | MATCH | Stable public ecosystem methods; current adapter tests, MCP smoke and packaged Customize | Ecosystem gateway/controller, Customize and details | Supported local catalog/detail/install operations are reachable with retained cache on failures. An installed-catalog completeness claim is separate. | Preserve mutation serialization/readback and retained usable partial catalogs. |
-| Explicit plugin catalog truncation signal | PARTIAL | [131-row fixture and stable catalog evidence](PLUGIN_INSTALLED_SCOPE_EVIDENCE.md); fresh adapter source | `EcosystemProtocolAdapter.listPlugins` caps at 100; `PluginCatalogSnapshot.isPartial` reports source errors only | Additional distinct usable rows are silently omitted. At-cap/loaded wording is not an explicit omitted-row signal. | Track actual omitted usable distinct rows separately from source errors, without raising the cap or changing the query. |
+| Explicit plugin catalog truncation signal | MATCH | Source `45c80d8`, integrated `9a75ddc`; real typed installed/public stock probes and packaged wide/compact/exact/partial-source cases | Canonical `PluginCatalogSnapshot.isTruncated` plus independent source-error state, bounded cap100, shared notices | Genuine observed omitted usable entries are disclosed; exact-cap and legacy counts remain conservatively loaded-only. This does not implement an authoritative installed inventory or browse all omitted rows. | Preserve cap/query and parser validity; continue MCP OAuth and separate inventory research. |
 | Scoped installed-plugin inventory | PARTIAL | Stable `plugin/installed`; [four-build scoped inventory](PLUGIN_CATALOG_TRUTH_EVIDENCE.md) | Native queries `plugin/list`, not `plugin/installed` | Catalog and installed queries are different; home/workspace/suggestion scope and authenticated background-sync effects remain to reconcile. | Design explicit safe scope and payload bounds; do not label the existing catalog an authoritative installed inventory. |
 | Apps catalog/details, direct MCP calls/resources | MATCH | Stable app and MCP methods; current protocol tests and real MCP smoke | Typed ecosystem adapter, bounded app pages/tool form/resource result surface | Supported text/structured local calls are reachable. Account/private installations and arbitrary rich UI templates are not established by this subset. | Keep page/tool/source limits and per-result bounds. |
 | MCP OAuth login from server status | MISSING | Stable `mcpServer/oauth/login` and completion notification | Native parses `authStatus`, but has no OAuth login request/action | A configured server requiring OAuth cannot be authenticated through the normal Native status path. URL elicitation is a different workflow. | Add supported start/result/lifecycle/browser handoff, with Host-owned credentials and cancellation/failure behavior; verify via a disposable local OAuth fixture where practical. |
@@ -139,7 +139,7 @@ next action identifies a real external dependency.
 | Rank | Confirmed gap | User-visible value | Support confidence | Feasibility / risk | Action |
 |---|---|---|---|---|---|
 | Closed (`a0d2a05`) | Cold-resume failure hidden from conversation | High: a normal failed send can look inert | High: fresh current source plus prior normal-entry real stock evidence | Small state/presentation seam, independent of U1; guard stale attempts and keep draft | Fresh current reproduction and attempt-scoped feedback for implicit and explicit resume. |
-| 2 | Silent plugin catalog omission | Medium/high for affected workspaces; truthful inventory | High: stable response + distinct 131-row fixture; current cap/source-error code | Narrow protocol/model/UI truth correction, low regression surface | Signal genuine truncation separately from partial sources while retaining cap 100. |
+| Closed (`45c80d8` / `9a75ddc`) | Silent plugin catalog omission | Medium/high for affected workspaces; truthful inventory | High: stable response + distinct 131-row fixture; current cap/source-error code | Narrow protocol/model/UI truth correction, low regression surface | Signal genuine truncation separately from partial sources while retaining cap 100. |
 | 3 | Account and MCP OAuth access paths absent | High: onboarding/configured-server usability | High stable contracts; actual identity flow requires user/local OAuth evidence | Separate lifecycle/security/UI work | Implement complete stock-owned flows, not a credential bridge. |
 | 4 | Additional-permission grant coverage | High when the opt-in feature is in scope | Stable request/response, but relevant emitter flags are under-development and off | Security-sensitive; normal-workflow/adoption evidence still needed | Reproduce and classify before implementation; schema presence alone is insufficient. |
 | 5 | Global search, queue, suggestions, terminal cleanup and richer saved data | High but different scopes/dependencies | Public methods exist; bounds and state behavior need focused probes | Separate coherent slices, not one generic framework | Progress the highest supported research item and reclassify; no queue-exhaustion stop. |
@@ -154,7 +154,7 @@ reviewed by both peers and independently verified against real stock.
 
 No completion is asserted: this audit finds both supported `MISSING` and material
 `PARTIAL` workflows. The first correction is verified below; explicit catalog
-truncation is the next active functional slice. A green implementation checkpoint is not a
+truncation is verified; supported MCP OAuth is the next active functional slice. A green implementation checkpoint is not a
 stop condition; Track U continues concurrently.
 
 ## First correction checkpoint — cold-resume feedback
@@ -231,9 +231,20 @@ explicit notice suppresses its redundant bottom cap notice; exact-100 and legacy
 gateway counts keep conservative loaded wording.
 
 Thirteen protocol tests, compact/wide notice tests and strict analysis pass.
-Combined U1/source gates, direct-stock saturated/exact catalog probes and a new
-packaged walkthrough are pending. This checkpoint does not yet close the catalog
-row or the separate authoritative installed-inventory research.
+Combined source `9a75ddc` subsequently passes 577 default cases, five enabled
+stock cases, memory/Rust/Linux/MCP gates. Four real ProcessTransport → Host →
+stock checks cover installed `0.167.0-alpha.3.2` and public `0.167.1`: saturated
+fixture retains100/truncated=true and exact fixture retains100/truncated=false.
+Each saturated case also validates source-error coexistence. Fixture files have
+131/100 entries; raw response total was not separately counted.
+
+The frozen combined Linux package verifies wide/compact truncation, no explicit
+truncation notice for the exact100 case, both warning types for an unreadable
+marketplace, and successful normal `plugin/read` detail inspection. Evidence and
+setup negatives are in `/var/tmp/native-plugin-catalog-real-stock-r1/` and
+`/var/tmp/native-desktop-f-u-9a75ddc-r1/`. No overflow/Unhandled was found; all
+App/Host/stock/Xvfb processes exited. This closes only the explicit signal row,
+not authoritative installed-inventory/full-catalog access or Human UI review.
 
 ## Next functional preflight — stock-owned MCP OAuth
 
