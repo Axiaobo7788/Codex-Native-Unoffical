@@ -1457,17 +1457,27 @@ void main() {
         final harness = SimulatedRuntimeHarness();
         await pumpSimulatedRuntimeApp(tester, harness: harness);
 
-        // 1. Open Ecosystem dialog from sidebar footer
+        // 1. Route to Customize destination from desktop navigation rail
         await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
         await tester.pumpAndSettle();
 
-        expect(find.text('Skills, Plugins & MCP'), findsOneWidget);
+        expect(find.byKey(const ValueKey('customize-sidebar')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('customize-workspace-view')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('plugin-row-git-workflow')),
+          findsOneWidget,
+        );
+
+        // Switch to Skills section in Customize sidebar and toggle skill state
+        await tester.tap(find.byKey(const ValueKey('customize-nav-skills')));
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('skill-row-frontend-design')),
           findsOneWidget,
         );
-
-        // Toggle skill enabled state
         await tester.tap(
           find.byKey(const ValueKey('skill-toggle-frontend-design')),
         );
@@ -1479,24 +1489,16 @@ void main() {
           ),
         ]);
 
-        // Switch to Plugins tab
-        await tester.tap(find.text('Plugins (1)'));
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('plugin-row-git-workflow')),
-          findsOneWidget,
-        );
-
-        // Switch to MCP tab
-        await tester.tap(find.text('MCP (1)'));
+        // Switch to MCP section
+        await tester.tap(find.byKey(const ValueKey('customize-nav-mcp')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('mcp-row-filesystem-mcp')),
           findsOneWidget,
         );
 
-        // Close Ecosystem dialog
-        await tester.tap(find.byTooltip('Close'));
+        // Return to Home destination via rail
+        await tester.tap(find.byKey(const ValueKey('app-shell-home-button')));
         await tester.pumpAndSettle();
 
         // 2. Open Remote Setup dialog and switch between Track A and Track B
