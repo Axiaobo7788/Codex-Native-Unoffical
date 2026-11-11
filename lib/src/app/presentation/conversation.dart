@@ -991,9 +991,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           threadController.canManageGoal(threadId),
                     );
                   } finally {
-                    if (identical(_pendingGoalSave, pending)) {
-                      _pendingGoalSave = null;
-                    }
+                    _pendingGoalSave = null;
                   }
                 },
               )
