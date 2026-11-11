@@ -8844,41 +8844,24 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
   /// Composes inline Desktop reasoning Markdown source from typed
   /// `entry.reasoningParts` per `ADR-060` + official `182735.5b42af8792.js`
   /// `v1hC.W`:
-  /// - Single-part summaries (`parts.length == 1`) preserve `parts.first`
-  ///   verbatim so a standalone plain summary paragraph is never discarded.
-  /// - Multi-part summaries (`parts.length > 1`) with a non-empty plain
-  ///   single-line first part (`!startsWith('**')`, `!startsWith('#')`, no
-  ///   newline) wrap `parts.first` as `'**$first**'` before joining with
-  ///   `'\n\n'`, allowing `225284.ak` (`_normalizeActiveReasoningBody` /
-  ///   `_normalizeCompletedReasoningBody`) to strip the summary title and
-  ///   render the remaining body paragraphs.
-  /// - Multi-part summaries whose `parts.first` is empty (sparse
-  ///   `summaryIndex > 0` without `summaryIndex == 0`) omit the empty leading
-  ///   slot without promoting `parts[1]` into a synthetic bold heading.
+  /// - Only when `first` is non-empty and `parts.length > 1`, wraps `first` as
+  ///   `'**$first**'` unless `first.startsWith('**')`, then joins all parts
+  ///   with `'\n\n'`.
+  /// - Otherwise returns `first` (so `parts = ['', ...]` yields `''`, matching
+  ///   `v1hC.W`, while `Execution` mode and in-conversation search continue to
+  ///   use unmodified `entry.text`).
   static String _composeInlineReasoningSource(ConversationEntry entry) {
     final parts = entry.reasoningParts;
     if (parts.isEmpty) {
       return _extractRawReasoningContent(entry.text);
     }
-    if (parts.length == 1) {
-      return parts.first;
-    }
     final first = parts.first;
-    if (first.isEmpty) {
-      return [
-        for (final part in parts.skip(1))
-          if (part.isNotEmpty) part,
-      ].join('\n\n');
+    if (first.isNotEmpty && parts.length > 1) {
+      return first.startsWith('**')
+          ? parts.join('\n\n')
+          : ['**$first**', ...parts.skip(1)].join('\n\n');
     }
-    final trimmedFirst = first.trimLeft();
-    final shouldWrapFirstPart =
-        !trimmedFirst.startsWith('**') &&
-        !trimmedFirst.startsWith('#') &&
-        !first.contains('\n');
-    if (shouldWrapFirstPart) {
-      return ['**${first.trim()}**', ...parts.skip(1)].join('\n\n');
-    }
-    return parts.join('\n\n');
+    return first;
   }
 
   /// Matches `225284.ak` active body `O`:

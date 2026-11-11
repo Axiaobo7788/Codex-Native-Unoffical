@@ -838,7 +838,9 @@ Trailing paragraph 4.
       expect(find.textContaining('Live plain title'), findsNothing);
       expect(find.text('Live body paragraph.'), findsOneWidget);
 
-      // Sparse summaryIndex > 0 without part[0] preserves part[1] intact.
+      // Empty first part (`['', 'Sparse body...']`) yields `''` under exact
+      // `182735.v1hC.W` (`t && n.length !== 0 ? ... : t ?? ""`), keeping the
+      // inline `Thought` row non-expandable while Execution preserves raw text.
       harness.customTurnEvents
         ..add(
           const ReasoningItemEvent(
@@ -871,18 +873,32 @@ Trailing paragraph 4.
 
       final thoughtHeaders = find.text('Thought');
       expect(thoughtHeaders, findsNWidgets(3));
-      await tester.tap(thoughtHeaders.at(1));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Sparse body without heading.', findRichText: true),
-        findsOneWidget,
+      final sparseHeader = find.ancestor(
+        of: thoughtHeaders.at(1),
+        matching: find.byType(CodexInlineActivityHeader),
       );
-      await tester.tap(thoughtHeaders.at(1));
-      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CodexInlineActivityHeader>(sparseHeader).hasDisclosure,
+        isFalse,
+      );
+      expect(
+        find.textContaining('Sparse body without heading.', findRichText: true),
+        findsNothing,
+      );
       await tester.tap(thoughtHeaders.first);
       await tester.pumpAndSettle();
       expect(
         find.text('Standalone plain summary.', findRichText: true),
+        findsOneWidget,
+      );
+
+      // Execution mode still exposes unmodified raw text even when part[0] is empty.
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Execution'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Sparse body without heading.'),
         findsOneWidget,
       );
     },
