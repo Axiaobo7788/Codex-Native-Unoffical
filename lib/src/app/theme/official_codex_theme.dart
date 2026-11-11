@@ -188,6 +188,17 @@ abstract final class OfficialCodexTheme {
   /// Reasoning preview/expanded scroll body maximum height (`8.75rem`: `140px`).
   static const double reasoningBodyMaxHeight = 140.0;
 
+  /// Reasoning Markdown `.content-oxuumP` (`225284.ak` + `0b2d31a9d760.css`)
+  /// vertical spacing and list inset tokens:
+  /// - `.paragraph-gJJthE + .paragraph-gJJthE`: `var(--spacing)` (`4px`)
+  /// - `h1..h3.heading-mOenvy`: `calc(var(--spacing) * 2)` (`8px`) top,
+  ///   `+ *` `var(--spacing)` (`4px`) bottom
+  /// - `ul.list-RaLbwp.ps-4`: `4 * var(--spacing)` (`16px`) inline-start inset
+  static const double reasoningParagraphGap = baseGrid;
+  static const double reasoningHeadingTopGap = baseGrid * 2;
+  static const double reasoningHeadingBottomGap = baseGrid;
+  static const double reasoningUnorderedListInset = baseGrid * 4;
+
   /// Attachment chip height (28px).
   static const double attachmentChipHeight = 28.0;
 
@@ -277,6 +288,9 @@ abstract final class OfficialCodexTheme {
   static const Color darkTextMuted = Color(0xFF909090);
   // `.summary-lK7Lpm` (`color-mix(in oklab, var(--color-text) 60%, transparent)`)
   static const Color darkActivitySummaryText = Color(0x99DFDFDF);
+  // `225284.ak` `.content-oxuumP [&_*]:text-text/50`
+  // (`color-mix(in oklab, var(--color-text) 50%, transparent)`)
+  static const Color darkActivityReasoningNestedText = Color(0x80DFDFDF);
   // `.execDescendants-CELqcM` / `text-text/30` (`color-mix(in oklab, var(--color-text) 30%, transparent)`)
   static const Color darkActivityChildText = Color(0x4DDFDFDF);
 
@@ -316,6 +330,9 @@ abstract final class OfficialCodexTheme {
   static const Color lightTextMuted = Color(0xFF8E8F90);
   // `.summary-lK7Lpm` (`color-mix(in oklab, var(--color-text) 60%, transparent)`)
   static const Color lightActivitySummaryText = Color(0x991A1C1F);
+  // `225284.ak` `.content-oxuumP [&_*]:text-text/50`
+  // (`color-mix(in oklab, var(--color-text) 50%, transparent)`)
+  static const Color lightActivityReasoningNestedText = Color(0x801A1C1F);
   // `.execDescendants-CELqcM` / `text-text/30` (`color-mix(in oklab, var(--color-text) 30%, transparent)`)
   static const Color lightActivityChildText = Color(0x4D1A1C1F);
 
@@ -356,6 +373,7 @@ final class OfficialCodexThemeData {
     required this.textSecondary,
     required this.textMuted,
     required this.activitySummaryText,
+    required this.activityReasoningNestedText,
     required this.activityChildText,
     required this.diffAddedFill,
     required this.diffAddedText,
@@ -383,6 +401,7 @@ final class OfficialCodexThemeData {
   final Color textSecondary;
   final Color textMuted;
   final Color activitySummaryText;
+  final Color activityReasoningNestedText;
   final Color activityChildText;
   final Color diffAddedFill;
   final Color diffAddedText;
@@ -412,6 +431,8 @@ final class OfficialCodexThemeData {
     textSecondary: OfficialCodexTheme.darkTextSecondary,
     textMuted: OfficialCodexTheme.darkTextMuted,
     activitySummaryText: OfficialCodexTheme.darkActivitySummaryText,
+    activityReasoningNestedText:
+        OfficialCodexTheme.darkActivityReasoningNestedText,
     activityChildText: OfficialCodexTheme.darkActivityChildText,
     diffAddedFill: OfficialCodexTheme.darkDiffAddedFill,
     diffAddedText: OfficialCodexTheme.darkDiffAddedText,
@@ -440,6 +461,8 @@ final class OfficialCodexThemeData {
     textSecondary: OfficialCodexTheme.lightTextSecondary,
     textMuted: OfficialCodexTheme.lightTextMuted,
     activitySummaryText: OfficialCodexTheme.lightActivitySummaryText,
+    activityReasoningNestedText:
+        OfficialCodexTheme.lightActivityReasoningNestedText,
     activityChildText: OfficialCodexTheme.lightActivityChildText,
     diffAddedFill: OfficialCodexTheme.lightDiffAddedFill,
     diffAddedText: OfficialCodexTheme.lightDiffAddedText,

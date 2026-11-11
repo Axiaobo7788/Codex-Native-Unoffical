@@ -8,6 +8,15 @@ import 'package:markdown/markdown.dart' as md;
 
 import '../../app/theme/official_codex_theme.dart';
 
+/// Official Desktop Markdown layout variants:
+/// - [assistant]: `0040d5ae1a9f.css` relaxed conversation prose (`2em` list
+///   inset, `w600` primary-ink markers, `0.25em` block-spacing grid).
+/// - [reasoning]: `225284.ak` + `0b2d31a9d760.css` `.content-oxuumP` (`4px`
+///   `var(--spacing)` grid, `4px` `p + p`, `8px`/`4px` `h1..h3` spacing,
+///   `ps-4` `16px` unordered list inset, and `225284.aS` digit-grouped
+///   `ps-8`/`ps-10`/`ps-12`/`ps-14` ordered list insets).
+enum DesktopMarkdownVariant { assistant, reasoning }
+
 /// Renders bounded Desktop Markdown in a single AST pass using the official
 /// Codex Desktop screen-CSS geometry for root edges, block adjacency, tight
 /// and loose lists, blockquotes, tables, horizontal rules, and code blocks.
@@ -21,6 +30,7 @@ class DesktopMarkdownBody extends StatefulWidget {
     required this.imageBuilder,
     required this.onTapLink,
     required this.bodyEm,
+    this.variant = DesktopMarkdownVariant.assistant,
     this.borderMedium = OfficialCodexTheme.lightControlBorderStrong,
     this.borderLight = OfficialCodexTheme.lightControlBorder,
     this.inlineCodeBackground = OfficialCodexTheme.lightInlineCodeBackground,
@@ -40,6 +50,7 @@ class DesktopMarkdownBody extends StatefulWidget {
   final MarkdownImageBuilder imageBuilder;
   final MarkdownTapLinkCallback onTapLink;
   final double bodyEm;
+  final DesktopMarkdownVariant variant;
   final Color borderMedium;
   final Color borderLight;
   final Color inlineCodeBackground;
@@ -102,6 +113,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     if (widget.data != oldWidget.data ||
         widget.styleSheet != oldWidget.styleSheet ||
         widget.bodyEm != oldWidget.bodyEm ||
+        widget.variant != oldWidget.variant ||
         widget.borderMedium != oldWidget.borderMedium ||
         widget.borderLight != oldWidget.borderLight ||
         widget.inlineCodeBackground != oldWidget.inlineCodeBackground ||
@@ -344,6 +356,11 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     );
   }
 
+  double get _blockSpacingUnit =>
+      widget.variant == DesktopMarkdownVariant.reasoning
+      ? _currentTextScaler.scale(OfficialCodexTheme.baseGrid)
+      : widget.bodyEm / 4;
+
   Widget _buildList(
     md.Element listElement, {
     required int listDepth,
@@ -360,15 +377,16 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     })
     buildChildNode,
   }) {
+    final isReasoning = widget.variant == DesktopMarkdownVariant.reasoning;
     final isOrdered = listElement.tag == 'ol';
     final start = int.tryParse(listElement.attributes['start'] ?? '') ?? 1;
-    final space = widget.bodyEm / 4;
-    final markerGutterWidth = widget.bodyEm * 1.625;
+    final space = _blockSpacingUnit;
+    final defaultMarkerGutterWidth = widget.bodyEm * 1.625;
     final markerGap = space * 1.5;
     final baseStyle = _currentDefaultTextStyle;
     final markerStyle = baseStyle.copyWith(
       color: baseStyle.color,
-      fontWeight: FontWeight.w600,
+      fontWeight: isReasoning ? FontWeight.w400 : FontWeight.w600,
     );
 
     final rawItems = (listElement.children ?? const <md.Node>[])
@@ -383,13 +401,33 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     for (var itemIndex = 0; itemIndex < rawItems.length; itemIndex++) {
       final item = rawItems[itemIndex];
       final (:blocks, :taskChecked) = _normalizeListItemBlocks(item);
+      final double itemMarkerGutterWidth;
+      if (isReasoning) {
+        if (isOrdered && taskChecked == null) {
+          final digits = '${start + itemIndex}'.length;
+          final psUnits = switch (digits) {
+            <= 2 => 8,
+            3 => 10,
+            4 => 12,
+            _ => 14,
+          };
+          itemMarkerGutterWidth = math.max(0.0, psUnits * space - markerGap);
+        } else {
+          itemMarkerGutterWidth = math.max(0.0, 4 * space - markerGap);
+        }
+      } else {
+        itemMarkerGutterWidth = defaultMarkerGutterWidth;
+      }
 
       final Widget marker;
       final double markerBoxWidth;
       if (taskChecked != null) {
+        final lineBoxMultiplier = isReasoning
+            ? OfficialCodexTheme.activityChatLineHeight
+            : 1.625;
         final topInset = math.max(
           0.0,
-          (widget.bodyEm * 1.625 - widget.bodyEm) / 2,
+          (widget.bodyEm * lineBoxMultiplier - widget.bodyEm) / 2,
         );
         marker = Padding(
           padding: EdgeInsets.only(top: topInset),
@@ -401,7 +439,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
             color: taskChecked ? baseStyle.color : widget.borderMedium,
           ),
         );
-        markerBoxWidth = math.max(markerGutterWidth, widget.bodyEm);
+        markerBoxWidth = math.max(itemMarkerGutterWidth, widget.bodyEm);
       } else if (isOrdered) {
         final markerLabel = '${start + itemIndex}.';
         marker = Text(
@@ -410,7 +448,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
           style: markerStyle,
         );
         markerBoxWidth = math.max(
-          markerGutterWidth,
+          itemMarkerGutterWidth,
           _measureSingleLineWidth(
             markerLabel,
             markerStyle,
@@ -418,6 +456,33 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
             _currentLocale,
           ),
         );
+      } else if (isReasoning) {
+        final bulletSize = textScaler.scale(4.5);
+        final lineBoxHeight =
+            textScaler.scale(
+              baseStyle.fontSize ?? OfficialCodexTheme.activityChatFontSize,
+            ) *
+            OfficialCodexTheme.activityChatLineHeight;
+        final topInset = math.max(0.0, (lineBoxHeight - bulletSize) / 2);
+        final bulletColor =
+            markerStyle.color ??
+            OfficialCodexTheme.lightActivityReasoningNestedText;
+        marker = Padding(
+          padding: EdgeInsets.only(top: topInset),
+          child: SizedBox.square(
+            dimension: bulletSize,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: listDepth == 1 ? null : bulletColor,
+                border: listDepth == 1
+                    ? Border.all(color: bulletColor, width: 1.0)
+                    : null,
+                shape: listDepth >= 2 ? BoxShape.rectangle : BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+        markerBoxWidth = math.max(itemMarkerGutterWidth, bulletSize);
       } else {
         final bullet = switch (listDepth) {
           0 => '•',
@@ -426,7 +491,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
         };
         marker = Text(bullet, textAlign: TextAlign.right, style: markerStyle);
         markerBoxWidth = math.max(
-          markerGutterWidth,
+          itemMarkerGutterWidth,
           _measureSingleLineWidth(
             bullet,
             markerStyle,
@@ -475,7 +540,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ConstrainedBox(
-              constraints: BoxConstraints(minWidth: markerGutterWidth),
+              constraints: BoxConstraints(minWidth: itemMarkerGutterWidth),
               child: Align(alignment: Alignment.topRight, child: marker),
             ),
             SizedBox(width: markerGap),
@@ -569,10 +634,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
   }
 
   double _listItemChildGap(String? previousTag, String? currentTag) {
-    final space = widget.bodyEm / 4;
+    final isReasoning = widget.variant == DesktopMarkdownVariant.reasoning;
+    final space = _blockSpacingUnit;
     if (previousTag == 'p' && currentTag == 'p') {
-      // `:is(.ListItem, [data-markdown-list-item-content]) > p + p { margin-top: 4 * S }`
-      return 4 * space;
+      // Assistant `.ListItem > p + p { margin-top: 4 * S }`;
+      // reasoning `.paragraph-gJJthE + .paragraph-gJJthE { margin-top: var(--spacing) }`.
+      return (isReasoning ? 1 : 4) * space;
     }
     if (previousTag == 'ul' ||
         previousTag == 'ol' ||
@@ -585,18 +652,31 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     return math.max(prevBottom, currTop) * space;
   }
 
-  ({double top, double bottom}) _containerChildMargins(String? tag) =>
-      switch (tag) {
-        'p' || 'ul' || 'ol' || 'h5' || 'h6' => (top: 0, bottom: 0),
-        'h1' => (top: 4, bottom: 2),
-        'h2' || 'h3' => (top: 4, bottom: 1),
-        'h4' => (top: 4, bottom: 0),
-        'blockquote' => (top: 0, bottom: 2),
-        'pre' => (top: 5, bottom: 5),
-        'table' => (top: 4, bottom: 0),
-        'hr' => (top: 7, bottom: 7),
+  ({double top, double bottom}) _containerChildMargins(String? tag) {
+    if (widget.variant == DesktopMarkdownVariant.reasoning) {
+      return switch (tag) {
+        'p' || 'ul' || 'ol' => (top: 0, bottom: 0),
+        'h1' || 'h2' || 'h3' => (top: 2, bottom: 1),
+        'h4' || 'h5' || 'h6' => (top: 1, bottom: 0),
+        'blockquote' => (top: 0, bottom: 1),
+        'pre' => (top: 2, bottom: 2),
+        'table' => (top: 2, bottom: 1),
+        'hr' => (top: 2, bottom: 2),
         _ => (top: 0, bottom: 0),
       };
+    }
+    return switch (tag) {
+      'p' || 'ul' || 'ol' || 'h5' || 'h6' => (top: 0, bottom: 0),
+      'h1' => (top: 4, bottom: 2),
+      'h2' || 'h3' => (top: 4, bottom: 1),
+      'h4' => (top: 4, bottom: 0),
+      'blockquote' => (top: 0, bottom: 2),
+      'pre' => (top: 5, bottom: 5),
+      'table' => (top: 4, bottom: 0),
+      'hr' => (top: 7, bottom: 7),
+      _ => (top: 0, bottom: 0),
+    };
+  }
 
   Widget _buildBlockquote(
     md.Element blockquote, {
@@ -613,7 +693,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     })
     buildChildNode,
   }) {
-    final space = widget.bodyEm / 4;
+    final space = _blockSpacingUnit;
     final quoteDelta = space * 6;
     final childAvailableWidth = availableWidth.isFinite
         ? math.max(0.0, availableWidth - quoteDelta)
@@ -721,19 +801,26 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
       return const SizedBox.shrink();
     }
 
-    final space = widget.bodyEm / 4;
+    final isReasoning = widget.variant == DesktopMarkdownVariant.reasoning;
+    final space = _blockSpacingUnit;
     final baseStyle = _currentDefaultTextStyle;
     final baseFontSize = baseStyle.fontSize ?? OfficialCodexTheme.chatFontSize;
-    final smallFontSize = math.max(12.0, baseFontSize * 0.875);
+    final smallFontSize = isReasoning
+        ? baseFontSize
+        : math.max(12.0, baseFontSize * 0.875);
     final headerStyle = baseStyle.copyWith(
       fontSize: smallFontSize,
-      height: baseFontSize / smallFontSize,
+      height: isReasoning
+          ? OfficialCodexTheme.activityChatLineHeight
+          : baseFontSize / smallFontSize,
       fontWeight: FontWeight.w600,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final cellStyle = baseStyle.copyWith(
       fontSize: smallFontSize,
-      height: (baseFontSize * 1.625) / smallFontSize,
+      height: isReasoning
+          ? OfficialCodexTheme.activityChatLineHeight
+          : (baseFontSize * 1.625) / smallFontSize,
       fontWeight: FontWeight.w400,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
@@ -963,35 +1050,55 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     if (previous == null || current == null) {
       return widget.styleSheet.blockSpacing ?? 10;
     }
-    return math.max(previous.bottom, current.top) * widget.bodyEm / 4;
+    return math.max(previous.bottom, current.top) * _blockSpacingUnit;
   }
 
-  ({double top, double bottom})? _margins(String? tag, String? previous) =>
-      switch (tag) {
-        'p' when previous == 'p' => (top: 4, bottom: 4),
-        'p' when previous == 'h1' || previous == 'h2' || previous == 'h3' => (
-          top: 0,
-          bottom: 1,
-        ),
-        'p' => (top: 2, bottom: 1),
+  ({double top, double bottom})? _margins(String? tag, String? previous) {
+    if (widget.variant == DesktopMarkdownVariant.reasoning) {
+      return switch (tag) {
+        // `.paragraph-gJJthE { margin: 0 }` +
+        // `.content-oxuumP > .paragraph-gJJthE + .paragraph-gJJthE { margin-top: var(--spacing) }`
+        'p' when previous == 'p' => (top: 1, bottom: 0),
+        'p' => (top: 0, bottom: 0),
+        // `.list-RaLbwp { margin-block: 0 }`
         'ul' || 'ol' => (top: 0, bottom: 0),
-        'h1' when previous == 'hr' => (top: 0, bottom: 2),
-        'h1' => (top: 4, bottom: 2),
-        'h2' || 'h3' when previous == 'hr' => (top: 0, bottom: 1),
-        'h2' || 'h3' => (top: 4, bottom: 1),
-        'h4' when previous == 'hr' => (top: 0, bottom: 0),
-        'h4' => (top: 4, bottom: 0),
-        'h5' ||
-        'h6' when previous == 'ul' || previous == 'ol' => (top: 4, bottom: 0),
-        'h5' || 'h6' => (top: 0, bottom: 0),
-        'blockquote' => (top: 0, bottom: 2),
-        'pre' when previous == 'hr' => (top: 0, bottom: 5),
-        'pre' => (top: 5, bottom: 5),
-        'table' when previous == 'hr' => (top: 0, bottom: 0),
-        'table' => (top: 4, bottom: 0),
-        'hr' => (top: 7, bottom: 7),
+        // `.content-oxuumP > h1..h3.heading-mOenvy { margin-top: calc(var(--spacing) * 2) }` +
+        // `.content-oxuumP > h1..h3.heading-mOenvy + * { margin-top: var(--spacing) }`
+        'h1' || 'h2' || 'h3' => (top: 2, bottom: 1),
+        'h4' || 'h5' || 'h6' => (top: 1, bottom: 0),
+        'blockquote' => (top: 2, bottom: 2),
+        'pre' => (top: 2, bottom: 2),
+        'table' => (top: 2, bottom: 1),
+        'hr' => (top: 2, bottom: 2),
         _ => null,
       };
+    }
+    return switch (tag) {
+      'p' when previous == 'p' => (top: 4, bottom: 4),
+      'p' when previous == 'h1' || previous == 'h2' || previous == 'h3' => (
+        top: 0,
+        bottom: 1,
+      ),
+      'p' => (top: 2, bottom: 1),
+      'ul' || 'ol' => (top: 0, bottom: 0),
+      'h1' when previous == 'hr' => (top: 0, bottom: 2),
+      'h1' => (top: 4, bottom: 2),
+      'h2' || 'h3' when previous == 'hr' => (top: 0, bottom: 1),
+      'h2' || 'h3' => (top: 4, bottom: 1),
+      'h4' when previous == 'hr' => (top: 0, bottom: 0),
+      'h4' => (top: 4, bottom: 0),
+      'h5' ||
+      'h6' when previous == 'ul' || previous == 'ol' => (top: 4, bottom: 0),
+      'h5' || 'h6' => (top: 0, bottom: 0),
+      'blockquote' => (top: 0, bottom: 2),
+      'pre' when previous == 'hr' => (top: 0, bottom: 5),
+      'pre' => (top: 5, bottom: 5),
+      'table' when previous == 'hr' => (top: 0, bottom: 0),
+      'table' => (top: 4, bottom: 0),
+      'hr' => (top: 7, bottom: 7),
+      _ => null,
+    };
+  }
 
   GestureRecognizer _createLink(String text, String? href, String title) {
     final recognizer = TapGestureRecognizer()

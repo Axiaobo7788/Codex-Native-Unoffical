@@ -1355,6 +1355,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   static const _maxRetainedThreadScrollBookmarks = 32;
   static const _maxRetainedThreadDags = 32;
   static const _maxMeasuredItemHeights = 512;
+  static const _maxTrackedReasoningTimings = 64;
   static const _maxRestorePages = 10;
   static const _maxRestoreAlignmentPasses = 32;
   static const _followThresholdPixels = 160.0;
@@ -1413,6 +1414,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   _commandOutputPreview;
   var _commandPreviewReading = false;
   final Set<String> _expandedLiveActivityGroupIds = <String>{};
+  final LinkedHashMap<String, DateTime> _liveReasoningStartedAtById =
+      LinkedHashMap();
+  final LinkedHashMap<String, Duration> _completedReasoningElapsedById =
+      LinkedHashMap();
+  var _reasoningTimingsVersion = 0;
   String? _customProjectDirectory;
   final _threadActionsPopoverController = CodexPopoverController();
   final _timelineDetailsPopoverController = CodexPopoverController();
@@ -2334,7 +2340,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                         ? _DiffView(controller: widget.diffController)
                         : goalEditor != null && !splitGoalEditor
                         ? goalEditor
-                        : _timeline(controller),
+                        : _ReasoningTimingScope(
+                            version: _reasoningTimingsVersion,
+                            elapsedByItemId: _completedReasoningElapsedById,
+                            child: _timeline(controller),
+                          ),
                   ),
                   if (widget.hasDesktopShell &&
                       !showingChanges &&
@@ -4768,6 +4778,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       );
     }
     final showLiveEntries = !widget.historyController.canReturnToNewest;
+    _reconcileLiveReasoningTimings();
     final rawLiveEntries = showLiveEntries
         ? controller.entries
         : const <ConversationEntry>[];
@@ -6459,6 +6470,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _threadScrollBookmarks.remove(revertedId);
         if (revertedId == _activeThreadId) {
           widget.controller.clearEntries();
+          _clearReasoningTimings();
         }
       }
     }
@@ -6999,6 +7011,63 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
   }
 
+  void _clearReasoningTimings() {
+    if (_liveReasoningStartedAtById.isEmpty &&
+        _completedReasoningElapsedById.isEmpty) {
+      return;
+    }
+    _liveReasoningStartedAtById.clear();
+    _completedReasoningElapsedById.clear();
+    _reasoningTimingsVersion += 1;
+  }
+
+  void _reconcileLiveReasoningTimings() {
+    if (!mounted) {
+      return;
+    }
+    final entries = widget.controller.entries;
+    if (entries.isEmpty) {
+      return;
+    }
+    final now = ReasoningClockScope.nowOf(context)();
+    for (final entry in entries) {
+      if (entry.kind != ConversationEntryKind.activity ||
+          (entry.text != 'Reasoning' &&
+              !entry.text.startsWith('Reasoning: '))) {
+        continue;
+      }
+      final key = entry.stockItemId ?? entry.id;
+      if (!entry.completed) {
+        if (!_liveReasoningStartedAtById.containsKey(key) &&
+            !_completedReasoningElapsedById.containsKey(key)) {
+          _liveReasoningStartedAtById[key] = now;
+          while (_liveReasoningStartedAtById.length >
+              _maxTrackedReasoningTimings) {
+            _liveReasoningStartedAtById.remove(
+              _liveReasoningStartedAtById.keys.first,
+            );
+          }
+        }
+      } else {
+        final startedAt = _liveReasoningStartedAtById.remove(key);
+        if (startedAt != null &&
+            !_completedReasoningElapsedById.containsKey(key)) {
+          final elapsed = now.difference(startedAt);
+          if (!elapsed.isNegative) {
+            _completedReasoningElapsedById[key] = elapsed;
+            while (_completedReasoningElapsedById.length >
+                _maxTrackedReasoningTimings) {
+              _completedReasoningElapsedById.remove(
+                _completedReasoningElapsedById.keys.first,
+              );
+            }
+            _reasoningTimingsVersion += 1;
+          }
+        }
+      }
+    }
+  }
+
   bool _keepsLiveOutputPreview(_CommandOutputPreviewKey key) {
     if (widget.historyController.canReturnToNewest) {
       return false;
@@ -7055,6 +7124,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _activeThreadId = nextThreadId;
     _interruptingQuestion.value = null;
     _expandedLiveActivityGroupIds.clear();
+    _clearReasoningTimings();
     _clearCommandOutputPreview();
     _showChanges = false;
     _goalEditorThreadId = null;
@@ -7214,6 +7284,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final previousThreadId = _activeThreadId;
     _syncActiveThreadSelection();
     _reconcileLiveOutputPreview();
+    _reconcileLiveReasoningTimings();
     if (previousThreadId != _activeThreadId) {
       final thread = widget.controller.thread;
       if (thread != null &&
@@ -8682,6 +8753,25 @@ class _UserAttachmentChipState extends State<_UserAttachmentChip> {
   }
 }
 
+class _ReasoningTimingScope extends InheritedWidget {
+  const _ReasoningTimingScope({
+    required this.version,
+    required this.elapsedByItemId,
+    required super.child,
+  });
+
+  final int version;
+  final Map<String, Duration> elapsedByItemId;
+
+  static Duration? elapsedOf(BuildContext context, String itemId) => context
+      .dependOnInheritedWidgetOfExactType<_ReasoningTimingScope>()
+      ?.elapsedByItemId[itemId];
+
+  @override
+  bool updateShouldNotify(covariant _ReasoningTimingScope oldWidget) =>
+      version != oldWidget.version;
+}
+
 class _ReasoningEntryView extends StatefulWidget {
   const _ReasoningEntryView({
     required this.entry,
@@ -8703,12 +8793,41 @@ class _ReasoningEntryView extends StatefulWidget {
 
 class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
   bool _expanded = false;
+  DateTime? _localActiveSince;
+  Duration? _localCompletedElapsed;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.entry.completed) {
+      _localActiveSince = ReasoningClockScope.nowOf(context)();
+    }
+  }
 
   @override
   void didUpdateWidget(covariant _ReasoningEntryView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.entry.id != oldWidget.entry.id) {
+    final oldKey = oldWidget.entry.stockItemId ?? oldWidget.entry.id;
+    final nextKey = widget.entry.stockItemId ?? widget.entry.id;
+    if (nextKey != oldKey) {
       _expanded = false;
+      _localCompletedElapsed = null;
+      _localActiveSince = !widget.entry.completed
+          ? ReasoningClockScope.nowOf(context)()
+          : null;
+      return;
+    }
+    if (!widget.entry.completed) {
+      _localActiveSince ??= ReasoningClockScope.nowOf(context)();
+      _localCompletedElapsed = null;
+    } else if (_localActiveSince != null && _localCompletedElapsed == null) {
+      final elapsed = ReasoningClockScope.nowOf(
+        context,
+      )().difference(_localActiveSince!);
+      _localActiveSince = null;
+      if (!elapsed.isNegative) {
+        _localCompletedElapsed = elapsed;
+      }
     }
   }
 
@@ -8810,6 +8929,18 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
     final showBody = activeStreaming
         ? bodyText.isNotEmpty
         : hasExpandableBody && (_expanded || widget.forceExpanded);
+    final timingKey = entry.stockItemId ?? entry.id;
+    final effectiveElapsed =
+        _ReasoningTimingScope.elapsedOf(context, timingKey) ??
+        _localCompletedElapsed;
+    final formattedElapsed = activeStreaming || effectiveElapsed == null
+        ? null
+        : ReasoningMarkdown.formatElapsed(effectiveElapsed);
+    final headerLabel = activeStreaming
+        ? 'Thinking'
+        : (formattedElapsed != null
+              ? 'Thought for $formattedElapsed'
+              : 'Thought');
 
     return Container(
       key: widget.isActiveSearchMatch
@@ -8829,7 +8960,7 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
         mainAxisSize: MainAxisSize.min,
         children: [
           CodexInlineActivityHeader(
-            label: activeStreaming ? 'Thinking' : 'Thought',
+            label: headerLabel,
             restingTextColor: theme.activityChildText,
             hasDisclosure: hasExpandableBody,
             isExpanded: showBody,
@@ -8849,14 +8980,19 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
                 key: ValueKey('reasoning-body-scroll-${entry.id}'),
                 primary: false,
                 reverse: activeStreaming,
-                child: SelectableText(
-                  bodyText,
-                  style: TextStyle(
-                    fontSize: OfficialCodexTheme.activityChatFontSize,
-                    height: OfficialCodexTheme.activityChatLineHeight,
-                    color: theme.activitySummaryText,
-                  ),
-                ),
+                child: widget.forceExpanded
+                    ? SelectableText(
+                        bodyText,
+                        style: TextStyle(
+                          fontSize: OfficialCodexTheme.activityChatFontSize,
+                          height: OfficialCodexTheme.activityChatLineHeight,
+                          color: theme.activitySummaryText,
+                        ),
+                      )
+                    : ReasoningMarkdown(
+                        data: bodyText,
+                        completed: !activeStreaming,
+                      ),
               ),
             ),
           ],

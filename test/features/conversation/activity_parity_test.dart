@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_activity_row.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/domain/history_models.dart';
 import 'package:codex_native_unofficial/src/domain/output_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
+import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -88,7 +90,10 @@ void main() {
       expect(reasoningScroll, findsOneWidget);
       expect(tester.getSize(reasoningScroll).height, 140.0);
       expect(
-        find.textContaining('Normalized reasoning paragraph line 1.'),
+        find.textContaining(
+          'Normalized reasoning paragraph line 1.',
+          findRichText: true,
+        ),
         findsOneWidget,
       );
       expect(find.textContaining('Inspecting local files'), findsNothing);
@@ -565,6 +570,159 @@ void main() {
         startsWith('1 of 1'),
       );
       expect(find.text('GitHub · List pull requests'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'A7 expanded reasoning renders .content-oxuumP Markdown inside 140px scroll, formats live Thought for {elapsed}, and preserves Execution raw fallback',
+    (tester) async {
+      var fakeNow = DateTime.utc(2026, 4, 15, 12, 0, 0);
+      final harness = _A7ParityHarness(
+        reasoningText: '''
+**Stripped heading**
+
+First reasoning paragraph with `inline_code`.
+
+### Nested section
+
+- Alpha check
+- Beta check
+
+Trailing paragraph 1.
+
+Trailing paragraph 2.
+
+Trailing paragraph 3.
+
+Trailing paragraph 4.
+''',
+      );
+      tester.view.physicalSize = const Size(1191, 865);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(harness.disposeHarness);
+
+      await tester.pumpWidget(
+        ReasoningClockScope(
+          now: () => fakeNow,
+          child: CodexNativeApp(runtimeController: harness),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('A7 parity thread'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('turn-work-a7-turn-1')));
+      await tester.pumpAndSettle();
+
+      // Saved historical reasoning without observed live duration shows "Thought".
+      expect(find.text('Thought'), findsOneWidget);
+      await tester.tap(find.text('Thought'));
+      await tester.pumpAndSettle();
+
+      final savedScroll = find.byKey(
+        const ValueKey('reasoning-body-scroll-a7-reason-1'),
+      );
+      expect(savedScroll, findsOneWidget);
+      expect(tester.getSize(savedScroll).height, 140.0);
+      expect(find.byKey(const ValueKey('reasoning-markdown')), findsOneWidget);
+      expect(find.text('Stripped heading', findRichText: true), findsNothing);
+      expect(find.text('inline_code'), findsOneWidget);
+      expect(find.text('Nested section', findRichText: true), findsOneWidget);
+      expect(find.text('Alpha check', findRichText: true), findsOneWidget);
+
+      // Execution detail mode preserves raw SelectableText (including stripped heading).
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Execution'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('reasoning-markdown')), findsNothing);
+      expect(find.textContaining('**Stripped heading**'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('timeline-details-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Commands'));
+      await tester.pumpAndSettle();
+
+      // Live streaming reasoning records elapsed duration via F9dY.C (>=1s -> "Thought for {elapsed}", <1s -> "Thought").
+      harness.customTurnEvents
+        ..add(
+          const TurnStartedEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-elapsed-turn',
+          ),
+        )
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-elapsed-turn',
+            itemId: 'live-r-4s',
+            summary: 'Reasoning: **Plan**\n\nEvaluating `schema` paths.',
+            status: 'inProgress',
+            completed: false,
+          ),
+        );
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(find.text('Thinking'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('reasoning-streaming-text')),
+        findsOneWidget,
+      );
+
+      fakeNow = fakeNow.add(const Duration(milliseconds: 4200));
+      harness.customTurnEvents.add(
+        const ActivityEvent(
+          threadId: 'a7-thread',
+          turnId: 'live-elapsed-turn',
+          itemId: 'live-r-4s',
+          summary: 'Reasoning: **Plan**\n\nEvaluating `schema` paths.',
+          status: 'completed',
+          completed: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Thought for 4s'), findsOneWidget);
+
+      // Sub-second live reasoning (<1s) omits duration ("Thought").
+      harness.customTurnEvents.add(
+        const ActivityEvent(
+          threadId: 'a7-thread',
+          turnId: 'live-elapsed-turn',
+          itemId: 'live-r-subsec',
+          summary: 'Reasoning: Quick check.',
+          status: 'inProgress',
+          completed: false,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 60));
+      fakeNow = fakeNow.add(const Duration(milliseconds: 650));
+      harness.customTurnEvents
+        ..add(
+          const ActivityEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-elapsed-turn',
+            itemId: 'live-r-subsec',
+            summary: 'Reasoning: Quick check.',
+            status: 'completed',
+            completed: true,
+          ),
+        )
+        ..add(
+          const TurnCompletedEvent(
+            threadId: 'a7-thread',
+            turnId: 'live-elapsed-turn',
+            status: TurnRuntimeStatus.completed,
+          ),
+        );
+      await tester.pumpAndSettle();
+      expect(find.text('Thought for 4s'), findsOneWidget);
+      expect(find.text('Thought'), findsWidgets);
+
+      // Expanding the completed live reasoning row renders Markdown pill `schema`.
+      await tester.tap(find.text('Thought for 4s'));
+      await tester.pumpAndSettle();
+      expect(find.text('schema'), findsOneWidget);
     },
   );
 }

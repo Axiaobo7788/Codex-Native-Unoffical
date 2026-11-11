@@ -223,7 +223,14 @@ class AssistantMarkdown extends StatelessWidget {
     );
   }
 
-  Future<void> _openLink(BuildContext context, String? href) async {
+  Future<void> _openLink(BuildContext context, String? href) =>
+      _openExternalLink(context, href, externalLinkLauncher);
+
+  static Future<void> _openExternalLink(
+    BuildContext context,
+    String? href,
+    ExternalLinkLauncher launcher,
+  ) async {
     final uri = href == null ? null : Uri.tryParse(href);
     if (uri == null ||
         !uri.isAbsolute ||
@@ -234,7 +241,7 @@ class AssistantMarkdown extends StatelessWidget {
     }
 
     try {
-      final opened = await externalLinkLauncher(uri);
+      final opened = await launcher(uri);
       if (!opened && context.mounted) {
         _showMessage(context, 'The link could not be opened.');
       }
@@ -297,6 +304,197 @@ class AssistantMarkdown extends StatelessWidget {
         ? value
         : '${value.substring(0, maxCharacters)}…';
   }
+}
+
+/// Renders official Desktop reasoning Markdown (`225284.ak` +
+/// `0b2d31a9d760.css` `.content-oxuumP`):
+/// - `14px` `.text-size-chat` (`OfficialCodexTheme.activityChatFontSize`) and
+///   `1.5` line height (`OfficialCodexTheme.activityChatLineHeight`) across
+///   paragraphs, lists, tables, and `h1`–`h6` headings (`[&_*]:text-size-chat`).
+/// - `60%` outer ink (`activitySummaryText`) on streaming/bounded fallback
+///   text and `50%` nested ink (`activityReasoningNestedText`,
+///   `[&_*]:text-text/50`) on rendered Markdown elements.
+/// - Preserves `ADR-058`: `!completed` streaming `SelectableText` bypass,
+///   `16 KiB` source cap, `128`-pill `WidgetSpan` cap, safe `http`/`https`
+///   external link opening, and `0` remote image fetches.
+class ReasoningMarkdown extends StatelessWidget {
+  const ReasoningMarkdown({
+    super.key,
+    required this.data,
+    required this.completed,
+    ExternalLinkLauncher? externalLinkLauncher,
+  }) : externalLinkLauncher =
+           externalLinkLauncher ?? AssistantMarkdown._launchExternal;
+
+  static const maxSourceCharacters = AssistantMarkdown.maxSourceCharacters;
+  static const _omittedPrefix =
+      '[Earlier reasoning text omitted from this view]\n\n';
+
+  final String data;
+  final bool completed;
+  final ExternalLinkLauncher externalLinkLauncher;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = _boundedSource(data);
+    final theme = Theme.of(context);
+    final palette = ThemeTokens.of(context);
+    final codexTheme = OfficialCodexTheme.of(context);
+    const fontSize = OfficialCodexTheme.activityChatFontSize;
+    const lineHeight = OfficialCodexTheme.activityChatLineHeight;
+    final streamingStyle = TextStyle(
+      fontSize: fontSize,
+      height: lineHeight,
+      color: codexTheme.activitySummaryText,
+    );
+    if (!completed || data.length > maxSourceCharacters) {
+      return SelectableText(
+        source,
+        key: ValueKey(
+          completed ? 'reasoning-bounded-text' : 'reasoning-streaming-text',
+        ),
+        style: streamingStyle,
+      );
+    }
+
+    final nestedColor = codexTheme.activityReasoningNestedText;
+    final bodyStyle =
+        theme.textTheme.bodyMedium?.copyWith(
+          fontSize: fontSize,
+          height: lineHeight,
+          color: nestedColor,
+        ) ??
+        TextStyle(fontSize: fontSize, height: lineHeight, color: nestedColor);
+    final headingStyle = bodyStyle.copyWith(fontWeight: FontWeight.w600);
+    final baseStyleSheet = MarkdownStyleSheet.fromTheme(theme);
+    final styleSheet = baseStyleSheet.copyWith(
+      a: bodyStyle.copyWith(
+        color: nestedColor,
+        decoration: TextDecoration.underline,
+        decorationStyle: TextDecorationStyle.dotted,
+        decorationColor: palette.textMuted,
+      ),
+      p: bodyStyle,
+      strong: bodyStyle.copyWith(fontWeight: FontWeight.bold),
+      em: bodyStyle.copyWith(fontStyle: FontStyle.italic),
+      del: bodyStyle.copyWith(decoration: TextDecoration.lineThrough),
+      code: bodyStyle.copyWith(
+        color: nestedColor,
+        backgroundColor: null,
+        fontFamily: 'monospace',
+        fontSize: fontSize * OfficialCodexTheme.inlineCodeFontScale,
+      ),
+      h1: headingStyle,
+      h2: headingStyle,
+      h3: headingStyle,
+      h4: headingStyle,
+      h5: headingStyle,
+      h6: headingStyle,
+      blockSpacing: OfficialCodexTheme.reasoningParagraphGap,
+      listBullet: bodyStyle,
+      blockquote: bodyStyle,
+      tableHead: headingStyle,
+      tableBody: bodyStyle,
+      tableBorder: TableBorder.all(color: palette.border),
+      tableCellsPadding: const EdgeInsets.all(ThemeTokens.space2),
+      blockquotePadding: const EdgeInsets.symmetric(
+        horizontal: ThemeTokens.space3,
+        vertical: ThemeTokens.space1,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        border: Border(left: BorderSide(color: palette.borderStrong, width: 3)),
+      ),
+      codeblockPadding: EdgeInsets.zero,
+      codeblockDecoration: const BoxDecoration(),
+    );
+
+    return SelectionArea(
+      child: DesktopMarkdownBody(
+        key: const ValueKey('reasoning-markdown'),
+        data: source,
+        variant: DesktopMarkdownVariant.reasoning,
+        styleSheet: styleSheet,
+        bodyEm: MediaQuery.textScalerOf(context).scale(fontSize),
+        borderMedium: palette.borderStrong,
+        borderLight: codexTheme.hairlineBorder,
+        inlineCodeBackground: codexTheme.inlineCodeBackground,
+        inlineCodeRadius: OfficialCodexTheme.inlineCodeRadius,
+        inlineCodeHorizontalPadding:
+            OfficialCodexTheme.inlineCodeHorizontalPadding,
+        inlineCodeVerticalPadding: OfficialCodexTheme.inlineCodeVerticalPadding,
+        inlineCodeFontScale: OfficialCodexTheme.inlineCodeFontScale,
+        maxInlineCodePills: OfficialCodexTheme.maxInlineCodePills,
+        extensionSet: AssistantMarkdown._safeExtensions,
+        builders: {
+          'pre': _CodeBlockBuilder(desktop: true, bodyFontSize: fontSize),
+        },
+        imageBuilder: (uri, title, alt) =>
+            AssistantMarkdown._blockedImage(context, uri, title, alt),
+        onTapLink: (text, href, title) => unawaited(
+          AssistantMarkdown._openExternalLink(
+            context,
+            href,
+            externalLinkLauncher,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Formats live streaming reasoning duration per official `100921.F9dY.C`
+  /// (`underOneSecond: "null"`, `trimZeroUnits: false`) used by `225284.ak`
+  /// `reasoningItem.thoughtWithElapsed` (`"Thought for {elapsed}"`).
+  static String? formatElapsed(Duration elapsed) {
+    final totalSeconds = math.max(0, elapsed.inMilliseconds) ~/ 1000;
+    if (totalSeconds < 1) {
+      return null;
+    }
+    if (totalSeconds < 60) {
+      return '${totalSeconds}s';
+    }
+    final days = totalSeconds ~/ 86400;
+    final hours = (totalSeconds ~/ 3600) % 24;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (days > 0 || hours > 0) {
+      final parts = <String>[
+        if (days > 0) '${days}d',
+        '${hours}h',
+        '${minutes}m',
+        '${seconds}s',
+      ];
+      return parts.join(' ');
+    }
+    return '${minutes}m ${seconds}s';
+  }
+
+  static String _boundedSource(String value) {
+    if (value.length <= maxSourceCharacters) {
+      return value;
+    }
+    final retained = maxSourceCharacters - _omittedPrefix.length;
+    return '$_omittedPrefix${value.substring(value.length - retained)}';
+  }
+}
+
+/// Optional clock override for deterministic widget testing of live reasoning
+/// elapsed duration (`225284.ak` `R` -> `"Thought for {elapsed}"`).
+class ReasoningClockScope extends InheritedWidget {
+  const ReasoningClockScope({
+    super.key,
+    required this.now,
+    required super.child,
+  });
+
+  final DateTime Function() now;
+
+  static DateTime Function() nowOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ReasoningClockScope>()?.now ??
+      DateTime.now;
+
+  @override
+  bool updateShouldNotify(covariant ReasoningClockScope oldWidget) =>
+      now != oldWidget.now;
 }
 
 class _LiteralHtmlBlockSyntax extends md.BlockSyntax {

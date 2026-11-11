@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
 import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
@@ -1984,6 +1986,284 @@ void main() {}
       expect(
         tester.widget<Text>(find.text('dyn_pill')).style?.fontSize,
         closeTo(20.0 * OfficialCodexTheme.inlineCodeFontScale, 0.01),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  test(
+    'ReasoningMarkdown.formatElapsed matches official 100921.F9dY.C boundaries',
+    () {
+      expect(ReasoningMarkdown.formatElapsed(Duration.zero), isNull);
+      expect(
+        ReasoningMarkdown.formatElapsed(const Duration(milliseconds: 999)),
+        isNull,
+      );
+      expect(ReasoningMarkdown.formatElapsed(const Duration(seconds: 1)), '1s');
+      expect(
+        ReasoningMarkdown.formatElapsed(const Duration(milliseconds: 4200)),
+        '4s',
+      );
+      expect(
+        ReasoningMarkdown.formatElapsed(const Duration(seconds: 59)),
+        '59s',
+      );
+      expect(
+        ReasoningMarkdown.formatElapsed(const Duration(seconds: 60)),
+        '1m 0s',
+      );
+      expect(
+        ReasoningMarkdown.formatElapsed(const Duration(seconds: 72)),
+        '1m 12s',
+      );
+      expect(
+        ReasoningMarkdown.formatElapsed(const Duration(hours: 1)),
+        '1h 0m 0s',
+      );
+      expect(
+        ReasoningMarkdown.formatElapsed(
+          const Duration(hours: 1, minutes: 2, seconds: 3),
+        ),
+        '1h 2m 3s',
+      );
+      expect(
+        ReasoningMarkdown.formatElapsed(
+          const Duration(days: 1, hours: 2, minutes: 3, seconds: 4),
+        ),
+        '1d 2h 3m 4s',
+      );
+    },
+  );
+
+  testWidgets(
+    'ReasoningMarkdown translates 25894 .content-oxuumP rhythm, 50% ink, aS ordered-list insets, and ADR-058 bounds',
+    (tester) async {
+      final launched = <Uri>[];
+      Widget wrapReasoning(
+        Widget child, {
+        OfficialCodexThemeData themeData = OfficialCodexThemeData.light,
+      }) => MaterialApp(
+        home: OfficialCodexThemeProvider(
+          data: themeData,
+          child: Scaffold(body: SizedBox(width: 560, child: child)),
+        ),
+      );
+
+      // 1. Streaming (!completed) bypasses Markdown AST and uses 60% summary ink.
+      await tester.pumpWidget(
+        wrapReasoning(
+          const ReasoningMarkdown(
+            data: 'Streaming **unparsed** delta',
+            completed: false,
+          ),
+        ),
+      );
+      final streaming = tester.widget<SelectableText>(
+        find.byKey(const ValueKey('reasoning-streaming-text')),
+      );
+      expect(streaming.data, 'Streaming **unparsed** delta');
+      expect(streaming.style?.fontSize, 14.0);
+      expect(streaming.style?.height, 1.5);
+      expect(
+        streaming.style?.color,
+        OfficialCodexThemeData.light.activitySummaryText,
+      );
+
+      // 2. Completed reasoning translates .content-oxuumP 4px/8px rhythm, 14px
+      // typography across headings/lists, 50% nested ink, and blocked images.
+      await tester.pumpWidget(
+        wrapReasoning(
+          ReasoningMarkdown(
+            data: '''
+First reasoning paragraph.
+
+Second reasoning paragraph with `pill`.
+
+### Section heading
+
+Paragraph before list.
+
+- Bullet alpha
+- Bullet beta
+
+[docs](https://example.com/spec)
+
+![blocked](https://example.com/blocked.png)
+''',
+            completed: true,
+            externalLinkLauncher: (uri) async {
+              launched.add(uri);
+              return true;
+            },
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('reasoning-markdown')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('blocked-markdown-image')),
+        findsOneWidget,
+      );
+
+      final p1 = find.text('First reasoning paragraph.', findRichText: true);
+      final p2 = find.textContaining(
+        'Second reasoning paragraph with',
+        findRichText: true,
+      );
+      final heading = find.text('Section heading', findRichText: true);
+      final beforeList = find.text(
+        'Paragraph before list.',
+        findRichText: true,
+      );
+      final bullet1 = find.text('Bullet alpha', findRichText: true);
+      final bullet2 = find.text('Bullet beta', findRichText: true);
+
+      // p + p gap = 4px (1 * var(--spacing)), h3 top = 8px, h3 bottom = 4px,
+      // p + ul outer margin = 0px, tight li + li gap = 0px.
+      expect(
+        tester.getTopLeft(p2).dy - tester.getBottomLeft(p1).dy,
+        closeTo(4.0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(heading).dy - tester.getBottomLeft(p2).dy,
+        closeTo(8.0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(beforeList).dy - tester.getBottomLeft(heading).dy,
+        closeTo(4.0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(bullet1).dy - tester.getBottomLeft(beforeList).dy,
+        closeTo(0.0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(bullet2).dy - tester.getBottomLeft(bullet1).dy,
+        closeTo(0.0, 0.01),
+      );
+
+      // Unordered list text starts at ps-4 (16px) from the markdown container.
+      final markdownLeft = tester
+          .getTopLeft(find.byKey(const ValueKey('reasoning-markdown')))
+          .dx;
+      expect(tester.getTopLeft(bullet1).dx - markdownLeft, closeTo(16.0, 0.01));
+
+      // Heading and paragraph both use 14px .text-size-chat and 50% nested ink.
+      final p1Style = tester
+          .widget<Text>(find.text('First reasoning paragraph.'))
+          .textSpan!
+          .style!;
+      final headingStyle = tester
+          .widget<Text>(find.text('Section heading'))
+          .textSpan!
+          .style!;
+      expect(p1Style.fontSize, 14.0);
+      expect(p1Style.height, 1.5);
+      expect(
+        p1Style.color,
+        OfficialCodexThemeData.light.activityReasoningNestedText,
+      );
+      expect(headingStyle.fontSize, 14.0);
+      expect(headingStyle.fontWeight, FontWeight.w600);
+      expect(
+        headingStyle.color,
+        OfficialCodexThemeData.light.activityReasoningNestedText,
+      );
+
+      await tester.tap(find.text('docs', findRichText: true));
+      await tester.pump();
+      expect(launched, [Uri.parse('https://example.com/spec')]);
+
+      // Dark theme 50% nested ink (#DFDFDF at 0.50 alpha = 0x80DFDFDF).
+      await tester.pumpWidget(
+        wrapReasoning(
+          const ReasoningMarkdown(
+            data: 'Dark reasoning line.',
+            completed: true,
+          ),
+          themeData: OfficialCodexThemeData.dark,
+        ),
+      );
+      final darkStyle = tester
+          .widget<Text>(find.text('Dark reasoning line.'))
+          .textSpan!
+          .style!;
+      expect(
+        darkStyle.color,
+        OfficialCodexThemeData.dark.activityReasoningNestedText,
+      );
+
+      // 3. Loose list li > p + p = 4px; 225284.aS digit-grouped ordered-list insets.
+      await tester.pumpWidget(
+        wrapReasoning(
+          const ReasoningMarkdown(
+            data:
+                '- Loose first\n\n'
+                '  Loose continuation\n\n'
+                '- Loose second',
+            completed: true,
+          ),
+        ),
+      );
+      final looseFirst = find.text('Loose first', findRichText: true);
+      final looseCont = find.text('Loose continuation', findRichText: true);
+      expect(
+        tester.getTopLeft(looseCont).dy - tester.getBottomLeft(looseFirst).dy,
+        closeTo(4.0, 0.01),
+      );
+
+      for (final (startNum, expectedInset) in [
+        (1, 32.0),
+        (12, 32.0),
+        (100, 40.0),
+        (1000, 48.0),
+        (10000, 56.0),
+      ]) {
+        await tester.pumpWidget(
+          wrapReasoning(
+            ReasoningMarkdown(
+              data: '$startNum. Ordered entry',
+              completed: true,
+            ),
+          ),
+        );
+        final markerFinder = find.text('$startNum.');
+        final gutterBox = tester.widget<ConstrainedBox>(
+          find
+              .ancestor(
+                of: markerFinder,
+                matching: find.byWidgetPredicate(
+                  (w) => w is ConstrainedBox && w.constraints.minWidth > 0,
+                ),
+              )
+              .first,
+        );
+        // markerGap is 1.5 * 4px = 6px; gutter minWidth + 6px == ps-{8,10,12,14}.
+        expect(
+          gutterBox.constraints.minWidth + 6.0,
+          closeTo(expectedInset, 0.01),
+        );
+        final rootLeft = tester
+            .getTopLeft(find.byKey(const ValueKey('reasoning-markdown')))
+            .dx;
+        final itemLeft = tester
+            .getTopLeft(find.text('Ordered entry', findRichText: true))
+            .dx;
+        final measuredMarkerWidth = tester.getSize(markerFinder).width;
+        expect(
+          itemLeft - rootLeft,
+          closeTo(math.max(expectedInset, measuredMarkerWidth + 6.0), 0.01),
+        );
+      }
+
+      // 4. >16 KiB source cap falls back to bounded SelectableText.
+      final oversized =
+          'head-${List.filled(ReasoningMarkdown.maxSourceCharacters + 32, 'r').join()}';
+      await tester.pumpWidget(
+        wrapReasoning(ReasoningMarkdown(data: oversized, completed: true)),
+      );
+      expect(
+        find.byKey(const ValueKey('reasoning-bounded-text')),
+        findsOneWidget,
       );
       expect(tester.takeException(), isNull);
     },
