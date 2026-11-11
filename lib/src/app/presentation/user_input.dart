@@ -7,12 +7,14 @@ class _UserInputBanner extends StatelessWidget {
     required this.desktop,
     this.activeThreadId,
     this.autofocusChoices = false,
+    this.interruptingRequest,
   });
 
   final UserInputController controller;
   final bool desktop;
   final String? activeThreadId;
   final bool autofocusChoices;
+  final ValueNotifier<UserInputRequest?>? interruptingRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +57,7 @@ class _UserInputBanner extends StatelessWidget {
           desktop: desktop,
           autoAdvance: isCurrentDesktop,
           autofocusChoices: isCurrentDesktop && autofocusChoices,
+          interruptingRequest: interruptingRequest,
         );
       },
     );
@@ -536,6 +539,7 @@ class _UserInputCard extends StatefulWidget {
     required this.desktop,
     required this.autoAdvance,
     required this.autofocusChoices,
+    this.interruptingRequest,
   });
 
   final UserInputController controller;
@@ -545,6 +549,7 @@ class _UserInputCard extends StatefulWidget {
   final bool desktop;
   final bool autoAdvance;
   final bool autofocusChoices;
+  final ValueNotifier<UserInputRequest?>? interruptingRequest;
 
   @override
   State<_UserInputCard> createState() => _UserInputCardState();
@@ -559,6 +564,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   final _optionFocusNodes = <({String questionId, String label}), FocusNode>{};
   late final Map<String, FocusNode> _otherAnswerFocusNodes;
   Timer? _choiceAdvanceTimer;
+  FocusNode? _focusBeforeInterrupt;
   var _questionIndex = 0;
 
   @override
@@ -582,12 +588,45 @@ class _UserInputCardState extends State<_UserInputCard> {
             onKeyEvent: (node, event) => _handleOtherUp(question, node, event),
           ),
     };
+    widget.interruptingRequest?.addListener(_handleInterruptChanged);
     _focusCurrentChoices();
+  }
+
+  bool get _requestBusy =>
+      widget.controller.isSubmitting(widget.request.requestId) ||
+      identical(widget.interruptingRequest?.value, widget.request);
+
+  void _handleInterruptChanged() {
+    if (identical(widget.interruptingRequest?.value, widget.request)) {
+      if (_choiceNavigationFocus.hasFocus) {
+        _focusBeforeInterrupt = FocusManager.instance.primaryFocus;
+      }
+      _cancelChoiceAdvance();
+    } else if (_focusBeforeInterrupt case final focus?) {
+      _focusBeforeInterrupt = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.autofocusChoices &&
+            !_requestBusy &&
+            focus.context != null &&
+            focus.canRequestFocus &&
+            TickerMode.valuesOf(context).enabled &&
+            ModalRoute.of(context)?.isCurrent != false) {
+          focus.requestFocus();
+        }
+      });
+    }
+    setState(() {});
   }
 
   @override
   void didUpdateWidget(covariant _UserInputCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.interruptingRequest != widget.interruptingRequest) {
+      oldWidget.interruptingRequest?.removeListener(_handleInterruptChanged);
+      widget.interruptingRequest?.addListener(_handleInterruptChanged);
+      _handleInterruptChanged();
+    }
     if (!widget.autoAdvance ||
         oldWidget.controller != widget.controller ||
         oldWidget.request.threadId != widget.request.threadId ||
@@ -615,7 +654,7 @@ class _UserInputCardState extends State<_UserInputCard> {
           _questionIndex == index &&
           TickerMode.valuesOf(context).enabled &&
           ModalRoute.of(context)?.isCurrent != false &&
-          !widget.controller.isSubmitting(widget.request.requestId)) {
+          !_requestBusy) {
         _choiceNavigationFocus.requestFocus();
       }
     });
@@ -629,7 +668,7 @@ class _UserInputCardState extends State<_UserInputCard> {
         !keyboard.isControlPressed &&
         !keyboard.isMetaPressed &&
         !keyboard.isShiftPressed &&
-        !widget.controller.isSubmitting(widget.request.requestId);
+        !_requestBusy;
   }
 
   KeyEventResult _handleOtherUp(
@@ -783,6 +822,7 @@ class _UserInputCardState extends State<_UserInputCard> {
 
   @override
   void dispose() {
+    widget.interruptingRequest?.removeListener(_handleInterruptChanged);
     _cancelChoiceAdvance();
     _choiceNavigationFocus.dispose();
     for (final focus in _optionFocusNodes.values) {
@@ -804,7 +844,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
-    final submitting = widget.controller.isSubmitting(widget.request.requestId);
+    final submitting = _requestBusy;
     final questions = widget.request.questions;
     final stepped = widget.desktop && questions.length > 1;
     final showHeader = !widget.desktop || widget.pendingCount > 1 || submitting;
@@ -1171,7 +1211,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   }
 
   void _selectOption(UserInputQuestion question, String label) {
-    if (_choiceAdvanceTimer != null) {
+    if (_requestBusy || _choiceAdvanceTimer != null) {
       return;
     }
     _setSelectedOption(question, label);
@@ -1186,7 +1226,7 @@ class _UserInputCardState extends State<_UserInputCard> {
           !TickerMode.valuesOf(context).enabled ||
           _questionIndex != index ||
           widget.request.questions.elementAtOrNull(index)?.id != question.id ||
-          widget.controller.isSubmitting(widget.request.requestId)) {
+          _requestBusy) {
         return;
       }
       _acceptCurrentChoice(question);
@@ -1218,11 +1258,13 @@ class _UserInputCardState extends State<_UserInputCard> {
   }
 
   void _cancelRequest() {
+    if (_requestBusy) return;
     _cancelChoiceAdvance();
     unawaited(widget.controller.cancel(widget.request.requestId));
   }
 
   void _selectOtherAnswer(UserInputQuestion question, {bool moveFocus = true}) {
+    if (_requestBusy) return;
     _cancelChoiceAdvance();
     if (!_otherSelections.contains(question.id)) {
       setState(() {
@@ -1235,7 +1277,7 @@ class _UserInputCardState extends State<_UserInputCard> {
         if (mounted &&
             widget.request.questions[_questionIndex].id == question.id &&
             _otherSelections.contains(question.id) &&
-            !widget.controller.isSubmitting(widget.request.requestId)) {
+            !_requestBusy) {
           _otherAnswerFocusNodes[question.id]?.requestFocus();
         }
       });
@@ -1283,7 +1325,8 @@ class _UserInputCardState extends State<_UserInputCard> {
   );
 
   void _showQuestion(int index) {
-    if (index == _questionIndex ||
+    if (_requestBusy ||
+        index == _questionIndex ||
         index < 0 ||
         index >= widget.request.questions.length) {
       return;
@@ -1312,7 +1355,7 @@ class _UserInputCardState extends State<_UserInputCard> {
 
   void _submit() {
     _cancelChoiceAdvance();
-    if (!_isComplete) return;
+    if (_requestBusy || !_isComplete) return;
     final answers = {
       for (final question in widget.request.questions)
         question.id: [_answerFor(question)!],

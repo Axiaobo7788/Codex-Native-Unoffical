@@ -101,6 +101,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   final _composerInputKey = GlobalKey();
   final _approvalBannerKey = GlobalKey();
   final _userInputBannerKey = GlobalKey();
+  final _interruptingQuestion = ValueNotifier<UserInputRequest?>(null);
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   final _conversationFocusNode = FocusNode();
@@ -678,6 +679,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   void dispose() {
     _clearComposerStop();
     _clearCommandOutputPreview();
+    _interruptingQuestion.dispose();
     unawaited(_attachmentEventSubscription?.cancel());
     widget.threadController?.removeListener(_handleThreadListChanged);
     widget.controller.removeListener(_handleConversationChanged);
@@ -949,6 +951,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           desktop: widget.hasDesktopShell,
           activeThreadId: widget.isOffstage ? null : threadId,
           autofocusChoices: widget.approvalController.pending.isEmpty,
+          interruptingRequest: _interruptingQuestion,
         );
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.
@@ -4059,6 +4062,27 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return;
     }
     final target = _desktopStopTarget;
+    final question = widget.userInputController.pending.firstOrNull;
+    final composing = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorStateOfType<EditableTextState>()
+        ?.widget
+        .controller
+        .value
+        .composing;
+    if (target != null &&
+        ModalRoute.of(context)?.isCurrent != false &&
+        !(composing?.isValid == true && composing?.isCollapsed == false) &&
+        question != null &&
+        question.threadId == target.threadId &&
+        question.turnId == target.turnId &&
+        widget.approvalController.pending.isEmpty &&
+        widget.userInputController.pendingElicitations.isEmpty &&
+        !widget.userInputController.isSubmitting(question.requestId)) {
+      if (_interruptingQuestion.value == null) {
+        unawaited(_interruptPendingQuestion(question));
+      }
+      return;
+    }
     if (target == null || _hasPendingComposerRequest) {
       if (_armedComposerStop != null) {
         setState(_clearComposerStop);
@@ -4074,6 +4098,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _composerStopTimer = Timer(const Duration(seconds: 2), () {
       setState(_clearComposerStop);
     });
+  }
+
+  Future<void> _interruptPendingQuestion(UserInputRequest request) async {
+    _interruptingQuestion.value = request;
+    setState(_clearComposerStop);
+    try {
+      await widget.controller.interrupt();
+    } finally {
+      if (mounted && identical(_interruptingQuestion.value, request)) {
+        _interruptingQuestion.value = null;
+      }
+    }
   }
 
   Widget _composer(
@@ -5253,6 +5289,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _captureThreadScrollBookmark(previousThreadId);
     }
     _activeThreadId = nextThreadId;
+    _interruptingQuestion.value = null;
     _clearCommandOutputPreview();
     _showChanges = false;
     _goalEditorThreadId = null;

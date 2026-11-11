@@ -1516,6 +1516,128 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Escape interrupts the active stock question and cancels choice advancement',
+    (tester) async {
+      final runtime = await _pumpSelectedApp(tester);
+      runtime.turnStartStatus = TurnRuntimeStatus.inProgress;
+      final interrupt = Completer<void>();
+      runtime.interruptCompletion = interrupt.future;
+      addTearDown(() {
+        if (!interrupt.isCompleted) interrupt.complete();
+      });
+      await _send(tester, 'Ask a stock question.');
+      UserInputRequest request(String id, String turn) => UserInputRequest(
+        requestId: id,
+        threadId: 'controls-thread',
+        turnId: turn,
+        itemId: 'question-item',
+        isBlocking: false,
+        questions: [
+          UserInputQuestion(
+            id: 'choice',
+            header: 'Choice',
+            question: 'Choose the disposable path.',
+            options: const [
+              UserInputOption(label: 'First', description: ''),
+              UserInputOption(label: 'Second', description: ''),
+            ],
+            allowsOther: true,
+            isSecret: false,
+          ),
+        ],
+      );
+      runtime.emitUserInput(request('stale-question', 'older-turn'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(runtime.interrupts, isEmpty);
+      runtime.resolveUserInput('stale-question');
+      runtime.emitUserInput(request('active-question', 'turn-1'));
+      runtime.emitApproval(
+        const ApprovalRequest(
+          requestId: 'priority-approval',
+          kind: ApprovalKind.command,
+          threadId: 'controls-thread',
+          turnId: 'turn-1',
+          itemId: 'approved-item',
+          summary: 'Disposable approval',
+          approveSupported: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(runtime.interrupts, isEmpty);
+      expect(runtime.approvalDecisions, isEmpty);
+      await tester.tap(find.text('Reject'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('thread-actions-menu-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(runtime.interrupts, isEmpty);
+      expect(
+        tester
+            .widget<Focus>(
+              find.byKey(const ValueKey('user-input-choice-scope')),
+            )
+            .focusNode!
+            .hasPrimaryFocus,
+        isTrue,
+      );
+
+      final other = find.byKey(const ValueKey('user-input-choice-text'));
+      await tester.tap(other);
+      await tester.pumpAndSettle();
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: 'Composing',
+          selection: TextSelection.collapsed(offset: 9),
+          composing: TextRange(start: 0, end: 9),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(runtime.interrupts, isEmpty);
+      await tester.enterText(other, 'Preserved custom draft');
+      runtime.interruptError = StateError('Disposable interrupt failure');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(runtime.interrupts, [('controls-thread', 'turn-1')]);
+      expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
+      expect(
+        tester.widget<TextField>(other).controller!.text,
+        'Preserved custom draft',
+      );
+      runtime.interruptError = null;
+      runtime.interrupts.clear();
+      final scope = find.byKey(const ValueKey('user-input-choice-scope'));
+      tester.widget<Focus>(scope).focusNode!.requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await tester.pump(const Duration(milliseconds: 70));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(runtime.interrupts, [('controls-thread', 'turn-1')]);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(runtime.interrupts, hasLength(1));
+      expect(runtime.userInputSubmissions, isEmpty);
+      expect(runtime.userInputCancellations, isEmpty);
+      interrupt.complete();
+      runtime.resolveUserInput('active-question');
+      runtime.completeTurn('turn-1', TurnRuntimeStatus.interrupted);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('user-input-card')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('saved command group opens lazily and keeps loaded item search', (
     tester,
   ) async {
@@ -1711,6 +1833,10 @@ class _ProductRuntimeController extends RuntimeController {
   final StreamController<UserInputEvent> _userInputs =
       StreamController<UserInputEvent>.broadcast(sync: true);
   final List<TurnStartOptions> turnOptions = [];
+  var turnStartStatus = TurnRuntimeStatus.completed;
+  Future<void>? interruptCompletion;
+  Object? interruptError;
+  final List<(String, String)> interrupts = [];
   final List<String> startedThreadCwds = [];
   List<HistoryTurn> historyTurns = const [];
   List<HistoryItem> expandedTurnItems = const [];
@@ -1843,17 +1969,22 @@ class _ProductRuntimeController extends RuntimeController {
   @override
   Future<TurnHandle> startTurn(TurnStartOptions options) async {
     turnOptions.add(options);
-    return TurnHandle(
-      id: 'turn-${turnOptions.length}',
-      status: TurnRuntimeStatus.completed,
-    );
+    final id = 'turn-${turnOptions.length}';
+    if (turnStartStatus == TurnRuntimeStatus.inProgress) {
+      _turns.add(TurnStartedEvent(threadId: options.threadId, turnId: id));
+    }
+    return TurnHandle(id: id, status: turnStartStatus);
   }
 
   @override
   Future<void> interruptTurn({
     required String threadId,
     required String turnId,
-  }) async {}
+  }) async {
+    interrupts.add((threadId, turnId));
+    if (interruptError case final error?) throw error;
+    await interruptCompletion;
+  }
 
   @override
   Future<void> decideApproval({
@@ -1893,6 +2024,16 @@ class _ProductRuntimeController extends RuntimeController {
 
   void emitUserInput(UserInputRequest request) {
     _userInputs.add(UserInputRequestedEvent(request: request));
+  }
+
+  void resolveUserInput(Object requestId) {
+    _userInputs.add(UserInputResolvedEvent(requestId: requestId));
+  }
+
+  void completeTurn(String turnId, TurnRuntimeStatus status) {
+    _turns.add(
+      TurnCompletedEvent(threadId: thread.id, turnId: turnId, status: status),
+    );
   }
 
   Future<void> closeStreams() async {
