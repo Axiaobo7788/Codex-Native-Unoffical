@@ -69,10 +69,13 @@ Home, open Changes, Review, compact and dark keep separate state gates.
 
 ## Active peer coordination
 
-- Gemini's A6 source commits `d9dc65f`, `82b9685`, `e836769` and `40e8aaf`,
-  with evidence through `48659f3`, are being integrated normally. Codex owns
-  independent shared verification and integration; all seven surfaces and the
-  single heavy runtime slot have been released by the peer.
+- A6 source through `40e8aaf`, with peer evidence through `48659f3`, is
+  integrated and published at `ea4eb1a71e8570002f3b995a6816b11193e280ec`.
+  The next peer round owns A7 activity/reasoning/completed-disclosure
+  presentation in an isolated Gemini worktree. Codex owns systems review,
+  independent runtime verification and integration memory. Controller,
+  protocol and history semantics remain outside the presentation write lock.
+  Heavy analysis/test/build/capture work is serialized between the peers.
 - The independent ASCII snapshot matches all 195 source/test/tool files.
   Format, strict analysis, 65-root pure-Dart boundary, 555 default Flutter
   cases, five separately enabled direct-stock cases, the 100/1,000-turn history
@@ -82,7 +85,16 @@ Home, open Changes, Review, compact and dark keep separate state gates.
   ordinary and over-budget links, and zero tested image-sentinel GETs after exit.
 - Previous published checkpoint `5e0996aee18363845b628b1e50ef5b3bb73c4b30` passed
   all three hosted jobs in [43007725868](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43007725868).
-  The current integration's publication and exact-HEAD CI remain pending.
+  Exact-HEAD run [43033221454](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43033221454)
+  passed the Windows and macOS jobs. Linux attempt 1 never reached project
+  checks: Ubuntu package installation repeatedly reported `Temporary failure
+  resolving 'azure.archive.ubuntu.com'`. It was cancelled after the prolonged
+  stall; only Linux was retried at the same SHA. Attempt 2 encountered the
+  same DNS failure and was cancelled by the 20-minute job timeout, again
+  before project checks.
+  This is preserved external negative evidence, not a passing Linux gate or
+  a demonstrated UI regression. Isolated A7 work can proceed independently;
+  no workflow or package-source configuration was changed.
 - The 2026-11-11 15:54 host OOM killed ChatGPT while peer validation overlapped;
   the kernel snapshot included two Flutter compiler pipelines and six test
   runners. Those old workers are gone. This is not a Native memory-leak
