@@ -947,6 +947,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           key: _userInputBannerKey,
           controller: widget.userInputController,
           desktop: widget.hasDesktopShell,
+          activeThreadId: widget.isOffstage ? null : threadId,
         );
         // The official resize coordinator switches pane behavior at a 960 px
         // workspace. Keep the compact replacement view below that boundary.

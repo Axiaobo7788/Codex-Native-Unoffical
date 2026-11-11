@@ -826,8 +826,15 @@ void main() {
     expect(find.descendant(of: footer, matching: next), findsOneWidget);
     expect(tester.getCenter(other).dy, closeTo(tester.getCenter(next).dy, 1));
     expect(tester.getTopRight(other).dx, lessThan(tester.getTopLeft(next).dx));
+    expect(runtime.userInputSubmissions, isEmpty);
+    await tester.tap(
+      find.byKey(const ValueKey('user-input-approach-Incremental')),
+    );
+    await tester.pump(const Duration(milliseconds: 70));
     await tester.tap(other);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text('Question 1 of 2'), findsOneWidget);
     expect(tester.widget<TextField>(other).focusNode!.hasFocus, isTrue);
     expect(tester.widget<CodexButton>(next).isEnabled, isFalse);
 
@@ -861,8 +868,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
-    await tester.tap(next);
+    await tester.pump(const Duration(milliseconds: 179));
+    expect(find.text('Question 1 of 2'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pumpAndSettle();
     expect(find.text('Question 2 of 2'), findsOneWidget);
     expect(tester.widget<TextField>(field).obscureText, isTrue);
@@ -882,6 +890,67 @@ void main() {
     expect(runtime.userInputSubmissions.single.$2.values, {
       'approach': ['Full pass'],
       'note': ['  Keep this private.  '],
+    });
+  });
+
+  testWidgets('leaving the question thread cancels direct choice submission', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1191, 865);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final runtime = _ProductRuntimeController()
+      ..extraThreads = [
+        ThreadSummary(
+          id: 'other-thread',
+          sessionId: 'other-session',
+          preview: 'Alternate thread',
+          cwd: '/workspace',
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+          status: ThreadRuntimeStatus.idle,
+          ephemeral: false,
+        ),
+      ];
+    addTearDown(runtime.closeStreams);
+    await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controls thread'));
+    await tester.pumpAndSettle();
+    runtime.emitUserInput(
+      UserInputRequest(
+        requestId: 'choice-thread-scope',
+        threadId: runtime.thread.id,
+        turnId: 'turn-1',
+        itemId: 'item-1',
+        isBlocking: true,
+        questions: [
+          UserInputQuestion(
+            id: 'approach',
+            header: 'Approach',
+            question: 'Choose the fixture option.',
+            options: const [UserInputOption(label: 'Default', description: '')],
+            allowsOther: false,
+            isSecret: false,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('user-input-approach-Default')));
+    await tester.pump(const Duration(milliseconds: 70));
+    await tester.tap(find.text('Alternate thread'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(runtime.userInputSubmissions, isEmpty);
+
+    await tester.tap(find.text('Controls thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('user-input-submit')));
+    await tester.pumpAndSettle();
+    expect(runtime.userInputSubmissions.single.$2.values, {
+      'approach': ['Default'],
     });
   });
 
@@ -936,10 +1005,6 @@ void main() {
       final scroll = find.byKey(const ValueKey('user-input-question-scroll'));
       final submit = find.byKey(const ValueKey('user-input-submit'));
       final last = find.byKey(const ValueKey('user-input-approach-Option 8'));
-      await tester.tap(
-        find.byKey(const ValueKey('user-input-approach-Option 1')),
-      );
-      await tester.pumpAndSettle();
       tester.view.physicalSize = const Size(820, 420);
       await tester.pumpAndSettle();
       expect(tester.getBottomLeft(submit).dy, lessThan(420));
@@ -959,8 +1024,9 @@ void main() {
         ),
       );
       await tester.tap(last);
-      await tester.pumpAndSettle();
-      await tester.tap(submit);
+      await tester.pump(const Duration(milliseconds: 179));
+      expect(runtime.userInputSubmissions, isEmpty);
+      await tester.pump(const Duration(milliseconds: 1));
       await tester.pumpAndSettle();
       expect(runtime.userInputSubmissions.single.$2.values, {
         'approach': ['Option 8'],

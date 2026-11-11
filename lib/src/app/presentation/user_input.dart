@@ -5,10 +5,12 @@ class _UserInputBanner extends StatelessWidget {
     super.key,
     required this.controller,
     required this.desktop,
+    this.activeThreadId,
   });
 
   final UserInputController controller;
   final bool desktop;
+  final String? activeThreadId;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +50,7 @@ class _UserInputBanner extends StatelessWidget {
           pendingCount: controller.pending.length,
           errorMessage: error,
           desktop: desktop,
+          autoAdvance: desktop && request.threadId == activeThreadId,
         );
       },
     );
@@ -527,6 +530,7 @@ class _UserInputCard extends StatefulWidget {
     required this.pendingCount,
     required this.errorMessage,
     required this.desktop,
+    required this.autoAdvance,
   });
 
   final UserInputController controller;
@@ -534,6 +538,7 @@ class _UserInputCard extends StatefulWidget {
   final int pendingCount;
   final String? errorMessage;
   final bool desktop;
+  final bool autoAdvance;
 
   @override
   State<_UserInputCard> createState() => _UserInputCardState();
@@ -545,6 +550,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   final Set<String> _otherSelections = {};
   final _questionScroll = ScrollController();
   late final Map<String, FocusNode> _otherAnswerFocusNodes;
+  Timer? _choiceAdvanceTimer;
   var _questionIndex = 0;
 
   @override
@@ -568,6 +574,17 @@ class _UserInputCardState extends State<_UserInputCard> {
     };
   }
 
+  @override
+  void didUpdateWidget(covariant _UserInputCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.autoAdvance ||
+        oldWidget.controller != widget.controller ||
+        oldWidget.request.threadId != widget.request.threadId ||
+        oldWidget.request.turnId != widget.request.turnId) {
+      _cancelChoiceAdvance();
+    }
+  }
+
   void _handleAnswerChanged() {
     if (mounted) {
       setState(() {});
@@ -576,6 +593,7 @@ class _UserInputCardState extends State<_UserInputCard> {
 
   @override
   void dispose() {
+    _cancelChoiceAdvance();
     _questionScroll.dispose();
     for (final focus in _otherAnswerFocusNodes.values) {
       focus.dispose();
@@ -762,9 +780,7 @@ class _UserInputCardState extends State<_UserInputCard> {
           key: const ValueKey('user-input-cancel'),
           variant: CodexButtonVariant.ghost,
           size: CodexButtonSize.sm,
-          onPressed: submitting
-              ? null
-              : () => widget.controller.cancel(widget.request.requestId),
+          onPressed: submitting ? null : _cancelRequest,
           label: 'Cancel request',
           tooltip: 'Cancel request',
         ),
@@ -870,13 +886,7 @@ class _UserInputCardState extends State<_UserInputCard> {
               selected:
                   !usesOther && _selectedOptions[question.id] == option.label,
               enabled: !submitting,
-              onPressed: () {
-                _otherAnswerFocusNodes[question.id]?.unfocus();
-                setState(() {
-                  _otherSelections.remove(question.id);
-                  _selectedOptions[question.id] = option.label;
-                });
-              },
+              onPressed: () => _selectOption(question, option.label),
             ),
             const SizedBox(height: ThemeTokens.space1),
           ],
@@ -904,7 +914,48 @@ class _UserInputCardState extends State<_UserInputCard> {
     );
   }
 
+  void _selectOption(UserInputQuestion question, String label) {
+    if (_choiceAdvanceTimer != null) {
+      return;
+    }
+    _otherAnswerFocusNodes[question.id]?.unfocus();
+    setState(() {
+      _otherSelections.remove(question.id);
+      _selectedOptions[question.id] = label;
+    });
+    if (!widget.autoAdvance) {
+      return;
+    }
+
+    final index = _questionIndex;
+    _choiceAdvanceTimer = Timer(const Duration(milliseconds: 180), () {
+      _choiceAdvanceTimer = null;
+      if (!mounted ||
+          !TickerMode.valuesOf(context).enabled ||
+          _questionIndex != index ||
+          widget.controller.isSubmitting(widget.request.requestId)) {
+        return;
+      }
+      if (index + 1 < widget.request.questions.length) {
+        _showQuestion(index + 1);
+      } else {
+        _submit();
+      }
+    });
+  }
+
+  void _cancelChoiceAdvance() {
+    _choiceAdvanceTimer?.cancel();
+    _choiceAdvanceTimer = null;
+  }
+
+  void _cancelRequest() {
+    _cancelChoiceAdvance();
+    unawaited(widget.controller.cancel(widget.request.requestId));
+  }
+
   void _selectOtherAnswer(UserInputQuestion question, {bool moveFocus = true}) {
+    _cancelChoiceAdvance();
     if (!_otherSelections.contains(question.id)) {
       setState(() {
         _selectedOptions[question.id] = null;
@@ -965,6 +1016,7 @@ class _UserInputCardState extends State<_UserInputCard> {
 
   void _showQuestion(int index) {
     if (index < 0 || index >= widget.request.questions.length) return;
+    _cancelChoiceAdvance();
     if (_questionScroll.hasClients) {
       _questionScroll.jumpTo(0);
     }
@@ -986,6 +1038,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   );
 
   void _submit() {
+    _cancelChoiceAdvance();
     if (!_isComplete) return;
     final answers = {
       for (final question in widget.request.questions)
