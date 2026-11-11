@@ -564,6 +564,9 @@ class _UserInputCardState extends State<_UserInputCard> {
   final _optionFocusNodes = <({String questionId, String label}), FocusNode>{};
   late final Map<String, FocusNode> _otherAnswerFocusNodes;
   Timer? _choiceAdvanceTimer;
+  String? _advancingOptionLabel;
+  String? _hoveredOptionLabel;
+  var _otherHovered = false;
   FocusNode? _focusBeforeInterrupt;
   var _questionIndex = 0;
 
@@ -847,7 +850,6 @@ class _UserInputCardState extends State<_UserInputCard> {
     final submitting = _requestBusy;
     final questions = widget.request.questions;
     final stepped = widget.desktop && questions.length > 1;
-    final showHeader = !widget.desktop || widget.pendingCount > 1 || submitting;
     final visibleQuestions = stepped ? [questions[_questionIndex]] : questions;
     final hasNext = stepped && _questionIndex < questions.length - 1;
     final canContinue = hasNext
@@ -899,35 +901,29 @@ class _UserInputCardState extends State<_UserInputCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (stepped) ...[
-                            _questionStepHeader(
-                              questions[_questionIndex],
+                          if (widget.desktop && current != null) ...[
+                            _desktopQuestionHeader(
+                              current,
                               submitting,
+                              stepped: stepped,
                             ),
                             const SizedBox(height: ThemeTokens.space3),
-                          ] else if (showHeader) ...[
+                          ] else if (!widget.desktop) ...[
                             Row(
                               children: [
-                                if (!widget.desktop)
-                                  Icon(
-                                    Icons.live_help_outlined,
-                                    size: 18,
-                                    color: theme.textSecondary,
-                                  ),
-                                if (!widget.desktop)
-                                  const SizedBox(width: ThemeTokens.space2),
+                                Icon(
+                                  Icons.live_help_outlined,
+                                  size: 18,
+                                  color: theme.textSecondary,
+                                ),
+                                const SizedBox(width: ThemeTokens.space2),
                                 Expanded(
                                   child: Text(
                                     'Codex needs your input'
                                     '${widget.pendingCount > 1 ? ' (${widget.pendingCount})' : ''}',
-                                    style: widget.desktop
-                                        ? Theme.of(context).textTheme.bodySmall
-                                              ?.copyWith(
-                                                color: theme.textSecondary,
-                                              )
-                                        : Theme.of(context)
-                                              .textTheme
-                                              .titleMedium,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
                                   ),
                                 ),
                                 if (submitting)
@@ -960,7 +956,7 @@ class _UserInputCardState extends State<_UserInputCard> {
                               visibleQuestions[index],
                               submitting,
                               inlineOther: inlineQuestion != null,
-                              showTitle: !stepped,
+                              showTitle: !widget.desktop,
                             ),
                           ],
                         ],
@@ -976,7 +972,11 @@ class _UserInputCardState extends State<_UserInputCard> {
                         ?.copyWith(color: palette.danger),
                   ),
                 ],
-                const SizedBox(height: ThemeTokens.space3),
+                SizedBox(
+                  height: inlineQuestion != null
+                      ? ThemeTokens.space1
+                      : ThemeTokens.space3,
+                ),
                 if (inlineQuestion != null)
                   _inlineOtherFooter(inlineQuestion, submitting, actions)
                 else
@@ -996,10 +996,17 @@ class _UserInputCardState extends State<_UserInputCard> {
     );
   }
 
-  Widget _questionStepHeader(UserInputQuestion question, bool submitting) {
-    final theme = Theme.of(context).textTheme;
+  Widget _desktopQuestionHeader(
+    UserInputQuestion question,
+    bool submitting, {
+    required bool stepped,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    final codexTheme = OfficialCodexTheme.of(context);
     final count = widget.request.questions.length;
+    final hasTrailing = widget.pendingCount > 1 || stepped || submitting;
     return Padding(
+      key: const ValueKey('desktop-question-header'),
       padding: const EdgeInsetsDirectional.only(
         start: ThemeTokens.space1,
         top: ThemeTokens.space1,
@@ -1010,47 +1017,67 @@ class _UserInputCardState extends State<_UserInputCard> {
           Expanded(
             child: Text(
               question.question,
-              style: theme.bodyMedium?.copyWith(
+              style: textTheme.bodyMedium?.copyWith(
                 fontSize: 14,
                 height: 20 / 14,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const SizedBox(width: ThemeTokens.space2),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CodexIconButton(
-                key: const ValueKey('user-input-previous'),
-                tooltip: 'Previous question',
-                size: 20,
-                onPressed: submitting || _questionIndex == 0
-                    ? null
-                    : () => _showQuestion(_questionIndex - 1),
-                icon: const Icon(Icons.chevron_left_rounded, size: 14),
-              ),
-              const SizedBox(width: ThemeTokens.space1),
-              Text('${_questionIndex + 1} of $count', style: theme.bodySmall),
-              const SizedBox(width: ThemeTokens.space1),
-              CodexIconButton(
-                key: const ValueKey('user-input-next-question'),
-                tooltip: 'Next question',
-                size: 20,
-                onPressed: submitting || _questionIndex == count - 1
-                    ? null
-                    : () => _showQuestion(_questionIndex + 1),
-                icon: const Icon(Icons.chevron_right_rounded, size: 14),
-              ),
-              if (submitting) ...[
-                const SizedBox(width: ThemeTokens.space1),
-                const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+          if (hasTrailing) ...[
+            const SizedBox(width: ThemeTokens.space2),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.pendingCount > 1) ...[
+                  Text(
+                    '${widget.pendingCount} queued',
+                    key: const ValueKey('desktop-question-queued-count'),
+                    style: textTheme.bodySmall?.copyWith(
+                      color: codexTheme.textSecondary,
+                    ),
+                  ),
+                  if (stepped || submitting)
+                    const SizedBox(width: ThemeTokens.space2),
+                ],
+                if (stepped) ...[
+                  CodexIconButton(
+                    key: const ValueKey('user-input-previous'),
+                    tooltip: 'Previous question',
+                    size: 20,
+                    onPressed: submitting || _questionIndex == 0
+                        ? null
+                        : () => _showQuestion(_questionIndex - 1),
+                    icon: const Icon(Icons.chevron_left_rounded, size: 14),
+                  ),
+                  const SizedBox(width: ThemeTokens.space1),
+                  Text(
+                    '${_questionIndex + 1} of $count',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: codexTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: ThemeTokens.space1),
+                  CodexIconButton(
+                    key: const ValueKey('user-input-next-question'),
+                    tooltip: 'Next question',
+                    size: 20,
+                    onPressed: submitting || _questionIndex == count - 1
+                        ? null
+                        : () => _showQuestion(_questionIndex + 1),
+                    icon: const Icon(Icons.chevron_right_rounded, size: 14),
+                  ),
+                  if (submitting) const SizedBox(width: ThemeTokens.space1),
+                ],
+                if (submitting)
+                  const SizedBox.square(
+                    key: ValueKey('desktop-question-submitting-indicator'),
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
               ],
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -1060,41 +1087,79 @@ class _UserInputCardState extends State<_UserInputCard> {
     required bool hasNext,
     required bool submitting,
     required bool canContinue,
-  }) => Row(
-    mainAxisSize: MainAxisSize.min,
-    mainAxisAlignment: MainAxisAlignment.end,
-    children: [
-      Flexible(
-        child: CodexButton(
-          key: const ValueKey('user-input-cancel'),
-          variant: CodexButtonVariant.ghost,
-          size: CodexButtonSize.sm,
-          onPressed: submitting ? null : _cancelRequest,
-          label: 'Cancel request',
-          tooltip: 'Cancel request',
+  }) {
+    final codexTheme = OfficialCodexTheme.of(context);
+    final actionLabel = hasNext
+        ? 'Continue'
+        : widget.desktop
+        ? 'Submit'
+        : 'Submit answers';
+    final primaryFg = codexTheme.isDark
+        ? const Color(0xFF0D0D0D)
+        : const Color(0xFFFFFFFF);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Flexible(
+          child: CodexButton(
+            key: const ValueKey('user-input-cancel'),
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
+            onPressed: submitting ? null : _cancelRequest,
+            label: 'Cancel request',
+            tooltip: 'Cancel request',
+          ),
         ),
-      ),
-      const SizedBox(width: ThemeTokens.space2),
-      Flexible(
-        child: CodexButton(
-          key: ValueKey(hasNext ? 'user-input-next' : 'user-input-submit'),
-          variant: CodexButtonVariant.primary,
-          size: CodexButtonSize.sm,
-          loading: submitting,
-          onPressed: submitting || !canContinue
-              ? null
-              : hasNext
-              ? () => _showQuestion(_questionIndex + 1)
-              : _submit,
-          label: hasNext
-              ? 'Continue'
-              : widget.desktop
-              ? 'Submit'
-              : 'Submit answers',
+        const SizedBox(width: ThemeTokens.space2),
+        Flexible(
+          child: CodexButton(
+            key: ValueKey(hasNext ? 'user-input-next' : 'user-input-submit'),
+            variant: CodexButtonVariant.primary,
+            size: CodexButtonSize.sm,
+            loading: submitting,
+            onPressed: submitting || !canContinue
+                ? null
+                : hasNext
+                ? () => _showQuestion(_questionIndex + 1)
+                : _submit,
+            label: actionLabel,
+            child: widget.desktop
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          actionLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: primaryFg,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                      ),
+                      if (!submitting) ...[
+                        const SizedBox(width: 6),
+                        ExcludeSemantics(
+                          child: _DesktopReturnKeyBadge(
+                            key: const ValueKey(
+                              'desktop-question-submit-shortcut',
+                            ),
+                            foreground: primaryFg,
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                : null,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _inlineOtherFooter(
     UserInputQuestion question,
@@ -1103,22 +1168,50 @@ class _UserInputCardState extends State<_UserInputCard> {
   ) {
     final focus = _otherAnswerFocusNodes[question.id]!;
     final theme = OfficialCodexTheme.of(context);
-    return AnimatedBuilder(
-      animation: focus,
-      builder: (context, child) => DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(OfficialCodexTheme.buttonRadius),
-          border: Border.all(
-            color: focus.hasFocus ? theme.focusRing : Colors.transparent,
-          ),
-        ),
-        child: child,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
+    return MouseRegion(
+      onEnter: submitting
+          ? null
+          : (_) {
+              if (!_otherHovered || _hoveredOptionLabel != null) {
+                setState(() {
+                  _otherHovered = true;
+                  _hoveredOptionLabel = null;
+                });
+              }
+            },
+      onExit: (_) {
+        if (_otherHovered) {
+          setState(() => _otherHovered = false);
+        }
+      },
+      child: AnimatedBuilder(
+        animation: focus,
+        builder: (context, child) => Container(
           key: const ValueKey('desktop-question-other-footer'),
+          constraints: const BoxConstraints(minHeight: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: focus.hasFocus ? theme.focusRing : Colors.transparent,
+            ),
+          ),
+          child: child,
+        ),
+        child: Row(
           children: [
+            SizedBox.square(
+              key: const ValueKey('desktop-question-other-marker'),
+              dimension: 20,
+              child: Center(
+                child: Icon(
+                  Icons.edit_outlined,
+                  size: 14,
+                  color: theme.textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(width: ThemeTokens.space2),
             Expanded(
               child: Focus(
                 canRequestFocus: false,
@@ -1188,21 +1281,56 @@ class _UserInputCardState extends State<_UserInputCard> {
         ],
         if (question.options.isNotEmpty) ...[
           for (final (index, option) in question.options.indexed) ...[
-            _UserInputOptionTile(
-              key: ValueKey('user-input-${question.id}-${option.label}'),
-              label: option.label,
-              description: option.description,
-              desktop: widget.desktop,
-              focusNode: widget.desktop
-                  ? _optionFocus(question, option.label)
-                  : null,
-              number: question.options.length > 1 ? index + 1 : null,
-              selected:
-                  !usesOther && _selectedOptions[question.id] == option.label,
-              enabled: !submitting,
-              onPressed: () => _selectOption(question, option.label),
+            Builder(
+              builder: (context) {
+                final selected =
+                    !usesOther && _selectedOptions[question.id] == option.label;
+                final markerSelected =
+                    widget.desktop && _advancingOptionLabel != null
+                    ? _advancingOptionLabel == option.label
+                    : selected;
+                final highlighted = widget.desktop
+                    ? (_advancingOptionLabel != null
+                          ? _advancingOptionLabel == option.label
+                          : _otherHovered
+                          ? false
+                          : (_hoveredOptionLabel != null
+                                ? _hoveredOptionLabel == option.label
+                                : selected))
+                    : selected;
+                return _UserInputOptionTile(
+                  key: ValueKey('user-input-${question.id}-${option.label}'),
+                  label: option.label,
+                  description: option.description,
+                  desktop: widget.desktop,
+                  focusNode: widget.desktop
+                      ? _optionFocus(question, option.label)
+                      : null,
+                  number: question.options.length > 1 ? index + 1 : null,
+                  selected: selected,
+                  markerSelected: markerSelected,
+                  highlighted: highlighted,
+                  enabled: !submitting,
+                  onHoverChanged: widget.desktop
+                      ? (hovering) {
+                          if (hovering && _hoveredOptionLabel != option.label) {
+                            setState(() {
+                              _otherHovered = false;
+                              _hoveredOptionLabel = option.label;
+                            });
+                          } else if (!hovering &&
+                              _hoveredOptionLabel == option.label) {
+                            setState(() => _hoveredOptionLabel = null);
+                          }
+                        }
+                      : null,
+                  onPressed: () => _selectOption(question, option.label),
+                );
+              },
             ),
-            const SizedBox(height: ThemeTokens.space1),
+            if (index < question.options.length - 1 ||
+                (question.allowsOther && !inlineOther))
+              const SizedBox(height: ThemeTokens.space1),
           ],
           if (question.allowsOther && !inlineOther) ...[
             _UserInputOptionTile(
@@ -1236,13 +1364,18 @@ class _UserInputCardState extends State<_UserInputCard> {
     }
 
     final index = _questionIndex;
+    setState(() => _advancingOptionLabel = label);
     _choiceAdvanceTimer = Timer(const Duration(milliseconds: 180), () {
       _choiceAdvanceTimer = null;
+      _advancingOptionLabel = null;
       if (!mounted ||
           !TickerMode.valuesOf(context).enabled ||
           _questionIndex != index ||
           widget.request.questions.elementAtOrNull(index)?.id != question.id ||
           _requestBusy) {
+        if (mounted) {
+          setState(() {});
+        }
         return;
       }
       _acceptCurrentChoice(question);
@@ -1271,6 +1404,7 @@ class _UserInputCardState extends State<_UserInputCard> {
   void _cancelChoiceAdvance() {
     _choiceAdvanceTimer?.cancel();
     _choiceAdvanceTimer = null;
+    _advancingOptionLabel = null;
   }
 
   void _cancelRequest() {
@@ -1325,13 +1459,7 @@ class _UserInputCardState extends State<_UserInputCard> {
       enabledBorder: inline ? InputBorder.none : null,
       focusedBorder: inline ? InputBorder.none : null,
       disabledBorder: inline ? InputBorder.none : null,
-      prefixIcon: inline ? const Icon(Icons.edit_outlined, size: 14) : null,
-      prefixIconConstraints: inline
-          ? const BoxConstraints(minWidth: 20, minHeight: 20)
-          : null,
-      contentPadding: inline
-          ? const EdgeInsetsDirectional.only(start: ThemeTokens.space2)
-          : null,
+      contentPadding: inline ? const EdgeInsets.symmetric(vertical: 4) : null,
       hintText: question.isSecret
           ? 'Enter a private answer'
           : inline
@@ -1351,7 +1479,11 @@ class _UserInputCardState extends State<_UserInputCard> {
     if (_questionScroll.hasClients) {
       _questionScroll.jumpTo(0);
     }
-    setState(() => _questionIndex = index);
+    setState(() {
+      _hoveredOptionLabel = null;
+      _otherHovered = false;
+      _questionIndex = index;
+    });
     _focusCurrentChoices();
   }
 
@@ -1380,6 +1512,36 @@ class _UserInputCardState extends State<_UserInputCard> {
   }
 }
 
+class _DesktopReturnKeyBadge extends StatelessWidget {
+  const _DesktopReturnKeyBadge({super.key, required this.foreground});
+
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 16,
+      constraints: const BoxConstraints(minWidth: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: foreground.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '⏎',
+        textScaler: TextScaler.noScaling,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 11,
+          height: 1.0,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
 class _UserInputOptionTile extends StatefulWidget {
   const _UserInputOptionTile({
     super.key,
@@ -1390,6 +1552,9 @@ class _UserInputOptionTile extends StatefulWidget {
     this.focusNode,
     this.custom = false,
     required this.selected,
+    this.markerSelected,
+    this.highlighted,
+    this.onHoverChanged,
     required this.enabled,
     required this.onPressed,
   });
@@ -1401,6 +1566,9 @@ class _UserInputOptionTile extends StatefulWidget {
   final FocusNode? focusNode;
   final bool custom;
   final bool selected;
+  final bool? markerSelected;
+  final bool? highlighted;
+  final ValueChanged<bool>? onHoverChanged;
   final bool enabled;
   final VoidCallback onPressed;
 
@@ -1409,6 +1577,8 @@ class _UserInputOptionTile extends StatefulWidget {
 }
 
 class _UserInputOptionTileState extends State<_UserInputOptionTile> {
+  static const _recommendedSuffix = ' (Recommended)';
+
   var _hovered = false;
   var _focused = false;
 
@@ -1416,7 +1586,8 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
   Widget build(BuildContext context) {
     final palette = ThemeTokens.of(context);
     final theme = OfficialCodexTheme.of(context);
-    final background = widget.selected
+    final effectiveHighlighted = widget.highlighted ?? widget.selected;
+    final background = effectiveHighlighted
         ? palette.selected
         : _hovered && widget.enabled
         ? palette.hover
@@ -1428,6 +1599,19 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
         : widget.selected
         ? palette.borderStrong
         : palette.border;
+    final hasRecommendedSuffix =
+        widget.desktop && widget.label.endsWith(_recommendedSuffix);
+    final displayLabel = hasRecommendedSuffix
+        ? widget.label.substring(
+            0,
+            widget.label.length - _recommendedSuffix.length,
+          )
+        : widget.label;
+    final showEnterAffordance =
+        widget.desktop &&
+        !widget.custom &&
+        widget.enabled &&
+        (effectiveHighlighted || _hovered || _focused);
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 80),
       padding: widget.desktop
@@ -1437,45 +1621,128 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
       decoration: BoxDecoration(
         color: background,
         border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(OfficialCodexTheme.buttonRadius),
+        borderRadius: BorderRadius.circular(
+          widget.desktop ? 12 : OfficialCodexTheme.buttonRadius,
+        ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: widget.desktop
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         children: [
-          if (widget.desktop)
-            _desktopMarker(theme)
-          else
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(
-                widget.selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                size: 16,
-                color: widget.selected ? palette.accent : palette.textMuted,
-              ),
-            ),
-          const SizedBox(width: ThemeTokens.space2),
           Expanded(
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.label,
-                  style: Theme.of(context).textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                if (widget.description.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.description,
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: palette.textSecondary),
+                if (widget.desktop)
+                  _desktopMarker(theme)
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(
+                      widget.selected
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 16,
+                      color: widget.selected
+                          ? palette.accent
+                          : palette.textMuted,
+                    ),
                   ),
-                ],
+                const SizedBox(width: ThemeTokens.space2),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (hasRecommendedSuffix)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              displayLabel,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    fontSize: 14,
+                                    height: 20 / 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                            ExcludeSemantics(
+                              child: Container(
+                                key: const ValueKey(
+                                  'desktop-question-recommended-badge',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.selectedTint,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Recommended',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontSize: 12,
+                                        height: 16 / 12,
+                                        color: theme.textSecondary,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          displayLabel,
+                          style: widget.desktop
+                              ? Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      fontSize: 14,
+                                      height: 20 / 14,
+                                      fontWeight: FontWeight.w500,
+                                    )
+                              : Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      if (widget.description.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.description,
+                          style: widget.desktop
+                              ? Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      fontSize: 14,
+                                      height: 20 / 14,
+                                      color: theme.textSecondary,
+                                    )
+                              : Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: palette.textSecondary),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+          if (widget.desktop && !widget.custom) ...[
+            const SizedBox(width: ThemeTokens.space2),
+            ExcludeSemantics(
+              child: Opacity(
+                key: const ValueKey('desktop-question-option-enter'),
+                opacity: showEnterAffordance ? 1 : 0,
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 16,
+                  color: theme.textSecondary,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1490,7 +1757,6 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
       child: FocusableActionDetector(
         focusNode: widget.focusNode,
         enabled: widget.enabled,
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
         onShowFocusHighlight: (value) => setState(() => _focused = value),
         shortcuts: const {
           SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
@@ -1511,6 +1777,20 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
             cursor: widget.enabled
                 ? SystemMouseCursors.click
                 : SystemMouseCursors.basic,
+            onEnter: widget.enabled
+                ? (_) {
+                    if (!_hovered) {
+                      setState(() => _hovered = true);
+                    }
+                    widget.onHoverChanged?.call(true);
+                  }
+                : null,
+            onExit: (_) {
+              if (_hovered) {
+                setState(() => _hovered = false);
+              }
+              widget.onHoverChanged?.call(false);
+            },
             child: Opacity(opacity: widget.enabled ? 1 : 0.55, child: content),
           ),
         ),
@@ -1520,13 +1800,14 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
 
   Widget _desktopMarker(OfficialCodexThemeData theme) {
     final number = widget.number;
+    final selected = widget.markerSelected ?? widget.selected;
     if (widget.custom) {
       return SizedBox.square(
         dimension: 20,
-        child: Icon(Icons.edit_outlined, size: 14, color: theme.textMuted),
+        child: Icon(Icons.edit_outlined, size: 14, color: theme.textSecondary),
       );
     }
-    final foreground = widget.selected
+    final foreground = selected
         ? theme.workspaceBackground
         : theme.textSecondary;
     return Container(
@@ -1535,9 +1816,9 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
       height: 20,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: widget.selected ? theme.textPrimary : theme.elevatedSurface,
+        color: selected ? theme.textPrimary : theme.hoverTint,
         border: Border.all(
-          color: widget.selected ? theme.textPrimary : theme.hairlineBorder,
+          color: selected ? theme.textPrimary : theme.hairlineBorder,
         ),
         borderRadius: BorderRadius.circular(4),
       ),
@@ -1546,11 +1827,12 @@ class _UserInputOptionTileState extends State<_UserInputOptionTile> {
               '$number',
               style: TextStyle(
                 color: foreground,
-                fontSize: 11,
+                fontSize: 12,
+                height: 1.0,
                 fontWeight: FontWeight.w500,
               ),
             )
-          : widget.selected
+          : selected
           ? Icon(Icons.circle, size: 6, color: foreground)
           : null,
     );

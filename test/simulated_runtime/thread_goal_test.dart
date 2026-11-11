@@ -450,6 +450,85 @@ void main() {
     expect(harness.goalWrites, 3);
     expect(harness.goal!.objective, 'Retryable draft');
   });
+
+  testWidgets(
+    'Goal editor refreshes relative wall time across visibility lifecycle and Revert preserves non-refocus end selection',
+    (tester) async {
+      final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final harness = _GoalHarness()
+        ..goal = ThreadGoal(
+          objective: 'Saved goal',
+          status: ThreadGoalStatus.paused,
+          createdAtSeconds: nowSeconds - 180,
+          updatedAtSeconds: nowSeconds,
+          tokensUsed: 0,
+          timeUsedSeconds: 0,
+        );
+      await pumpSimulatedRuntimeApp(tester, harness: harness);
+      await tester.tap(find.text('Goal thread'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit goal'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Updated just now'), findsOneWidget);
+      addTearDown(() {
+        final state = tester.binding.lifecycleState;
+        if (state == AppLifecycleState.hidden ||
+            state == AppLifecycleState.paused) {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+        }
+        if (tester.binding.lifecycleState != AppLifecycleState.resumed) {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+        }
+      });
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump();
+      harness.goal = ThreadGoal(
+        objective: 'Saved goal',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: nowSeconds - 180,
+        updatedAtSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 180,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+      harness._goalEvents.add(
+        ThreadGoalUpdatedEvent(threadId: 'goal-thread', goal: harness.goal!),
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('Updated 3 min ago'), findsOneWidget);
+
+      final editor = find.byKey(
+        const ValueKey('desktop-goal-editor-objective'),
+      );
+      final revert = find.byKey(const ValueKey('desktop-goal-editor-revert'));
+      await tester.enterText(editor, 'Saved goal ');
+      await tester.pump();
+      tester.widget<TextField>(editor).focusNode!.unfocus();
+      await tester.pump();
+      expect(tester.widget<TextField>(editor).focusNode!.hasFocus, isFalse);
+
+      await tester.tap(revert);
+      await tester.pumpAndSettle();
+      final revertedField = tester.widget<TextField>(editor);
+      expect(revertedField.controller!.text, 'Saved goal');
+      expect(
+        revertedField.controller!.selection,
+        const TextSelection.collapsed(offset: 10),
+      );
+      expect(revertedField.focusNode!.hasFocus, isFalse);
+
+      await tester.tap(find.byTooltip('Close goal editor'));
+      await tester.pumpAndSettle();
+      expect(editor, findsNothing);
+    },
+  );
 }
 
 class _GoalHarness extends SimulatedRuntimeHarness {

@@ -316,6 +316,7 @@ class CodexIconButton extends StatefulWidget {
     this.shape = BoxShape.rectangle,
     this.tooltip,
     this.selected = false,
+    this.disabledOpacity = 0.45,
   });
 
   final VoidCallback? onPressed;
@@ -326,6 +327,7 @@ class CodexIconButton extends StatefulWidget {
   final BoxShape shape;
   final String? tooltip;
   final bool selected;
+  final double disabledOpacity;
 
   bool get isEnabled => onPressed != null;
 
@@ -478,7 +480,7 @@ class _CodexIconButtonState extends State<CodexIconButton> {
     );
 
     if (!widget.isEnabled) {
-      result = Opacity(opacity: 0.45, child: result);
+      result = Opacity(opacity: widget.disabledOpacity, child: result);
     }
 
     result = FocusableActionDetector(

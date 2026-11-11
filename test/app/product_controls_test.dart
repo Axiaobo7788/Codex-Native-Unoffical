@@ -1940,6 +1940,179 @@ void main() {
     expect(find.text('group output'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'desktop question header unifies queued/submitting state and scopes composer send disabled opacity',
+    (tester) async {
+      final runtime = await _pumpSelectedApp(tester);
+
+      final sendButton = find.byKey(const ValueKey('composer-send-button'));
+      expect(tester.widget<CodexIconButton>(sendButton).isEnabled, isFalse);
+      final sendOpacity = tester.widget<Opacity>(
+        find.descendant(of: sendButton, matching: find.byType(Opacity)).first,
+      );
+      expect(sendOpacity.opacity, 0.5);
+
+      final submitGate = Completer<void>();
+      runtime.userInputSubmitCompletion = submitGate.future;
+      for (final id in ['queued-1', 'queued-2']) {
+        runtime.emitUserInput(
+          UserInputRequest(
+            requestId: id,
+            threadId: 'controls-thread',
+            turnId: 'turn-1',
+            itemId: 'item-$id',
+            isBlocking: true,
+            questions: [
+              UserInputQuestion(
+                id: 'approach',
+                header: 'Approach',
+                question: 'Select the preferred strategy.',
+                options: const [
+                  UserInputOption(
+                    label: 'Incremental (Recommended)',
+                    description: 'Small, reversible slices.',
+                  ),
+                  UserInputOption(
+                    label: 'Full rewrite',
+                    description: 'Replace the whole surface at once.',
+                  ),
+                ],
+                allowsOther: true,
+                isSecret: false,
+              ),
+            ],
+          ),
+        );
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Codex needs your input'), findsNothing);
+      final header = find.byKey(const ValueKey('desktop-question-header'));
+      final queued = find.byKey(
+        const ValueKey('desktop-question-queued-count'),
+      );
+      expect(header, findsOneWidget);
+      expect(find.descendant(of: header, matching: queued), findsOneWidget);
+      expect(tester.widget<Text>(queued).data, '2 queued');
+
+      expect(find.text('Incremental'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('desktop-question-recommended-badge')),
+        findsOneWidget,
+      );
+      final firstTile = find.byKey(
+        const ValueKey('user-input-approach-Incremental (Recommended)'),
+      );
+      final secondTile = find.byKey(
+        const ValueKey('user-input-approach-Full rewrite'),
+      );
+      expect(
+        find.descendant(
+          of: firstTile,
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label == 'Incremental (Recommended)',
+          ),
+        ),
+        findsOneWidget,
+      );
+
+      double enterOpacityFor(Finder tile) => tester
+          .widget<Opacity>(
+            find.descendant(
+              of: tile,
+              matching: find.byKey(
+                const ValueKey('desktop-question-option-enter'),
+              ),
+            ),
+          )
+          .opacity;
+
+      expect(enterOpacityFor(firstTile), 1);
+      expect(enterOpacityFor(secondTile), 0);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(gesture.removePointer);
+      await gesture.addPointer(location: Offset.zero);
+      await gesture.moveTo(tester.getCenter(secondTile));
+      await tester.pumpAndSettle();
+      expect(enterOpacityFor(firstTile), 0);
+      expect(enterOpacityFor(secondTile), 1);
+
+      final footer = find.byKey(
+        const ValueKey('desktop-question-other-footer'),
+      );
+      await gesture.moveTo(tester.getCenter(footer));
+      await tester.pumpAndSettle();
+      expect(enterOpacityFor(firstTile), 0);
+      expect(enterOpacityFor(secondTile), 0);
+
+      final firstMarker = find
+          .descendant(
+            of: firstTile,
+            matching: find.byKey(
+              const ValueKey('desktop-question-option-marker'),
+            ),
+          )
+          .first;
+      final otherMarker = find.byKey(
+        const ValueKey('desktop-question-other-marker'),
+      );
+      expect(
+        tester.getTopLeft(otherMarker).dx,
+        closeTo(tester.getTopLeft(firstMarker).dx, 0.5),
+      );
+      expect(
+        tester.getTopLeft(footer).dy - tester.getBottomLeft(secondTile).dy,
+        closeTo(4, 1.5),
+      );
+
+      final submit = find.byKey(const ValueKey('user-input-submit'));
+      expect(
+        find.descendant(
+          of: submit,
+          matching: find.byKey(
+            const ValueKey('desktop-question-submit-shortcut'),
+          ),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(submit);
+      await tester.pump();
+      expect(find.textContaining('Codex needs your input'), findsNothing);
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.byKey(
+            const ValueKey('desktop-question-submitting-indicator'),
+          ),
+        ),
+        findsOneWidget,
+      );
+      final cancelDisabledOpacity = tester.widget<Opacity>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('user-input-cancel')),
+              matching: find.byType(Opacity),
+            )
+            .first,
+      );
+      expect(cancelDisabledOpacity.opacity, 0.45);
+
+      submitGate.complete();
+      await tester.pumpAndSettle();
+      expect(runtime.userInputSubmissions.single.$1, 'queued-1');
+      expect(runtime.userInputSubmissions.single.$2.values, {
+        'approach': ['Incremental (Recommended)'],
+      });
+      expect(find.byKey(const ValueKey('user-input-card')), findsOneWidget);
+      expect(queued, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<_ProductRuntimeController> _pumpSelectedApp(WidgetTester tester) async {
@@ -2012,6 +2185,7 @@ class _ProductRuntimeController extends RuntimeController {
   final List<({Object requestId, ApprovalDecision decision})>
   approvalDecisions = [];
   final List<(Object, UserInputAnswers)> userInputSubmissions = [];
+  Future<void>? userInputSubmitCompletion;
   final List<Object> userInputCancellations = [];
   var failNextReadThread = false;
   List<ThreadSummary> extraThreads = const [];
@@ -2167,6 +2341,7 @@ class _ProductRuntimeController extends RuntimeController {
     required UserInputAnswers answers,
   }) async {
     userInputSubmissions.add((requestId, answers));
+    await userInputSubmitCompletion;
   }
 
   @override
