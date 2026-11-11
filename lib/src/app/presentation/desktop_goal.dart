@@ -150,13 +150,25 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
     final objective = _draft.text.trim();
     final changed = objective != widget.goal.objective;
     final stale = _sourceObjective != widget.goal.objective;
+    final canSave =
+        !widget.saving &&
+        changed &&
+        !stale &&
+        objective.isNotEmpty &&
+        objective.length <= ThreadGoal.maxObjectiveLength;
+    final save = canSave ? () => unawaited(_save(objective)) : null;
+    void saveShortcut() {
+      final composing = _draft.value.composing;
+      if (!composing.isValid || composing.isCollapsed) save?.call();
+    }
+
     final minutes = math.max(
       0,
       (DateTime.now().millisecondsSinceEpoch ~/ 1000 -
               widget.goal.updatedAtSeconds) ~/
           60,
     );
-    return DecoratedBox(
+    final editor = DecoratedBox(
       decoration: BoxDecoration(
         color: theme.workspaceBackground,
         border: BorderDirectional(
@@ -194,8 +206,13 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 12, 4),
+          Container(
+            key: const ValueKey('desktop-goal-editor-toolbar'),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: theme.hairlineBorder)),
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -207,37 +224,37 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
                         : 'Updated $minutes min ago',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: theme.textSecondary),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: theme.textSecondary,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
                   ),
                 ),
+                const SizedBox(width: ThemeTokens.space1),
                 CodexIconButton(
+                  key: const ValueKey('desktop-goal-editor-revert'),
                   tooltip: 'Revert goal draft',
                   size: 28,
-                  onPressed: !widget.saving && (changed || stale)
+                  onPressed:
+                      !widget.saving &&
+                          (_draft.text != widget.goal.objective || stale)
                       ? () => setState(_revert)
                       : null,
                   icon: const Icon(Icons.undo_rounded, size: 16),
                 ),
-                const SizedBox(width: ThemeTokens.space1),
+                const SizedBox(width: 6),
                 CodexButton(
+                  key: const ValueKey('desktop-goal-editor-save'),
                   label: 'Save',
-                  size: CodexButtonSize.sm,
+                  size: CodexButtonSize.toolbar,
                   variant: CodexButtonVariant.primary,
                   loading: widget.saving,
-                  onPressed:
-                      !widget.saving &&
-                          changed &&
-                          !stale &&
-                          objective.isNotEmpty &&
-                          objective.length <= ThreadGoal.maxObjectiveLength
-                      ? () => unawaited(_save(objective))
-                      : null,
+                  onPressed: save,
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: theme.hairlineBorder),
           Expanded(
             child: TextField(
               key: const ValueKey('desktop-goal-editor-objective'),
@@ -246,6 +263,8 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
               onChanged: (_) => setState(() {}),
               autofocus: true,
               readOnly: widget.saving,
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(fontSize: 14, height: 1.5),
               expands: true,
               maxLines: null,
               maxLength: ThreadGoal.maxObjectiveLength,
@@ -257,12 +276,27 @@ class _DesktopGoalEditorState extends State<_DesktopGoalEditor> {
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 counterText: '',
-                contentPadding: EdgeInsets.all(16),
+                contentPadding: EdgeInsets.all(20),
               ),
             ),
           ),
         ],
       ),
+    );
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          control: true,
+          includeRepeats: false,
+        ): saveShortcut,
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          meta: true,
+          includeRepeats: false,
+        ): saveShortcut,
+      },
+      child: editor,
     );
   }
 }

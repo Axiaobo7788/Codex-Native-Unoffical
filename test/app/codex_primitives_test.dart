@@ -30,6 +30,49 @@ void main() {
   }
 
   group('CodexButton and CodexIconButton', () {
+    testWidgets('toolbar size keeps its measured label and radius', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CodexButton(
+                label: 'Save',
+                size: CodexButtonSize.toolbar,
+                onPressed: () {},
+              ),
+              CodexButton(
+                label: 'Small',
+                size: CodexButtonSize.sm,
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ),
+      );
+      final title = tester.widget<Text>(find.text('Save'));
+      expect(title.style!.fontSize, 13);
+      expect(title.style!.height! * title.style!.fontSize!, 18);
+      expect(title.style!.fontWeight, FontWeight.w400);
+      expect(tester.widget<Text>(find.text('Small')).style!.fontSize, 12);
+      for (final (label, radius) in [('Save', 8.0), ('Small', 10.0)]) {
+        final button = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(CodexButton),
+        );
+        expect(tester.getSize(button).height, 28);
+        final container = tester.widget<AnimatedContainer>(
+          find.descendant(of: button, matching: find.byType(AnimatedContainer)),
+        );
+        expect(
+          (container.decoration! as BoxDecoration).borderRadius,
+          BorderRadius.circular(radius),
+        );
+      }
+    });
+
     testWidgets('renders button with label and responds to tap', (
       tester,
     ) async {

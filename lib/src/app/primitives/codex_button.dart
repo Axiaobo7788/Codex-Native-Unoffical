@@ -6,7 +6,7 @@ import 'codex_tooltip.dart';
 
 enum CodexButtonVariant { primary, secondary, ghost, danger }
 
-enum CodexButtonSize { sm, md, lg }
+enum CodexButtonSize { sm, md, lg, toolbar }
 
 /// A desktop-first, zero-ink-ripple semantic button conforming to official
 /// ChatGPT / Codex desktop specifications.
@@ -115,6 +115,11 @@ class _CodexButtonState extends State<CodexButton> {
         fontSize = 14.0;
         padding = const EdgeInsets.symmetric(horizontal: 16.0);
         break;
+      case CodexButtonSize.toolbar:
+        height = 28.0;
+        fontSize = 13.0;
+        padding = const EdgeInsets.symmetric(horizontal: 8.0);
+        break;
     }
 
     // Resolve surface and text colors based on variant & state
@@ -218,7 +223,10 @@ class _CodexButtonState extends State<CodexButton> {
               style: TextStyle(
                 color: textColor,
                 fontSize: fontSize,
-                fontWeight: FontWeight.w500,
+                height: widget.size == CodexButtonSize.toolbar ? 18 / 13 : null,
+                fontWeight: widget.size == CodexButtonSize.toolbar
+                    ? FontWeight.w400
+                    : FontWeight.w500,
                 letterSpacing: -0.1,
               ),
             ),
@@ -241,7 +249,11 @@ class _CodexButtonState extends State<CodexButton> {
       padding: padding,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(OfficialCodexTheme.buttonRadius),
+        borderRadius: BorderRadius.circular(
+          widget.size == CodexButtonSize.toolbar
+              ? OfficialCodexTheme.iconButtonRadius
+              : OfficialCodexTheme.buttonRadius,
+        ),
         border: border,
       ),
       child: Transform.scale(scale: _isPressed ? 0.99 : 1.0, child: content),

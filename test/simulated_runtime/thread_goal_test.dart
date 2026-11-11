@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/domain/diff_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:flutter/material.dart';
@@ -268,6 +271,110 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('Goal toolbar saves through the guarded keyboard path', (
+    tester,
+  ) async {
+    final harness = _GoalHarness()
+      ..goal = const ThreadGoal(
+        objective: 'Saved goal',
+        status: ThreadGoalStatus.paused,
+        createdAtSeconds: 1,
+        updatedAtSeconds: 1,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+      );
+    await pumpSimulatedRuntimeApp(tester, harness: harness);
+    await tester.tap(find.text('Goal thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit goal'));
+    await tester.pumpAndSettle();
+    final editor = find.byKey(const ValueKey('desktop-goal-editor-objective'));
+    final save = find.byKey(const ValueKey('desktop-goal-editor-save'));
+    final revert = find.byKey(const ValueKey('desktop-goal-editor-revert'));
+    final toolbar = find.byKey(const ValueKey('desktop-goal-editor-toolbar'));
+    expect(tester.getSize(toolbar).height, 40);
+    expect(tester.getSize(save).height, 28);
+    expect(tester.getRect(save).left - tester.getRect(revert).right, 6);
+    final field = tester.widget<TextField>(editor);
+    expect(field.decoration!.contentPadding, const EdgeInsets.all(20));
+    expect(field.style!.fontSize, 14);
+    expect(field.style!.height, 1.5);
+
+    Future<void> saveByKeyboard({bool meta = false}) async {
+      final modifier = meta
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyUpEvent(modifier);
+    }
+
+    await tester.enterText(editor, 'Saved goal ');
+    await tester.pump();
+    expect(tester.widget<CodexIconButton>(revert).onPressed, isNotNull);
+    expect(tester.widget<CodexButton>(save).isEnabled, isFalse);
+    await saveByKeyboard();
+    await tester.pumpAndSettle();
+    expect(harness.goalWrites, 0);
+    await tester.tap(revert);
+    await tester.pumpAndSettle();
+    expect(field.controller!.text, 'Saved goal');
+
+    await tester.tap(editor);
+    await tester.enterText(editor, 'Typed goal');
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Typed goal',
+        selection: TextSelection.collapsed(offset: 10),
+        composing: TextRange(start: 0, end: 5),
+      ),
+    );
+    await tester.pump();
+    await saveByKeyboard();
+    await tester.pump();
+    expect(harness.goalWrites, 0);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Typed goal',
+        selection: TextSelection.collapsed(offset: 10),
+      ),
+    );
+    await tester.pump();
+    final gate = Completer<void>();
+    harness.saveGate = gate.future;
+    await saveByKeyboard();
+    await tester.pump();
+    expect(harness.goalWrites, 1);
+    expect(tester.widget<TextField>(editor).readOnly, isTrue);
+    await saveByKeyboard();
+    await tester.pump();
+    expect(harness.goalWrites, 1);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(harness.goal!.objective, 'Typed goal');
+    expect(editor, findsOneWidget);
+    expect(tester.widget<TextField>(editor).readOnly, isFalse);
+    expect(tester.widget<CodexButton>(save).isEnabled, isFalse);
+
+    await tester.enterText(editor, 'Retryable draft');
+    await tester.pump();
+    final failedSave = Completer<void>();
+    harness.saveGate = failedSave.future;
+    await saveByKeyboard();
+    await tester.pump();
+    failedSave.completeError(StateError('Fixture goal save failure'));
+    await tester.pumpAndSettle();
+    expect(harness.goal!.objective, 'Typed goal');
+    expect(field.controller!.text, 'Retryable draft');
+    expect(tester.widget<TextField>(editor).focusNode!.hasFocus, isTrue);
+    expect(tester.widget<CodexButton>(save).isEnabled, isTrue);
+    harness.saveGate = null;
+    await saveByKeyboard(meta: true);
+    await tester.pumpAndSettle();
+    expect(harness.goalWrites, 3);
+    expect(harness.goal!.objective, 'Retryable draft');
+  });
 }
 
 class _GoalHarness extends SimulatedRuntimeHarness {
@@ -280,6 +387,8 @@ class _GoalHarness extends SimulatedRuntimeHarness {
 
   ThreadGoal? goal;
   var goalReads = 0;
+  var goalWrites = 0;
+  Future<void>? saveGate;
 
   @override
   bool get supportsThreadGoals => true;
@@ -295,14 +404,18 @@ class _GoalHarness extends SimulatedRuntimeHarness {
     String threadId, {
     String? objective,
     ThreadGoalStatus? status,
-  }) async => goal = ThreadGoal(
-    objective: objective ?? goal!.objective,
-    status: status ?? goal!.status,
-    createdAtSeconds: 1,
-    updatedAtSeconds: 1,
-    tokensUsed: 0,
-    timeUsedSeconds: 0,
-  );
+  }) async {
+    goalWrites += 1;
+    await saveGate;
+    return goal = ThreadGoal(
+      objective: objective ?? goal!.objective,
+      status: status ?? goal!.status,
+      createdAtSeconds: 1,
+      updatedAtSeconds: 1,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+    );
+  }
 
   @override
   Future<bool> clearThreadGoal(String threadId) async {
