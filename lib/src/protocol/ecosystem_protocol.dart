@@ -268,6 +268,7 @@ class EcosystemProtocolAdapter {
     });
     final plugins = <PluginSummaryModel>[];
     final seenIds = <String>{};
+    var isTruncated = false;
 
     void addPluginMap(
       Map<String, Object?> map, {
@@ -275,6 +276,11 @@ class EcosystemProtocolAdapter {
       String? fallbackMarketplacePath,
     }) {
       if (plugins.length >= maxBoundedItems) {
+        final id = _nonEmptyString(map['id']) ?? _nonEmptyString(map['name']);
+        // Check the fields that can reject a row without constructing it.
+        if (id != null && !seenIds.contains(id) && _hasValidPluginFlags(map)) {
+          isTruncated = true;
+        }
         return;
       }
       final summary = _parsePluginSummary(
@@ -290,6 +296,7 @@ class EcosystemProtocolAdapter {
 
     final marketplaces = result['marketplaces'];
     if (marketplaces is List<Object?>) {
+      marketplaceLoop:
       for (final marketplace in marketplaces) {
         if (marketplace is! Map<String, Object?>) {
           continue;
@@ -305,22 +312,29 @@ class EcosystemProtocolAdapter {
                 fallbackMarketplaceName: mpName,
                 fallbackMarketplacePath: mpPath,
               );
+              if (isTruncated) {
+                break marketplaceLoop;
+              }
             }
           }
         }
       }
     }
     final directPlugins = result['plugins'];
-    if (directPlugins is List<Object?>) {
+    if (!isTruncated && directPlugins is List<Object?>) {
       for (final item in directPlugins) {
         if (item is Map<String, Object?>) {
           addPluginMap(item);
+          if (isTruncated) {
+            break;
+          }
         }
       }
     }
     final errors = result['marketplaceLoadErrors'];
     return PluginCatalogSnapshot(
       plugins: List<PluginSummaryModel>.unmodifiable(plugins),
+      isTruncated: isTruncated,
       isPartial: switch (errors) {
         null => false,
         final List<Object?> entries => entries.isNotEmpty,
@@ -359,23 +373,25 @@ class EcosystemProtocolAdapter {
     final mpPath =
         _nonEmptyString(pluginObj['marketplacePath']) ?? normalizedPath;
     final summaryRaw = pluginObj['summary'];
-    final summary =
-        (summaryRaw is Map<String, Object?>
-            ? _parsePluginSummary(
-                summaryRaw,
-                fallbackMarketplaceName: mpName,
-                fallbackMarketplacePath: mpPath,
-              )
-            : null) ??
-        PluginSummaryModel(
-          id: normalizedName,
-          name: normalizedName,
-          pluginName: normalizedName,
-          description: _nonEmptyString(pluginObj['description']) ?? '',
-          enabled: true,
-          marketplaceName: mpName,
-          marketplacePath: mpPath,
-        );
+    final summary = switch (summaryRaw) {
+      final Map<String, Object?> raw =>
+        _parsePluginSummary(
+              raw,
+              fallbackMarketplaceName: mpName,
+              fallbackMarketplacePath: mpPath,
+            ) ??
+            (throw const FormatException('Malformed plugin detail summary.')),
+      null => PluginSummaryModel(
+        id: normalizedName,
+        name: normalizedName,
+        pluginName: normalizedName,
+        description: _nonEmptyString(pluginObj['description']) ?? '',
+        enabled: true,
+        marketplaceName: mpName,
+        marketplacePath: mpPath,
+      ),
+      _ => throw const FormatException('Malformed plugin detail summary.'),
+    };
     final description =
         _nonEmptyString(pluginObj['description']) ?? summary.description;
     final skills = <SkillSummary>[];
@@ -1076,6 +1092,10 @@ class EcosystemProtocolAdapter {
     );
   }
 
+  static bool _hasValidPluginFlags(Map<String, Object?> map) =>
+      (map['enabled'] == null || map['enabled'] is bool) &&
+      (map['installed'] == null || map['installed'] is bool);
+
   static PluginSummaryModel? _parsePluginSummary(
     Map<String, Object?> map, {
     String? fallbackMarketplaceName,
@@ -1083,7 +1103,7 @@ class EcosystemProtocolAdapter {
   }) {
     final rawName = _nonEmptyString(map['name']);
     final id = _nonEmptyString(map['id']) ?? rawName;
-    if (id == null) {
+    if (id == null || !_hasValidPluginFlags(map)) {
       return null;
     }
     final interfaceMap = map['interface'] is Map<String, Object?>

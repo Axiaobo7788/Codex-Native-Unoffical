@@ -1500,6 +1500,86 @@ void main() {
       },
     );
 
+    for (final width in [720.0, 1280.0]) {
+      testWidgets(
+        'discloses truncated plugin catalogs independently of partial sources at $width width',
+        (tester) async {
+          final plugins = [
+            for (var index = 0; index < maxBoundedEcosystemItems; index++)
+              PluginSummaryModel(
+                id: 'fixture-$index@local',
+                name: 'Fixture $index',
+                description: '',
+                enabled: false,
+                installed: false,
+              ),
+          ];
+          var snapshot = PluginCatalogSnapshot(plugins: plugins);
+          final harness = _ConfigurableEcosystemHarness(
+            listPluginCatalogOverride: (_) async => snapshot,
+          );
+          await pumpSimulatedRuntimeApp(
+            tester,
+            harness: harness,
+            size: Size(width, 800),
+          );
+          await tester.tap(find.byKey(const ValueKey('ecosystem-button')));
+          await tester.pumpAndSettle();
+          if (width < 760) {
+            await tester.tap(find.text('Plugins (100 loaded)'));
+          } else {
+            await tester.tap(
+              find.byKey(const ValueKey('customize-nav-plugins')),
+            );
+          }
+          await tester.pumpAndSettle();
+
+          final truncated = find.byKey(
+            const ValueKey('ecosystem-plugins-truncated'),
+          );
+          final partial = find.byKey(
+            const ValueKey('ecosystem-plugins-partial'),
+          );
+          final capNotice = find.byKey(
+            const ValueKey('ecosystem-plugins-bound-notice'),
+          );
+          final refresh = find.byKey(
+            const ValueKey('ecosystem-refresh-button'),
+          );
+          expect(truncated, findsNothing);
+          expect(partial, findsNothing);
+          expect(capNotice, findsOneWidget);
+
+          snapshot = PluginCatalogSnapshot(
+            plugins: plugins,
+            isTruncated: true,
+            isPartial: true,
+          );
+          await tester.tap(refresh);
+          await tester.pumpAndSettle();
+          expect(truncated, findsOneWidget);
+          expect(
+            find.text('Showing the first 100 catalog entries.'),
+            findsOneWidget,
+          );
+          expect(partial, findsOneWidget);
+          expect(capNotice, findsNothing);
+          expect(
+            find.byKey(const ValueKey('plugin-row-fixture-0@local')),
+            findsOneWidget,
+          );
+
+          snapshot = PluginCatalogSnapshot(plugins: plugins, isPartial: true);
+          await tester.tap(refresh);
+          await tester.pumpAndSettle();
+          expect(truncated, findsNothing);
+          expect(partial, findsOneWidget);
+          expect(capNotice, findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
     testWidgets(
       'fails closed visibly when backend does not support ecosystem catalog mutations',
       (tester) async {

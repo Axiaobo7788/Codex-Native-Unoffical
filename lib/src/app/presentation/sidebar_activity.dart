@@ -2689,8 +2689,11 @@ class _EcosystemController extends ChangeNotifier {
   String? _mcpLoadError;
   String? _pluginActionNotice;
   List<SkillSummary> _skills = const [];
-  List<PluginSummaryModel> _plugins = const [];
-  var _pluginCatalogIsPartial = false;
+  PluginCatalogSnapshot _pluginCatalog = const PluginCatalogSnapshot(
+    plugins: [],
+  );
+
+  List<PluginSummaryModel> get _plugins => _pluginCatalog.plugins;
   List<InstalledAppSnapshotModel> _installedApps = const [];
   List<AppSummaryModel> _catalogApps = const [];
   String? _appsNextCursor;
@@ -2735,7 +2738,8 @@ class _EcosystemController extends ChangeNotifier {
   bool get installedAppsLoadFailed => _installedAppsLoadFailed;
   bool get catalogAppsLoadFailed => _catalogAppsLoadFailed;
   bool get mcpLoadFailed => _mcpLoadFailed;
-  bool get pluginCatalogIsPartial => _pluginCatalogIsPartial;
+  bool get pluginCatalogIsPartial => _pluginCatalog.isPartial;
+  bool get pluginCatalogIsTruncated => _pluginCatalog.isTruncated;
   String? get appsError => _appsError;
   String? get appsNextCursor => _appsNextCursor;
   String? get pluginActionNotice => _pluginActionNotice;
@@ -2777,7 +2781,8 @@ class _EcosystemController extends ChangeNotifier {
 
   bool get isSkillsAtCap => _skills.length >= maxBoundedEcosystemItems;
   bool get isPluginsAtCap => _plugins.length >= maxBoundedEcosystemItems;
-  bool get isPluginsIncomplete => _pluginCatalogIsPartial || isPluginsAtCap;
+  bool get isPluginsIncomplete =>
+      pluginCatalogIsPartial || pluginCatalogIsTruncated || isPluginsAtCap;
   bool get isInstalledAppsAtCap =>
       _installedApps.length >= maxBoundedEcosystemItems;
   bool get isCatalogAppsAtCap =>
@@ -3067,8 +3072,7 @@ class _EcosystemController extends ChangeNotifier {
         return;
       }
       final nextPlugins = snapshot.plugins;
-      _plugins = nextPlugins;
-      _pluginCatalogIsPartial = snapshot.isPartial;
+      _pluginCatalog = snapshot;
       _prunePluginCaches(nextPlugins, forceRefetch: forceRefetch);
       _pluginsLoadFailed = false;
       _pluginsError = null;
@@ -4873,6 +4877,26 @@ class _EcosystemNoticesAndElicitationSlot extends StatelessWidget {
               ),
             ),
           ),
+        if (section == _EcosystemSection.plugins &&
+            controller.pluginCatalogIsTruncated &&
+            !controller.pluginsLoadFailed)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              0,
+            ),
+            child: KeyedSubtree(
+              key: const ValueKey('ecosystem-plugins-truncated'),
+              child: _InlineNotice(
+                icon: Icons.info_outline_rounded,
+                color: palette.textSecondary,
+                text:
+                    'Showing the first ${controller.plugins.length} catalog entries.',
+              ),
+            ),
+          ),
         if (controller.pluginActionNotice case final notice?
             when section == _EcosystemSection.plugins)
           Padding(
@@ -5376,7 +5400,9 @@ class _EcosystemSectionBody extends StatelessWidget {
                 ],
               ),
             ),
-          if (controller.isPluginsAtCap)
+          if (controller.isPluginsAtCap &&
+              (!controller.pluginCatalogIsTruncated ||
+                  controller.pluginsLoadFailed))
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(

@@ -112,6 +112,116 @@ void main() {
   });
 
   test(
+    'skips malformed plugin flags before the retained catalog cap',
+    () async {
+      final adapter = EcosystemProtocolAdapter(
+        request: (method, [params = const {}]) async => {
+          'plugins': [
+            {'id': 'bad-enabled', 'enabled': 'invalid'},
+            {'id': 'valid-disabled', 'enabled': false},
+            {'id': 'bad-installed', 'installed': 1},
+            {'id': 'valid-defaults'},
+          ],
+        },
+      );
+      final result = await adapter.listPluginCatalog();
+      expect(result.plugins.map((entry) => entry.id), [
+        'valid-disabled',
+        'valid-defaults',
+      ]);
+      expect(result.plugins.first.enabled, isFalse);
+      expect(result.plugins.last.enabled, isTrue);
+      expect(result.isTruncated, isFalse);
+    },
+  );
+
+  test(
+    'rejects malformed plugin detail instead of inventing enabled state',
+    () async {
+      for (final summary in <Object>[
+        {'id': 'broken', 'enabled': 'invalid'},
+        {'id': 'broken', 'installed': 1},
+        'unsupported summary',
+      ]) {
+        final adapter = EcosystemProtocolAdapter(
+          request: (method, [params = const {}]) async => {
+            'plugin': {'summary': summary},
+          },
+        );
+        await expectLater(
+          adapter.readPlugin(pluginName: 'broken'),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
+  test('reports truncation only for an omitted usable catalog entry', () async {
+    final retained = [
+      for (var index = 0; index < maxBoundedEcosystemItems; index++)
+        {'id': 'plugin-$index', 'enabled': true},
+    ];
+    var marketplaces = [
+      {'name': 'fixture', 'plugins': retained},
+    ];
+    var direct = <Map<String, Object?>>[];
+    var errors = <Map<String, Object?>>[];
+    final adapter = EcosystemProtocolAdapter(
+      request: (method, [params = const {}]) async {
+        expect(method, 'plugin/list');
+        return {
+          'marketplaces': marketplaces,
+          'plugins': direct,
+          'marketplaceLoadErrors': errors,
+        };
+      },
+    );
+
+    final exact = await adapter.listPluginCatalog();
+    expect(exact.plugins, hasLength(maxBoundedEcosystemItems));
+    expect(exact.isTruncated, isFalse);
+
+    direct = [
+      {'id': 'plugin-0', 'enabled': true},
+      {'description': 'A row without identity'},
+      {'id': 'malformed-enabled', 'enabled': 'invalid'},
+      {'id': 'malformed-installed', 'installed': 1},
+    ];
+    final ignored = await adapter.listPluginCatalog();
+    expect(ignored.isTruncated, isFalse);
+
+    direct.add({'name': 'omitted-direct'});
+    final truncated = await adapter.listPluginCatalog();
+    expect(truncated.isTruncated, isTrue);
+    expect(truncated.isPartial, isFalse);
+    expect(
+      truncated.plugins.map((plugin) => plugin.id),
+      exact.plugins.map((plugin) => plugin.id),
+    );
+
+    direct = [];
+    marketplaces = [
+      ...marketplaces,
+      {
+        'name': 'later-market',
+        'plugins': [
+          {'id': 'omitted-nested', 'enabled': true},
+        ],
+      },
+    ];
+    errors = [
+      {
+        'marketplacePath': '/fixture/marketplace.json',
+        'message': 'Fixture failure',
+      },
+    ];
+    final partial = await adapter.listPluginCatalog();
+    expect(partial.isTruncated, isTrue);
+    expect(partial.isPartial, isTrue);
+    expect(partial.plugins, hasLength(maxBoundedEcosystemItems));
+  });
+
+  test(
     'parses plugin/list and mcpServerStatus/list with bounded items',
     () async {
       final adapter = EcosystemProtocolAdapter(
