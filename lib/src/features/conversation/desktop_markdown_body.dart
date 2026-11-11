@@ -696,8 +696,10 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
     }
 
     final space = widget.bodyEm / 4;
-    final baseStyle = widget.styleSheet.p ?? const TextStyle(fontSize: 14);
-    final baseFontSize = baseStyle.fontSize ?? 14.0;
+    final baseStyle =
+        widget.styleSheet.p ??
+        const TextStyle(fontSize: OfficialCodexTheme.chatFontSize);
+    final baseFontSize = baseStyle.fontSize ?? OfficialCodexTheme.chatFontSize;
     final smallFontSize = math.max(12.0, baseFontSize * 0.875);
     final headerStyle = baseStyle.copyWith(
       fontSize: smallFontSize,
@@ -999,32 +1001,39 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody>
 
   @override
   Widget build(BuildContext context) {
-    final textScaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        final canReuseForWidth =
-            !_needsRebuild &&
-            _lastTextScaler == textScaler &&
-            _builtWithFiniteWidth == maxWidth.isFinite &&
-            (_lastMaxWidth == maxWidth ||
-                !maxWidth.isFinite ||
-                (maxWidth >= _minValidRootMaxWidth &&
-                    maxWidth <= _maxValidRootMaxWidth));
-        if (!canReuseForWidth) {
-          _needsRebuild = false;
-          _lastMaxWidth = maxWidth;
-          _lastTextScaler = textScaler;
-          _buildBlocks(maxWidth: maxWidth, textScaler: textScaler);
-        } else {
-          _lastMaxWidth = maxWidth;
-        }
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: _children,
-        );
-      },
+    return DefaultTextStyle.merge(
+      style: widget.styleSheet.p,
+      child: Builder(
+        builder: (context) {
+          final textScaler = MediaQuery.textScalerOf(context);
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth;
+              final canReuseForWidth =
+                  !_needsRebuild &&
+                  _lastTextScaler == textScaler &&
+                  _builtWithFiniteWidth == maxWidth.isFinite &&
+                  (_lastMaxWidth == maxWidth ||
+                      !maxWidth.isFinite ||
+                      (maxWidth >= _minValidRootMaxWidth &&
+                          maxWidth <= _maxValidRootMaxWidth));
+              if (!canReuseForWidth) {
+                _needsRebuild = false;
+                _lastMaxWidth = maxWidth;
+                _lastTextScaler = textScaler;
+                _buildBlocks(maxWidth: maxWidth, textScaler: textScaler);
+              } else {
+                _lastMaxWidth = maxWidth;
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _children,
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -1286,7 +1295,9 @@ final class _DesktopInlineCodeBuilder extends MarkdownElementBuilder {
         .merge(fallbackStyle)
         .merge(parentStyle);
     final baseFontSize =
-        effectiveParent.fontSize ?? preferredStyle?.fontSize ?? 14.0;
+        effectiveParent.fontSize ??
+        preferredStyle?.fontSize ??
+        OfficialCodexTheme.chatFontSize;
     final activeLink = currentLink();
 
     if (!hasPillSlot()) {

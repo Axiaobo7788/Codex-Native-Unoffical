@@ -256,7 +256,7 @@ abstract final class ThemeTokens {
       ),
       titleMedium: TextStyle(
         color: palette.textPrimary,
-        fontSize: 14,
+        fontSize: OfficialCodexTheme.chatFontSize,
         height: 1.35,
         fontWeight: FontWeight.w600,
       ),
@@ -273,8 +273,8 @@ abstract final class ThemeTokens {
       ),
       bodyMedium: TextStyle(
         color: palette.textPrimary,
-        fontSize: 13.5,
-        height: 1.45,
+        fontSize: OfficialCodexTheme.chatFontSize,
+        height: 1.5,
       ),
       bodySmall: TextStyle(
         color: palette.textSecondary,

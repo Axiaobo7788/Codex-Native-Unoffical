@@ -191,8 +191,8 @@ class CodexActivityRow extends StatelessWidget {
 
 /// Official inline activity summary / disclosure header (`152406.BI7J` / `jKy0` / `o6bI`).
 ///
-/// Renders a natural-height, self-start inline row (`13.5px` / `20px` scalable
-/// chat line box, `6px` icon-to-label gap, `4px` label-to-chevron gap). Only
+/// Renders a natural-height, self-start inline row (`14px` / `21px` scalable
+/// `.text-size-chat` line box, `6px` icon-to-label gap, `4px` label-to-chevron gap). Only
 /// becomes an interactive button with hover ink promotion and `14px` chevron
 /// when [hasDisclosure] is `true`.
 class CodexInlineActivityHeader extends StatefulWidget {
@@ -427,7 +427,7 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
 /// Official Desktop inline `Worked for` turn divider (`225284.getw.i` +
 /// `890434.ygO2` `ghostTertiary` `inline` + `14353.mRLe`).
 ///
-/// Renders a backgroundless inline disclosure button (`13.5px` / `20px`
+/// Renders a backgroundless inline disclosure button (`14px` / `21px`
 /// `textMuted` -> `textPrimary` on hover/focus, always-visible `14px` chevron
 /// rotating `90°` when expanded), followed by a `4px` gap (`pt-1`), a `1px`
 /// full-width hairline rule, and `16px` (`--conversation-item-gap`) bottom rhythm.

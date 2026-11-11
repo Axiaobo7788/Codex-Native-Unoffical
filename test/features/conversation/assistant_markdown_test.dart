@@ -1,4 +1,5 @@
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
+import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
 import 'package:codex_native_unofficial/src/features/conversation/assistant_markdown.dart';
 import 'package:codex_native_unofficial/src/features/conversation/desktop_markdown_body.dart';
 import 'package:flutter/gestures.dart';
@@ -687,6 +688,23 @@ Final paragraph. A remote image stays an explicit blocked preview.
         OfficialCodexTheme.codeBlockBorderWidth,
       );
       expect(find.text('Dart'), findsOneWidget);
+      final codeHeaderText = tester.widget<Text>(find.text('Dart'));
+      expect(codeHeaderText.style?.fontSize, 13.0);
+      expect(codeHeaderText.style?.fontWeight, FontWeight.w500);
+      final codeContentText = tester.widget<Text>(
+        find.descendant(
+          of: codeBlock,
+          matching: find.textContaining('int add(int first, int second)'),
+        ),
+      );
+      expect(
+        codeContentText.style?.fontSize,
+        OfficialCodexTheme.chatCodeFontSize,
+      );
+      expect(
+        codeContentText.style!.fontSize! * codeContentText.style!.height!,
+        closeTo(OfficialCodexTheme.chatCodeBlockMinLineHeight, 0.01),
+      );
       final codeCopyButton = find.byKey(
         const ValueKey('desktop-markdown-code-copy'),
       );
@@ -1698,6 +1716,109 @@ $bodyPills `${tok(129)}` [`${tok(130)}`](https://example.invalid/over) [See `${t
       await tester.pump();
       expect(tester.allElements.length, emptyShellElements);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'application ThemeTokens light and dark themes resolve initialized 14px chat / 12px code scale and Electron foregrounds',
+    (tester) async {
+      const sample = '''# Heading one
+
+Body prose with `inline_pill` token.
+
+| Header | Cell |
+| :--- | :--- |
+| Key | Value |
+
+```dart
+void main() {}
+```''';
+
+      for (final (theme, official, expectedPrimary) in [
+        (
+          ThemeTokens.lightTheme,
+          OfficialCodexThemeData.light,
+          const Color(0xFF1A1C1F),
+        ),
+        (
+          ThemeTokens.darkTheme,
+          OfficialCodexThemeData.dark,
+          const Color(0xFFDFDFDF),
+        ),
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: OfficialCodexThemeProvider(
+              data: official,
+              child: const Scaffold(
+                body: SingleChildScrollView(
+                  child: SizedBox(
+                    width: 640,
+                    child: AssistantMarkdown(
+                      data: sample,
+                      completed: true,
+                      proseLineHeight:
+                          OfficialCodexTheme.assistantProseLineHeight,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final h1Style = tester
+            .widget<Text>(find.text('Heading one'))
+            .textSpan!
+            .style!;
+        expect(h1Style.fontSize, 21.0);
+        expect(h1Style.fontSize! * h1Style.height!, closeTo(28.0, 0.01));
+        expect(h1Style.color, expectedPrimary);
+
+        final bodyRich = tester.widget<RichText>(
+          find.textContaining('Body prose with', findRichText: true),
+        );
+        expect(bodyRich.text.style?.fontSize, 14.0);
+        expect(bodyRich.text.style?.height, 1.625);
+        expect(bodyRich.text.style?.color, expectedPrimary);
+
+        final pillText = tester.widget<Text>(find.text('inline_pill'));
+        expect(pillText.style?.fontSize, closeTo(12.88, 0.01));
+        expect(pillText.style?.color, expectedPrimary);
+
+        TextStyle findRichSpanStyle(String target) {
+          TextStyle? matched;
+          tester
+              .widget<RichText>(find.text(target, findRichText: true))
+              .text
+              .visitChildren((span) {
+                if (span is TextSpan && span.text == target) {
+                  matched = span.style;
+                  return false;
+                }
+                return true;
+              });
+          return matched!;
+        }
+
+        final thStyle = findRichSpanStyle('Header');
+        expect(thStyle.fontSize, 12.25);
+        expect(thStyle.fontSize! * thStyle.height!, closeTo(14.0, 0.01));
+
+        final tdStyle = findRichSpanStyle('Value');
+        expect(tdStyle.fontSize, 12.25);
+        expect(tdStyle.fontSize! * tdStyle.height!, closeTo(22.75, 0.01));
+
+        final codeText = tester.widget<Text>(find.text('void main() {}'));
+        expect(codeText.style?.fontSize, 12.0);
+        expect(
+          codeText.style!.fontSize! * codeText.style!.height!,
+          closeTo(20.0, 0.01),
+        );
+        expect(codeText.style?.color, expectedPrimary);
+      }
     },
   );
 }

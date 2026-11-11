@@ -48,9 +48,21 @@ abstract final class OfficialCodexTheme {
   static const double userMessageHorizontalPadding = 16.0;
   static const double userMessageVerticalPadding = 10.0;
 
+  /// Initialized Electron UI/chat sans font size (`93122` `sansFontSize.default = 14` ->
+  /// `182735` `--font-ui-size: 14px` -> `e77f816560c6.css` `--codex-chat-font-size: 14px`).
+  static const double chatFontSize = 14.0;
+
+  /// Initialized Electron chat code font size (`93122` `codeFontSize.default = 12` ->
+  /// `182735` `:root --font-code-size: 12px` -> `e77f816560c6.css` `--codex-chat-code-font-size: 12px`).
+  static const double chatCodeFontSize = 12.0;
+
+  /// Desktop Markdown fenced code block minimum line-box height
+  /// (`0040d5ae1a9f.css` `.CodeContent-ybJ8Tl { line-height: max(1.5em, 20px) }`).
+  static const double chatCodeBlockMinLineHeight = 20.0;
+
   /// User message typography size (`93122` `sansFontSize.default = 14` ->
   /// `182735` `--font-ui-size: 14px` -> `e77f816560c6.css` `.text-size-chat` = `14px`).
-  static const double userMessageFontSize = 14.0;
+  static const double userMessageFontSize = chatFontSize;
 
   /// User message relaxed line-height multiplier (`leading-relaxed`: `1.625`).
   static const double userMessageLineHeight = 1.625;
@@ -162,11 +174,10 @@ abstract final class OfficialCodexTheme {
   static const double activityInlineChevronGap = 4.0;
 
   /// Inline activity chat typography size and line height: `.text-size-chat`
-  /// resolves `var(--codex-chat-font-size)` (fallback `var(--font-ui-size, 13px)`
-  /// in `e77f816560c6.css`); `13.5px` / `20px` matches Native's calibrated
-  /// chat `bodyMedium` scale.
-  static const double activityChatFontSize = 13.5;
-  static const double activityChatLineHeight = 20.0 / 13.5;
+  /// resolves `var(--codex-chat-font-size)` (`14px`) while inheriting root
+  /// `html, :host { line-height: 1.5 }` (`21px` line box in `e77f816560c6.css`).
+  static const double activityChatFontSize = chatFontSize;
+  static const double activityChatLineHeight = 1.5;
 
   /// Top gap between inline `Worked for` trigger and hairline rule (`pt-1`: `4px`).
   static const double workDividerRuleTopGap = 4.0;
@@ -250,21 +261,24 @@ abstract final class OfficialCodexTheme {
   static const Color darkElevatedSurface = Color(0xFF2F2F2F); // Tier 2
   static const Color darkModalSurface = Color(0xFF2F2F2F); // Tier 3
   // `--color-background-user-message: color-mix(in oklab, var(--color-text) 5%, transparent)`
-  static const Color darkUserBubbleBackground = Color(0x0DECECEC);
-  static const Color darkUserBubbleTranslucent = Color(0x0DECECEC);
+  static const Color darkUserBubbleBackground = Color(0x0DDFDFDF);
+  static const Color darkUserBubbleTranslucent = Color(0x0DDFDFDF);
   static const Color darkHairlineBorder = Color(
     0x14FFFFFF,
   ); // rgba(255,255,255,0.08)
   static const Color darkFocusRing = Color(0xFF3B82F6);
   static const Color darkAccent = Color(0xFF10A37F);
 
-  static const Color darkTextPrimary = Color(0xFFECECEC);
-  static const Color darkTextSecondary = Color(0xFFB4B4B4);
-  static const Color darkTextMuted = Color(0xFF8E8E8E);
+  // Electron dark foreground hierarchy (`890434.F5h5` + `BQgU` + `e77f816560c6.css`):
+  // `--color-text: #dfdfdf`, `--color-text-secondary: color-mix(in srgb, #dfdfdf 65%, transparent)`,
+  // `--color-text-tertiary: rgba(255, 255, 255, 0.498)` (opaque sRGB over `#212121` workspace).
+  static const Color darkTextPrimary = Color(0xFFDFDFDF);
+  static const Color darkTextSecondary = Color(0xFF9D9D9D);
+  static const Color darkTextMuted = Color(0xFF909090);
   // `.summary-lK7Lpm` (`color-mix(in oklab, var(--color-text) 60%, transparent)`)
-  static const Color darkActivitySummaryText = Color(0x99ECECEC);
+  static const Color darkActivitySummaryText = Color(0x99DFDFDF);
   // `.execDescendants-CELqcM` / `text-text/30` (`color-mix(in oklab, var(--color-text) 30%, transparent)`)
-  static const Color darkActivityChildText = Color(0x4DECECEC);
+  static const Color darkActivityChildText = Color(0x4DDFDFDF);
 
   static const Color darkDiffAddedFill = Color(0xFF1E4620);
   static const Color darkDiffAddedText = Color(0xFF4ADE80);
@@ -283,8 +297,8 @@ abstract final class OfficialCodexTheme {
   static const Color lightElevatedSurface = Color(0xFFF4F4F4); // Tier 2
   static const Color lightModalSurface = Color(0xFFFFFFFF); // Tier 3
   // `--color-background-user-message: color-mix(in oklab, var(--color-text) 5%, transparent)`
-  static const Color lightUserBubbleBackground = Color(0x0D0D0D0D);
-  static const Color lightUserBubbleTranslucent = Color(0x0D0D0D0D);
+  static const Color lightUserBubbleBackground = Color(0x0D1A1C1F);
+  static const Color lightUserBubbleTranslucent = Color(0x0D1A1C1F);
   // `color-mix(in srgb, var(--color-background-primary-ghost-hover) 60%, var(--color-text) 6%)`
   // -> `color(srgb 0.101961 0.109804 0.121569 / 0.09)` in light mode.
   static const Color lightInlineCodeBackground = Color(0x171A1C1F);
@@ -294,13 +308,16 @@ abstract final class OfficialCodexTheme {
   static const Color lightFocusRing = Color(0xFF2563EB);
   static const Color lightAccent = Color(0xFF10A37F);
 
-  static const Color lightTextPrimary = Color(0xFF0D0D0D);
-  static const Color lightTextSecondary = Color(0xFF5D5D5D);
-  static const Color lightTextMuted = Color(0xFF8F8F8F);
+  // Electron light foreground hierarchy (`890434.F5h5` + `BQgU` + `e77f816560c6.css`):
+  // `--color-text: #1a1c1f`, `--color-text-secondary: color-mix(in srgb, #1a1c1f 65%, transparent)`,
+  // `--color-text-tertiary: rgba(26, 28, 31, 0.495)` (opaque sRGB over `#FFFFFF` workspace).
+  static const Color lightTextPrimary = Color(0xFF1A1C1F);
+  static const Color lightTextSecondary = Color(0xFF6A6B6D);
+  static const Color lightTextMuted = Color(0xFF8E8F90);
   // `.summary-lK7Lpm` (`color-mix(in oklab, var(--color-text) 60%, transparent)`)
-  static const Color lightActivitySummaryText = Color(0x990D0D0D);
+  static const Color lightActivitySummaryText = Color(0x991A1C1F);
   // `.execDescendants-CELqcM` / `text-text/30` (`color-mix(in oklab, var(--color-text) 30%, transparent)`)
-  static const Color lightActivityChildText = Color(0x4D0D0D0D);
+  static const Color lightActivityChildText = Color(0x4D1A1C1F);
 
   static const Color lightDiffAddedFill = Color(0xFFDCFCE7);
   static const Color lightDiffAddedText = Color(0xFF15803D);

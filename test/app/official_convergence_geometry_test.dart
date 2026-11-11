@@ -326,6 +326,36 @@ void main() {
         expect(find.text('Worked for 42s'), findsOneWidget);
         expect(find.text('Command: flutter test'), findsOneWidget);
         expect(find.text('Command: cargo test'), findsNothing);
+        final workDividerText = tester.widget<Text>(
+          find.text('Worked for 42s'),
+        );
+        expect(
+          workDividerText.style?.fontSize,
+          OfficialCodexTheme.chatFontSize,
+        );
+        expect(
+          workDividerText.style?.height,
+          OfficialCodexTheme.activityChatLineHeight,
+        );
+        final inlineCmdText = tester.widget<Text>(
+          find.text('Command: flutter test'),
+        );
+        expect(inlineCmdText.style?.fontSize, OfficialCodexTheme.chatFontSize);
+        expect(
+          inlineCmdText.style?.height,
+          OfficialCodexTheme.activityChatLineHeight,
+        );
+        final assistantProseRich = tester.widget<RichText>(
+          find.text('Acknowledged geometry verified.', findRichText: true),
+        );
+        expect(
+          assistantProseRich.text.style?.fontSize,
+          OfficialCodexTheme.chatFontSize,
+        );
+        expect(
+          assistantProseRich.text.style?.height,
+          OfficialCodexTheme.assistantProseLineHeight,
+        );
 
         // In Execution: intermediate command 2 expands inline
         await tester.tap(find.text('Execution'));
