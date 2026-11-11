@@ -124,7 +124,8 @@ permission to lower the engineering or visual quality bar.
   Three old-source red cases reproduce body/part/snapshot loss. Both peer P2s
   (UTF-16 clipping and saved multipart boundaries) have red-before-green
   evidence. Optional bounded `reasoningParts` preserves the presentation seam;
-  raw text gains no synthetic emphasis. Packaged reasoning replay is next.
+  raw text gains no synthetic emphasis. The source-bound real packaged before/
+  after replay now passes: [evidence](docs/reverse/REASONING_PROJECTION_EVIDENCE.md).
   No presentation file is rewritten for this systems correction.
 - **Track U / Gemini:** U3 `22bf94e` released its six presentation/test surfaces
   after official-TUI handoff. Codex independently reviewed the diff and light/dark
@@ -132,19 +133,33 @@ permission to lower the engineering or visual quality bar.
   4/8 px rhythm and 140 px scroll cap; live observed duration has a completed
   header while saved items without stock duration remain simply Thought.
   The live projection correction above and signed-in comparison remain open;
-  Golden State A7 is still PARTIAL. Next presentation ownership is being
-  negotiated through the same TUI; shared checkpoint docs remain Codex-owned.
-- Heavy validation is **Codex-owned** after Gemini's explicit release and owned
-  runtime teardown. Gemini stays light-only until handoff. Flutter tests use
+  Golden State A7 is still PARTIAL. Gemini accepted the A7 presentation follow-up
+  before A6 in `/var/tmp/native-gemini-u4-a6-user-markdown`, now based on
+  `0286a4d`. Its five locks are `diff_approval_output.dart`, `conversation.dart`,
+  `assistant_markdown.dart`, `activity_parity_test.dart` and
+  `assistant_markdown_test.dart`. It consumes typed parts for official first-part
+  emphasis while preserving raw Execution/search and all controller/protocol
+  surfaces. Shared checkpoint docs remain Codex-owned.
+- Heavy validation is **Gemini-owned** after Codex's explicit release and verified
+  replay teardown. Codex is source/docs-only until the next lease handoff. Flutter tests use
   `--concurrency=1`; Cargo uses two jobs; Linux release uses `--config-only`
   then CMake `--parallel 2`. The earlier host OOM was compiler/test overlap;
   no Native heap-leak fix is claimed.
 - Next independent functional gaps include explicit local runtime retry/crash
-  recovery and newly observed unmaterialized-new-thread history. Their evidence
-  and bounded correction requirements are recorded in the functional audit.
+  recovery and newly observed unmaterialized-new-thread history. Codex has begun
+  the latter source audit in `/var/tmp/native-codex-desktop-new-thread-history`
+  (base `0286a4d`); no tested correction exists yet. It reuses the current
+  ThreadList materialization admission instead of inferring emptiness from an
+  arbitrary RPC error. Evidence and next action are in the functional audit.
 
 ## Current checkpoints
 
+- **Current functional source `0286a4dfbc99390f7ad9c35d6e74920ae25b2d64`:**
+  bounded reasoning projection, peer P2 corrections, shared/release gates and
+  source-bound actual-stock before/after pass. Published on
+  `agent/codex-desktop-reasoning-stream`; exact branch CI
+  [43115598909](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43115598909)
+  remains in progress at this checkpoint. Main has not integrated it yet.
 - **Published combined source `03b23c44206ef9d38a580af28ee8158cc9ad1e43`:**
   preserves MCP `beac41f`, peer corrections `0cdf0e8`, timeout `0943cd9`,
   Gemini U2 `d725eba` and U3 `22bf94e`. All 376 tracked files were hashed
@@ -201,7 +216,11 @@ permission to lower the engineering or visual quality bar.
   explicitly used `CARGO_BUILD_JOBS=2` and CMake `--parallel 2` and passed
   release/83-library closure. All 218 tracked application/test/tool/Linux/build
   input hashes matched before/after. Rust source is unchanged; prior 100-test
-  evidence remains distinct. Real packaged reasoning replay is pending.
+  evidence remains distinct. Real packaged reasoning replay now passes with
+  independently seeded profiles: baseline `03b23c4` versus `0286a4d`, AOT
+  `9f9c6d2a…`, same U3 UI. Full multiline/list/sentinel content is visible; ten
+  fixture model calls, zero image GETs, zero observed overflow/Unhandled. All
+  owned workers exited. This does not close Human or first-part UI gates.
 - Prior source `03b23c4`: format 203 files/zero changes, strict analysis, 68-root
   pure-Dart boundary, 607 default Flutter cases/five opt-in skips, five enabled
   real-stock cases, history 100/1,000 plus ten 3 MiB outputs, two-job Linux
