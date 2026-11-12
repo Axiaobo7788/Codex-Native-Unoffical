@@ -154,6 +154,25 @@ void main() {
           find.byKey(const ValueKey('runtime-draft-new-conversation')),
           findsOneWidget,
         );
+        harness.failReplacement = true;
+        await tester.tap(
+          find.byKey(const ValueKey('runtime-draft-new-conversation')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.textContaining('Fixture replacement denied'),
+          ),
+          findsOneWidget,
+        );
+        expect(harness.startedThreadCwds, [cwd]);
+        expect(editor.text, 'Keep draft across explicit replacement');
+        expect(
+          find.byKey(const ValueKey('composer-attachment-chip-0')),
+          findsOneWidget,
+        );
+        harness.failReplacement = false;
         await tester.tap(
           find.byKey(const ValueKey('runtime-draft-new-conversation')),
         );
@@ -384,6 +403,13 @@ class _PendingTurnRuntime extends SimulatedRuntimeHarness {
 class _SessionLostRuntime extends SimulatedRuntimeHarness {
   _SessionLostRuntime() : super(initialThreads: []);
   String? lostThreadId;
+  bool failReplacement = false;
+  @override
+  Future<ThreadSummary> startThread(ThreadStartOptions options) {
+    if (failReplacement) throw StateError('Fixture replacement denied');
+    return super.startThread(options);
+  }
+
   @override
   Future<ThreadSummary> readThread(String threadId) {
     if (threadId == lostThreadId) {

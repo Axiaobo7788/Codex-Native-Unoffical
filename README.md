@@ -13,6 +13,9 @@ and is not affiliated with or endorsed by OpenAI.
   logical pixels. Narrow windows use a compact Threads and Conversation layout.
   The active conversation keeps its draft and attachments through resizing
   and same-thread navigation in the compact Threads pane.
+  Experimental local runtime recovery keeps the current draft and attachments.
+  Reconnect refreshes saved state; an unavailable session-only draft can be
+  moved to a new conversation explicitly. Recovery does not replay work.
   Find filters loaded messages. On supported local threads, the experimental
   saved search also finds older messages and opens the matched turn.
 - **Organization and review:** archive, rename, pin, and group local threads into

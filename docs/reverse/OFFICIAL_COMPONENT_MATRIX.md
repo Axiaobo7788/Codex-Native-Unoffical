@@ -114,7 +114,7 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 - **Shape**: Borderless `22px` corners, `16×10px` padding and `5%` ink tint.
 - **Text**: Normal `14px` role, `1.625` line height.
 - **Attachments**: Separate bounded pills `8px` above the bubble. Attachment-only messages have no empty text bubble. Thumbnail/preview fidelity remains open.
-- **Disclosure**: More than 20 rendered lines shows `Show more` / `Show less`, with `10px` total separation (4px flex gap plus 6px margin). Native collapsed selectable text uses a bounded prefix; full toolbar Copy remains exact. This differs from official CSS clipping and is not claimed identical.
+- **Disclosure (current U7)**: Source `44a8809`, integrated in `24201ac`, measures actual child height against20 lines and clips at19lh, with a10,240 UTF16-unit measurement budget. A code card straddling the clip boundary expands to its bottom when the forced-source budget does not apply. Selection is limited to visible content and excludes disclosure controls; hidden controls are inert. Full toolbar Copy stays exact. Owner captures and combined685 cases verify the translated behavior; matched official/Human presentation remains separate.
 - **Bounds**: Existing saved/live source caps and 16-attachment cap remain; collapse measurement is bounded and cached per message.
 
 ### 3.5 `CodexActivityRow`

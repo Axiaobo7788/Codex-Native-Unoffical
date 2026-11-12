@@ -3057,6 +3057,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         !threads.selectedThreadNeedsDraftRecovery(oldThread.id)) {
       return;
     }
+    // A prior failed attempt's notice must not cover the recovered composer's
+    // Send button after this explicit retry succeeds.
+    ScaffoldMessenger.maybeOf(context)?.removeCurrentSnackBar();
     final operation = Object();
     final runtimeVersion = widget.controller.runtimeInvalidationVersion;
     setState(() {
@@ -3067,14 +3070,27 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     try {
       // This is an explicit new-thread action, never a retry of an unknown
       // prior write. It creates no turn and never deletes the old stock store.
-      await threads.startThread(
+      final created = await threads.startThread(
         widget.settingsController.threadOptions(oldThread.cwd),
         replaceSessionDraftId: oldThread.id,
       );
+      if (created == null &&
+          mounted &&
+          identical(_draftReplacementOperation, operation) &&
+          runtimeVersion == widget.controller.runtimeInvalidationVersion &&
+          widget.controller.thread?.id == oldThread.id) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(
+              threads.errorMessage ?? 'Could not create a new conversation.',
+            ),
+          ),
+        );
+      }
     } on StateError catch (error) {
       if (mounted && identical(_draftReplacementOperation, operation)) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message.toString())));
+        ScaffoldMessenger.maybeOf(context)
+            ?.showSnackBar(SnackBar(content: Text(error.message.toString())));
       }
     } finally {
       if (mounted && identical(_draftReplacementOperation, operation)) {

@@ -5093,3 +5093,29 @@ packet is exercised. See [recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE
 and ADR-063. Current build25894 static process-manager observations do not prove
 an official automatic crash-recovery or state-database repair workflow; neither
 is inferred or copied into Native.
+
+
+### Recovery/U7 combined checkpoint24201ac
+
+The frozen combined packet passes685 default cases, both five-case real-stock
+sets and the bounded-memory/Linux gate. The public and installed packaged empty
+session recovery now preserves a draft/mention through explicit replacement at
+700px, and only explicit Send invokes the controlled model. A real active Host
+exit keeps the new draft and unconfirmed outcome without replay. Twenty-three
+captures and twelve exited process identities are retained privately; exact
+source/binary identities and negative earlier packets are in
+[recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md). BranchCI43171510846
+passes all three jobs at the same source. This is not Human acceptance.
+
+U7's actual-height clipping supersedes the earlier Native visible-prefix
+substitute in the current Golden A6/component mapping. A6 remains PARTIAL for
+external attachment/hover and matched-state evidence. The current canonical
+reading/composer token is672px in OfficialCodexTheme; older704px records describe
+previous source and must not overwrite the current token during memory repair.
+
+A further Native observation is queued for fresh official/stock comparison:
+a newly submitted first turn can leave the live header as Untitled until fresh
+thread metadata is read; after recovery the stock preview is shown. This is not
+yet classified as a confirmed official-title-generation gap or justification for
+a private title service. Runtime failure feedback and obsolete Back entries are
+concrete coupled follow-ups owned independently by the peers.

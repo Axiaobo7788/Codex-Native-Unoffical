@@ -106,71 +106,63 @@ permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Current shared implementation checkpoint is `7d0282d131ceda57aa2dfa66c9f6cffc2f007b1a`,
-  normally integrated and pushed. It preserves Codex settings `9fc19d3` /
-  evidence `5c46c44`, saved-title scope `cafcf12`, and Gemini U6 `df46ace` /
-  `e9a9697` / `7301289` through a normal merge. Main working tree is clean.
-- Codex owns Track F. Loaded inherited settings and saved-title discovery are
-  integrated. The isolated workspace-recovery slice now retains one mounted
-  editor/draft/attachment state, retires session-local operations and Host
-  references, and admits explicit local reconnection without automatic resume
-  or write replay. Peer-found stale relay notifications, root popovers and lost
-  session-only IDs have regression cases and corrections. Latest 108 targeted
-  cases and the 18-case lifecycle/Retry follow-up pass. A 30-case retirement/
-  memory follow-up also passes after replacing the old strong-reference snapshot
-  with scalar session tags; these counts overlap. Current shared gates,
-  new-source packaged session-draft replacement and integration remain pending.
-- The earlier isolated Linux packet verifies real owned stock/Host termination,
-  same-App recovery, bounded saved history, retained draft/attachment, active
-  unconfirmed outcomes and no extra model call. It also **reproduces** the old
-  session-only ID failure. That packet is not evidence that the later fix has
-  passed real use. See [recovery evidence](docs/reverse/WORKSPACE_RECOVERY_EVIDENCE.md).
-- Gemini U7 A6 actual-height clipping/selection is frozen at `44a8809`; its
-  independent peer audit is durable at `3c18450`. Neither is integrated yet.
-  The peers refreshed the official agy session after the long audit. Gemini
-  continues read-only current25894 evidence/targeted review; conversation
-  lifecycle surfaces were explicitly released to Codex.
-- Codex currently owns the exclusive heavy lease. All earlier owned App/Host/
-  stock/model workers exited. Flutter uses one worker and Cargo/CMake two jobs;
-  no overlapping heavy workloads. Gemini has zero heavy/runtime workers.
-- Live coordination remains official agy TUI-only. Peers are equal; one writer
-  per overlapping surface. Codex will negotiate any runtime-generation bridge
-  inside Gemini's conversation presentation instead of writing over it.
+- Current shared **validation source** is `24201ac2ee22a5cb2befab8f129f2137f920f623`,
+  a normal merge preserving Codex recovery `5e08cfe` / `3d68ebe`, Gemini U7
+  `44a8809`, and its initial peer audit `3c18450`. It is pushed on the Codex
+  branch. Main is still `2600ec5` (docs over source7d) until the current coupled
+  corrections are integrated; no history rewrite or overwrite is needed.
+- Core local recovery is machine and controlled real-stock verified. It retains
+  one mounted editor/draft/attachment state, retires old operations/requests and
+  Host references, and reconnects without implicit resume or write replay.
+  Unavailable prior-session drafts require an explicit new-conversation action.
+  The old failed real packet remains preserved; the new packet demonstrates
+  the actual correction on both public and installed stock.
+- Codex owns the compact/collapsed replacement-failure feedback follow-up in
+  `conversation.dart` and its existing continuity test. A real widget RED proved
+  the compact error was hidden. The first notice fix covered Send after a
+  successful retry; that negative is preserved. Seven updated widget cases and
+  strict analysis now pass after removing the obsolete notice at a new attempt.
+- Gemini owns the coupled Back-stack placeholder correction in isolated
+  `agent/gemini-runtime-draft-navigation`, based on24201ac. Its writable surfaces
+  are ThreadListController, app shell and a new navigation test; Codex does not
+  edit them concurrently. Gemini has the exclusive heavy lease for targeted
+  validation; Codex is source/docs/CI-only. All Codex real-use workers exited.
+- U7 is source-integrated in the shared validation branch, with later peer
+  review `5746b8e` reporting zero P0/P1 at its explicitly inspected source.
+  Golden A stays PARTIAL. The next UI candidate remains evidenced A7 saved/live
+  activity hierarchy and non-Shell rows, followed by other actionable A rows.
+- Live communication is official agy TUI-only, refreshed after the long session.
+  Peers remain equal; one writer per overlapping surface. Flutter uses one
+  worker, Cargo/CMake two jobs, with no overlapping heavy workloads.
 
 ## Current verification checkpoint
 
-- **Source `7d0282d` machine gates:** format 208/zero changes, strict analysis 0,
-  pure-Dart 68, 660 default Flutter cases/five explicit stock skips. Five enabled
-  direct-stock cases pass separately on public `0.167.2` and installed alpha.
-  History retains 100/1,000 turns and discards ten 3 MiB command payloads.
-  Cargo format and two-job Linux/83-system-library bundle closure pass. Rust
-  source is unchanged; local Clippy/100-test history is not relabeled as a new
-  local run. Hosted CI runs its own complete Rust gate.
-- Frozen shared packet:
-  `/var/tmp/native-desktop-settings-u6-7d0282d-r1/bundle/`,
-  AOT `393b320fc16111e22f507202d0052110cd3b1b651af6a286e2aa61b44e7af554`,
+- **Source24201ac machine gates:** format209/zero changes, strict analysis0,
+  pure-Dart68, **685 default Flutter cases/five explicit stock skips**. Five
+  enabled direct-stock cases pass separately on public0.167.2 and installed
+  0.167.0-alpha.3.2. History retains100/1,000 turns and discards ten3MiB outputs.
+  Cargo format and two-job Linux/83-system-library closure pass. Rust source is
+  unchanged; no new local Clippy/100-test run is inferred. Hosted verify runs
+  its own full Rust gate.
+- Frozen packet: `/var/tmp/native-desktop-recovery-u7-24201ac-r1/bundle/`,
+  AOT `01f4443b863dcf5ce3a6b3187c96236a417df9498e2926c2be79f846b560988b`,
   Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
-  Its recorded binary identities remain unchanged after the owned replay.
-- **Agent real-use:** [settings evidence](docs/reverse/INHERITED_SETTINGS_EVIDENCE.md)
-  verifies acknowledged loaded settings and neutral cold values.
-  [Combined evidence](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md) records
-  real old/new provider search, packaged all-provider title discovery, readable
-  foreign history, truthful mismatch/draft preservation and zero model calls.
-  U6's public light/dark and installed-light stock runs show actual Shell
-  success/exit-code2 cards; Codex inspected source, captures and process exit.
-  All owned App/Host/stock/model workers exited. These are not Human acceptance.
-- **Hosted exact-source gates:** `5c46c44` CI43156192343 passes all three jobs.
-  Source9fc's earlier run was cancelled by normal branch concurrency when its
-  documentation follow-up was pushed; it is not called green. For `7d0282d`,
-  branch CI43157353142 first passes macOS/Windows but verify times out during
-  dependency installation before code checks. Only failed job130980357409 was
-  rerun. Exact main [CI43158612189](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43158612189) now passes verify, macOS and Windows.
-  Branch attempt two also passes at the same SHA. The first timeout is
-  preserved; no CI policy/workflow change was made.
-- Private seeded duplicate assistant IDs, early captures, coordinate mistakes
-  and Xvfb/ATK/model-metadata warnings remain in source-bound evidence. Corrected
-  fixture passes do not erase them. ASCII worktree analysis does not establish
-  a fix for the original Unicode-path Flutter/LSP framing failure.
+  All247 tracked validation/build input hashes match after the shared packet.
+  Frozen binary identities also match after real use.
+- **Agent real-use:** [recovery evidence](docs/reverse/WORKSPACE_RECOVERY_EVIDENCE.md)
+  records23 captures, same-App empty/active crash recovery, retained text and
+  mention attachments at wide/700px, explicit replacement and first Send on
+  public and installed stock, three controlled model POSTs, and no replay.
+  All12 recorded App/Host/stock PIDs are absent; the owned model exits after
+  SIGINT and is awaited. These are not Human or live-account acceptance.
+- **Hosted exact source:** branch [CI43171510846](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43171510846)
+  at24201ac passes verify, macOS and Windows. The newer failure-feedback and
+  navigation follow-ups still need their combined final-source gate/CI.
+- Earlier settings/provider/Shell evidence remains linked from the functional
+  audit and [source7d checkpoint](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
+  Old APT timeouts, fixture duplicate IDs, coordinate/clipboard mistakes,
+  Xvfb/ATK/model-metadata warnings and failed REDs remain preserved. ASCII-path
+  success does not establish a fix for the original Unicode-path LSP failure.
 
 ## Current architecture truth
 
@@ -207,12 +199,13 @@ permission to lower the engineering or visual quality bar.
 - Both tracks still have machine-actionable work. The
   [functional audit](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md) and
   [living matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md) remain canonical for
-  supported missing/partial workflows, including hot recovery, Home settings,
+  supported missing/partial workflows, including the coupled recovery follow-ups, Home settings,
   account lifecycle, global content search and queue/terminal management.
 - [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) remains PARTIAL.
-  U6 Shell cards and acknowledged controls do not close saved-activity hierarchy,
+  U6 Shell cards, U7 user-bubble clipping and acknowledged controls do not close saved-activity hierarchy,
   every popover/state, Home, Changes, Review, compact or dark comparisons. U7
-  rendered-height clipping is active, not delegated to a generic Human gate.
+  rendered-height clipping is implemented; remaining evidenced A6/A7 differences
+  are active machine work, not delegated to a generic Human gate.
 - **NOT YET HUMAN VERIFIED:** matched signed-in official visual comparison,
   subjective interaction/long-session acceptance and unavailable physical
   platform checks remain surface-scoped. Physical Android checks are deferred
@@ -223,7 +216,8 @@ permission to lower the engineering or visual quality bar.
 ## Durable history
 
 Git is canonical for actual HEAD/worktrees. Earlier status/checkpoint narratives
-are preserved in [the 7d snapshot](docs/history/PROJECT_STATUS_at_7d0282d.md),
+are preserved in [the24201ac snapshot](docs/history/PROJECT_STATUS_at_24201ac.md),
+[the7d snapshot](docs/history/PROJECT_STATUS_at_7d0282d.md),
 [Desktop UI history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md)
 and the source-bound evidence linked from the functional audit. ADRs remain in
 [Decisions](docs/DECISIONS.md); old test counts are historical evidence, not

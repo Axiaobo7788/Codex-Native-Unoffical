@@ -1,7 +1,7 @@
 # Local Desktop workspace recovery evidence
 
-Status: implementation and focused machine verification; integration and the
-latest-source packaged correction remain pending. Program remains SELF_ITERATION.
+Status: source24201ac shared gates and controlled real-stock core recovery pass.
+Coupled compact failure-feedback and Back-stack follow-ups remain active. Program remains SELF_ITERATION.
 This is a local Codex Desktop lifecycle correction, not Remote expansion.
 
 ## Preserved failures and source corrections
@@ -78,3 +78,68 @@ scalar retirement tag on existing bounded entries. Pending reconciliation holds
 only versions and a thread ID, so a failed read cannot keep an additional old
 entry/text window alive after controller eviction. This preserves the same
 manual-Retry and fresh explicit-turn behavior without a second payload owner.
+
+
+## Shared source24201ac: correction verified in real packaged runtime
+
+Source `24201ac2ee22a5cb2befab8f129f2137f920f623` normally integrates recovery
+`5e08cfe` / scalar-tag follow-up `3d68ebe`, U7 `44a8809`, and peer audit `3c18450`.
+The follow-up peer audit `5746b8e` records zero P0/P1 at its explicitly inspected
+source; [its report](HOT_RECOVERY_PEER_FOLLOWUP.md) retains non-blocking observations
+and hypotheses separately. It did not independently rerun the real processes.
+
+The new frozen packet `/var/tmp/native-desktop-recovery-u7-24201ac-r1/bundle/` has
+AOT `01f4443b863dcf5ce3a6b3187c96236a417df9498e2926c2be79f846b560988b`,
+runner `3125fd1b1fe4b946c5d171ab674aff75809869418a5a0a06344ff064fede1de2`,
+and unchanged Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
+All247 tracked validation/build hashes match. Format209/zero changes, strict
+analysis0, pure-Dart68, 685 default cases/five stock skips, five enabled stock
+cases on each tested binary, history100/1,000 plus ten3MiB payloads, Cargo format,
+two-job Linux and83-system-library closure pass. Rust source is unchanged;
+local earlier Clippy/test evidence is not called a new run. Exact branch
+[CI43171510846](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43171510846)
+passes all three jobs, including its own full Rust gate.
+
+The new private replay `/var/tmp/native-workspace-recovery-real-r2/verification.json`
+records23 PNG captures/checksums and these actual product interactions:
+
+- public0.167.2: create a new empty session, enter `EmptyDraft242` and a local
+  mention, terminate only its owned stock child, and reconnect in the same App;
+- at700x760, the unavailable-session notice has an explicit New conversation
+  action. It preserves draft, attachment and project context, creates no turn
+  and makes no model POST. Actual UTF8 clipboard text remains `EmptyDraft242`;
+- only explicit subsequent Send produces the first model POST, saves the user
+  prompt/attachment and displays the controlled fixture response;
+- terminate the owned Host during a later active request, retaining a separately
+  typed `Keep242ActiveDraft`. The stock child also exits on Linux. Reconnect
+  keeps the same App, reads saved history, shows an unconfirmed-outcome warning
+  and makes no extra model POST. The copied draft matches exactly;
+- installed0.167.0-alpha.3.2 independently repeats the empty-session Host exit,
+  reconnect, explicit replacement, retained `InstalledEmpty242`/mention at700px
+  and first successful Send. Its one POST makes three total across both cases;
+- all12 recorded App/Host/stock PIDs are absent after normal script cleanup;
+  the controlled model is stopped by SIGINT and its session exits0. Frozen
+  binary checksums are unchanged. No personal auth/profile or cloud model was used.
+
+The earlier `thread not found` packet remains a real failure of its earlier
+binary; this later pass does not erase it. Human visual/long-session acceptance,
+physical Windows/macOS crash behavior, and matched official signed-in crash
+interaction remain unrun.
+
+## Coupled follow-ups after source24201ac
+
+- Compact/collapsed new-conversation RPC failures were only visible in the
+  sidebar. `runtime-replacement-feedback-red-r1.log` passes wide and fails compact
+  on missing visible feedback. A first Snackbar correction then covers Send
+  after successful retry in both windows (`green-r2`, two actual hit-test failures).
+  The corrected flow reports the bounded current-scope error, removes the
+  obsolete notice at the next explicit attempt, retains draft/attachment on
+  failure, and allows immediate retry/Send. Updated seven widget cases and
+  strict analysis pass (`green-r3`); combined/source-real evidence is still pending.
+- Gemini owns bounded Back-stack pruning for the evicted session-only placeholder
+  in an independent worktree. Arbitrary saved threads outside the current catalog
+  must stay navigable. Its targeted and combined validation remain pending.
+- Persisted stock item IDs identify items across process sessions. The peer's
+  synthetic reused-ID delta-prefix observation remains research, not a proven
+  supported stock failure: dropping retained prefixes blindly could also lose
+  a valid same-item continuation. No speculative namespace rewrite is adopted.

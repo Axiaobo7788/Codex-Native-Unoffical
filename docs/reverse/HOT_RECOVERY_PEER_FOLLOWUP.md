@@ -27,14 +27,14 @@ Red-Before-Green Evidence Inspected: `/var/tmp/native-ui-r0.BbOvHT/runtime-recov
 2. **`P1-2` — Queued async broadcast relay notifications delivered after retirement: `CLOSED` (`SOURCE-VERIFIED` + `MACHINE VERIFIED` red-to-green)**
    - Preserved red log `/var/tmp/native-ui-r0.BbOvHT/runtime-recovery-peer-findings-red-r1.log` confirmed `queued runtime relay never delivers a notification after retirement` failed (`Actual: [false]`) before the fix.
    - All 8 application-owned relay controllers in `lib/src/app/runtime_controller.dart:142-157` (`_turnEvents`, `_threadEvents`, `_approvalEvents`, `_userInputEvents`, `_mcpElicitationEvents`, `_mcpOauthEvents`, `_runtimeDiagnosticsEvents`, `_threadAttachmentEvents`) now use `StreamController<...>.broadcast(sync: true)`.
-   - `_invalidateMcpOauth()` (`lib/src/app/runtime_controller.dart:221-230`) schedules `McpOauthInvalidatedEvent` via microtask guarded by `epoch == _desktopEpoch && !_mcpOauthEvents.isClosed`. Reentrancy across `shutdown()` (`:1436-1448`) and `_closeDesktopTransport()` (`:1278-1283`) is safe because transport retirement awaits subscription cancellation before controller `.close()` or subsequent `++_desktopEpoch`.
+   - `_invalidateMcpOauth()` (`lib/src/app/runtime_controller.dart:221-230`) schedules `McpOauthInvalidated` via microtask guarded by `epoch == _desktopEpoch && !_mcpOauthEvents.isClosed`. Reentrancy across `shutdown()` (`:1436-1448`) and `_closeDesktopTransport()` (`:1278-1283`) is safe because transport retirement awaits subscription cancellation before controller `.close()` or subsequent `++_desktopEpoch`.
 
 3. **`P1-3` — Root-overlay `CodexPopover` remains open and hit-testable when workspace is `Offstage`: `CLOSED` (`SOURCE-VERIFIED` + `MACHINE VERIFIED` red-to-green)**
    - Preserved red log confirmed `runtime loss dismisses root-overlay composer popovers` failed (`Found 1 widget with text "Attach file (@mention)"` hit-testable) before the fix.
    - `CodexPopoverAnchorState` (`lib/src/app/primitives/codex_popover.dart:81-93, 186-189`) unconditionally subscribes to `TickerMode.valuesOf(context).enabled` in `didChangeDependencies()`, schedules post-frame `_controller.hide()` when disabled (avoiding build-phase overlay mutation), and blocks `_showPopover()` while inactive.
 
 4. **`P2-3` — Manual history `Retry` reconciliation and error visibility under retained live entries: `CLOSED` (`SOURCE-VERIFIED` + `MACHINE VERIFIED`)**
-   - `_pendingRecoveredHistory` + `HistoryController.refreshVersion` (`lib/src/app/codex_native_app.dart:243-303`, `lib/src/features/history/history_controller.dart:45, 71, 417`) reconciles retired live entries on any subsequent successful newest-page refresh on the same `(runtimeVersion, threadId)`.
+   - `_pendingRecoveredHistory` + `HistoryController.refreshVersion` (`lib/src/app/codex_native_app.dart:243-303`, `lib/src/features/conversation/history_controller.dart:45, 71, 417`) reconciles retired live entries on any subsequent successful newest-page refresh on the same `(runtimeVersion, threadId)`.
    - `lib/src/app/presentation/conversation.dart:2409-2415, 3015-3022` exposes `conversation-history-error-banner` and `conversation-history-retry` when retained live entries would otherwise hide the empty-turns history error view.
 
 ---
