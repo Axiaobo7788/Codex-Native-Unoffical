@@ -123,8 +123,10 @@ permission to lower the engineering or visual quality bar.
   regression and strict analysis pass. The product test's missing input frame
   and incomplete active-to-idle lifecycle were corrected, with both negative
   logs retained. The final case verifies zero premature reads, one first-turn
-  hydration and visible user input. Shared gates, real-stock before/after,
-  targeted peer audit and integration remain pending.
+  hydration and visible user input. Gemini inspected the actual source commit
+  with zero P0/P1/P2 findings and independently confirmed public-stock
+  materialization precedes the active notification. Shared gates, packaged
+  real-stock after-fix and integration remain pending.
 - **Published reasoning data correction:** `0286a4d`, integrated in main
   `27db663`, passes 615 default cases/five skips, five enabled stock cases,
   analysis/pure-Dart/memory/release and source-bound actual-stock comparison.
@@ -136,12 +138,15 @@ permission to lower the engineering or visual quality bar.
   passes. Root read the actual diff; final integrated/runtime verification is
   still separate. Current A6 source is in
   `/var/tmp/native-gemini-u4-a6-user-markdown`, covering conversation/message
-  bubble/theme/Markdown and related tests. It preserves the 16 KiB/128-pill
-  Markdown bounds. An encoded-image P1 blocks that slice's integration:
-  ResizeImage alone limits pixels, not full-file input. Gemini owns the bounded
-  provider correction; the encoded-read bound is now present, and a remaining
-  unbounded pending-load queue must be capped/retired before integration. Root
-  is reviewing the actual path and lifecycle.
+  bubble/theme/Markdown and related tests. It preserves the 16,384-code-unit/128-pill
+  Markdown bounds. Root's encoded-image and pending-queue P1 findings are
+  addressed in the current source: a 10 MiB encoded-input limit, four active
+  loads, 64 pending loads and mounted-interest cancellation/retirement. Active
+  slots remain held until actual reads settle. The decoder owns its transferred
+  buffer. Final owner tests, captures and committed-source review remain pending;
+  source inspection alone does not establish the completed runtime boundary.
+  The owner reports 94 focused passes and a Linux release build; same-state
+  packaged captures and the final source commit are still in progress.
   Parent app import-header ownership is released to Gemini only for required
   provider imports; Root's selection/history hook stays frozen and disjoint.
   Shared checkpoint docs remain Codex-owned. Golden State A remains PARTIAL.
@@ -153,9 +158,10 @@ permission to lower the engineering or visual quality bar.
 - Next independent functional gaps include explicit local runtime retry/crash
   recovery and newly observed unmaterialized-new-thread history. Codex has begun
   the latter source audit in `/var/tmp/native-codex-desktop-new-thread-history`
-  (base `0286a4d`); no tested correction exists yet. It reuses the current
-  ThreadList materialization admission instead of inferring emptiness from an
-  arbitrary RPC error. Evidence and next action are in the functional audit.
+  (source `732d2a4`, based on `27db663`). Focused machine gates pass; actual-stock
+  after-fix validation remains pending. It reuses the existing ThreadList
+  materialization admission instead of inferring emptiness from an arbitrary
+  RPC error. Evidence and next action are in the functional audit.
 
 ## Current checkpoints
 
@@ -169,6 +175,10 @@ source/validation checkpoints, rather than a second branch-state database.
   source `0286a4d`, MCP authentication/timeouts, U2/U3, and all earlier catalog,
   typography and cold-resume corrections. New-thread admission and U4 are not
   integrated into that checkpoint.
+- **Published new-thread source `732d2a4`:**
+  [CI43122125258](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43122125258)
+  completed successfully at the exact SHA. This is not the combined U4 source or
+  the pending local packaged-stock walkthrough.
 - **Previous combined source `03b23c4` / main `abd0e41`:** shared 607-case
   checkpoint and actual global MCP login/reload pass; exact main
   [43113451050](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43113451050)
@@ -244,7 +254,7 @@ source/validation checkpoints, rather than a second branch-state database.
   portal OpenURI counters were zero. External browser/account acceptance and
   in-app runtime crash recovery are not established by these checks.
 - U3 actual light/dark captures have been independently inspected, including the
-  live 240-character flattening that the next systems slice addresses. Owned
+  live 240-character flattening corrected by source `0286a4d`. Owned
   App/Host/stock/Xvfb/provider/portal/DBus workers exited after packaged replay.
   Private driver/accessibility and fixture metadata warnings remain recorded.
 - **NOT YET HUMAN VERIFIED:** matched signed-in official live captures,

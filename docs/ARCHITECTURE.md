@@ -96,6 +96,14 @@ The app-server/thread store is authoritative. Flutter retains only the current w
 
 The target is bounded UI memory even when a Codex session has accumulated very large historical context.
 
+Text limits named `Characters` or `maxSourceCharacters` count Dart UTF-16 code
+units, not encoded bytes. For example, the current reasoning budget is
+8,192 code units and the Markdown parse budget is 16,384 code units. Wire frames,
+command ranges and encoded image/file input have separate explicit byte limits.
+Older benchmark records sometimes call ASCII fixture sizes “8 KiB” or “16 KiB”;
+those labels do not establish the byte size of arbitrary multilingual strings
+or total widget/codec heap usage.
+
 ## Product and presentation
 
 Production Desktop connects to stock Codex through the Host. The

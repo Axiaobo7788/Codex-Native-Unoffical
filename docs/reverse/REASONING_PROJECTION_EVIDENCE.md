@@ -13,7 +13,7 @@ summaryIndex. Saved history joined parts with one newline, differing from the
 observed official paragraph composition.
 
 The corrected adapter projects typed reasoning snapshots and bounded deltas.
-The controller retains at most 8 KiB and 32 sparse summary parts per item,
+The controller retains at most 8,192 UTF-16 code units and 32 sparse summary parts per item,
 respects smaller entry budgets, coalesces at the existing interval, and keeps the
 existing pending-item/entry/thread limits. Nonempty completed stock snapshots
 replace partial live state; older empty/missing snapshots retain observed text.

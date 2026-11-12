@@ -2718,7 +2718,7 @@ backtick density:
 - **Context:** The caption-sized 240-character live projection collapsed
   whitespace, ignored summary indices and discarded started/completed summary
   bodies. U3's actual stock replay exposed different live and saved content.
-- **Decision:** Retain at most 8 KiB and 32 summary parts per reasoning item,
+- **Decision:** Retain at most 8,192 UTF-16 code units and 32 summary parts per reasoning item,
   further respecting a smaller configured entry budget. Use sparse bounded keys
   for stock indices, preserve an absent/empty first part, coalesce UI updates at
   the existing cadence, and retain existing pending-item/entry/thread limits.
@@ -2732,3 +2732,10 @@ backtick density:
   Streaming keeps its lazy unparsed rendering, saved history remains paginated,
   and inactive thread changes clear the transient accumulator. This projection
   covers stock-provided summaries, not an independently reconstructed agent loop.
+
+**Budget-unit calibration (2026-11-12):** Text budgets in ADR-057/058/060 use the
+existing Dart character constants, measured in UTF-16 code units. The earlier
+KiB shorthand describes ASCII fixture sizes or numeric multiples of 1,024; it
+is not a generic encoded-byte/heap claim. No budget value or behavior changes.
+Wire and encoded-file byte limits remain separate. See the architecture memory
+model for the current measurement terminology.
