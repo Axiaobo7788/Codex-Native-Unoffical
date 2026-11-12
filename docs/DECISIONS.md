@@ -2835,7 +2835,7 @@ model for the current measurement terminology.
   interrupt a new process, replay a turn or synthesize a successful stock outcome.
   Retire Host references while retaining bounded last-known prose. A successful
   fresh-history publication, including a later manual Retry, replaces only old
-  immutable live-entry identities and preserves new explicit work.
+  session-tagged live entries and preserves new explicit work.
 - **Session-only drafts:** A pre-failure unmaterialized or ephemeral ID requires
   fresh metadata before being treated as usable. Failed reads mean unavailable
   or unconfirmed, not proof of deletion or of no accepted work. The user may
@@ -2845,9 +2845,10 @@ model for the current measurement terminology.
   their normal explicit-resume/error path.
 - **Bounds:** Catalog/history/entry limits, inactive eviction, streaming coalescing,
   lazy Markdown, per-file diffs and Host-owned bounded output remain unchanged.
-  The temporary reconciliation snapshot contains at most the current bounded
-  live entries and is released on successful refresh, thread change or loss of
-  its runtime generation. No full history or output payload is retained.
+  A scalar retirement tag on the existing bounded entries replaces the earlier
+  temporary identity snapshot. Pending reconciliation retains only version/thread
+  identifiers, so failed history reads cannot pin an additional old live working
+  set after ordinary entry eviction. No full history or output payload is retained.
 - **Evidence:** Red-before-green unit/widget cases distinguish stale response
   admission from visible draft retention. Controlled packaged Linux probes use
   the real bundled Host and stock server with an isolated local model fixture;

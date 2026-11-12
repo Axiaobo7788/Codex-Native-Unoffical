@@ -19,7 +19,7 @@ This is a local Codex Desktop lifecycle correction, not Remote expansion.
   `/var/tmp/native-workspace-recovery-real-r1/public/shell-candidate-r2/11-empty-send-attempt.png`.
   The later explicit new-conversation correction is not relabeled as a pass of
   that earlier binary.
-- Retained live entries initially shadowed fresh saved history. Identity-based
+- Retained live entries initially shadowed fresh saved history. Session-tagged
   reconciliation now preserves new explicit work and the unconfirmed warning.
   A retry follow-up also revealed that retained live text hid the full-page
   history error/Retry affordance. A compact existing-style notice now exposes
@@ -72,3 +72,9 @@ Later source passes 108 focused cases and 18 lifecycle/Retry follow-up cases;
 these counts overlap and must not be added. Pure-Dart68 and strict analysis pass
 at their recorded snapshots. Full current-source/shared U7 gates, direct-stock
 cases, memory benchmark, final Linux packet and exact hosted CI remain pending.
+
+Recovery source follow-up replaces the earlier strong identity snapshot with a
+scalar retirement tag on existing bounded entries. Pending reconciliation holds
+only versions and a thread ID, so a failed read cannot keep an additional old
+entry/text window alive after controller eviction. This preserves the same
+manual-Retry and fresh explicit-turn behavior without a second payload owner.

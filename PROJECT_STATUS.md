@@ -116,7 +116,9 @@ permission to lower the engineering or visual quality bar.
   references, and admits explicit local reconnection without automatic resume
   or write replay. Peer-found stale relay notifications, root popovers and lost
   session-only IDs have regression cases and corrections. Latest 108 targeted
-  cases and the 18-case lifecycle/Retry follow-up pass; current shared gates,
+  cases and the 18-case lifecycle/Retry follow-up pass. A 30-case retirement/
+  memory follow-up also passes after replacing the old strong-reference snapshot
+  with scalar session tags; these counts overlap. Current shared gates,
   new-source packaged session-draft replacement and integration remain pending.
 - The earlier isolated Linux packet verifies real owned stock/Host termination,
   same-App recovery, bounded saved history, retained draft/attachment, active

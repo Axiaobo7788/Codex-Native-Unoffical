@@ -31,24 +31,49 @@ void main() {
     await gateway.dispose();
   });
 
-  test('saved recovery retires old identities without deleting a new explicit turn', () async {
-    await controller.submit('Old acknowledged work');
-    controller.invalidateRuntime();
-    final oldProjection = controller.entries;
-    await controller.submit('New explicit work');
-    final activeTurn = controller.activeTurnId;
-    controller.reconcileRecoveredHistory(oldProjection);
-    expect(
-      controller.entries.where((e) => e.text == 'Old acknowledged work'),
-      isEmpty,
-    );
-    expect(
-      controller.entries.where((e) => e.text == 'New explicit work'),
-      hasLength(1),
-    );
-    expect(controller.activeTurnId, activeTurn);
-    expect(controller.busy, isTrue);
-  });
+  test(
+    'saved recovery releases old entries without deleting fresh accepted work',
+    () async {
+      await controller.submit('Old acknowledged work');
+      gateway.events.add(
+        const AssistantMessageEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'reused',
+          text: 'Old reply',
+          completed: false,
+        ),
+      );
+      controller.invalidateRuntime();
+      final retiredVersion = controller.runtimeInvalidationVersion;
+      await controller.submit('New explicit work');
+      final activeTurn = controller.activeTurnId;
+      gateway.events.add(
+        const AssistantMessageEvent(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          itemId: 'reused',
+          text: 'Fresh accepted reply',
+          completed: false,
+        ),
+      );
+      controller.reconcileRecoveredHistory(retiredVersion);
+      expect(
+        controller.entries.where((e) => e.text == 'Fresh accepted reply'),
+        hasLength(1),
+      );
+      expect(
+        controller.entries.where((e) => e.text == 'Old acknowledged work'),
+        isEmpty,
+      );
+      expect(
+        controller.entries.where((e) => e.text == 'New explicit work'),
+        hasLength(1),
+      );
+      expect(controller.activeTurnId, activeTurn);
+      expect(controller.busy, isTrue);
+    },
+  );
 
   test(
     'runtime loss ends the old stream without a successful stock outcome',

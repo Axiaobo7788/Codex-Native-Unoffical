@@ -106,7 +106,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     int runtimeVersion,
     String? threadId,
     int afterHistoryVersion,
-    List<ConversationEntry> entries,
+    int retiredEntriesVersion,
   })?
   _pendingRecoveredHistory;
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -244,7 +244,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
       runtimeVersion: version,
       threadId: selectedId,
       afterHistoryVersion: _historyController.refreshVersion,
-      entries: _conversationController.entries,
+      retiredEntriesVersion: _conversationController.runtimeInvalidationVersion,
     );
     bool current() =>
         mounted &&
@@ -297,7 +297,9 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
       return;
     }
     _pendingRecoveredHistory = null;
-    _conversationController.reconcileRecoveredHistory(pending.entries);
+    _conversationController.reconcileRecoveredHistory(
+      pending.retiredEntriesVersion,
+    );
   }
 
   void _handleThreadSelection() {

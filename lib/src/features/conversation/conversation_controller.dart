@@ -26,6 +26,7 @@ class ConversationEntry {
     this.commandOutput,
     this.reasoningParts = const [],
     this.attachments = const [],
+    this.retiredRuntimeVersion = 0,
   });
 
   final String id;
@@ -40,6 +41,7 @@ class ConversationEntry {
   final OutputDescriptor? commandOutput;
   final List<String> reasoningParts;
   final List<UserAttachment> attachments;
+  final int retiredRuntimeVersion;
 
   ConversationEntry copyWith({
     String? text,
@@ -51,6 +53,7 @@ class ConversationEntry {
     OutputDescriptor? commandOutput,
     List<UserAttachment>? attachments,
     List<String>? reasoningParts,
+    int retiredRuntimeVersion = 0,
   }) => ConversationEntry(
     id: id,
     kind: kind,
@@ -64,6 +67,7 @@ class ConversationEntry {
     commandOutput: commandOutput ?? this.commandOutput,
     reasoningParts: reasoningParts ?? this.reasoningParts,
     attachments: attachments ?? this.attachments,
+    retiredRuntimeVersion: retiredRuntimeVersion,
   );
 }
 
@@ -141,14 +145,15 @@ class ConversationController extends ChangeNotifier {
   bool get busy => _busy;
   int get runtimeInvalidationVersion => _runtimeInvalidationVersion;
 
-  /// The newly read stock window replaces only the retained old projection.
-  /// A new explicit turn may already have added/replaced immutable entries;
-  /// those must survive the old history read's completion.
-  void reconcileRecoveredHistory(List<ConversationEntry> oldProjection) {
-    final retired = HashSet<ConversationEntry>.identity()
-      ..addAll(oldProjection);
+  /// Retire only the previous-session entries after a fresh saved read. The
+  /// epoch tag avoids retaining a second old working set while a read needs
+  /// Retry. New accepted events create/copy untagged entries and survive.
+  void reconcileRecoveredHistory(int retiredVersion) {
+    if (retiredVersion <= 0) return;
     final before = _entries.length;
-    _entries.removeWhere(retired.contains);
+    _entries.removeWhere(
+      (entry) => entry.retiredRuntimeVersion == retiredVersion,
+    );
     if (_entries.length != before) _notify();
   }
 
@@ -261,15 +266,13 @@ class ConversationController extends ChangeNotifier {
     );
     for (var i = 0; i < _entries.length; i += 1) {
       final entry = _entries[i];
-      if (!entry.completed || entry.commandOutput != null) {
-        // End rendering a dead stream, while explicitly keeping its outcome
-        // unconfirmed rather than calling it a completed stock operation.
-        _entries[i] = entry.copyWith(
-          completed: true,
-          status: entry.completed ? entry.status : 'unconfirmed',
-          commandOutput: entry.commandOutput?.withoutSessionReference(),
-        );
-      }
+      // End rendering a dead stream, without asserting a stock completion.
+      _entries[i] = entry.copyWith(
+        completed: true,
+        status: entry.completed ? entry.status : 'unconfirmed',
+        commandOutput: entry.commandOutput?.withoutSessionReference(),
+        retiredRuntimeVersion: _runtimeInvalidationVersion,
+      );
     }
     _reasoningSummaries.clear();
     _mcpBaseSummaries.clear();
