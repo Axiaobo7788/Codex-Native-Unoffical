@@ -161,22 +161,8 @@ void main() {
   );
 
   testWidgets(
-    'U8 A7 fileChange inline +A -D accessory and bounded 240px patch preview card disclose only for matching turnId',
+    'U8 A7 fileChange rows render per-item +A -D stats while withholding turn-aggregate diff disclosure pending per-item seam',
     (tester) async {
-      String? copiedText;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-            if (call.method == 'Clipboard.setData') {
-              final args = call.arguments as Map<dynamic, dynamic>?;
-              copiedText = args?['text'] as String?;
-            }
-            return null;
-          });
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(SystemChannels.platform, null),
-      );
-
       final harness = _PatchAndNonShellHarness();
       await pumpSimulatedRuntimeApp(
         tester,
@@ -294,29 +280,16 @@ void main() {
         OfficialCodexThemeData.light.diffRemovedText,
       );
 
-      // Clicking "Edited a file" discloses bounded 240px CodexInlinePatchPreviewCard.
-      expect(find.byType(CodexInlinePatchPreviewCard), findsNothing);
+      // Even when TurnDiffUpdated carries identical +12 -3 stats, turn-aggregate
+      // diffs are never presented as per-item fileChange content.
+      final liveEditHeader = tester.widget<CodexInlineActivityHeader>(
+        find.ancestor(
+          of: plusTwelve,
+          matching: find.byType(CodexInlineActivityHeader),
+        ),
+      );
+      expect(liveEditHeader.hasDisclosure, isFalse);
       await tester.tap(find.text('Edited a file'));
-      await tester.pumpAndSettle();
-      expect(find.byType(CodexInlinePatchPreviewCard), findsOneWidget);
-      expect(
-        tester.getSize(find.byType(CodexInlinePatchPreviewCard)).height,
-        lessThanOrEqualTo(246.0),
-      );
-      expect(find.text('-final oldFlag = false;'), findsOneWidget);
-
-      // Copy diff button copies patch lines to clipboard.
-      await tester.tap(
-        find.byKey(const ValueKey('inline-patch-copy-lib/main.dart')),
-      );
-      await tester.pump();
-      expect(copiedText, contains('-final oldFlag = false;'));
-
-      // Collapsing and re-expanding parent live group resets child patch expansion.
-      await tester.tap(find.text('Edited a file and read files'));
-      await tester.pumpAndSettle();
-      expect(find.byType(CodexInlinePatchPreviewCard), findsNothing);
-      await tester.tap(find.text('Edited a file and read files'));
       await tester.pumpAndSettle();
       expect(find.byType(CodexInlinePatchPreviewCard), findsNothing);
 
@@ -540,16 +513,19 @@ void main() {
   );
 
   testWidgets(
-    'U8 A7 CodexInlinePatchPreviewCard awaits Clipboard.setData before showing Copied and suppresses clipboard errors',
+    'U8 A7 CodexInlinePatchPreviewCard clamps to 240px, truncates at 80 lines, awaits Clipboard.setData, and suppresses clipboard errors',
     (tester) async {
       var completer = Completer<void>();
       var failClipboard = false;
+      String? copiedText;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, (call) async {
             if (call.method == 'Clipboard.setData') {
               if (failClipboard) {
                 throw PlatformException(code: 'unavailable');
               }
+              final args = call.arguments as Map<Object?, Object?>?;
+              copiedText = args?['text'] as String?;
               await completer.future;
             }
             return null;
@@ -559,29 +535,40 @@ void main() {
             .setMockMethodCallHandler(SystemChannels.platform, null);
       });
 
-      const file = DiffFile(
+      final file = DiffFile(
         path: 'lib/a.dart',
-        additions: 1,
-        deletions: 0,
-        lines: ['+final ok = true;'],
+        additions: 90,
+        deletions: 1,
+        lines: [
+          '-final oldFlag = false;',
+          for (var i = 1; i <= 90; i++) '+final ok$i = $i;',
+        ],
         truncated: false,
       );
-      const card = CodexInlinePatchPreviewCard(files: [file]);
+      final card = CodexInlinePatchPreviewCard(files: [file]);
       const copyKey = ValueKey('inline-patch-copy-lib/a.dart');
 
       await tester.pumpWidget(
         MaterialApp(
           home: OfficialCodexThemeProvider(
             data: OfficialCodexThemeData.light,
-            child: const Scaffold(body: card),
+            child: Scaffold(body: card),
           ),
         ),
       );
+
+      expect(
+        tester.getSize(find.byType(CodexInlinePatchPreviewCard)).height,
+        lessThanOrEqualTo(246.0),
+      );
+      expect(find.text('-final oldFlag = false;'), findsOneWidget);
+      expect(find.text('Showing bounded diff preview'), findsOneWidget);
 
       final copyButton = find.byKey(copyKey);
 
       await tester.tap(copyButton);
       await tester.pump();
+      expect(copiedText, contains('-final oldFlag = false;'));
       expect(find.byIcon(Icons.check_rounded), findsNothing);
 
       completer.complete();
