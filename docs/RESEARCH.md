@@ -5164,3 +5164,13 @@ custom-tool attempt demonstrates why static tool-handler existence is not proof
 of active model tool advertisement. The supported exec_command/apply_patch
 workflow establishes the actual file approval behavior. Details and remaining
 combined gates stay in the [approval evidence](reverse/APPROVAL_CHOICES_EVIDENCE.md).
+
+
+Track F file-change reconciliation (`ac47002`): real stock add/delete bodies are
+raw content, while updates are unified hunks. Five pre-correction regressions fail;
+43 focused live/history cases pass after shared bounded parsing. Actual public
+and installed stock both report a created three-line Markdown file as `+3 -0`
+in live and saved projections. This does not close per-item patch access. U8
+aggregate file/count equality cannot prove per-item content identity; the owner
+conservative correction withholds disclosure until the typed lazy seam.
+[Source-bound limits and real-stock evidence](reverse/FILE_CHANGE_STATISTICS_EVIDENCE.md).

@@ -106,80 +106,62 @@ permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Shared validation source is `55dcf16293bc6f508d25331d22996340361ca8ee`,
-  a normal merge preserving Codex recovery5e08cfe/3d68ebe, Gemini U7
-  44a8809, calibrated peer audits3c18450/5746b8e, Codex visible replacement
-  failure/retry507cbc7 and Gemini bounded Back/Forward reconciliation4122c37.
-  All owner branches and main are pushed: normal fast-forward mainba6f27c
-  preserves both owners. Its exact hosted CI passes; Git remains canonical
-  for actual HEAD and worktree state.
-- The scoped local recovery flow now has combined machine and packaged stock
-  verification. One editor/draft/attachment state stays mounted; stale async
-  operations, requests and Host references retire; reconnect performs reads
-  without automatic resume, writes or replay. An unavailable prior-session
-  draft requires explicit replacement. Its real creation failure is visible
-  at700px, retry retains the draft, and Back/Forward follows the replacement.
-- Codex has read the actual navigation diff and tests with no blocking finding.
-  Gemini's39 targeted cases/pure68/format/strict analysis pass. Both peers have
-  released these recovery write surfaces. Their real-use workers all exited.
-- Active next pair, agreed through official agy: Codex owns typed approval
-  decisions/protocol/controller, only `_ApprovalBanner` and its one library import,
-  and dedicated tests in `agent/codex-approval-choices`. Gemini owns U8 A7
-  saved/live activity, non-Shell rows, the rest of the output/activity presentation,
-  conversation presentation and its dedicated test in
-  `agent/gemini-golden-ui-u8-a7-hierarchy`. The overlapping file is split at the
-  explicit class boundary; neither writes the other's region.
-- Approval branchc2b5a64 is committed/pushed and exact hostedCI43184267473
-  passes all three jobs. Its targeted peer audit exposes1P1/2P2 despite green CI.
-  The isolated baseline reproduces four failures. The current correction has
- 70 targeted passes, strict analysis0/pure68, a bounded response menu, identity-
-  keyed deciding state and scoped errors, local structural dedup and escaped
-  rule display. Peer reinspection and merged packaged/shared gates remain open.
-  [Evidence](docs/reverse/APPROVAL_CHOICES_EVIDENCE.md) preserves each negative.
-- Eight real public/installed approval cases verify exact command-rule
-  persistence/repeated execution, same-file session editing and cancellation.
-  Managed-network real emission remains separately unverified. All owned probe
-  processes exit. Root now has the exclusive heavy lease for fixes/integration.
-- Gemini U8 is committed/pushed at6f196cee, with78 targeted tests and a final
-  packaged replay reported for inspection. Its multi-edit/cold-saved per-item
-  patch gap stays machine-actionable. Root is verifying actual source/artifacts;
-  Golden A remains PARTIAL. No blanket Human-only gate or Desktop closure.
-- Live communication stays official agy TUI-only. Peers are equal. Flutter uses
-  one worker and Cargo/CMake two jobs; heavy work never overlaps across peers.
+- Main/origin remain `ba6f27c` (clean at the latest fetch); the isolated combined
+  branch now preserves approvals `c2b5a64`/`474ec93`, Gemini U8 `6f196cee`,
+  clipboard `571a656`, conservative aggregate removal `4a8f83a`, and Track F
+  statistics `ac47002` through ordinary merges. Last production merge:
+  `1f20a78a16496cbaa7fcee24b2a49a3853b9ff61`. Git is canonical for actual HEAD.
+- Approval choices preserve exact stock scope, explicit refusal/cancellation and
+  request identity. A bounded response menu fixes legibility without the earlier
+  vertical Wrap overflow. Old deciding/error completions cannot affect a newer
+  request reusing the ID. Gemini's source reinspection closes the original
+  1P1/2P2 on `474ec93`; historical findings/REDs remain preserved.
+- U8 translates saved interrupted/failed grouping, search/collaboration/reroute
+  captions, inline stats and all four numeric Shell exit-code call sites. Root
+  inspected source and actual owner r3 captures. Visible count/stat equality is
+  **not** per-item content identity: `4a8f83a` removes aggregate-as-item disclosure.
+  The preview primitive is staged for an authoritative typed/lazy per-item seam.
+- `ac47002` fixes raw add/delete versus unified-update statistics with one bounded
+  pure-Dart helper. Actual public/installed stock emits the same `+3 -0` live and
+  saved result for created sign-prefixed Markdown. This is not per-item preview
+  implementation or A7 closure.
+- Root holds the exclusive heavy lease for the combined gates/build and packaged
+  approval-menu walk. Gemini stays source/docs-only for independent review and
+  current official evidence. Flutter1/Cargo-CMake2 remain serialized. Live peer
+  communication remains the official agy TUI only.
 
 ## Current verification checkpoint
 
-- **Source55dcf16 machine gates:** format210/zero changes, strict analysis0,
-  pure-Dart68, **689 default Flutter cases/five explicit stock skips**. Five
-  enabled direct-stock cases pass separately on public0.167.2 and installed
-  0.167.0-alpha.3.2. History retains100/1,000 turns and discards ten3MiB outputs.
-  Cargo format and two-job Linux/83-system-library closure pass. Rust source is
-  unchanged; no new local Clippy/100-test run is inferred. Hosted verify runs
-  its own full Rust gate.
-- Frozen packet: `/var/tmp/native-desktop-recovery-nav-55dcf16-r1/bundle/`,
-  AOT `63e9da82019f1d06eed5bb73dcd392bb3ca7acf9f54b43c77820314275d974fc`,
-  Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
-  All248 tracked validation/build input hashes match after the shared packet.
-  Frozen binary identities also match after real use.
-- **Agent real-use:** [recovery evidence](docs/reverse/WORKSPACE_RECOVERY_EVIDENCE.md)
-  retains the source24201ac23-capture public/installed empty/active crash packet,
-  plus source55dcf16 sixteen captures: actual stock configuration error visible
-  at700px, exact retained draft/mention, explicit retry/Send, and real wide
-  Back/Forward across the replacement. Two model POSTs come only from two
-  explicit Sends. All five new App/Host/stock identities and owned model exit;
-  both standalone real configuration-error probes also close. These are
-  controlled model tests, not Human or live-account acceptance.
-- **Hosted exact source:** prior branch
-  [CI43171510846](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43171510846)
-  at24201ac passes verify/macOS/Windows. Final mainba6f27c (docs over the same
- 55dcf16 code) also passes all three jobs in
-  [CI43178375434](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43178375434).
-  These gates do not verify the uncommitted next approval slice.
-- Earlier settings/provider/Shell evidence remains linked from the functional
-  audit and [source7d checkpoint](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
-  Earlier product REDs, APT timeout, fixture duplicate IDs, coordinate/clipboard
-  errors and native/model warnings remain preserved. ASCII-path analysis does
-  not establish a fix for the original Unicode-path LSP failure.
+- Approval correction: 70 focused cases, strict analysis0/pure68/format214;
+  exact `474ec93` hosted [CI43195046161](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43195046161)
+  passes verify/macOS/Windows. Source-only peer reinspection reports no open
+  P0/P1/P2 on that correction; merged gates remain separate.
+- File statistics: 5 RED regressions; 43 focused live/history cases pass,
+  strict analysis0/pure69/217-file format passes. Two actual bundled-Host stock
+  probes verify live and saved `+3 -0`, session editing and process cleanup.
+  [Statistics evidence](docs/reverse/FILE_CHANGE_STATISTICS_EVIDENCE.md).
+- Real approvals: 4 command-rule/cancel and 4 file-session/cancel cases pass on
+  public0.167.2 and installed0.167.0-alpha.3.2. Exact persisted prefixes, repeated
+  identical command and independent interrupted outcomes are checked. All owned
+  workers exit. Managed-network natural emission remains unverified.
+  [Evidence and preserved negatives](docs/reverse/APPROVAL_CHOICES_EVIDENCE.md).
+- Combined source `1f20a78`: format/strict analysis/pure69 pass. The first full
+  Flutter gate records723 passes/five skips/one U8 **test assertion** failure:
+  an offscreen lazy-list footer is expected before scrolling. An integration
+  test correction now actually scrolls, verifies the80-line cap/footer and
+  returns to the copy flow; all5 U8 cases pass. Fresh full/shared stock, memory,
+  build and packaged-menu gates remain pending.
+  Private `approval-u8-shared-r1.log` preserves the negative. No green combined
+  checkpoint is claimed yet.
+- Previous shared recovery source55dcf16 passed 689 default cases/five skips,
+  5 enabled stock cases per binary, memory100/1,000 plus ten3MiB outputs and
+  two-job Linux/83-library closure. Its frozen packet and actual recovery/error/
+  retry/Back-Forward captures remain in the [recovery evidence](docs/reverse/WORKSPACE_RECOVERY_EVIDENCE.md).
+  Mainba6 hosted [CI43178375434](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43178375434)
+  is green; it is not evidence for the later combined branch.
+- Source7d settings/provider/Shell results remain in the [earlier checkpoint](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
+  Earlier real runtime, fixture, APT and Unicode-path LSP negatives remain
+  preserved. ASCII-path gates do not establish that the Unicode-path bug is fixed.
 
 ## Current architecture truth
 
@@ -188,7 +170,9 @@ permission to lower the engineering or visual quality bar.
   core client does not require Node/Electron or reimplement the agent loop.
 - Conversation state is bounded: paginated history, virtualized lists, bounded
   inactive/live projections and coalesced streaming. Markdown/images are
-  bounded; command output and per-file diffs remain lazy. Upstream deferOutput
+  bounded; command output stays Host-backed and lazy. Changes remains a bounded
+  turn aggregate; per-item file previews and Host-backed file-diff payloads are
+  still separate machine-actionable work. Upstream deferOutput
   acceptance is not proof of deferred loading; whole-item fallback limitations
   remain explicit.
 - Loaded settings are stock acknowledgement, never catalog-default inference.

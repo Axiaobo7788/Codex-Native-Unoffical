@@ -124,7 +124,8 @@ To achieve 1:1 official fidelity while retaining Flutter's robust low-level capa
 - **Hierarchy**: Thought disclosure, saved completed-turn divider and activity/output actions share the timeline rather than individual elevated cards.
 - **Bounds**: Saved activity retains its `224px` lazy viewport, reasoning its `140px` viewport, and output remains on demand.
 - **U6 command detail**: `df46ace`/`e9a9697`/`7301289` map current `PuGl.d` Shell structure, two-line command expansion, hover/focus copy and actual int32 exit-code status, retaining the 4 KiB lazy preview and full-output action. See [checkpoint evidence](SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
-- **Remaining deltas**: Full saved-activity hierarchy, running command-preview delivery and matched signed-in comparison remain open. U4 first-part reasoning emphasis is already translated; these gaps must not be collapsed into a generic Human gate.
+- **U8 accessories and hierarchy**: `6f196cee` supplies quiet search/collaboration/reroute captions, inline tabular `+/-` stats, boundary-proven interrupted/failed saved grouping and all four Shell exit-code call sites. The standalone `CodexInlinePatchPreviewCard` is capped at 240px/80 lines with awaited clipboard completion; item-level binding remains withheld until authoritative per-item data exists. A matching turn/stat count never authorizes aggregate-as-item content.
+- **Remaining deltas**: Per-item live/saved patch disclosure, running command-preview delivery and matched signed-in comparison remain open. U4 first-part reasoning emphasis is already translated; these gaps must not be collapsed into a generic Human gate.
 
 ### 3.6 `CodexPopover` & `CodexMenu`
 

@@ -562,7 +562,19 @@ void main() {
         lessThanOrEqualTo(246.0),
       );
       expect(find.text('-final oldFlag = false;'), findsOneWidget);
+      final diffList = find.descendant(
+        of: find.byType(CodexInlinePatchPreviewCard),
+        matching: find.byType(ListView),
+      );
+      // The footer is virtualized. Exercise the actual bounded viewport rather
+      // than requiring offscreen rows to be eagerly built.
+      await tester.drag(diffList, const Offset(0, -2500));
+      await tester.pumpAndSettle();
       expect(find.text('Showing bounded diff preview'), findsOneWidget);
+      expect(find.text('+final ok79 = 79;'), findsOneWidget);
+      expect(find.text('+final ok80 = 80;'), findsNothing);
+      await tester.drag(diffList, const Offset(0, 2500));
+      await tester.pumpAndSettle();
 
       final copyButton = find.byKey(copyKey);
 

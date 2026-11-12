@@ -88,3 +88,15 @@ Only the agreed U8 files are modified or added relative to `ba6f27c0834c6e005904
 ## 5. Companion Peer Audit Reference
 
 The targeted peer audit of `Root` commit `c2b5a64aad831f4d9219fb323702bfc1c72e57bf` (`agent/codex-approval-choices`) is recorded in [`docs/reverse/APPROVAL_CHOICES_PEER_AUDIT.md`](./APPROVAL_CHOICES_PEER_AUDIT.md) (`0 P0`, `1 P1`, `2 P2`, `1 INVALID` candidate cleared via `25894` `474578`).
+
+
+## Root integration gate follow-up
+
+Combined production merge `1f20a78` passes format/strict analysis/pure69.
+The first full Flutter run records723 passes/five skips/one failure: the new
+standalone preview test expected the virtualized footer before scrolling. The
+integration correction exercises the actual list, checks the80-line boundary
+and footer, then returns to the clipboard flow. All5 U8 cases pass on that
+correction (`approval-u8-scroll-test-r2.log`). Production rendering is unchanged;
+virtualization stays enabled. The negative remains in `approval-u8-shared-r1.log`;
+fresh shared gates and packaged approval capture are separately pending.
