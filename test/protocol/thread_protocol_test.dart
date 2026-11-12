@@ -32,6 +32,245 @@ void main() {
     await notifications.close();
   });
 
+  test(
+    'an unload invalidates cached settings before an active auto-load',
+    () async {
+      final subscription = adapter.events.listen((_) {});
+      try {
+        responses['thread/resume'] = {
+          'thread': _threadJson(id: 'unloaded'),
+          ..._executionSettingsJson(model: 'retired-model'),
+        };
+        await adapter.resumeThread('unloaded');
+        for (final type in ['notLoaded', 'active']) {
+          notifications.add(
+            CodexNotification(
+              method: 'thread/status/changed',
+              params: {
+                'threadId': 'unloaded',
+                'status': {'type': type},
+              },
+            ),
+          );
+        }
+        responses['thread/read'] = {'thread': _threadJson(id: 'unloaded')};
+        expect(
+          (await adapter.readThread('unloaded')).executionSettings?.model,
+          isNull,
+        );
+      } finally {
+        await subscription.cancel();
+      }
+    },
+  );
+
+  test(
+    'evicting an in-flight newer snapshot cannot resurrect an older reply',
+    () async {
+      final reply = Completer<JsonObject>();
+      final raced = ThreadProtocolAdapter(
+        request: (_, [params = const {}]) => reply.future,
+        notifications: notifications.stream,
+      );
+      final subscription = raced.events.listen((_) {});
+      try {
+        final pending = raced.startThread(
+          const ThreadStartOptions(cwd: '/workspace'),
+        );
+        for (var i = 0; i <= 100; i += 1) {
+          notifications.add(
+            CodexNotification(
+              method: 'thread/settings/updated',
+              params: {
+                'threadId': i == 0 ? 'raced' : 'other-$i',
+                'threadSettings': {
+                  ..._executionSettingsJson(model: 'newer-model'),
+                  'sandboxPolicy': {'type': 'readOnly'},
+                },
+              },
+            ),
+          );
+        }
+        reply.complete({
+          'thread': _threadJson(id: 'raced'),
+          ..._executionSettingsJson(model: 'older-model'),
+        });
+        // Retaining the newer value or admitting honest uncertainty is safe;
+        // displaying the known-older configuration after eviction is not.
+        expect((await pending).executionSettings?.model, isNot('older-model'));
+      } finally {
+        await subscription.cancel();
+      }
+    },
+  );
+
+  test('loaded session replies preserve actual inherited settings', () async {
+    for (final method in ['thread/start', 'thread/resume', 'thread/fork']) {
+      responses[method] = {
+        'thread': _threadJson(id: 'configured-thread'),
+        ..._executionSettingsJson(model: 'configured-model'),
+      };
+      final thread = await switch (method) {
+        'thread/start' => adapter.startThread(
+          const ThreadStartOptions(cwd: '/workspace'),
+        ),
+        'thread/resume' => adapter.resumeThread('configured-thread'),
+        _ => adapter.forkThread(
+          const ThreadForkOptions(threadId: 'parent-thread'),
+        ),
+      };
+      final settings = thread.executionSettings!;
+      expect(settings.model, 'configured-model');
+      expect(settings.modelProvider, 'custom-provider');
+      expect(settings.reasoningEffort, 'high');
+      expect(settings.approvalPolicy, ObservedApprovalPolicy.never);
+      expect(settings.sandbox, ObservedSandboxPolicy.readOnly);
+      expect(requests.last.params.containsKey('model'), isFalse);
+      expect(requests.last.params.containsKey('approvalPolicy'), isFalse);
+    }
+  });
+
+  test('a newer settings notification wins over an in-flight session reply', () async {
+    final reply = Completer<JsonObject>();
+    final raced = ThreadProtocolAdapter(
+      request: (method, [params = const {}]) => method == 'thread/start'
+          ? reply.future
+          : Future.value({'thread': _threadJson(id: 'raced-thread')}),
+      notifications: notifications.stream,
+    );
+    final events = <ThreadLifecycleEvent>[];
+    final subscription = raced.events.listen(events.add);
+    try {
+      final pending = raced.startThread(
+        const ThreadStartOptions(cwd: '/workspace'),
+      );
+      notifications.add(
+        CodexNotification(
+          method: 'thread/settings/updated',
+          params: {
+            'threadId': 'raced-thread',
+            'threadSettings': {
+              ..._executionSettingsJson(model: 'newer-model'),
+              'effort': 'low',
+              'sandboxPolicy': {'type': 'externalSandbox'},
+            },
+          },
+        ),
+      );
+      reply.complete({
+        'thread': _threadJson(id: 'raced-thread'),
+        ..._executionSettingsJson(model: 'older-model'),
+      });
+      final settings = (await pending).executionSettings!;
+      expect(settings.model, 'newer-model');
+      expect(settings.reasoningEffort, 'low');
+      expect(settings.sandbox, ObservedSandboxPolicy.externalSandbox);
+      expect(settings.source, ThreadSettingsSource.notification);
+      expect(events.single, isA<ThreadExecutionSettingsChangedEvent>());
+      // A subsequent metadata-only read cannot invent or reset model settings.
+      expect(
+        (await raced.readThread('raced-thread')).executionSettings,
+        same(settings),
+      );
+    } finally {
+      await subscription.cancel();
+    }
+  });
+
+  test(
+    'settings observation retention stays bounded for inactive IDs',
+    () async {
+      final subscription = adapter.events.listen((_) {});
+      try {
+        for (var i = 0; i < 101; i += 1) {
+          notifications.add(
+            CodexNotification(
+              method: 'thread/settings/updated',
+              params: {
+                'threadId': 'settings-$i',
+                'threadSettings': {
+                  ..._executionSettingsJson(model: 'configured-$i'),
+                  'sandboxPolicy': {'type': 'readOnly'},
+                },
+              },
+            ),
+          );
+        }
+        responses['thread/read'] = {'thread': _threadJson(id: 'settings-0')};
+        expect(
+          (await adapter.readThread('settings-0')).executionSettings,
+          isNull,
+        );
+        responses['thread/read'] = {'thread': _threadJson(id: 'settings-100')};
+        expect(
+          (await adapter.readThread('settings-100')).executionSettings?.model,
+          'configured-100',
+        );
+      } finally {
+        await subscription.cancel();
+      }
+    },
+  );
+
+  test(
+    'granular and unknown policies do not become writable defaults',
+    () async {
+      responses['thread/start'] = {
+        'thread': _threadJson(id: 'custom-policy'),
+        ..._executionSettingsJson(model: 'configured-model'),
+        'approvalPolicy': {
+          'granular': {
+            'mcp_elicitations': false,
+            'rules': true,
+            'sandbox_approval': false,
+          },
+        },
+        'sandbox': {'type': 'externalSandbox'},
+      };
+      var thread = await adapter.startThread(
+        const ThreadStartOptions(cwd: '/workspace'),
+      );
+      expect(
+        thread.executionSettings?.approvalPolicy,
+        ObservedApprovalPolicy.granular,
+      );
+      expect(
+        thread.executionSettings?.sandbox,
+        ObservedSandboxPolicy.externalSandbox,
+      );
+      responses['thread/start'] = {
+        'thread': _threadJson(id: 'unknown-policy'),
+        ..._executionSettingsJson(model: 'configured-model'),
+        'approvalPolicy': 'future-policy',
+        'sandbox': {'type': 'future-sandbox'},
+      };
+      thread = await adapter.startThread(
+        const ThreadStartOptions(cwd: '/workspace'),
+      );
+      expect(
+        thread.executionSettings?.approvalPolicy,
+        ObservedApprovalPolicy.unknown,
+      );
+      expect(thread.executionSettings?.sandbox, ObservedSandboxPolicy.unknown);
+    },
+  );
+
+  test('oversized settings stay unknown without failing a successful thread operation', () async {
+    responses['thread/start'] = {
+      'thread': _threadJson(id: 'oversized-settings'),
+      ..._executionSettingsJson(model: 'm' * 513),
+    };
+    final thread = await adapter.startThread(
+      const ThreadStartOptions(cwd: '/workspace'),
+    );
+    expect(thread.id, 'oversized-settings');
+    expect(thread.executionSettings?.model, isNull);
+    expect(
+      thread.executionSettings?.approvalPolicy,
+      ObservedApprovalPolicy.never,
+    );
+  });
+
   test('queued-work presence requires a conclusive bounded page', () async {
     responses['thread/queue/list'] = {'data': [], 'nextCursor': null};
     expect(
@@ -1062,6 +1301,14 @@ JsonObject _threadJson({required String id}) => {
   'model': 'gpt-test',
   'projectId': null,
   'turns': <Object?>[],
+};
+
+JsonObject _executionSettingsJson({required String model}) => {
+  'model': model,
+  'modelProvider': 'custom-provider',
+  'reasoningEffort': 'high',
+  'approvalPolicy': 'never',
+  'sandbox': {'type': 'readOnly'},
 };
 
 class _Request {

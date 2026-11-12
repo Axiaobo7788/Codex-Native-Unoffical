@@ -201,6 +201,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
 
   void _handleThreadSelection() {
     final selected = _threadController.selectedThread;
+    _settingsController.bindThread(selected);
     if (_threadController.revertVersion != _lastRevertVersion) {
       _lastRevertVersion = _threadController.revertVersion;
       final revertedId = _threadController.lastRevertedThreadId;

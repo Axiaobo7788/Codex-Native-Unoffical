@@ -9982,8 +9982,15 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
       animation: controller,
       builder: (context, _) {
         final sandbox = controller.sandbox;
-        final fullAccess = sandbox == SandboxModeOverride.dangerFullAccess;
-        final label = _sandboxLabel(sandbox);
+        final fullAccess =
+            sandbox == SandboxModeOverride.dangerFullAccess ||
+            (sandbox == null &&
+                controller.observedSettings?.sandbox ==
+                    ObservedSandboxPolicy.dangerFullAccess);
+        final label = sandbox == null
+            ? _observedSandboxLabel(controller.observedSettings?.sandbox) ??
+                  _sandboxLabel(null)
+            : _sandboxLabel(sandbox);
         final desktopTriggerColor = fullAccess
             ? palette.warning
             : widget.iconOnly
@@ -10060,7 +10067,7 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
             icon: icon,
             tooltip: 'Execution settings: $label',
             label: switch (sandbox) {
-              null => 'Defaults',
+              null => controller.observedSettings == null ? 'Defaults' : label,
               SandboxModeOverride.workspaceWrite => 'Workspace',
               _ => label,
             },
@@ -10088,7 +10095,13 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
                   for (final mode in [null, ...SandboxModeOverride.values])
                     CodexMenuItem(
                       value: (mode: mode, advanced: false),
-                      label: _sandboxLabel(mode),
+                      label: mode == null
+                          ? _inheritedSettingLabel(
+                              _observedSandboxLabel(
+                                controller.observedSettings?.sandbox,
+                              ),
+                            )
+                          : _sandboxLabel(mode),
                       icon: Icon(
                         mode == SandboxModeOverride.dangerFullAccess
                             ? Icons.gpp_maybe_outlined
@@ -10135,6 +10148,27 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
     SandboxModeOverride.dangerFullAccess => 'Full access',
   };
 }
+
+String? _observedSandboxLabel(ObservedSandboxPolicy? policy) =>
+    switch (policy) {
+      ObservedSandboxPolicy.readOnly => 'Read only',
+      ObservedSandboxPolicy.workspaceWrite => 'Workspace write',
+      ObservedSandboxPolicy.dangerFullAccess => 'Full access',
+      ObservedSandboxPolicy.externalSandbox => 'External sandbox',
+      _ => null,
+    };
+
+String? _observedApprovalLabel(ObservedApprovalPolicy? policy) =>
+    switch (policy) {
+      ObservedApprovalPolicy.untrusted => 'Ask for untrusted commands',
+      ObservedApprovalPolicy.onRequest => 'Ask when Codex requests',
+      ObservedApprovalPolicy.never => 'Never ask',
+      ObservedApprovalPolicy.granular => 'Granular policy',
+      _ => null,
+    };
+
+String _inheritedSettingLabel(String? observed) =>
+    observed == null ? 'Codex default' : 'Codex default · $observed';
 
 class _ExecutionDropdownItem {
   const _ExecutionDropdownItem({required this.value, required this.label});
@@ -10363,9 +10397,12 @@ class _ExecutionSettingsDialog extends StatelessWidget {
                             label: 'Model',
                             value: controller.selectedModelId ?? _inherit,
                             items: [
-                              const _ExecutionDropdownItem(
+                              _ExecutionDropdownItem(
                                 value: _inherit,
-                                label: 'Codex default',
+                                label: _inheritedSettingLabel(
+                                  controller.observedModel?.displayName ??
+                                      controller.observedSettings?.model,
+                                ),
                               ),
                               for (final model in controller.models)
                                 _ExecutionDropdownItem(
@@ -10383,9 +10420,15 @@ class _ExecutionSettingsDialog extends StatelessWidget {
                             value:
                                 controller.selectedReasoningEffort ?? _inherit,
                             items: [
-                              const _ExecutionDropdownItem(
+                              _ExecutionDropdownItem(
                                 value: _inherit,
-                                label: 'Model default',
+                                label: _inheritedSettingLabel(
+                                  controller.selectedModelId == null
+                                      ? controller
+                                            .observedSettings
+                                            ?.reasoningEffort
+                                      : null,
+                                ),
                               ),
                               for (final effort
                                   in controller.availableReasoningEfforts)
@@ -10403,20 +10446,24 @@ class _ExecutionSettingsDialog extends StatelessWidget {
                           _ExecutionDropdown(
                             label: 'Approval mode',
                             value: _approvalValue(controller.approvalPolicy),
-                            items: const [
+                            items: [
                               _ExecutionDropdownItem(
                                 value: _inherit,
-                                label: 'Codex default',
+                                label: _inheritedSettingLabel(
+                                  _observedApprovalLabel(
+                                    controller.observedSettings?.approvalPolicy,
+                                  ),
+                                ),
                               ),
-                              _ExecutionDropdownItem(
+                              const _ExecutionDropdownItem(
                                 value: 'untrusted',
                                 label: 'Ask for untrusted commands',
                               ),
-                              _ExecutionDropdownItem(
+                              const _ExecutionDropdownItem(
                                 value: 'on-request',
                                 label: 'Ask when Codex requests',
                               ),
-                              _ExecutionDropdownItem(
+                              const _ExecutionDropdownItem(
                                 value: 'never',
                                 label: 'Never ask',
                               ),
@@ -10427,20 +10474,24 @@ class _ExecutionSettingsDialog extends StatelessWidget {
                           _ExecutionDropdown(
                             label: 'Sandbox',
                             value: _sandboxValue(controller.sandbox),
-                            items: const [
+                            items: [
                               _ExecutionDropdownItem(
                                 value: _inherit,
-                                label: 'Codex default',
+                                label: _inheritedSettingLabel(
+                                  _observedSandboxLabel(
+                                    controller.observedSettings?.sandbox,
+                                  ),
+                                ),
                               ),
-                              _ExecutionDropdownItem(
+                              const _ExecutionDropdownItem(
                                 value: 'read-only',
                                 label: 'Read only',
                               ),
-                              _ExecutionDropdownItem(
+                              const _ExecutionDropdownItem(
                                 value: 'workspace-write',
                                 label: 'Workspace write',
                               ),
-                              _ExecutionDropdownItem(
+                              const _ExecutionDropdownItem(
                                 value: 'danger-full-access',
                                 label: 'Danger: full access',
                               ),

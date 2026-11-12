@@ -2775,3 +2775,38 @@ model for the current measurement terminology.
   first Hosted dependency-install timeout remain preserved. The optional
   pre-existing shutdown-Future coalescing observation is not silently promoted
   into a new UI backlog item.
+
+
+## ADR-062: Separate acknowledged thread settings from writable overrides
+
+- **Date:** 2026-11-12
+- **Context:** A nullable client override and the default entry in `model/list`
+  do not establish the effective model, reasoning effort or execution policy of
+  a loaded stock thread. Public Start/Resume/Fork responses and
+  `thread/settings/updated` expose the actual read-side settings. Metadata-only
+  history selection must not resume a cold thread to populate controls.
+- **Decision:** Retain a small typed per-thread settings projection with bounded
+  model/provider/effort strings and policy classifications, separately from the
+  nullable writable overrides. Keep at most 100 snapshots, including small
+  invalidation records. Never retain raw configuration, credential material or
+  writable-root lists. Granular approval and external sandbox stay distinct
+  read-side classifications; they cannot silently become narrower overrides.
+- **Freshness:** Each protocol adapter has an isolate-local monotonic generation.
+  Request admission and notifications have an observation order within it.
+  These numbers are client ordering fences, not a server revision. A later
+  notification or invalidation wins over an older in-flight session response.
+  Unload, archive and deletion invalidate retained values; cold metadata rows
+  carry no acknowledged settings. A scalar eviction watermark conservatively
+  admits unknown values when the bounded cache cannot establish whether an old
+  response was superseded. Retaining uncertainty is preferable to displaying
+  a known-possibly-stale model or permission.
+- **Controls:** Show acknowledged inherited values in existing model/execution
+  controls without selecting an override. Unknown values keep neutral labels.
+  Actual uncatalogued models cannot borrow the recommended model's reasoning
+  capabilities. Revalidate reasoning overrides when the actual model/catalog
+  changes, preserving a valid explicit selected model. Home/cold configuration
+  discovery, provider editing and full popover fidelity remain separate work.
+- **Evidence:** The source-bound follow-up evidence records targeted regression
+  results, stock versions and runtime verification separately. Synthetic
+  notification-order/eviction tests do not prove that the same rare interleaving
+  was reproduced against a stock binary. Human visual acceptance remains open.

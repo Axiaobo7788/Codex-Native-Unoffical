@@ -2,6 +2,7 @@ import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_composer.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
+import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,70 @@ import 'package:flutter_test/flutter_test.dart';
 import '../simulated_runtime/simulated_runtime_harness.dart';
 
 void main() {
+  testWidgets(
+    'stock-observed model reaches the composer without becoming an override',
+    (tester) async {
+      final thread =
+          createTestThread(
+            id: 'observed-composer-thread',
+            preview: 'Observed settings',
+          ).copyWith(
+            executionSettings: const ThreadExecutionSettings(
+              model: 'configured-not-in-catalog',
+              modelProvider: 'fixture-provider',
+              reasoningEffort: 'high',
+              approvalPolicy: ObservedApprovalPolicy.never,
+              sandbox: ObservedSandboxPolicy.readOnly,
+              generation: 1,
+              observation: 1,
+              source: ThreadSettingsSource.resume,
+            ),
+          );
+      final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+      await pumpSimulatedRuntimeApp(
+        tester,
+        harness: harness,
+        size: const Size(1191, 865),
+      );
+      await tester.tap(find.text('Observed settings'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('composer-model-pill')),
+          matching: find.text('configured-not-in-catalog High'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Execution settings: Read only'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('execution-settings-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced settings…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Codex default · Never ask'), findsOneWidget);
+      expect(find.text('Codex default · Read only'), findsOneWidget);
+      expect(
+        find.text('Codex default · configured-not-in-catalog'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('conversation-composer')),
+        'Use the inherited thread settings',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      expect(harness.startedTurns, hasLength(1));
+      harness.emitTurnCompleted('turn-1', threadId: thread.id);
+      await tester.pumpAndSettle();
+      expect(harness.startedTurns.single.model, isNull);
+      expect(harness.startedTurns.single.reasoningEffort, isNull);
+      expect(harness.startedTurns.single.approvalPolicy, isNull);
+      expect(harness.startedTurns.single.sandbox, isNull);
+    },
+  );
+
   group('Official A11 Desktop Composer Layout & Surface Parity', () {
     testWidgets(
       'translates Light, Dark, and High-Contrast Desktop composer surface & elevation tokens while keeping Home unchanged',

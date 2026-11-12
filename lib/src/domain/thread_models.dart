@@ -99,6 +99,7 @@ class ThreadSummary {
     required this.ephemeral,
     this.name,
     this.model,
+    this.executionSettings,
     this.projectId,
     this.gitInfo,
     this.goal,
@@ -117,6 +118,7 @@ class ThreadSummary {
   final bool ephemeral;
   final String? name;
   final String? model;
+  final ThreadExecutionSettings? executionSettings;
   final String? projectId;
   final ThreadGitInfo? gitInfo;
   final ThreadGoal? goal;
@@ -134,6 +136,8 @@ class ThreadSummary {
     String? name,
     bool clearName = false,
     String? model,
+    ThreadExecutionSettings? executionSettings,
+    bool clearExecutionSettings = false,
     String? projectId,
     ThreadGitInfo? gitInfo,
     bool clearGitInfo = false,
@@ -156,6 +160,9 @@ class ThreadSummary {
     ephemeral: ephemeral,
     name: clearName ? null : (name ?? this.name),
     model: model ?? this.model,
+    executionSettings: clearExecutionSettings
+        ? null
+        : (executionSettings ?? this.executionSettings),
     projectId: projectId ?? this.projectId,
     gitInfo: clearGitInfo ? null : (gitInfo ?? this.gitInfo),
     goal: clearGoal ? null : (goal ?? this.goal),
@@ -308,6 +315,15 @@ sealed class ThreadLifecycleEvent {
   const ThreadLifecycleEvent({required this.threadId});
 
   final String threadId;
+}
+
+final class ThreadExecutionSettingsChangedEvent extends ThreadLifecycleEvent {
+  const ThreadExecutionSettingsChangedEvent({
+    required super.threadId,
+    required this.settings,
+  });
+
+  final ThreadExecutionSettings settings;
 }
 
 final class ThreadNameUpdatedEvent extends ThreadLifecycleEvent {

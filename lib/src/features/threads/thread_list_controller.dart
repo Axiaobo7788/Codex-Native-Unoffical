@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../domain/execution_settings.dart';
 import '../../domain/thread_gateway.dart';
 import '../../domain/thread_models.dart';
 
@@ -761,6 +762,7 @@ class ThreadListController extends ChangeNotifier {
       if (_disposed) {
         return false;
       }
+      _applyStatusUpdate(threadId, ThreadRuntimeStatus.notLoaded);
       if (!_showArchived) {
         final wasSelected = _selectedThread?.id == threadId;
         _threads.removeWhere((thread) => thread.id == threadId);
@@ -1324,6 +1326,12 @@ class ThreadListController extends ChangeNotifier {
         }
         _applyStatusUpdate(threadId, status);
         _notify();
+      case ThreadExecutionSettingsChangedEvent(
+        :final threadId,
+        :final settings,
+      ):
+        _applyExecutionSettings(threadId, settings);
+        _notify();
       case ThreadGoalUpdatedEvent(:final threadId, :final goal):
         _goalProjectionRevision += 1;
         _goalEventObserved |= threadId == _goalOperationThreadId;
@@ -1343,6 +1351,7 @@ class ThreadListController extends ChangeNotifier {
         _invalidateSectionOrder();
         _notify();
       case ThreadArchivedEvent(:final threadId):
+        _applyStatusUpdate(threadId, ThreadRuntimeStatus.notLoaded);
         if (!_showArchived) {
           final wasSelected = _selectedThread?.id == threadId;
           _threads.removeWhere((thread) => thread.id == threadId);
@@ -1397,10 +1406,34 @@ class ThreadListController extends ChangeNotifier {
   void _applyStatusUpdate(String threadId, ThreadRuntimeStatus status) {
     final index = _threads.indexWhere((thread) => thread.id == threadId);
     if (index != -1) {
-      _threads[index] = _threads[index].copyWith(status: status);
+      _threads[index] = _threads[index].copyWith(
+        status: status,
+        clearExecutionSettings: status == ThreadRuntimeStatus.notLoaded,
+      );
     }
     if (_selectedThread?.id == threadId) {
-      _selectedThread = _selectedThread!.copyWith(status: status);
+      _selectedThread = _selectedThread!.copyWith(
+        status: status,
+        clearExecutionSettings: status == ThreadRuntimeStatus.notLoaded,
+      );
+    }
+  }
+
+  void _applyExecutionSettings(
+    String threadId,
+    ThreadExecutionSettings settings,
+  ) {
+    ThreadSummary update(ThreadSummary thread) {
+      if (thread.status == ThreadRuntimeStatus.notLoaded) return thread;
+      final previous = thread.executionSettings;
+      if (previous != null && previous.isNewerThan(settings)) return thread;
+      return thread.copyWith(executionSettings: settings);
+    }
+
+    final index = _threads.indexWhere((thread) => thread.id == threadId);
+    if (index != -1) _threads[index] = update(_threads[index]);
+    if (_selectedThread?.id == threadId) {
+      _selectedThread = update(_selectedThread!);
     }
   }
 
@@ -1732,6 +1765,15 @@ class ThreadListController extends ChangeNotifier {
     if (thread.section?.isBuiltInPinned == true ||
         retained?.section?.isBuiltInPinned == true) {
       _pinnedThreadIds.remove(thread.id);
+    }
+    final incomingSettings = thread.executionSettings;
+    final previousSettings = retained?.executionSettings;
+    if (thread.status == ThreadRuntimeStatus.notLoaded) {
+      thread = thread.copyWith(clearExecutionSettings: true);
+    } else if (previousSettings != null &&
+        (incomingSettings == null ||
+            previousSettings.isNewerThan(incomingSettings))) {
+      thread = thread.copyWith(executionSettings: previousSettings);
     }
     if (thread.goal != null) {
       return thread;

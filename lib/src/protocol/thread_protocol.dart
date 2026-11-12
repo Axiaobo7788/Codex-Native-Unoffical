@@ -26,15 +26,28 @@ final class ThreadProtocolAdapter {
   ThreadProtocolAdapter({
     required this.request,
     Stream<CodexNotification> notifications = const Stream.empty(),
-  }) : events = notifications
-           .map(_parseNotification)
-           .where((event) => event != null)
-           .cast<ThreadLifecycleEvent>();
+  }) {
+    events = notifications
+        .map(_parseNotification)
+        .where((event) => event != null)
+        .cast<ThreadLifecycleEvent>();
+  }
 
   final ProtocolRequest request;
-  final Stream<ThreadLifecycleEvent> events;
+  late final Stream<ThreadLifecycleEvent> events;
+  static var _nextSettingsGeneration = 0;
+  final int _settingsGeneration = ++_nextSettingsGeneration;
+  var _settingsObservation = 0;
+  // Only small acknowledged metadata is retained, including notification-before-
+  // reply races for threads not yet in the UI catalog. Never cache raw config.
+  static const _maxRetainedSettings = 100;
+  final _observedSettings = <String, ThreadExecutionSettings>{};
+  // A scalar eviction fence keeps old in-flight replies from restoring a
+  // snapshot whose newer observation no longer fits in the bounded cache.
+  var _evictedSettingsObservation = 0;
 
   Future<ThreadPage> listThreads(ThreadListQuery query) async {
+    final observation = ++_settingsObservation;
     final searchTerm = query.searchTerm?.trim();
     final sectionId = switch (query.section?.id) {
       final id? => _requireOpaqueArgumentId(
@@ -68,7 +81,7 @@ final class ThreadProtocolAdapter {
     final receipts = response['readStates'];
     final threads = data
         .map((row) {
-          final thread = _parseThread(row);
+          final thread = _withObservedSettings(_parseThread(row), observation);
           final receipt = receipts is Map<String, Object?>
               ? _parseReadReceipt(receipts[thread.id])
               : null;
@@ -97,6 +110,7 @@ final class ThreadProtocolAdapter {
   }
 
   Future<ThreadSummary> startThread(ThreadStartOptions options) async {
+    final observation = ++_settingsObservation;
     final response = await request('thread/start', {
       'cwd': options.cwd,
       'ephemeral': options.ephemeral,
@@ -105,15 +119,21 @@ final class ThreadProtocolAdapter {
         'approvalPolicy': _approvalPolicy(approvalPolicy),
       if (options.sandbox case final sandbox?) 'sandbox': _sandbox(sandbox),
     });
-    return _parseThreadContainer(response, 'thread/start');
+    return _sessionThread(
+      response,
+      'thread/start',
+      ThreadSettingsSource.start,
+      observation,
+    );
   }
 
   Future<ThreadSummary> readThread(String threadId) async {
+    final observation = ++_settingsObservation;
     final response = await request('thread/read', {
       'threadId': threadId,
       'includeTurns': false,
     });
-    final thread = _parseThreadContainer(response, 'thread/read');
+    final thread = _parseThreadContainer(response, 'thread/read', observation);
     if (thread.id != threadId) {
       throw const ProtocolViolation(
         'thread/read returned a different thread ID than requested.',
@@ -183,11 +203,17 @@ final class ThreadProtocolAdapter {
   }
 
   Future<ThreadSummary> resumeThread(String threadId) async {
+    final observation = ++_settingsObservation;
     final response = await request('thread/resume', {
       'threadId': threadId,
       'excludeTurns': true,
     });
-    return _parseThreadContainer(response, 'thread/resume');
+    return _sessionThread(
+      response,
+      'thread/resume',
+      ThreadSettingsSource.resume,
+      observation,
+    );
   }
 
   Future<void> renameThread({
@@ -199,14 +225,17 @@ final class ThreadProtocolAdapter {
 
   Future<void> archiveThread(String threadId) async {
     await request('thread/archive', {'threadId': threadId});
+    _invalidateSettings(threadId, ++_settingsObservation);
   }
 
   Future<ThreadSummary> unarchiveThread(String threadId) async {
+    final observation = ++_settingsObservation;
     final response = await request('thread/unarchive', {'threadId': threadId});
-    return _parseThreadContainer(response, 'thread/unarchive');
+    return _parseThreadContainer(response, 'thread/unarchive', observation);
   }
 
   Future<ThreadSummary> forkThread(ThreadForkOptions options) async {
+    final observation = ++_settingsObservation;
     final response = await request('thread/fork', {
       'threadId': options.threadId,
       'excludeTurns': true,
@@ -219,18 +248,24 @@ final class ThreadProtocolAdapter {
         'approvalPolicy': _approvalPolicy(approvalPolicy),
       if (options.sandbox case final sandbox?) 'sandbox': _sandbox(sandbox),
     });
-    return _parseThreadContainer(response, 'thread/fork');
+    return _sessionThread(
+      response,
+      'thread/fork',
+      ThreadSettingsSource.fork,
+      observation,
+    );
   }
 
   Future<ThreadSummary> revertThread({
     required String threadId,
     required String beforeTurnId,
   }) async {
+    final observation = ++_settingsObservation;
     final response = await request('thread/revert', {
       'threadId': threadId,
       'beforeTurnId': beforeTurnId,
     });
-    return _parseThreadContainer(response, 'thread/revert');
+    return _parseThreadContainer(response, 'thread/revert', observation);
   }
 
   Future<void> compactThread(String threadId) async {
@@ -239,6 +274,7 @@ final class ThreadProtocolAdapter {
 
   Future<void> deleteThread(String threadId) async {
     await request('thread/delete', {'threadId': threadId});
+    _invalidateSettings(threadId, ++_settingsObservation);
   }
 
   Future<ThreadGoal?> readThreadGoal(String threadId) async {
@@ -440,10 +476,14 @@ final class ThreadProtocolAdapter {
     });
   }
 
-  static ThreadLifecycleEvent? _parseNotification(
-    CodexNotification notification,
-  ) {
+  ThreadLifecycleEvent? _parseNotification(CodexNotification notification) {
     final params = notification.params;
+    if (notification.method == 'thread/archived') {
+      _invalidateSettings(
+        _requiredString(params, 'threadId'),
+        ++_settingsObservation,
+      );
+    }
     return switch (notification.method) {
       'thread/name/updated' => ThreadNameUpdatedEvent(
         threadId: _requiredString(params, 'threadId'),
@@ -463,6 +503,7 @@ final class ThreadProtocolAdapter {
         itemsBackwardsCursor: _optionalString(params, 'itemsBackwardsCursor'),
       ),
       'thread/status/changed' => _parseStatusChanged(params),
+      'thread/settings/updated' => _parseSettingsChanged(params),
       'thread/goal/updated' => _parseGoalUpdated(params),
       'thread/goal/cleared' => ThreadGoalClearedEvent(
         threadId: _requiredString(params, 'threadId'),
@@ -511,15 +552,19 @@ final class ThreadProtocolAdapter {
       value.trim().isNotEmpty &&
       value.length <= _maxIdentifierLength;
 
-  static ThreadStatusChangedEvent _parseStatusChanged(JsonObject params) {
+  ThreadStatusChangedEvent _parseStatusChanged(JsonObject params) {
     final statusValue = params['status'];
     if (statusValue is! Map<String, Object?>) {
       throw const ProtocolViolation('Thread status must be an object.');
     }
-    return ThreadStatusChangedEvent(
+    final event = ThreadStatusChangedEvent(
       threadId: _requiredString(params, 'threadId'),
       status: _status(_requiredString(statusValue, 'type')),
     );
+    if (event.status == ThreadRuntimeStatus.notLoaded) {
+      _invalidateSettings(event.threadId, ++_settingsObservation);
+    }
+    return event;
   }
 
   static ThreadGoalUpdatedEvent _parseGoalUpdated(JsonObject params) {
@@ -566,15 +611,151 @@ final class ThreadProtocolAdapter {
     );
   }
 
-  static ThreadSummary _parseThreadContainer(
+  ThreadSummary _parseThreadContainer(
     JsonObject response,
-    String method,
-  ) {
+    String method, [
+    int? observation,
+  ]) {
     final thread = response['thread'];
     if (thread is! Map<String, Object?>) {
       throw ProtocolViolation('$method response did not contain a thread.');
     }
-    return _parseThread(thread);
+    return _withObservedSettings(_parseThread(thread), observation);
+  }
+
+  ThreadSummary _withObservedSettings(
+    ThreadSummary thread, [
+    int? observation,
+  ]) {
+    if (thread.status == ThreadRuntimeStatus.notLoaded) {
+      if (observation != null) _invalidateSettings(thread.id, observation);
+      return thread.copyWith(clearExecutionSettings: true);
+    }
+    final settings = _observedSettings[thread.id];
+    return settings == null
+        ? thread
+        : thread.copyWith(executionSettings: settings);
+  }
+
+  ThreadSummary _sessionThread(
+    JsonObject response,
+    String method,
+    ThreadSettingsSource source,
+    int observation,
+  ) {
+    final thread = _parseThreadContainer(response, method);
+    // Older/typed presentation fixtures may provide only thread metadata.
+    // That is an unknown inherited setting, never a model/list default.
+    if (!response.containsKey('model')) return thread;
+    final settings = _parseExecutionSettings(response, source, observation);
+    final current = _rememberSettings(thread.id, settings);
+    return thread.copyWith(
+      executionSettings: current,
+      clearExecutionSettings: thread.status == ThreadRuntimeStatus.notLoaded,
+    );
+  }
+
+  ThreadExecutionSettingsChangedEvent? _parseSettingsChanged(
+    JsonObject params,
+  ) {
+    final id = _settingsText(params['threadId']);
+    final raw = params['threadSettings'];
+    if (id == null || raw is! JsonObject) return null;
+    final settings = _parseExecutionSettings(
+      raw,
+      ThreadSettingsSource.notification,
+      ++_settingsObservation,
+    );
+    return ThreadExecutionSettingsChangedEvent(
+      threadId: id,
+      settings: _rememberSettings(id, settings),
+    );
+  }
+
+  ThreadExecutionSettings _rememberSettings(
+    String threadId,
+    ThreadExecutionSettings incoming,
+  ) {
+    if (_settingsText(threadId) == null) return incoming;
+    final previous = _observedSettings.remove(threadId);
+    final current = previous != null && previous.isNewerThan(incoming)
+        ? previous
+        : previous == null &&
+              incoming.observation <= _evictedSettingsObservation
+        ? _unknownSettings(++_settingsObservation)
+        : incoming;
+    _observedSettings[threadId] = current;
+    while (_observedSettings.length > _maxRetainedSettings) {
+      final evicted = _observedSettings.remove(_observedSettings.keys.first)!;
+      if (evicted.observation > _evictedSettingsObservation) {
+        _evictedSettingsObservation = evicted.observation;
+      }
+    }
+    return current;
+  }
+
+  void _invalidateSettings(String threadId, int observation) {
+    _rememberSettings(threadId, _unknownSettings(observation));
+  }
+
+  ThreadExecutionSettings _unknownSettings(int observation) =>
+      ThreadExecutionSettings(
+        model: null,
+        modelProvider: null,
+        approvalPolicy: ObservedApprovalPolicy.unknown,
+        sandbox: ObservedSandboxPolicy.unknown,
+        generation: _settingsGeneration,
+        observation: observation,
+        source: ThreadSettingsSource.invalidated,
+      );
+
+  ThreadExecutionSettings _parseExecutionSettings(
+    JsonObject raw,
+    ThreadSettingsSource source,
+    int observation,
+  ) {
+    final notification = source == ThreadSettingsSource.notification;
+    final effort = raw[notification ? 'effort' : 'reasoningEffort'];
+    final sandbox = raw[notification ? 'sandboxPolicy' : 'sandbox'];
+    final approval = switch (raw['approvalPolicy']) {
+      'untrusted' => ObservedApprovalPolicy.untrusted,
+      'on-request' => ObservedApprovalPolicy.onRequest,
+      'never' => ObservedApprovalPolicy.never,
+      {'granular': Map<String, Object?>()} => ObservedApprovalPolicy.granular,
+      _ => ObservedApprovalPolicy.unknown,
+    };
+    return ThreadExecutionSettings(
+      model: _settingsText(raw['model']),
+      modelProvider: _settingsText(raw['modelProvider']),
+      reasoningEffort: _settingsText(
+        effort,
+        maxLength: ThreadExecutionSettings.maxReasoningEffortLength,
+      ),
+      approvalPolicy: approval,
+      sandbox: switch (sandbox) {
+        {'type': 'readOnly'} => ObservedSandboxPolicy.readOnly,
+        {'type': 'workspaceWrite'} => ObservedSandboxPolicy.workspaceWrite,
+        {'type': 'dangerFullAccess'} => ObservedSandboxPolicy.dangerFullAccess,
+        {'type': 'externalSandbox'} => ObservedSandboxPolicy.externalSandbox,
+        _ => ObservedSandboxPolicy.unknown,
+      },
+      generation: _settingsGeneration,
+      observation: observation,
+      source: source,
+    );
+  }
+
+  static String? _settingsText(
+    Object? value, {
+    int maxLength = ThreadExecutionSettings.maxIdentifierLength,
+  }) {
+    if (value is! String ||
+        value.isEmpty ||
+        value.length > maxLength ||
+        value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F)) {
+      return null;
+    }
+    return value;
   }
 
   static ThreadSummary _parseThread(Object? value) {

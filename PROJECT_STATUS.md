@@ -118,14 +118,19 @@ permission to lower the engineering or visual quality bar.
   public history after full process restart with no extra model call.
   All owned workers exited. Driver timeouts/early captures and fixture warnings
   remain preserved. Connected-workspace hot recovery stays `MISSING`.
-- **Track F / Codex next:** bounded authoritative inherited model/approval/
-  sandbox settings, from supported Start/Resume/settings notifications with
-  source/freshness and generation checks. Current nullable overrides/catalog
-  are not actual inherited settings. U5's neutral inherited labels close the
-  misleading claims; they do not close this functional `PARTIAL`. Never resume
-  a cold/queued thread merely to learn settings. Codex owns domain/protocol,
-  thread/settings controllers, app wiring, the model-picker functional seam
-  and related tests; not Gemini's conversation composition.
+- **Track F / Codex active:** bounded acknowledged inherited settings in the
+  isolated `agent/codex-desktop-effective-settings` worktree. Start/Resume/Fork
+  and settings notifications feed typed read-side model/provider/effort/policy
+  metadata; writable overrides stay separate. Peer review exposed unload
+  resurrection and uncatalogued-model capability leakage; regression tests
+  also reproduced eviction allowing an older reply. Corrections preserve the
+  100-entry bound and admit unknown settings after invalidation/eviction.
+  Existing execution controls expose known inherited values, with no implicit
+  cold/queued resume. Full652/five skips, pure-Dart68, strict analysis and
+  real Host→stock settings probes on public0.167.2/installed alpha pass; a final
+  41-case protocol/settings/memory gate includes the metadata admission follow-up.
+  Packaged replay and integration remain in progress. This is not a Desktop
+  completion or Human acceptance claim.
 - **Track U / Gemini next:** U6 A7/C Shell activity card in
   `/var/tmp/native-gemini-u6-a7-shell-card`, branch
   `agent/gemini-golden-ui-u6-a7-shell-card`, base `c3957c9`.

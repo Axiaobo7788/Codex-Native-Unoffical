@@ -1,11 +1,102 @@
 import 'dart:async';
 
+import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/thread_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/features/threads/thread_list_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'notLoaded then active cannot resurrect a retired settings snapshot',
+    () async {
+      const retired = ThreadExecutionSettings(
+        model: 'retired-model',
+        modelProvider: 'fixture',
+        approvalPolicy: ObservedApprovalPolicy.never,
+        sandbox: ObservedSandboxPolicy.readOnly,
+        generation: 1,
+        observation: 1,
+        source: ThreadSettingsSource.resume,
+      );
+      final gateway = _FakeThreadGateway()
+        ..readStatuses['known'] = ThreadRuntimeStatus.idle;
+      gateway.pages.add(
+        ThreadPage(
+          threads: [
+            _thread(
+              'known',
+              status: ThreadRuntimeStatus.idle,
+            ).copyWith(executionSettings: retired),
+          ],
+          nextCursor: null,
+        ),
+      );
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(gateway.dispose);
+      addTearDown(controller.dispose);
+      await controller.refresh();
+      await controller.selectThread('known');
+      expect(controller.selectedThread?.executionSettings, same(retired));
+      for (final status in [
+        ThreadRuntimeStatus.notLoaded,
+        ThreadRuntimeStatus.active,
+      ]) {
+        gateway.events.add(
+          ThreadStatusChangedEvent(threadId: 'known', status: status),
+        );
+      }
+      expect(controller.selectedThread?.executionSettings, isNull);
+      expect(gateway.resumeIds, isEmpty);
+    },
+  );
+
+  test('metadata and a late resume reply preserve newer settings without extra resumes', () async {
+    ThreadExecutionSettings settings(int observation) =>
+        ThreadExecutionSettings(
+          model: 'configured-$observation',
+          modelProvider: 'fixture-provider',
+          approvalPolicy: ObservedApprovalPolicy.never,
+          sandbox: ObservedSandboxPolicy.readOnly,
+          generation: 1,
+          observation: observation,
+          source: observation == 1
+              ? ThreadSettingsSource.resume
+              : ThreadSettingsSource.notification,
+        );
+    final older = settings(1);
+    final newer = settings(2);
+    final gateway = _FakeThreadGateway()
+      ..readStatuses['known'] = ThreadRuntimeStatus.idle;
+    final row = _thread('known', status: ThreadRuntimeStatus.idle);
+    gateway.pages.add(
+      ThreadPage(
+        threads: [row.copyWith(executionSettings: older)],
+        nextCursor: null,
+      ),
+    );
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(gateway.dispose);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    await controller.selectThread('known');
+    expect(gateway.resumeIds, isEmpty);
+
+    gateway.pendingResume = Completer<ThreadSummary>();
+    final pending = controller.resumeThread('known');
+    gateway.events.add(
+      ThreadExecutionSettingsChangedEvent(threadId: 'known', settings: newer),
+    );
+    gateway.pendingResume!.complete(row.copyWith(executionSettings: older));
+    await pending;
+    expect(controller.selectedThread?.executionSettings, same(newer));
+
+    gateway.pages.add(ThreadPage(threads: [row], nextCursor: null));
+    await controller.refresh();
+    expect(controller.selectedThread?.executionSettings, same(newer));
+    expect(gateway.resumeIds, ['known']);
+  });
+
   test('a newer catalog receipt supersedes a pending write response', () async {
     const seen = ThreadReadReceipt(revision: 'seen', unread: true);
     const newer = ThreadReadReceipt(
@@ -1237,6 +1328,7 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
   final List<ThreadSectionMoveOptions> movedSections = [];
   final Map<String, ThreadSection?> readSectionOverrides = {};
   final Map<String, String> readIdOverrides = {};
+  final Map<String, ThreadRuntimeStatus> readStatuses = {};
   bool sectionSupport = true;
   Object? resumeError;
   Completer<ThreadSummary>? pendingResume;
@@ -1332,6 +1424,7 @@ class _FakeThreadGateway implements ThreadGateway, ThreadSectionGateway {
     return _thread(
       readIdOverrides[threadId] ?? threadId,
       name: 'Read metadata',
+      status: readStatuses[threadId] ?? ThreadRuntimeStatus.notLoaded,
       section: readSectionOverrides[threadId],
     );
   }
