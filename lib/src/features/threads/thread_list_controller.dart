@@ -33,6 +33,19 @@ class ThreadResumeOutcome {
   bool get isFailed => status == ThreadResumeStatus.failed;
 }
 
+@immutable
+class SessionDraftReplacement {
+  const SessionDraftReplacement({
+    required this.version,
+    required this.retiredThreadId,
+    required this.replacementThreadId,
+  });
+
+  final int version;
+  final String retiredThreadId;
+  final String replacementThreadId;
+}
+
 class ThreadListController extends ChangeNotifier {
   ThreadListController({
     required this.gateway,
@@ -77,12 +90,14 @@ class ThreadListController extends ChangeNotifier {
   ThreadSummary? _selectedThread;
   String? _errorMessage;
   String? _lastRevertedThreadId;
+  SessionDraftReplacement? _lastSessionDraftReplacement;
   String? _goalOperationThreadId;
   String? _pendingGoalHydrationThreadId;
   var _goalProjectionRevision = 0;
   var _hydratingGoal = false;
   var _goalEventObserved = false;
   var _revertVersion = 0;
+  var _sessionDraftReplacementVersion = 0;
   var _showArchived = false;
   var _initialLoadStarted = false;
   var _loading = false;
@@ -141,6 +156,8 @@ class ThreadListController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get lastRevertedThreadId => _lastRevertedThreadId;
   int get revertVersion => _revertVersion;
+  SessionDraftReplacement? get lastSessionDraftReplacement =>
+      _lastSessionDraftReplacement;
   bool get showArchived => _showArchived;
   String? get sectionScopeId => _sectionScopeId;
   String? get savedSearchTerm => _savedSearchTerm;
@@ -723,6 +740,13 @@ class ThreadListController extends ChangeNotifier {
         // or infer that a possibly accepted operation did not reach stock.
         _unmaterializedThreadIds.remove(replaceSessionDraftId);
         _threads.removeWhere((row) => row.id == replaceSessionDraftId);
+        if (replaceSessionDraftId != thread.id) {
+          _lastSessionDraftReplacement = SessionDraftReplacement(
+            version: ++_sessionDraftReplacementVersion,
+            retiredThreadId: replaceSessionDraftId,
+            replacementThreadId: thread.id,
+          );
+        }
       }
       final retained = _replaceOrPrepend(thread);
       _activateThread(retained);

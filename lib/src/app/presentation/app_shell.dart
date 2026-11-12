@@ -169,6 +169,7 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   final _navigationEntries = <_DesktopNavigationEntry>[];
   var _navigationIndex = -1;
   var _navigationOperationEpoch = 0;
+  var _lastDraftReplacementVersion = 0;
   _DesktopNavigationEntry? _pendingNavigationEntry;
   var _activeDestination = _DesktopShellDestination.home;
   var _activeCustomizeSection = _EcosystemSection.plugins;
@@ -290,6 +291,8 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
 
   void _bindNavigationState() {
     ++_navigationOperationEpoch;
+    _lastDraftReplacementVersion =
+        widget.threadController.lastSessionDraftReplacement?.version ?? 0;
     _navigationEntries.clear();
     _pendingNavigationEntry = null;
     if (widget.threadController.selectedThread?.id case final threadId?) {
@@ -304,6 +307,46 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
     if (_activeDestination == _DesktopShellDestination.customize) {
       _ensureCustomizeController();
     }
+  }
+
+  void _rewriteReplacedSessionDraftNavigation({
+    required String retiredThreadId,
+    required String replacementThreadId,
+  }) {
+    if (retiredThreadId == replacementThreadId) {
+      return;
+    }
+    if (_pendingNavigationEntry?.threadId == retiredThreadId) {
+      ++_navigationOperationEpoch;
+      _pendingNavigationEntry = null;
+    }
+    if (_navigationEntries.isEmpty) {
+      return;
+    }
+    final compacted = <_DesktopNavigationEntry>[];
+    var nextIndex = -1;
+    for (var i = 0; i < _navigationEntries.length; i += 1) {
+      final entry = _navigationEntries[i];
+      final rewritten = entry.threadId == retiredThreadId
+          ? (
+              destination: entry.destination,
+              threadId: replacementThreadId,
+              customizeSection: entry.customizeSection,
+            )
+          : entry;
+      if (compacted.isEmpty || compacted.last != rewritten) {
+        compacted.add(rewritten);
+      }
+      if (i == _navigationIndex) {
+        nextIndex = compacted.length - 1;
+      }
+    }
+    _navigationEntries
+      ..clear()
+      ..addAll(compacted);
+    _navigationIndex = _navigationEntries.isEmpty
+        ? -1
+        : nextIndex.clamp(0, _navigationEntries.length - 1);
   }
 
   void _pushNavigationEntry(_DesktopNavigationEntry entry) {
@@ -328,9 +371,16 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   }
 
   void _handleThreadControllerChanged() {
+    final replacement = widget.threadController.lastSessionDraftReplacement;
+    final hasDraftReplacement =
+        replacement != null &&
+        replacement.version != _lastDraftReplacementVersion;
     final threadId = widget.threadController.selectedThread?.id;
     final pending = _pendingNavigationEntry;
-    if (pending != null && threadId != null && threadId == pending.threadId) {
+    if (!hasDraftReplacement &&
+        pending != null &&
+        threadId != null &&
+        threadId == pending.threadId) {
       _syncCustomizeControllerContext();
       return;
     }
@@ -341,22 +391,48 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
     final previousContextKey = _customizeControllerKey;
     final nextContextKey = _currentEcosystemContextKey;
     final threadChanged = threadId != current?.threadId;
-    if (!threadChanged && previousContextKey == nextContextKey) {
+    if (!hasDraftReplacement &&
+        !threadChanged &&
+        previousContextKey == nextContextKey) {
       return;
     }
     setState(() {
+      if (hasDraftReplacement) {
+        _lastDraftReplacementVersion = replacement.version;
+        _rewriteReplacedSessionDraftNavigation(
+          retiredThreadId: replacement.retiredThreadId,
+          replacementThreadId: replacement.replacementThreadId,
+        );
+      }
       _syncCustomizeControllerContext();
-      if (!threadChanged) {
+      final effectiveCurrent =
+          _navigationIndex >= 0 && _navigationIndex < _navigationEntries.length
+          ? _navigationEntries[_navigationIndex]
+          : null;
+      final effectiveThreadChanged = threadId != effectiveCurrent?.threadId;
+      if (!effectiveThreadChanged) {
+        if (_isCompactLayout &&
+            hasDraftReplacement &&
+            _activeDestination == _DesktopShellDestination.customize &&
+            threadId != null) {
+          _activeDestination = _DesktopShellDestination.home;
+          _pushNavigationEntry((
+            destination: _DesktopShellDestination.home,
+            threadId: threadId,
+            customizeSection: _activeCustomizeSection,
+          ));
+        }
         return;
       }
       if (!_isCompactLayout &&
           _activeDestination == _DesktopShellDestination.customize) {
-        if (current != null &&
-            current.destination == _DesktopShellDestination.customize) {
+        if (effectiveCurrent != null &&
+            effectiveCurrent.destination ==
+                _DesktopShellDestination.customize) {
           _navigationEntries[_navigationIndex] = (
             destination: _DesktopShellDestination.customize,
             threadId: threadId,
-            customizeSection: current.customizeSection,
+            customizeSection: effectiveCurrent.customizeSection,
           );
         }
         return;
