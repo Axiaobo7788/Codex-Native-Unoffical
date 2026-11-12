@@ -9,7 +9,9 @@ import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -461,25 +463,63 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       expect(tester.takeException(), isNull);
 
-      // 4. Text selection / tap gesture on SelectableText inside the shifted short viewport
-      // resolves coordinates accurately and updates the EditableText selection.
-      final userSelectableText = find.descendant(
-        of: userRow,
-        matching: find.byType(SelectableText),
+      // 4. Markdown selection in the shifted sliver must still map pointer
+      // coordinates to the actual user text and preserve clipboard order.
+      const expectedSelection =
+          'Short thread B user prompt text for selection testing.';
+      String? copiedSelection;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedSelection =
+                (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          }
+          return null;
+        },
       );
-      expect(userSelectableText, findsOneWidget);
-      await tester.tapAt(tester.getCenter(userSelectableText));
-      await tester.pump();
-      final editableState = tester.state<EditableTextState>(
-        find.descendant(
-          of: userSelectableText,
-          matching: find.byType(EditableText),
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
         ),
       );
-      final selection = editableState.renderEditable.selection;
-      expect(selection, isNotNull);
-      expect(selection!.isValid, isTrue);
-      expect(selection.baseOffset, greaterThan(0));
+      final userMarkdown = find.descendant(
+        of: userRow,
+        matching: find.byKey(const ValueKey('user-message-markdown')),
+      );
+      final selectionRegion = find.descendant(
+        of: userRow,
+        matching: find.byType(SelectableRegion),
+      );
+      expect(userMarkdown, findsOneWidget);
+      expect(selectionRegion, findsOneWidget);
+      final selectableState = tester.state<SelectableRegionState>(
+        selectionRegion,
+      );
+      final selectionActionContext = tester.element(userMarkdown);
+      selectableState.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(selectionActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedSelection);
+
+      copiedSelection = null;
+      selectableState.clearSelection();
+      await tester.pump();
+      final markdownRect = tester.getRect(userMarkdown);
+      final drag = await tester.startGesture(
+        markdownRect.topLeft + const Offset(1, 6),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await drag.moveTo(markdownRect.bottomRight - const Offset(1, 6));
+      await tester.pump();
+      await drag.up();
+      await tester.pump();
+      Actions.invoke(selectionActionContext, CopySelectionTextIntent.copy);
+      await tester.pump();
+      expect(copiedSelection, expectedSelection);
 
       // 5. Focus / Scrollable.ensureVisible (getOffsetToReveal) does not yank a visible short-thread item.
       final timeline = find.byKey(const ValueKey('conversation-timeline'));

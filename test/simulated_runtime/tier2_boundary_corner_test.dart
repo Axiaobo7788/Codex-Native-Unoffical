@@ -8,6 +8,7 @@ import 'package:codex_native_unofficial/src/domain/model_models.dart';
 import 'package:codex_native_unofficial/src/domain/remote_admin_models.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'simulated_runtime_harness.dart';
@@ -331,7 +332,7 @@ void main() {
     });
 
     testWidgets(
-      'T2.3.3: Adversarial escaping with raw &#x20; followed by markdown',
+      'T2.3.3: User Markdown decodes entities while Copy preserves the original source',
       (tester) async {
         final thread = createTestThread(
           id: 'adv-esc-thread',
@@ -353,7 +354,43 @@ void main() {
         await tester.tap(find.text('Adversarial escape thread'));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('&#x20;'), findsOneWidget);
+        final markdown = find.descendant(
+          of: find.byKey(const ValueKey('history-user-turn-adv-esc')),
+          matching: find.byKey(const ValueKey('user-message-markdown')),
+        );
+        expect(markdown, findsOneWidget);
+        final paragraph = tester.widget<Text>(
+          find.descendant(of: markdown, matching: find.byType(Text)).first,
+        );
+        expect(paragraph.textSpan!.toPlainText(), contains('Compare   with '));
+        expect(paragraph.textSpan!.toPlainText(), contains('bold formatting.'));
+        expect(find.text('code'), findsOneWidget);
+        expect(find.textContaining('&#x20;', findRichText: true), findsNothing);
+
+        String? copiedSource;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copiedSource =
+                  (call.arguments as Map<Object?, Object?>)['text'] as String?;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('user-copy-user-turn-adv-esc')),
+        );
+        await tester.pump();
+        expect(copiedSource, prose);
+        // Complete the existing bounded Copy feedback timer before teardown.
+        await tester.pump(const Duration(seconds: 2));
         expect(tester.takeException(), isNull);
       },
     );

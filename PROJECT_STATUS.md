@@ -132,29 +132,24 @@ permission to lower the engineering or visual quality bar.
   analysis/pure-Dart/memory/release and source-bound actual-stock comparison.
   The former 240-character loss is closed. [Evidence](docs/reverse/REASONING_PROJECTION_EVIDENCE.md)
   keeps peer P2s and test/build negatives distinct from Human acceptance.
-- **Track U / Gemini:** U3 `22bf94e` is integrated. A7 follow-up commits
-  `8f2baaa` + `17619b9` retain provenance; the latter corrects an independently
-  revalidated current-ASAR predicate discrepancy. The owner reports 15 focused
-  passes. Root read the actual diff; final integrated/runtime verification is
-  still separate. Current A6 source is in
-  `/var/tmp/native-gemini-u4-a6-user-markdown`, covering conversation/message
-  bubble/theme/Markdown and related tests. It preserves the 16,384-code-unit/128-pill
-  Markdown bounds. Root's encoded-image and pending-queue P1 findings are
-  addressed in the current source: a 10 MiB encoded-input limit, four active
-  loads, 64 pending loads and mounted-interest cancellation/retirement. Active
-  slots remain held until actual reads settle. The decoder owns its transferred
-  buffer. Final owner tests, captures and committed-source review remain pending;
-  source inspection alone does not establish the completed runtime boundary.
-  The owner reports 94 focused passes and a Linux release build; same-state
-  packaged captures and the final source commit are still in progress.
-  Parent app import-header ownership is released to Gemini only for required
-  provider imports; Root's selection/history hook stays frozen and disjoint.
-  Shared checkpoint docs remain Codex-owned. Golden State A remains PARTIAL.
-- Heavy validation is **Gemini-owned** after Codex's explicit release and verified
-  replay teardown. Codex is source/docs-only until the next lease handoff. Flutter tests use
-  `--concurrency=1`; Cargo uses two jobs; Linux release uses `--config-only`
-  then CMake `--parallel 2`. The earlier host OOM was compiler/test overlap;
-  no Native heap-leak fix is claimed.
+- **Track U / Gemini:** U4 source `6bf61a7` preserves A7 commits `8f2baaa`
+  and `17619b9`. Normal merge `e052953` combines that source with new-thread
+  admission. User Markdown, 80 px local image tiles and previews retain bounded
+  text/pills, a 10 MiB encoded-input limit, four active and 64 pending loads,
+  mounted-interest retirement and decoder ownership. Root directly inspected
+  owner r5 light/dark inner-Thought and preview captures. Four model fixture
+  calls and zero image-sentinel GETs are recorded. Root's first full combined
+  run had 624 passes/five skips/two old presentation assumptions; the adapted
+  selection/escaping cases now pass within 37 focused cases. A pending Copy
+  feedback timer in the first adaptation was a test-driver omission, now
+  completed before teardown. Shared rerun/build and packaged F replay remain
+  pending. Source, tests and captures do not close signed-in/Human visual gates.
+- **Heavy validation is Codex-owned** after Gemini's explicit release, with
+  zero owner replay workers left. Gemini is source-only while Codex runs the
+  combined checkpoint. Flutter uses `--concurrency=1`, Cargo two jobs and CMake
+  `--parallel 2`. All U4 surfaces are released; shared docs remain Codex-owned.
+  Next functional preparation is never-connected local startup retry, distinct
+  from still-missing hot crash recovery and draft restoration.
 - Next independent functional gaps include explicit local runtime retry/crash
   recovery and newly observed unmaterialized-new-thread history. Codex has begun
   the latter source audit in `/var/tmp/native-codex-desktop-new-thread-history`
