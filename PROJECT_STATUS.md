@@ -113,20 +113,19 @@ permission to lower the engineering or visual quality bar.
   `22bf94e` through normal merges. Shared gates and a fresh packaged public
   stock authentication/reload replay pass. The supported global authentication
   subset is MATCH; parallel/scoped/custom MCP workflows remain separate research.
-- **Track F / Codex active correction:**
-  `/var/tmp/native-codex-desktop-new-thread-history`, branch
-  `agent/codex-desktop-new-thread-history`, base `27db663`. It reuses the
-  existing ThreadList materialization marker to defer history for a known new
-  empty thread and hydrate on the first readable transition. Ordinary history
-  RPC failures remain visible. The old-source app regression reproduces one
-  premature read; 37 history/thread cases, the lifecycle-complete product
-  regression and strict analysis pass. The product test's missing input frame
-  and incomplete active-to-idle lifecycle were corrected, with both negative
-  logs retained. The final case verifies zero premature reads, one first-turn
-  hydration and visible user input. Gemini inspected the actual source commit
-  with zero P0/P1/P2 findings and independently confirmed public-stock
-  materialization precedes the active notification. Shared gates, packaged
-  real-stock after-fix and integration remain pending.
+- **Track F / Codex checkpoint:** known-new-thread admission `732d2a4` is
+  validated in combined source `b22e955`. [Evidence](docs/reverse/NEW_THREAD_HISTORY_EVIDENCE.md)
+  records 626 default passes/five skips, five real-stock cases, pure-Dart,
+  analysis/memory/release and exact-source three-platform CI. Actual packaged
+  old/new public stock walks verify empty new chat, first Send, warm return and
+  full process restart; installed stock confirms empty chat/first Send. Ordinary
+  history failures stay visible and all owned workers exited.
+- **Track F / Codex active slice:** never-connected local startup retry,
+  `/var/tmp/native-codex-desktop-startup-retry`, branch
+  `agent/codex-desktop-startup-retry`. Two baseline regressions now reproduce:
+  no explicit Retry after failed discovery, and a late locator result overwrites
+  terminal Stopped with Not found after shutdown. No production correction is
+  implemented yet. This subset does not close hot crash/draft recovery.
 - **Published reasoning data correction:** `0286a4d`, integrated in main
   `27db663`, passes 615 default cases/five skips, five enabled stock cases,
   analysis/pure-Dart/memory/release and source-bound actual-stock comparison.
@@ -142,34 +141,37 @@ permission to lower the engineering or visual quality bar.
   run had 624 passes/five skips/two old presentation assumptions; the adapted
   selection/escaping cases now pass within 37 focused cases. A pending Copy
   feedback timer in the first adaptation was a test-driver omission, now
-  completed before teardown. Shared rerun/build and packaged F replay remain
-  pending. Source, tests and captures do not close signed-in/Human visual gates.
+  completed before teardown. Combined `b22e955` rerun/build and packaged F
+  replay now pass. Source, tests and captures do not close signed-in/Human visual gates.
 - **Heavy validation is Codex-owned** after Gemini's explicit release, with
   zero owner replay workers left. Gemini is source-only while Codex runs the
   combined checkpoint. Flutter uses `--concurrency=1`, Cargo two jobs and CMake
   `--parallel 2`. All U4 surfaces are released; shared docs remain Codex-owned.
   Next functional preparation is never-connected local startup retry, distinct
   from still-missing hot crash recovery and draft restoration.
-- Next independent functional gaps include explicit local runtime retry/crash
-  recovery and newly observed unmaterialized-new-thread history. Codex has begun
-  the latter source audit in `/var/tmp/native-codex-desktop-new-thread-history`
-  (source `732d2a4`, based on `27db663`). Focused machine gates pass; actual-stock
-  after-fix validation remains pending. It reuses the existing ThreadList
-  materialization admission instead of inferring emptiness from an arbitrary
-  RPC error. Evidence and next action are in the functional audit.
+- Next U ownership is being negotiated from refreshed build25894 evidence;
+  no new UI surface is assumed closed. Codex owns runtime/app-shell startup
+  state and shared docs; Gemini remains the presentation owner. No overlapping
+  writes or concurrent heavy validation.
 
 ## Current checkpoints
 
 Git is canonical for the current HEAD and working tree. These are immutable
 source/validation checkpoints, rather than a second branch-state database.
 
-- **Current verified main `27db663b8a4d29b658401d7c03abf6b4f37d09ec`:**
+- **Prior main checkpoint `27db663b8a4d29b658401d7c03abf6b4f37d09ec`:**
   [main CI43119069301](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43119069301)
   and [branch CI43116961616](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43116961616)
   both passed all three platforms at the exact SHA. It contains reasoning
   source `0286a4d`, MCP authentication/timeouts, U2/U3, and all earlier catalog,
   typography and cold-resume corrections. New-thread admission and U4 are not
   integrated into that checkpoint.
+- **Current combined release source `b22e955`:**
+  [exact-source CI43128650668](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43128650668)
+  passes all three jobs; 626 default/five stock cases, pure-Dart/analysis/memory,
+  Linux 83-library closure and source-bound public/installed walks pass. AOT
+  `6168b2d8…`, 244 selected tracked inputs unchanged. [Evidence](docs/reverse/NEW_THREAD_HISTORY_EVIDENCE.md)
+  records failures and scope. Git remains canonical for current integration.
 - **Published new-thread source `732d2a4`:**
   [CI43122125258](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43122125258)
   completed successfully at the exact SHA. This is not the combined U4 source or
