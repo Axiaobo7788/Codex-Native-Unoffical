@@ -60,7 +60,7 @@ The canonical matrix now contains54 functional workflows,27 surfaces,19 state
 units,16 interaction units and20 visual comparison units. Missing pages are
 counted explicitly; incomplete rows receive no arbitrary half-fidelity credit.
 
-**Next action:** publish the reconciled audit, then select implementation order from its
+**Next action:** use the published reconciled audit to select implementation order from its
 P0 inventory. The current user asked for the trustworthy gap list before further
 implementation, so do not silently start the next feature/polish slice.
 
@@ -83,6 +83,15 @@ implementation, so do not silently start the next feature/polish slice.
   serialized heavy work when implementation resumes.
 
 ## Verification and negative evidence
+
+- Audit publication source `de77288` exact [CI43220947635](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43220947635)
+  finished: macOS7m17s and Windows7m12s builds pass; Linux `verify` **fails** at
+  `Install Linux build dependencies` after its5-minute timeout. The log shows
+  repeated `mirrors.kernel.org` Ubuntu fetch retries; Dart/Flutter verification
+  did not start. This does not establish a code/test regression or green final
+  gates. No CI configuration change or retry/hardening loop is part of this
+  audit. This factual documentation follow-up triggers its own automatic CI;
+  its status must be read separately, never inherited from source0e2a or de77288.
 
 - Official installed renderer `26.1103.60933` / build25894 and ASAR hash were
   freshly rechecked; public latest and locally probed stock are0.167.2, installed

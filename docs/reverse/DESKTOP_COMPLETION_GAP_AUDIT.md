@@ -453,6 +453,18 @@ negative C-large evidence are explicitly scoped above; no heavy Flutter/Cargo
 suite was rerun for documentation. Main product CI0e2a is green; the final
 **documentation HEAD's** hosted result is tracked separately at publication.
 
+### Publication negative evidence
+
+Documentation source `de77288` was pushed to main. Exact
+[CI43220947635](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43220947635)
+finished with successful macOS (7m17s) and Windows (7m12s) builds, but failed Linux
+`verify`: `Install Linux build dependencies` timed out after5 minutes, with
+repeated `mirrors.kernel.org` Ubuntu fetch retries. Dart/Flutter verification
+steps did not execute. This preserves an infrastructure negative; it is not
+represented as a code-test failure, a green suite, or grounds to reopen unrelated
+CI hardening during the audit. The documentation follow-up has its own automatic
+CI status; read that exact HEAD separately.
+
 ### Direct source navigation at the audited baseline
 
 - Shell destinations/rail and compact switch:
