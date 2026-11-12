@@ -1,6 +1,8 @@
 # Codex Desktop functional capability and workflow audit
 
-Audited 2026-11-12 against Native `327ed906a0231ab4aac864956f224279fad2ad64`.
+Initial audit 2026-11-12 against Native
+`327ed906a0231ab4aac864956f224279fad2ad64`; the source-bound correction
+entries below track later main and peer commits explicitly.
 Program: `SELF_ITERATION`. Target: **Codex Desktop Completion — functional
 parity and high-fidelity UI**, with neither track reduced to a fallback.
 
@@ -305,3 +307,11 @@ establish65 complete renderer languages. Native Markdown tests with a Locale
 exercise font/layout measurement, not client translation. The functional row is
 MISSING; supported selector/fallback/renderer-locale scope is progressable
 research before implementation. Current new-thread and A6 work keep priority.
+
+Current-build source refinement: `11951.da263ae686.js` defines a nullable
+`localeOverride` UI preference with automatic detection. The language picker in
+`553834.8bcca01908.js` exposes explicit and Auto-detect choices, while `182735.5b42af8792.js` gates renderer localization with
+`enable_i18n`. This establishes a local client preference/renderer seam, not a
+model-language setting or a public cloud preference service. It does not yet
+establish exact supported renderer locales, fallback order or signed-in
+entitlements; those remain research before implementing an independent catalog.
