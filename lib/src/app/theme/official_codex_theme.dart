@@ -206,7 +206,20 @@ abstract final class OfficialCodexTheme {
   /// Activity / tool card corner radius (8px).
   static const double activityRowRadius = 8.0;
 
-  /// Inline command output scroll region (9rem at the reference scale).
+  /// Expanded shell card border width (`225284.PuGl.d` `border border-strong` = `1px`).
+  static const double shellCardBorderWidth = 1.0;
+
+  /// Expanded shell card header font size (`225284.PuGl.g` `text-sm` = `12px`).
+  static const double shellHeaderFontSize = 12.0;
+
+  /// Expanded shell card command/output monospace font size
+  /// (`e77f816560c6.css` `.text-size-chat-sm { font-size: calc(var(--codex-chat-font-size) - 1px) }` = `13px`).
+  static const double shellCodeFontSize = chatFontSize - 1.0;
+
+  /// Collapsed line limit for expanded shell card `$ <command>` block (`PuGl.g` `line-clamp-2`).
+  static const int shellCommandCollapsedLines = 2;
+
+  /// Inline command output scroll region (`PuGl.g` `max-h-36`: `9rem` = `144px`).
   static const double commandOutputPreviewHeight = 144.0;
 
   /// Turn work divider pill height (26px) in compact/mobile mode.
@@ -499,6 +512,16 @@ final class OfficialCodexThemeData {
   Color get composerSurface => isDark
       ? OfficialCodexTheme.darkComposerSurface
       : OfficialCodexTheme.lightComposerSurface;
+
+  /// `--color-border-strong: var(--app-color-border-heavy)` on Electron shell cards
+  /// (`12%` `#1A1C1F` in light mode, `16%` `#FFFFFF` in dark mode).
+  Color get shellCardBorder =>
+      isDark ? const Color(0x29FFFFFF) : const Color(0x1F1A1C1F);
+
+  /// `--color-codex-description: color-mix(in srgb, var(--color-text) 70%, transparent)`
+  /// used for shell header, `$ <command>`, and shell output text in `225284.PuGl.d`.
+  Color get shellDescriptionText =>
+      isDark ? const Color(0xB3DFDFDF) : const Color(0xB31A1C1F);
 
   static const dark = OfficialCodexThemeData(
     brightness: Brightness.dark,

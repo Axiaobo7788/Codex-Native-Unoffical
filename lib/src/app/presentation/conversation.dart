@@ -303,9 +303,7 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
   final nonNominal = _nonNominalStatus(status);
 
   if (isCommand || rawText.startsWith('Command: ')) {
-    final cmd = rawText.startsWith('Command: ')
-        ? rawText.substring('Command: '.length).trim()
-        : rawText.trim();
+    final cmd = unwrapCodexShellCommand(rawText);
     if (isDeclined) {
       return (
         caption: cmd.isNotEmpty ? 'Command declined: $cmd' : 'Command declined',
@@ -5153,6 +5151,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 turnId: item.turnId,
                                 output: item.output,
                                 saved: true,
+                                rawCommand: item.text,
+                                status: item.status,
                               )
                             : null,
                         overrideEntryText: overrideText,
@@ -5323,6 +5323,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     turnId: liveTurnId,
                     output: entry.completed ? entry.commandOutput : null,
                     saved: false,
+                    rawCommand: entry.text,
+                    status: entry.status,
+                    completed: entry.completed,
                   );
                   final useInlinePreviewDisclosure =
                       widget.hasDesktopShell &&
@@ -6748,6 +6751,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     required String turnId,
     required OutputDescriptor? output,
     required bool saved,
+    String rawCommand = '',
+    String? status,
+    bool completed = true,
+    int? exitCode,
   }) {
     final reference = output?.reference;
     if (output == null || !output.available || reference == null) {
@@ -6796,7 +6803,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       ),
       detail: viewer == null
           ? null
-          : _InlineCommandOutput(viewer: viewer, openFullOutput: fullOutput),
+          : _InlineCommandOutput(
+              viewer: viewer,
+              openFullOutput: fullOutput,
+              rawCommand: rawCommand,
+              status: status,
+              completed: completed,
+              exitCode: exitCode,
+            ),
       hasInlinePreview: true,
       previewExpanded: expanded,
       onTogglePreview: onToggle,
@@ -7091,6 +7105,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   turnId: item.turnId,
                   output: item.output,
                   saved: true,
+                  rawCommand: item.text,
+                  status: item.status,
                 )
               : null,
         );
@@ -7152,6 +7168,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           turnId: liveTurnId,
           output: entry.completed ? entry.commandOutput : null,
           saved: false,
+          rawCommand: entry.text,
+          status: entry.status,
+          completed: entry.completed,
         );
         final useInlinePreviewDisclosure =
             widget.hasDesktopShell &&
@@ -9582,9 +9601,23 @@ class _ActivityContent extends StatelessWidget {
   Widget build(BuildContext context) {
     if (inline && resolvedActivity != null) {
       final resolved = resolvedActivity!;
+      final effectiveCommand = isCommand || entry.text.startsWith('Command: ');
+      final collapseExpandedCommandCaption =
+          isExpanded &&
+          effectiveCommand &&
+          resolved.segmentKind != _ActivityGroupSegmentKind.exploration &&
+          !resolved.isWarning;
+      final summary = collapseExpandedCommandCaption
+          ? (entry.status?.trim() == 'interrupted'
+                ? 'Stopped command'
+                : 'Ran command')
+          : resolved.caption;
+      final verbLength = collapseExpandedCommandCaption
+          ? null
+          : resolved.verbLength;
       return CodexActivityRow(
-        summary: resolved.caption,
-        verbLength: resolved.verbLength,
+        summary: summary,
+        verbLength: verbLength,
         icon: Icon(resolved.icon, size: 14),
         statusText: resolved.statusBadge,
         isRunning: !entry.completed,
