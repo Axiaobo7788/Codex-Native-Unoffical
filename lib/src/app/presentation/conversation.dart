@@ -10023,7 +10023,6 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
             icon: icon,
           );
         } else if (widget.useSandboxMenu) {
-          final triggerLabel = _desktopTriggerLabel(sandbox);
           button = CodexButton(
             key: const ValueKey('execution-settings-button'),
             variant: CodexButtonVariant.ghost,
@@ -10041,7 +10040,7 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      triggerLabel,
+                      label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelSmall
@@ -10128,14 +10127,6 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
       },
     );
   }
-
-  String _desktopTriggerLabel(SandboxModeOverride? sandbox) =>
-      switch (sandbox) {
-        null => 'Ask for approval',
-        SandboxModeOverride.readOnly => 'Read only',
-        SandboxModeOverride.workspaceWrite => 'Workspace write',
-        SandboxModeOverride.dangerFullAccess => 'Full access',
-      };
 
   String _sandboxLabel(SandboxModeOverride? sandbox) => switch (sandbox) {
     null => 'Codex default',

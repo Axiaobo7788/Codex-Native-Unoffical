@@ -140,13 +140,21 @@ String _composerModelSummaryLabel(
   ExecutionSettingsController controller, {
   required bool useDesktopPicker,
 }) {
-  final model = controller.effectiveModel;
-  if (useDesktopPicker && controller.selectedModelId == null) {
+  if (controller.selectedModelId == null) {
+    if (!useDesktopPicker && controller.loading && controller.models.isEmpty) {
+      return 'Loading models…';
+    }
     final effort = _formatModelEffortLabel(controller.selectedReasoningEffort);
-    return effort == null ? 'Codex settings' : 'Codex settings $effort';
+    if (effort == null) {
+      return 'Codex settings';
+    }
+    return useDesktopPicker
+        ? 'Codex settings $effort'
+        : 'Codex settings · $effort';
   }
+  final model = controller.effectiveModel;
   if (model == null) {
-    return controller.loading ? 'Loading models…' : 'Codex default';
+    return controller.loading ? 'Loading models…' : 'Codex settings';
   }
   final rawEffort =
       controller.selectedReasoningEffort ?? model.defaultReasoningEffort;

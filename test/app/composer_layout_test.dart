@@ -177,10 +177,11 @@ void main() {
         expect(
           find.descendant(
             of: permissionsFinder,
-            matching: find.text('Ask for approval'),
+            matching: find.text('Codex default'),
           ),
           findsNothing,
         );
+        expect(find.text('Ask for approval'), findsNothing);
 
         // IME composing lock (16389.zdsX.T): long active composition stays locked
         // to single-line until composition commits.
@@ -218,7 +219,7 @@ void main() {
         expect(tester.getRect(attachFinder).left, initialAttachLeft);
 
         // In multiline mode, input spans Row 1 with 12px horizontal inset and
-        // permissions moves to Row 2 leading next to '+' with 'Ask for approval'.
+        // permissions moves to Row 2 leading next to '+' with truthful 'Codex default'.
         final surfaceRect = tester.getRect(surfaceFinder);
         final fieldRect = tester.getRect(fieldFinder);
         expect(
@@ -244,10 +245,11 @@ void main() {
         expect(
           find.descendant(
             of: permissionsFinder,
-            matching: find.text('Ask for approval'),
+            matching: find.text('Codex default'),
           ),
           findsOneWidget,
         );
+        expect(find.text('Ask for approval'), findsNothing);
 
         // Deleting back to a short single-line draft restores 28px inline pill
         // while keeping focus and selection intact.
@@ -347,10 +349,11 @@ void main() {
         expect(
           find.descendant(
             of: permissionsFinder,
-            matching: find.text('Ask for approval'),
+            matching: find.text('Codex default'),
           ),
           findsOneWidget,
         );
+        expect(find.text('Ask for approval'), findsNothing);
 
         // Select Full access from the multiline labeled permissions trigger.
         await tester.tap(permissionsFinder);
@@ -461,6 +464,158 @@ void main() {
           decoration.boxShadow,
           OfficialCodexTheme.lightComposerCompactShadows,
         );
+      },
+    );
+
+    testWidgets(
+      'keeps inherited model and sandbox labels truthful across Home hero, Desktop thread, and compact composers',
+      (tester) async {
+        final thread = createTestThread(
+          id: 'composer-truthful-inherited',
+          preview: 'Truthful inherited controls',
+        );
+        final harness = SimulatedRuntimeHarness(initialThreads: [thread]);
+        await pumpSimulatedRuntimeApp(
+          tester,
+          harness: harness,
+          size: const Size(1191, 865),
+        );
+
+        final modelFinder = find.byKey(const ValueKey('composer-model-pill'));
+        final permissionsFinder = find.byKey(
+          const ValueKey('execution-settings-button'),
+        );
+        final fieldFinder = find.byKey(const ValueKey('conversation-composer'));
+
+        // 1. Home hero composer (null selectedModelId & null sandbox):
+        // must NOT display catalog default ('o3-mini') or 'Ask for approval'.
+        expect(
+          find.descendant(
+            of: modelFinder,
+            matching: find.text('Codex settings'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('o3-mini'), findsNothing);
+        expect(find.text('Ask for approval'), findsNothing);
+        expect(
+          find.descendant(
+            of: permissionsFinder,
+            matching: find.text('Defaults'),
+          ),
+          findsOneWidget,
+        );
+
+        // 2. Active Desktop thread composer (1191x865):
+        await tester.tap(find.text('Truthful inherited controls'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: modelFinder,
+            matching: find.text('Codex settings'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('o3-mini'), findsNothing);
+
+        await tester.enterText(fieldFinder, 'Line 1\nLine 2');
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: permissionsFinder,
+            matching: find.text('Codex default'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Ask for approval'), findsNothing);
+
+        await tester.tap(permissionsFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Read only').last);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: permissionsFinder,
+            matching: find.text('Read only'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(permissionsFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Codex default').last);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: permissionsFinder,
+            matching: find.text('Codex default'),
+          ),
+          findsOneWidget,
+        );
+
+        // 3. Compact composer (<760px, !hasDesktopShell):
+        // null selectedModelId must STILL show 'Codex settings', not catalog default.
+        tester.view.physicalSize = const Size(600, 865);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: modelFinder,
+            matching: find.text('Codex settings'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('o3-mini'), findsNothing);
+        expect(
+          find.descendant(
+            of: permissionsFinder,
+            matching: find.text('Defaults'),
+          ),
+          findsOneWidget,
+        );
+
+        // Selecting an explicit model in compact dialog shows it, and resetting
+        // back to Codex default restores 'Codex settings' + null wire overrides.
+        await tester.tap(modelFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('execution-Model')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('o3-mini').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: modelFinder,
+            matching: find.text('o3-mini · Medium'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(modelFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('execution-Model')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Codex default').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: modelFinder,
+            matching: find.text('Codex settings'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+        await tester.pumpAndSettle();
+        expect(harness.startedTurns.single.model, isNull);
+        expect(harness.startedTurns.single.sandbox, isNull);
+        expect(tester.takeException(), isNull);
       },
     );
   });

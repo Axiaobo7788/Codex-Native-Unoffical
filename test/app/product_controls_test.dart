@@ -1596,12 +1596,15 @@ void main() {
       await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
       await tester.pumpAndSettle();
 
-      // Unselected state shows the Home hero, model pill, and active composer.
+      // Unselected state shows the Home hero, truthful inherited model pill, and active composer.
       expect(find.byKey(const ValueKey('home-hero-heading')), findsOneWidget);
-      expect(find.text('Default model · Medium'), findsOneWidget);
+      expect(find.text('Codex settings'), findsOneWidget);
+      expect(find.text('Default model · Medium'), findsNothing);
       await _send(tester, 'Start directly from landing page');
       expect(runtime.startedThreadCwds, hasLength(1));
       expect(runtime.turnOptions, hasLength(1));
+      expect(runtime.turnOptions.single.model, isNull);
+      expect(runtime.turnOptions.single.sandbox, isNull);
       expect(
         runtime.turnOptions.single.text,
         'Start directly from landing page',
