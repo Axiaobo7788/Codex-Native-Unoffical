@@ -150,7 +150,7 @@ next action identifies a real external dependency.
 |---|---|---|---|---|---|
 | Closed (`a0d2a05`) | Cold-resume failure hidden from conversation | High: a normal failed send can look inert | High: fresh current source plus prior normal-entry real stock evidence | Small state/presentation seam, independent of U1; guard stale attempts and keep draft | Fresh current reproduction and attempt-scoped feedback for implicit and explicit resume. |
 | Closed (`45c80d8` / `9a75ddc`) | Silent plugin catalog omission | Medium/high for affected workspaces; truthful inventory | High: stable response + distinct 131-row fixture; current cap/source-error code | Narrow protocol/model/UI truth correction, low regression surface | Signal genuine truncation separately from partial sources while retaining cap 100. |
-| 3 | Account and MCP OAuth access paths absent | High: onboarding/configured-server usability | High stable contracts; actual identity flow requires user/local OAuth evidence | Separate lifecycle/security/UI work | Implement complete stock-owned flows, not a credential bridge. |
+| 3 | Account sign-in/cancel/sign-out access path absent; global MCP OAuth is now separately verified | High: first-time/expired-account onboarding | High stable account contracts; identity/security interaction still needs the user | Separate lifecycle/security/UI work | Implement stock-owned account lifecycle without a credential bridge; retain the verified global MCP flow and research additional scopes separately. |
 | 4 | Additional-permission grant coverage | High when the opt-in feature is in scope | Stable request/response, but relevant emitter flags are under-development and off | Security-sensitive; normal-workflow/adoption evidence still needed | Reproduce and classify before implementation; schema presence alone is insufficient. |
 | 5 | Global search, queue, suggestions, terminal cleanup and richer saved data | High but different scopes/dependencies | Public methods exist; bounds and state behavior need focused probes | Separate coherent slices, not one generic framework | Progress the highest supported research item and reclassify; no queue-exhaustion stop. |
 
@@ -163,9 +163,12 @@ parent and adapts it to the current request/composer composition; the source was
 reviewed by both peers and independently verified against real stock.
 
 No completion is asserted: this audit finds both supported `MISSING` and material
-`PARTIAL` workflows. The first correction is verified below; explicit catalog
-truncation is verified; supported MCP OAuth is the next active functional slice. A green implementation checkpoint is not a
-stop condition; Track U continues concurrently.
+`PARTIAL` workflows. Cold-resume feedback, explicit catalog truncation, global
+MCP OAuth, bounded reasoning projection and known-new-thread history now have
+their own source-bound evidence below. Never-connected startup retry is active;
+connected-workspace recovery and effective inherited settings remain distinct
+open workflows. A green implementation checkpoint is not a stop condition;
+Track U continues concurrently.
 
 ## First correction checkpoint — cold-resume feedback
 

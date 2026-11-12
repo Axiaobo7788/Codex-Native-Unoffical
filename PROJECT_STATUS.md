@@ -124,13 +124,14 @@ permission to lower the engineering or visual quality bar.
   `/var/tmp/native-codex-desktop-startup-retry`, branch
   `agent/codex-desktop-startup-retry`. Two baseline regressions now reproduce:
   no explicit Retry after failed discovery, and a late locator result overwrites
-  terminal Stopped with Not found after shutdown. Current uncommitted source
+  terminal Stopped with Not found after shutdown. Published source `e8ece87`
   adds explicit retry admission, epoch-fenced startup/stream delivery and failed
   session retirement without closing app gateway streams. Strict analysis and
   the initial four cases pass; four existing runtime/Remote cases passed at
   that source. A subsequent Starting-notification shutdown regression was
-  reproduced and fixed with a pre-launch epoch check; all six startup cases
-  now pass. Refreshed analysis/shared gates are pending for this follow-up. Two intermediate widget-driver timeouts mixing real file
+  reproduced and fixed in `c8f5570` with a pre-launch epoch check; all six startup
+  cases now pass. Refreshed analysis/shared gates are pending for this follow-up.
+  Two intermediate widget-driver timeouts mixing real file
   I/O/FakeAsync remain recorded. The widget now tests the typed discovery change;
   real filesystem/process recovery belongs to the pending packaged-stock walk.
   Shared gates, real-stock recovery and targeted peer audit remain pending.
@@ -159,9 +160,16 @@ permission to lower the engineering or visual quality bar.
   `composer_model_picker.dart`, `official_codex_theme.dart` and
   `test/app/composer_layout_test.dart`. Current build25894 evidence, not prior
   TUI context, controls the translation. Unrelated Home expansion is excluded.
+  Source `3e8d381` and normal follow-up `76e3428` correct two accepted truth
+  findings: a null permission override does not mean approval is required, and
+  the catalog default is not the inherited runtime model. Root inspected the
+  actual follow-up and public/installed r2 captures; wide multiline, compact and
+  Home labels are truthful. Owner release/real-stock checks precede the pending
+  combined shared gate; signed-in official comparison remains a distinct gate.
 - Heavy validation is serialized via the official TUI lease. Codex released
-  its checkpoint workers and the exclusive lease to Gemini for U5. A bounded
-  short loan may be negotiated for Root's startup targets; no two heavy jobs
+  its checkpoint workers for U5; Gemini has now explicitly returned the lease
+  and all U5 surfaces. Codex owns the combined checkpoint validation and
+  packaged startup-retry walk while Gemini stays source-only. No two heavy jobs
   run together. Flutter tests use one worker, Cargo two jobs and CMake two jobs.
   Codex owns RuntimeController/app-shell startup state, runtime tests and shared
   docs. The writable surfaces do not overlap. All U4 surfaces are released.
