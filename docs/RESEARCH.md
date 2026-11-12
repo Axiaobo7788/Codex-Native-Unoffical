@@ -5152,3 +5152,15 @@ with no second approval, and cancel returns interrupted with no executed command
 Private owned profiles/loopback models and all runtime processes are cleaned up.
 [Source, limits, negatives and remaining checks](reverse/APPROVAL_CHOICES_EVIDENCE.md)
 remain separate from Human acceptance and the parallel Golden A7 reconstruction.
+
+
+Approval follow-up: a dedicated c2 baseline reproduces consent compression,
+same-connection deciding-ID reuse, structured duplicates and multiline fallback
+visibility despite green hosted CI. The correction passes70 focused cases and
+keeps additional responses in a bounded semantic menu. An adjacent old-response
+failure is now scoped to the exact pending request. New real public/installed
+same-file session and cancellation probes pass; a preserved unsupported direct
+custom-tool attempt demonstrates why static tool-handler existence is not proof
+of active model tool advertisement. The supported exec_command/apply_patch
+workflow establishes the actual file approval behavior. Details and remaining
+combined gates stay in the [approval evidence](reverse/APPROVAL_CHOICES_EVIDENCE.md).

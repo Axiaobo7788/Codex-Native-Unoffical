@@ -17,7 +17,7 @@ class ApprovalController extends ChangeNotifier {
   final ApprovalGateway gateway;
   final int maxPending;
   final List<ApprovalRequest> _pending = [];
-  final Set<Object> _deciding = {};
+  final Set<ApprovalRequest> _deciding = Set.identity();
   late final StreamSubscription<ApprovalEvent> _subscription;
   String? _errorMessage;
   var _disposed = false;
@@ -25,7 +25,9 @@ class ApprovalController extends ChangeNotifier {
 
   List<ApprovalRequest> get pending => List.unmodifiable(_pending);
   String? get errorMessage => _errorMessage;
-  bool isDeciding(Object requestId) => _deciding.contains(requestId);
+  bool isDeciding(Object requestId) => _pending.any(
+    (request) => request.requestId == requestId && _deciding.contains(request),
+  );
 
   Future<void> approve(Object requestId) =>
       _decide(requestId, ApprovalDecision.approveOnce);
@@ -56,7 +58,7 @@ class ApprovalController extends ChangeNotifier {
     final index = _pending.indexWhere(
       (request) => request.requestId == requestId,
     );
-    if (_disposed || index == -1 || _deciding.contains(requestId)) {
+    if (_disposed || index == -1 || _deciding.contains(_pending[index])) {
       return;
     }
     final request = _pending[index];
@@ -67,17 +69,20 @@ class ApprovalController extends ChangeNotifier {
       return;
     }
 
-    _deciding.add(requestId);
+    _deciding.add(request);
     _errorMessage = null;
     _notify();
     try {
       await gateway.decideApproval(requestId: requestId, decision: decision);
       if (generation == _runtimeGeneration) _pending.remove(request);
     } catch (error) {
-      if (generation == _runtimeGeneration) _errorMessage = error.toString();
+      if (generation == _runtimeGeneration &&
+          _pending.any((pending) => identical(pending, request))) {
+        _errorMessage = error.toString();
+      }
     } finally {
       if (generation == _runtimeGeneration) {
-        _deciding.remove(requestId);
+        _deciding.remove(request);
         _notify();
       }
     }
@@ -95,7 +100,9 @@ class ApprovalController extends ChangeNotifier {
         }
       case ApprovalResolvedEvent():
         _pending.removeWhere((request) => request.requestId == event.requestId);
-        _deciding.remove(event.requestId);
+        _deciding.removeWhere(
+          (request) => request.requestId == event.requestId,
+        );
     }
     _notify();
   }

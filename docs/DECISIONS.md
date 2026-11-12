@@ -2893,3 +2893,20 @@ command executing after only one approval, and independent cancellation returnin
 interrupted without executing the command. Specific file-session/network emission,
 packaged visual capture, peer audit and shared integration gates remain separately
 tracked in [approval evidence](reverse/APPROVAL_CHOICES_EVIDENCE.md).
+
+### ADR-064 follow-up — Legible bounded consent and request-scoped completion
+
+The c2b5a64 peer audit exposes a real narrow-split consent problem despite green
+CI: opposite persistent choices compress to indistinguishable labels. Keep the
+ordinary one-time/reject actions; place extra choices in a bounded, scrollable
+semantic response menu. The action verb must remain legible even if a long host
+is abbreviated. Do not replace horizontal compression with the already reproduced
+vertical Wrap overflow. Opening or dismissing the menu never grants consent.
+
+Scope deciding state and error publication to exact request identity in addition
+to the runtime-generation fence. Deduplicate equivalent options locally without
+interning authorization objects across requests. Suppress multiline compatibility
+prefixes and escape explicitly advertised argument text for inspection while
+preserving the actual response payload. The70-case correction gate and eight
+real stock command/file approval cases are recorded in the evidence packet;
+combined UI/source and peer reinspection remain separate integration gates.

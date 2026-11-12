@@ -112,11 +112,78 @@ or Human acceptance. Session/file and managed-network variants currently have
 schema/typed-protocol/widget evidence; their specific real emission/outcome is
 not asserted by the command-rule probes.
 
+## Peer findings and source-bound remediation
+
+The targeted peer audit ofc2b5a64 records0P0,1P1 and2P2. Its original
+observations remain source-scoped; a green hosted CI did not establish legible
+consent choices. A separate worktree preserves exactlyc2 plus three new
+regression files. `approval-peer-red-r1.log` records16 passes/four failures:
+consent legibility, same-connection deciding-ID reuse, duplicate rules and
+legacy multiline-rule suppression. A refined critical-verb check confirms the
+old strip gives18.15px where154.70px is needed to distinguish allow from deny.
+
+The follow-up keeps ordinary Reject/Approve once buttons and moves additional
+responses to a bounded existing CodexPopover/CodexMenu. Opening it grants
+nothing. Its16-choice list scrolls independently, preserves distinct policy
+verbs and exposes complete scope details. Request identity keys retire the
+menu on resolution/replacement; Escape closes it without consent. This avoids
+both horizontal compression and the earlier proven33px vertical Wrap overflow.
+Full hostnames can ellipsize while the action verb remains readable; a test's
+initial full-host non-ellipsis check was overly strict for the test font and is
+preserved separately from the meaningful critical-verb regression.
+
+Deciding state is now keyed by request identity without changing the public ID
+query. The relevant race is same-connection external resolution followed by ID
+reuse; the existing runtime-generation guard already covered cross-runtime
+completion. Exercising the adjacent failure path also reproduces an old RPC
+error polluting a new request (`approval-peer-retired-error-red-r5.log`). Error
+publication now requires that exact request still be pending.
+
+Structured options deduplicate by their canonical wire value **inside one
+request**, keeping the first actual offered object and preserving cross-request
+identity protection. Compatibility prefixes containing CR/LF are suppressed,
+matching the current renderer. Explicitly offered payloads remain unchanged;
+numbered scope arguments are JSON-quoted/escaped for display, preventing embedded
+newlines from impersonating another argument.
+
+The corrected source passes **70 targeted cases in one run**, strict analysis0
+and pure-Dart68 (`approval-peer-green-r7.log`, `analyze-r7`, `pure-r7`). Escape,
+external menu retirement, escaped scope text and the old short-split detail
+scroll all pass. The earlier missing import, wrong pure-gate filename, actual
+Wrap overflow, duplicate-text finder and overly strict full-host check remain
+recorded rather than reclassified as successful runs.
+
+## Real file-session approval and cancellation
+
+An initial direct custom apply_patch fixture times out waiting for approval;
+its owned rollout records `unsupported custom tool call: apply_patch`, not an
+executed edit or a client approval failure. Public handler code alone did not
+prove that tool was advertised in this model setup. The failed profile and
+closed Host/stock identities remain in
+`/var/tmp/native-approval-file-session-stock-r1/`.
+
+A distinct fixture follows the already observed stock-supported exec_command
+apply_patch heredoc workflow. All four cases pass in
+`/var/tmp/native-approval-file-session-stock-r2/verification.json`:
+
+- public0.167.2 and installed alpha both emit real file-change approvals;
+- explicit session approval applies the first patch, then a second patch of
+  the **same file** completes with only one approval across both turns;
+- independent cancellation returns interrupted and leaves no edited file;
+- all recorded Host/stock PIDs are absent, and every owned bounded model is
+  stopped and awaited. No user profile or account is involved.
+
+This verifies same-file session behavior, not an unlimited or cross-thread
+file grant. Together with command-rule/cancel probes it supplies eight real
+cases. Managed-network emission still has schema/typed-protocol/widget evidence
+only; no private service or fake managed-network parity is introduced.
+
 ## Remaining validation
 
-Targeted peer audit, one clean final targeted/shared gate, a combined packaged
-approval walkthrough and exact integrated hosted CI remain machine-actionable.
-Keep file-session and managed-network real-use coverage separately calibrated.
-The parallel U8 owner has the exclusive heavy lease after the bounded Root
-stock window. Both tracks continue; this document is a checkpoint, not Desktop
-completion or a reason to idle.
+c2b5a64's exact hostedCI43184267473 passes verify/macOS/Windows. That older
+checkpoint does not verify the follow-up fixes. Targeted peer reinspection,
+merged U8 shared gates, a new packaged approval walkthrough and exact final-HEAD
+hosted CI remain machine-actionable. Gemini's U8 A7 subset does not close the
+remaining per-item file-diff or live-output functional seams. Root has the
+exclusive heavy lease for correction/integration; peers continue independently
+on source/evidence. No Desktop completion or Human acceptance is claimed.

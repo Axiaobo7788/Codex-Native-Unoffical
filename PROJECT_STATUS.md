@@ -129,15 +129,21 @@ permission to lower the engineering or visual quality bar.
   conversation presentation and its dedicated test in
   `agent/gemini-golden-ui-u8-a7-hierarchy`. The overlapping file is split at the
   explicit class boundary; neither writes the other's region.
-- Approval choice code has64 distinct targeted passes across two final runs,
-  strict analysis0/pure68, and four actual bundled-Host public/installed command
-  rule/cancel cases. Stock persists the exact offered rule; the identical next
-  command needs no second approval. Cancellation prevents execution and returns
-  interrupted. Earlier layout/compiler/driver negatives remain preserved.
-  Peer audit, a single clean shared gate and packaged approval capture remain
-  pending. See the [work packet](docs/reverse/APPROVAL_CHOICES_EVIDENCE.md).
-  Gemini again has the exclusive heavy lease after Codex's bounded stock window.
-  Golden A remains PARTIAL; U7 does not close attachment/hover or other states.
+- Approval branchc2b5a64 is committed/pushed and exact hostedCI43184267473
+  passes all three jobs. Its targeted peer audit exposes1P1/2P2 despite green CI.
+  The isolated baseline reproduces four failures. The current correction has
+ 70 targeted passes, strict analysis0/pure68, a bounded response menu, identity-
+  keyed deciding state and scoped errors, local structural dedup and escaped
+  rule display. Peer reinspection and merged packaged/shared gates remain open.
+  [Evidence](docs/reverse/APPROVAL_CHOICES_EVIDENCE.md) preserves each negative.
+- Eight real public/installed approval cases verify exact command-rule
+  persistence/repeated execution, same-file session editing and cancellation.
+  Managed-network real emission remains separately unverified. All owned probe
+  processes exit. Root now has the exclusive heavy lease for fixes/integration.
+- Gemini U8 is committed/pushed at6f196cee, with78 targeted tests and a final
+  packaged replay reported for inspection. Its multi-edit/cold-saved per-item
+  patch gap stays machine-actionable. Root is verifying actual source/artifacts;
+  Golden A remains PARTIAL. No blanket Human-only gate or Desktop closure.
 - Live communication stays official agy TUI-only. Peers are equal. Flutter uses
   one worker and Cargo/CMake two jobs; heavy work never overlaps across peers.
 

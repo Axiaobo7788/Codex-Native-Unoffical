@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import '../domain/approval_models.dart';
 import '../domain/ecosystem_models.dart';
@@ -1164,6 +1165,7 @@ final class ServerRequestProtocolAdapter {
     final advertised = params['availableDecisions'];
     final humanCheckpoint = params['kind'] == 'humanCommand';
     final choices = <ApprovalDecision>[];
+    final seen = <String>{};
     if (advertised != null) {
       if (advertised is! List<Object?> || advertised.length > 16) {
         throw const FormatException(
@@ -1179,7 +1181,11 @@ final class ServerRequestProtocolAdapter {
                 choice != ApprovalDecision.cancelTurn)) {
           continue;
         }
-        if (!choices.contains(choice)) choices.add(choice);
+        // Canonicalize only within this response list. The retained object is
+        // still unique to this request, preserving cross-request identity.
+        if (seen.add(jsonEncode(_encodeApprovalDecision(choice)))) {
+          choices.add(choice);
+        }
       }
     } else {
       // Stable responses predate the experimental availableDecisions field.
@@ -1217,11 +1223,14 @@ final class ServerRequestProtocolAdapter {
           }
         } else if (params['additionalPermissions'] == null &&
             params['proposedExecpolicyAmendment'] != null) {
-          choices.add(
-            _parseExecpolicyApprovalDecision(
-              params['proposedExecpolicyAmendment'],
-            ),
+          final rule = _parseExecpolicyApprovalDecision(
+            params['proposedExecpolicyAmendment'],
           );
+          if (!rule.execpolicyAmendment.any(
+            (argument) => argument.contains('\n') || argument.contains('\r'),
+          )) {
+            choices.add(rule);
+          }
         }
       }
       choices.addAll([ApprovalDecision.reject, ApprovalDecision.cancelTurn]);

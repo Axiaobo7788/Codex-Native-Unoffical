@@ -376,27 +376,12 @@ class _ApprovalBanner extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: ThemeTokens.space2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    for (final (index, choice) in actions.indexed) ...[
-                      if (index > 0) const SizedBox(width: ThemeTokens.space2),
-                      Flexible(
-                        flex: choice == ApprovalDecision.approveOnce ? 3 : 2,
-                        child: CodexButton(
-                          variant: choice == ApprovalDecision.approveOnce
-                              ? CodexButtonVariant.primary
-                              : CodexButtonVariant.ghost,
-                          size: CodexButtonSize.sm,
-                          onPressed: deciding
-                              ? null
-                              : () => controller.choose(request, choice),
-                          label: _label(choice),
-                          tooltip: _scope(choice) ?? _label(choice),
-                        ),
-                      ),
-                    ],
-                  ],
+                _ApprovalActions(
+                  key: ObjectKey(request),
+                  request: request,
+                  controller: controller,
+                  choices: actions,
+                  deciding: deciding,
                 ),
                 if (error != null) ...[
                   const SizedBox(height: ThemeTokens.space2),
@@ -433,14 +418,170 @@ class _ApprovalBanner extends StatelessWidget {
           'This is broader than a one-time approval.',
     ApprovalDecisionKind.approveWithExecpolicyAmendment =>
       'Approve and apply the proposed command rule. Prefix arguments in order:\n'
-          '${decision.execpolicyAmendment.indexed.map((entry) => '${entry.$1 + 1}: ${entry.$2}').join('\n')}',
+          '${decision.execpolicyAmendment.indexed.map((entry) => '${entry.$1 + 1}: ${jsonEncode(entry.$2)}').join('\n')}',
     ApprovalDecisionKind.applyNetworkPolicyAmendment =>
       'Save a persistent ${decision.networkAction!.name} network rule for host: '
-          '${decision.networkHost}',
+          '${jsonEncode(decision.networkHost)}',
     ApprovalDecisionKind.cancelTurn =>
       'Deny this request and stop the current turn.',
     ApprovalDecisionKind.approveOnce || ApprovalDecisionKind.reject => null,
   };
+}
+
+class _ApprovalActions extends StatefulWidget {
+  const _ApprovalActions({
+    super.key,
+    required this.request,
+    required this.controller,
+    required this.choices,
+    required this.deciding,
+  });
+
+  final ApprovalRequest request;
+  final ApprovalController controller;
+  final List<ApprovalDecision> choices;
+  final bool deciding;
+
+  @override
+  State<_ApprovalActions> createState() => _ApprovalActionsState();
+}
+
+class _ApprovalActionsState extends State<_ApprovalActions> {
+  final _more = CodexPopoverController();
+  final _moreButtonKey = GlobalKey();
+
+  @override
+  void didUpdateWidget(covariant _ApprovalActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.deciding && !oldWidget.deciding) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.deciding) _more.hide();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _more.dispose();
+    super.dispose();
+  }
+
+  void _openMore() {
+    if (_more.isOpen) {
+      _more.hide();
+      return;
+    }
+    final box = _moreButtonKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    // The existing point-positioned menu clamps its complete bounded surface
+    // inside the window, even when the approval card is in a short split.
+    _more.show(
+      globalPosition: box.localToGlobal(Offset(0, box.size.height + 6)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final extra = widget.choices
+        .where(
+          (choice) =>
+              choice != ApprovalDecision.approveOnce &&
+              choice != ApprovalDecision.reject,
+        )
+        .toList(growable: false);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Flexible(
+          flex: 2,
+          child: CodexButton(
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
+            label: 'Reject',
+            tooltip: 'Reject',
+            onPressed: widget.deciding
+                ? null
+                : () => widget.controller.choose(
+                    widget.request,
+                    ApprovalDecision.reject,
+                  ),
+          ),
+        ),
+        if (widget.request.approveSupported) ...[
+          const SizedBox(width: ThemeTokens.space2),
+          Flexible(
+            flex: 3,
+            child: CodexButton(
+              variant: CodexButtonVariant.primary,
+              size: CodexButtonSize.sm,
+              label: 'Approve once',
+              tooltip: 'Approve once',
+              onPressed: widget.deciding
+                  ? null
+                  : () => widget.controller.choose(
+                      widget.request,
+                      ApprovalDecision.approveOnce,
+                    ),
+            ),
+          ),
+        ],
+        if (extra.isNotEmpty) ...[
+          const SizedBox(width: ThemeTokens.space2),
+          CodexPopoverAnchor(
+            controller: _more,
+            width: math.min(
+              420.0,
+              math.max(0.0, MediaQuery.sizeOf(context).width - 16),
+            ),
+            popoverBuilder: (context, close) => ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: math.max(
+                  0.0,
+                  math.min(360.0, MediaQuery.sizeOf(context).height - 24),
+                ),
+              ),
+              child: SingleChildScrollView(
+                child: CodexMenu<ApprovalDecision>(
+                  header: const Text('Choose an approval response'),
+                  items: [
+                    for (final choice in extra)
+                      CodexMenuItem(
+                        value: choice,
+                        label: _ApprovalBanner._label(choice),
+                        description: _ApprovalBanner._scope(choice),
+                        disabled: widget.deciding,
+                        trailing: switch (_ApprovalBanner._scope(choice)) {
+                          final scope? => CodexTooltip(
+                            message: scope,
+                            child: Icon(
+                              Icons.info_outline_rounded,
+                              size: 14,
+                              semanticLabel: scope,
+                            ),
+                          ),
+                          null => null,
+                        },
+                      ),
+                  ],
+                  onSelected: (choice) {
+                    close();
+                    widget.controller.choose(widget.request, choice);
+                  },
+                ),
+              ),
+            ),
+            child: CodexIconButton(
+              key: _moreButtonKey,
+              icon: const Icon(Icons.more_horiz_rounded),
+              size: 28,
+              tooltip: 'Choose an approval response',
+              onPressed: widget.deciding ? null : _openMore,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _HistoryEntryView extends StatelessWidget {

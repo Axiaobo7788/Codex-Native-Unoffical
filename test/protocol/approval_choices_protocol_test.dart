@@ -446,4 +446,100 @@ void main() {
     expect(errors.every((error) => error.$2 == -32602), isTrue);
     expect(replies, isEmpty);
   });
+
+  test('duplicate structured choices collapse locally without reusing identity across requests', () async {
+    const params = <String, Object?>{
+      'availableDecisions': [
+        {
+          'acceptWithExecpolicyAmendment': {
+            'execpolicy_amendment': ['printf'],
+          },
+        },
+        {
+          'acceptWithExecpolicyAmendment': {
+            'execpolicy_amendment': ['printf'],
+          },
+        },
+        {
+          'applyNetworkPolicyAmendment': {
+            'network_policy_amendment': {
+              'host': 'example.invalid',
+              'action': 'allow',
+            },
+          },
+        },
+        {
+          'applyNetworkPolicyAmendment': {
+            'network_policy_amendment': {
+              'host': 'example.invalid',
+              'action': 'allow',
+            },
+          },
+        },
+        'decline',
+      ],
+    };
+    final first = await command(params);
+    expect(first.availableDecisions, hasLength(3));
+    await adapter.decideApproval(
+      requestId: 1,
+      decision: ApprovalDecision.reject,
+    );
+    final second = await command(params, id: 2);
+    expect(second.availableDecisions, hasLength(3));
+    await expectLater(
+      adapter.decideApproval(
+        requestId: 2,
+        decision: first.availableDecisions.first,
+      ),
+      throwsUnsupportedError,
+    );
+    await adapter.decideApproval(
+      requestId: 2,
+      decision: second.availableDecisions.first,
+    );
+    expect(replies.last.$2, {
+      'decision': {
+        'acceptWithExecpolicyAmendment': {
+          'execpolicy_amendment': ['printf'],
+        },
+      },
+    });
+  });
+
+  test('legacy multiline rule is suppressed without changing an explicitly offered rule', () async {
+    final legacy = await command({
+      'proposedExecpolicyAmendment': ['printf', 'line1\n2: spoofed\r'],
+    });
+    expect(
+      legacy.availableDecisions.any(
+        (choice) =>
+            choice.kind == ApprovalDecisionKind.approveWithExecpolicyAmendment,
+      ),
+      isFalse,
+    );
+    await adapter.decideApproval(
+      requestId: 1,
+      decision: ApprovalDecision.reject,
+    );
+    final explicit = await command({
+      'availableDecisions': [
+        {
+          'acceptWithExecpolicyAmendment': {
+            'execpolicy_amendment': ['printf', 'line1\n2: spoofed\r'],
+          },
+        },
+        'decline',
+      ],
+    }, id: 2);
+    final rule = explicit.availableDecisions.first;
+    await adapter.decideApproval(requestId: 2, decision: rule);
+    expect(replies.last.$2, {
+      'decision': {
+        'acceptWithExecpolicyAmendment': {
+          'execpolicy_amendment': ['printf', 'line1\n2: spoofed\r'],
+        },
+      },
+    });
+  });
 }
