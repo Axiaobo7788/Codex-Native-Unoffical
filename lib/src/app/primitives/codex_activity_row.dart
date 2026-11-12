@@ -1963,6 +1963,7 @@ enum CodexFileDiffBodyState {
   empty,
   previewTooLarge,
   unavailable,
+  unsupported,
 }
 
 /// Extracts the display basename of [rawPath] (`ai.Q0` in `225284.O3Io`).
@@ -2049,13 +2050,20 @@ String formatCodexFileChangeTooltipPath(
   String path, {
   String? movePath,
   String? cwd,
+  bool pathTruncated = false,
 }) {
   final relOld = formatCodexWorkspaceRelativePath(path, cwd: cwd);
+  final String formatted;
   if (movePath == null || movePath.isEmpty || movePath == path) {
-    return relOld;
+    formatted = relOld;
+  } else {
+    final relNew = formatCodexWorkspaceRelativePath(movePath, cwd: cwd);
+    formatted = '$relOld → $relNew';
   }
-  final relNew = formatCodexWorkspaceRelativePath(movePath, cwd: cwd);
-  return '$relOld → $relNew';
+  if (pathTruncated && !formatted.endsWith('…')) {
+    return '$formatted…';
+  }
+  return formatted;
 }
 
 /// Pure presentation descriptor for a single file entry inside a `fileChange`
@@ -2066,6 +2074,7 @@ class CodexPerFileChangeItem {
     required this.id,
     required this.path,
     this.movePath,
+    this.pathTruncated = false,
     this.kind = CodexFileChangeKind.update,
     this.additions = 0,
     this.deletions = 0,
@@ -2080,6 +2089,7 @@ class CodexPerFileChangeItem {
   final String id;
   final String path;
   final String? movePath;
+  final bool pathTruncated;
   final CodexFileChangeKind kind;
   final int additions;
   final int deletions;
@@ -2095,7 +2105,13 @@ class CodexPerFileChangeItem {
     return moved != null && moved.isNotEmpty ? moved : path;
   }
 
-  String get displayName => codexPathBasename(effectivePath);
+  String get displayName {
+    final base = codexPathBasename(effectivePath);
+    if (pathTruncated && !base.endsWith('…')) {
+      return '$base…';
+    }
+    return base;
+  }
 
   bool get showsExpandedCardHeader =>
       bodyState == CodexFileDiffBodyState.ready ||
@@ -2259,13 +2275,21 @@ class _CodexPerFileDiffCardState extends State<CodexPerFileDiffCard> {
     final bool isDel;
     final bool isHunk;
     final String displayLine;
-    if (!isUnifiedDiff &&
-        (kind == CodexFileChangeKind.add ||
-            kind == CodexFileChangeKind.delete)) {
-      isAdd = kind == CodexFileChangeKind.add;
-      isDel = kind == CodexFileChangeKind.delete;
-      isHunk = false;
-      displayLine = '${isAdd ? '+' : '-'}$line';
+    if (!isUnifiedDiff) {
+      if (kind == CodexFileChangeKind.add ||
+          kind == CodexFileChangeKind.delete) {
+        isAdd = kind == CodexFileChangeKind.add;
+        isDel = kind == CodexFileChangeKind.delete;
+        isHunk = false;
+        displayLine = '${isAdd ? '+' : '-'}$line';
+      } else {
+        // Non-unified bodies on unknown/non-add/delete kinds stay neutral so
+        // leading '-' or '+' characters are never guessed as patch signs.
+        isAdd = false;
+        isDel = false;
+        isHunk = false;
+        displayLine = line;
+      }
     } else {
       isAdd = line.startsWith('+') && !line.startsWith('+++');
       isDel = line.startsWith('-') && !line.startsWith('---');
@@ -2307,6 +2331,7 @@ class _CodexPerFileDiffCardState extends State<CodexPerFileDiffCard> {
       item.path,
       movePath: item.movePath,
       cwd: widget.cwd,
+      pathTruncated: item.pathTruncated,
     );
     const codeStyle = TextStyle(
       fontFamily: 'monospace',
@@ -2324,6 +2349,8 @@ class _CodexPerFileDiffCardState extends State<CodexPerFileDiffCard> {
           label: 'Diff preview unavailable',
           onRetry: item.onRetryPreview,
         );
+      case CodexFileDiffBodyState.unsupported:
+        cardBody = _buildPlaceholder(theme, label: 'Diff preview unsupported');
       case CodexFileDiffBodyState.loading:
         cardBody = _buildPlaceholder(theme, label: 'Loading diff preview…');
       case CodexFileDiffBodyState.empty:
@@ -2576,6 +2603,7 @@ class CodexPerFileChangeRow extends StatelessWidget {
       item.path,
       movePath: item.movePath,
       cwd: cwd,
+      pathTruncated: item.pathTruncated,
     );
     final showRowStats =
         !usesGenericTitle && (item.additions > 0 || item.deletions > 0);

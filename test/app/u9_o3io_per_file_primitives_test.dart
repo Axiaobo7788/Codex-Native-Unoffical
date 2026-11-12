@@ -498,6 +498,47 @@ void main() {
         find.ancestor(of: bulletText, matching: find.byType(ColoredBox)).first,
       );
       expect(bulletBox.color, OfficialCodexThemeData.light.diffAddedFill);
+
+      // Unknown kind with non-unified body stays neutral (no guessed +/- sign),
+      // and unsupported + pathTruncated render truthfully without Retry.
+      const unknownKindBody = CodexPerFileChangeItem(
+        id: 'unk-raw',
+        path: '/repo/deep/truncated_seg',
+        pathTruncated: true,
+        kind: CodexFileChangeKind.unknown,
+        isUnifiedDiff: false,
+        bodyState: CodexFileDiffBodyState.ready,
+        diffLines: ['- not a deletion', '+ not an addition'],
+      );
+      const unsupportedBody = CodexPerFileChangeItem(
+        id: 'remote-unsup',
+        path: '/repo/remote.dart',
+        kind: CodexFileChangeKind.update,
+        additions: 2,
+        deletions: 1,
+        bodyState: CodexFileDiffBodyState.unsupported,
+      );
+
+      await tester.pumpWidget(
+        _wrapWithTheme(
+          CodexFileChangeActivityList(
+            files: const [unknownKindBody, unsupportedBody],
+            expandedFileIds: const {'unk-raw', 'remote-unsup'},
+            onToggleFile: (_) {},
+          ),
+        ),
+      );
+
+      final neutralLine = find.text('- not a deletion');
+      expect(neutralLine, findsOneWidget);
+      final neutralBox = tester.widget<ColoredBox>(
+        find.ancestor(of: neutralLine, matching: find.byType(ColoredBox)).first,
+      );
+      expect(neutralBox.color, Colors.transparent);
+      expect(find.text('truncated_seg…'), findsOneWidget);
+      expect(find.text('remote.dart'), findsOneWidget);
+      expect(find.text('Diff preview unsupported'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
     },
   );
 }
