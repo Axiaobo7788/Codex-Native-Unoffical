@@ -72,6 +72,7 @@ class ProcessTransport
     );
     _threadProtocol = ThreadProtocolAdapter(
       request: _request,
+      allProviderTitleSearch: true,
       notifications: _peer.notifications,
     );
     _threadAttachmentProtocol = ThreadAttachmentProtocolAdapter(

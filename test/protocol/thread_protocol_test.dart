@@ -20,6 +20,7 @@ void main() {
     responses = {};
     notifications = StreamController<CodexNotification>.broadcast(sync: true);
     adapter = ThreadProtocolAdapter(
+      allProviderTitleSearch: true,
       request: (method, [params = const {}]) async {
         requests.add(_Request(method, params));
         return responses[method] ?? const {};
@@ -695,6 +696,53 @@ void main() {
         'archived': true,
         'searchTerm': 'migration',
       });
+    },
+  );
+
+  test(
+    'blank title search preserves the configured-provider catalog',
+    () async {
+      responses['thread/list'] = {'data': [], 'nextCursor': null};
+      await adapter.listThreads(const ThreadListQuery(searchTerm: '  '));
+      expect(requests.single.params.containsKey('searchTerm'), isFalse);
+      expect(requests.single.params.containsKey('modelProviders'), isFalse);
+      expect(requests.single.method, 'thread/list');
+    },
+  );
+
+  test(
+    'local active title search uses all providers on every cursor page',
+    () async {
+      responses['thread/list'] = {'data': [], 'nextCursor': null};
+      for (final cursor in [null, 'opaque-next']) {
+        await adapter.listThreads(
+          ThreadListQuery(searchTerm: '  needle  ', cursor: cursor, limit: 1),
+        );
+        expect(requests.last.params['modelProviders'], isEmpty);
+        expect(requests.last.params['searchTerm'], 'needle');
+        expect(requests.last.params['limit'], 1);
+        expect(requests.last.params['cursor'], cursor);
+      }
+      expect(requests.every((r) => r.method == 'thread/list'), isTrue);
+    },
+  );
+
+  test(
+    'nonlocal and section queries retain their existing provider scope',
+    () async {
+      responses['thread/list'] = {'data': [], 'nextCursor': null};
+      final narrow = ThreadProtocolAdapter(
+        request: (method, [params = const {}]) async {
+          requests.add(_Request(method, params));
+          return responses[method]!;
+        },
+      );
+      await narrow.listThreads(const ThreadListQuery(searchTerm: 'needle'));
+      expect(requests.last.params.containsKey('modelProviders'), isFalse);
+      await adapter.listThreads(
+        const ThreadListQuery(searchTerm: 'needle', section: (id: 'section')),
+      );
+      expect(requests.last.params.containsKey('modelProviders'), isFalse);
     },
   );
 

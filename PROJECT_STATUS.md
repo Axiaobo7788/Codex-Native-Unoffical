@@ -129,6 +129,16 @@ permission to lower the engineering or visual quality bar.
   duplicate-ID fixture negative and corrected unique-ID run are retained. Both
   owned App/Host/stock trees and model fixtures exited. Home/current-cwd preview
   remains PARTIAL. Branch is pushed; coherent UI integration/CI remains pending.
+- **Track F next correction, active title search:** fresh public0.167.2
+  schema and rechecked25894 fallback confirm all-provider discovery only for
+  local active/unsectioned title searches. The normal/archived/section catalog
+  scopes and Remote contract are preserved. Format/pure68/strict analysis and
+  76 targeted cases pass. Real old/new Host-backed probes on public0.167.2 and
+  installed alpha find one configured-provider result before, three across
+  providers after, with one-row cursor pages and unchanged ordinary lists.
+  Metadata/history inspection stays cold; explicit foreign resume returns the
+  truthful stock modelProviderMismatch. Packaged search/failure replay and
+  combined integration remain pending.
 - **Track U / Gemini sourcedf46ace + e9a9697:** U6 A7/C Shell card and row
   disclosure, followed by nullable bounded public exitCode projection and
   calibrated unknown/footer status. Gemini owns the isolated U6 worktree and

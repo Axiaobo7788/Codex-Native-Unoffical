@@ -25,6 +25,7 @@ final class ThreadProtocolAdapter {
 
   ThreadProtocolAdapter({
     required this.request,
+    this.allProviderTitleSearch = false,
     Stream<CodexNotification> notifications = const Stream.empty(),
   }) {
     events = notifications
@@ -34,6 +35,9 @@ final class ThreadProtocolAdapter {
   }
 
   final ProtocolRequest request;
+
+  /// Local stock title-search semantics. Remote retains its narrower contract.
+  final bool allProviderTitleSearch;
   late final Stream<ThreadLifecycleEvent> events;
   static var _nextSettingsGeneration = 0;
   final int _settingsGeneration = ++_nextSettingsGeneration;
@@ -68,6 +72,15 @@ final class ThreadProtocolAdapter {
       'archived': query.archived,
       if (query.section != null) 'sectionId': sectionId,
       if (searchTerm != null && searchTerm.isNotEmpty) 'searchTerm': searchTerm,
+      // The explicit saved-title search follows stock Desktop's all-provider
+      // fallback. An omitted filter intentionally keeps ordinary catalogs in
+      // the configured provider. Discovery never resumes a returned thread.
+      if (allProviderTitleSearch &&
+          searchTerm != null &&
+          searchTerm.isNotEmpty &&
+          !query.archived &&
+          query.section == null)
+        'modelProviders': [],
     });
     final data = response['data'];
     if (data is! List<Object?>) {
