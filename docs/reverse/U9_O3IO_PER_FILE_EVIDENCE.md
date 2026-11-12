@@ -1,6 +1,6 @@
 # U9 Official `225284.O3Io` Per-File `fileChange` Evidence & Pre-Seam Primitives
 
-- **Evidence status:** Calibrated static ASAR + CSS reverse evidence from official Codex Desktop build `25894` (`26.1103.60933`); presentation primitives implemented in `lib/src/app/primitives/` + `lib/src/app/theme/` as **`SOURCE_ONLY_PRE_GATE`** (`0` heavy workers under `Root` exclusive heavy lease; `conversation.dart` binding deferred until `Root`'s `F-file-diff` metadata/descriptor seam lands).
+- **Evidence status:** Calibrated static ASAR + CSS reverse evidence from official Codex Desktop build `25894` (`26.1103.60933`); presentation primitives in `lib/src/app/primitives/` + `lib/src/app/theme/` are **`PRIMITIVES_MACHINE_VERIFIED`** (`218` format `0` diffs, `69` pure-Dart roots, strict analyze `0` issues, `59/59` targeted widget/tooltip/activity/theme/geometry tests; `conversation.dart` timeline binding and packaged real-use remain pending `Root`'s `F-file-diff` metadata/lazy-reader seam — no UI completion claimed).
 - **Base commit:** `0e2a5b80464f7ab6e3f5ab9034e9c37ecf6593ec` (`origin/main`).
 - **Write-surface discipline:** Only `lib/src/app/theme/official_codex_theme.dart`, `lib/src/app/primitives/codex_tooltip.dart`, `lib/src/app/primitives/codex_activity_row.dart`, `test/app/u9_o3io_per_file_primitives_test.dart`, and this reverse doc are touched (`0` Rust, protocol, domain, controller, or `conversation.dart` edits).
 
@@ -44,3 +44,19 @@ To bind `CodexFileChangeActivityList` cleanly into `conversation.dart` once `Roo
 ### Two non-blocking forward guards for the upcoming typed-metadata / lazy-reader sub-slice
 1. **Remote read-only descriptor gating (`lib/src/transport/remote/remote_transport.dart:453-468`):** Because `transform.rs` sanitizes stdout before `AppServerRemoteResponse`/`Notification` capture, Remote read-only clients also receive `_codexNativeFileDiff` with `available: true, ref: "..."`, while `RemoteTransport.readOutputRange` throws `_unsupported('Remote output reads')`. In the upcoming lazy-reader/transport seam, retire session refs on `RemoteTransport` (or gate range reads on capability) for `bytes > 0` while still allowing `bytes == 0` (`empty`) and `lineStats` to project synchronously without RPCs.
 2. **Kind-aware raw vs unified preview lines:** Spooled bytes for `kind == add | delete` are raw file content without unified `@@` headers; pass `isUnifiedDiff: false` (supported in `CodexPerFileChangeItem`) or prefix `+`/`-` in the preview reader so created Markdown `- bullet` lines highlight as additions rather than deletions.
+
+## 4. U9 Pre-Seam Primitive Gate & Preserved Negatives
+
+### Preserved pre-fix negatives on `4d44b67`
+1. **`dart format`:** `lib/src/app/primitives/codex_activity_row.dart` had `1` formatting diff (`218` files checked).
+2. **`flutter analyze --fatal-infos --fatal-warnings`:** `2` issues in `lib/src/app/primitives/codex_activity_row.dart`:
+   - `2256:17` (`undefined_named_parameter`): `CodexButton` used `compact: true` instead of `size: CodexButtonSize.sm`.
+   - `2618:13` (`use_null_aware_elements`): `if (statsSemantic != null) statsSemantic` replaced with `?statsSemantic`.
+3. **Targeted widget suite (`58` passed / `1` failed):** `U9 O3Io list honors 16px/4px gap, showDiffDetails, overflow, and 2.0x` caught a genuine `21px` / `11px` `RenderFlex` right-overflow at `2.0x` text scale on a `320px` viewport (`codex_activity_row.dart:2655`), where an unflexed `Text('Created ')` (`8 * 28px = 224px` in Ahem) inside a nested `Row` exceeded the `205.3px` / `187.0px` label slot. Fixed by replacing the nested `Row` with a single `CodexTooltip(monospace: true, child: Text.rich(..., maxLines: 1, overflow: TextOverflow.ellipsis))` matching `BI7J._buildLabelText`.
+
+### Post-fix machine-verified primitive gates
+- `dart format --output=none --set-exit-if-changed lib test tool`: **`218` files, `0` changed**.
+- `dart run tool/verify_pure_dart_boundary.dart`: **`PURE_DART_BOUNDARY=PASS (roots=69)`**.
+- `flutter analyze --no-pub --fatal-infos --fatal-warnings`: **`0` issues**.
+- `flutter test --no-pub` (`test/app/u9_o3io_per_file_primitives_test.dart`, `test/app/codex_primitives_test.dart`, `test/app/u8_a7_activity_hierarchy_test.dart`, `test/app/shell_command_card_test.dart`, `test/app/theme_tokens_test.dart`, `test/app/official_convergence_geometry_test.dart`, `test/features/conversation/activity_parity_test.dart`): **`59` passed, `0` failed** (`7` new `U9` primitive cases + `52` existing tooltip/activity/shell/theme/geometry cases).
+- Linux native bundle build intentionally deferred until `conversation.dart` timeline binding (pure Dart/Flutter widget primitive changes only; `0` native/CMake/Rust/domain/protocol writes).

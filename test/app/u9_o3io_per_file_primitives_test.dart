@@ -223,12 +223,18 @@ void main() {
         ),
       );
 
-      expect(find.text('Created '), findsOneWidget);
-      expect(find.text('created.dart'), findsOneWidget);
-      expect(find.text('Deleted '), findsOneWidget);
-      expect(find.text('removed.dart'), findsOneWidget);
-      expect(find.text('Edited '), findsOneWidget);
-      expect(find.text('updated.dart'), findsOneWidget);
+      expect(
+        find.text('Created created.dart', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Deleted removed.dart', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Edited updated.dart', findRichText: true),
+        findsOneWidget,
+      );
 
       // Add and delete rows carry 6x6 chartBlue/chartRed dots; update has none.
       final addDot = tester.widget<Container>(
@@ -306,11 +312,17 @@ void main() {
 
       // Oversized and unavailable states have no inner af card header, so the
       // outer row keeps "<Verb> <fileName>" and collapsed stats.
-      expect(find.text('giant_bundle.js'), findsOneWidget);
+      expect(
+        find.text('Edited giant_bundle.js', findRichText: true),
+        findsOneWidget,
+      );
       expect(find.text('+4200'), findsOneWidget);
       expect(find.text('Diff too large to preview'), findsOneWidget);
 
-      expect(find.text('retired.dart'), findsOneWidget);
+      expect(
+        find.text('Created retired.dart', findRichText: true),
+        findsOneWidget,
+      );
       expect(find.text('Diff preview unavailable'), findsOneWidget);
       await tester.tap(find.text('Retry'));
       await tester.pump();
@@ -536,7 +548,10 @@ void main() {
       );
       expect(neutralBox.color, Colors.transparent);
       expect(find.text('truncated_seg…'), findsOneWidget);
-      expect(find.text('remote.dart'), findsOneWidget);
+      expect(
+        find.text('Edited remote.dart', findRichText: true),
+        findsOneWidget,
+      );
       expect(find.text('Diff preview unsupported'), findsOneWidget);
       expect(find.text('Retry'), findsNothing);
     },

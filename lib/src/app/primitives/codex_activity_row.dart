@@ -219,12 +219,11 @@ class CodexActivityRow extends StatelessWidget {
 /// `.text-size-chat` line box, `6px` icon-to-label gap, `4px` label-to-chevron gap). Only
 /// becomes an interactive button with hover ink promotion and `14px` chevron
 /// when [hasDisclosure] is `true`.
-typedef CodexInlineHeaderLabelBuilder =
-    Widget Function(
-      BuildContext context,
-      bool active,
-      Color effectiveTextColor,
-    );
+typedef CodexInlineHeaderLabelBuilder = Widget Function(
+  BuildContext context,
+  bool active,
+  Color effectiveTextColor,
+);
 
 class CodexInlineActivityHeader extends StatefulWidget {
   const CodexInlineActivityHeader({
@@ -2254,7 +2253,7 @@ class _CodexPerFileDiffCardState extends State<CodexPerFileDiffCard> {
               CodexButton(
                 label: 'Retry',
                 variant: CodexButtonVariant.ghost,
-                compact: true,
+                size: CodexButtonSize.sm,
                 onPressed: onRetry,
               ),
             ],
@@ -2565,9 +2564,8 @@ class CodexPerFileChangeRow extends StatelessWidget {
         CodexFileChangeStatus.rejected => 'Rejected ',
         CodexFileChangeStatus.applied => 'Deleted ',
       },
-      CodexFileChangeKind.update || CodexFileChangeKind.unknown => switch (
-        status
-      ) {
+      CodexFileChangeKind.update ||
+      CodexFileChangeKind.unknown => switch (status) {
         CodexFileChangeStatus.inProgress => 'Editing ',
         CodexFileChangeStatus.stopped => 'Stopped editing ',
         CodexFileChangeStatus.rejected => 'Rejected ',
@@ -2580,8 +2578,8 @@ class CodexPerFileChangeRow extends StatelessWidget {
     return switch (kind) {
       CodexFileChangeKind.add => 'Created file',
       CodexFileChangeKind.delete => 'Deleted file',
-      CodexFileChangeKind.update || CodexFileChangeKind.unknown =>
-        'Edited file',
+      CodexFileChangeKind.update ||
+      CodexFileChangeKind.unknown => 'Edited file',
     };
   }
 
@@ -2617,7 +2615,7 @@ class CodexPerFileChangeRow extends StatelessWidget {
         ? <String>[
             'Toggle diff for $displayName',
             visibleSummary,
-            if (statsSemantic != null) statsSemantic,
+            ?statsSemantic,
           ].join(', ')
         : null;
 
@@ -2654,28 +2652,28 @@ class CodexPerFileChangeRow extends StatelessWidget {
                 fontWeight: FontWeight.w400,
                 color: effectiveTextColor,
               );
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(verbPrefix, maxLines: 1, style: baseStyle),
-                  Flexible(
-                    child: CodexTooltip(
-                      message: tooltipPath,
-                      monospace: true,
-                      child: Text(
-                        displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: baseStyle.copyWith(
+              return CodexTooltip(
+                message: tooltipPath,
+                monospace: true,
+                child: Text.rich(
+                  TextSpan(
+                    text: verbPrefix,
+                    children: [
+                      TextSpan(
+                        text: displayName,
+                        style: TextStyle(
                           color: fileColor,
                           decoration: TextDecoration.underline,
                           decorationStyle: TextDecorationStyle.dotted,
                           decorationColor: fileColor.withValues(alpha: 0.55),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: baseStyle,
+                ),
               );
             },
     );
