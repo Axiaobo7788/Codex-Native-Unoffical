@@ -2764,8 +2764,14 @@ model for the current measurement terminology.
   startup cases and strict analysis pass at the initial source. A subsequent
   synchronous Starting-listener shutdown regression is red-before-green; a
   pre-launch epoch check closes it and all six startup cases pass. Existing
-  runtime/Remote cases pass at the initial source; refreshed shared gates remain
-  pending for the follow-up. Unit/widget fixtures are not real-stock
-  process evidence. Shared/packaged-stock validation and targeted peer audit
-  are pending at this source checkpoint. Mixed real-I/O/FakeAsync test-driver
-  timeouts are retained rather than hidden by the later fixture correction.
+  runtime/Remote cases pass at the initial source. Combined `c3957c9` now passes
+  637 default cases/five skips, five stock cases on each runtime, pure-Dart68,
+  strict analysis, memory, Linux83 and source245 checks. Peer review finds no
+  P0/P1. [Packaged evidence](reverse/STARTUP_RETRY_EVIDENCE.md) verifies actual
+  missing-file → same-App Retry → Host/stock → saved first turn on public
+  `0.167.2` and installed alpha, plus public restart/history without another
+  model request. Unit/widget fixtures remain distinct from that real-process
+  evidence. Earlier driver timeouts, early captures, fixture warnings and the
+  first Hosted dependency-install timeout remain preserved. The optional
+  pre-existing shutdown-Future coalescing observation is not silently promoted
+  into a new UI backlog item.

@@ -8,25 +8,35 @@ authoritative.
 ## Current Codex Desktop functional audit
 
 The [2026-11-12 capability/workflow audit](reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md)
-compares five installed/public stock versions, current public stable `0.167.1`,
-actual Native access paths and existing real-stock evidence. It supersedes old
+compares the initial five installed/public stock versions and the subsequent
+public stable `0.167.2` refresh, actual Native access paths and source-bound
+real-stock evidence. It supersedes old
 F1–F32 labels as completion evidence for the narrowed Desktop target. Schema
 presence alone does not prove a normally enabled workflow: additional-permission
 emitter flags remain under-development/off by default. The audit records this
-negative boundary and prioritizes the confirmed normal cold-resume feedback gap.
-Its first correction retains existing peer commit `aba5feb` and current bounded
-controllers; final packaged/runtime evidence belongs in the audit, separately
-from simulated runtime tests and Human acceptance.
+negative boundary. Cold-resume feedback, catalog truncation, global MCP OAuth,
+reasoning projection and known-new-thread history now have their own verified
+subsets. Startup retry and current inherited-settings truth have distinct rows;
+the matrix does not infer Desktop completion from those checkpoints.
 
 The fresh [MCP OAuth preflight](reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md#next-functional-preflight--stock-owned-mcp-oauth)
-now verifies an account-free local authorization/PKCE/completion flow through the
-bundled Host and both installed stock and current public `0.167.1`. Native UI
-wiring remains missing. This is real runtime contract evidence, separate from a
-future product walkthrough or real external account acceptance.
+verifies an account-free local authorization/PKCE/completion flow through the
+bundled Host and installed/public `0.167.1` stock. Native global authentication
+is now wired and has [packaged evidence](reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
+Custom/scoped/concurrent flows and real external account acceptance remain
+separate. Earlier dated entries below retain their original version scope;
+they do not override the current audit or establish a later release's behavior.
+
+Public `0.167.2` has publisher-verified release bytes and 322 stable / 470
+experimental schema files canonically identical to the prior `0.167.1`
+exports. Schema identity is not runtime parity. Combined `c3957c9` separately
+passes direct-stock cases on `0.167.2` and installed alpha, and the
+[startup-retry walk](reverse/STARTUP_RETRY_EVIDENCE.md) records the exact
+packaged runtime, failure/first-turn/restart evidence and remaining limits.
 
 ## Current Codex Desktop UI fidelity
 
-_Reviewed: 2026-11-06_
+_Current-state refresh: 2026-11-12; older dated evidence retains its own scope._
 
 The current Golden-State implementation and comparison contract is maintained
 in [Golden State A](reverse/OFFICIAL_UI_GOLDEN_STATE_A.md). The 2026-11-11
@@ -47,9 +57,28 @@ lists, quotes, tables, separators and the `23355` / `272587` code card.
 `309406` gates the 36 px dictation override, leaving the supported ordinary
 Electron primary action at 28 px with a 16 px icon. The matrix distinguishes
 the manually assembled Chromium CSS specimen from a signed-in official live
-capture. It also retains the inline-code pill as machine-actionable research
-and separates visual blocked-image evidence from the positively controlled,
-post-Native loopback image-sentinel check.
+capture. Later A6/U4 source implements the measured inline-code pill, bounded
+user Markdown and local image rendering. The current matrix separates remaining
+clipped-selection/interaction work, signed-in comparison and controlled
+post-Native image-sentinel evidence.
+
+U5 rechecks `16389.Ips7`, `182735.osar`, `f0eddefa0de7.css` and
+`e77f816560c6.css`: ordinary single-line 28 px pill, multiline 22 px card,
+20 px editor line box, 12 px horizontal multiline input padding, 8 px footer
+gap, 5 px control gaps and 8 px primary-action leading gap. The 40 rem switch
+is a **viewport media query**; the 475 px permission-label collapse is a named
+**composer-footer container query**. These are different measurements.
+Light elevation and dark surface/rim are canonical tokens, not an MD3 seed.
+The Flutter translation keeps one editor/focus/controller across layout changes
+and caps single-line measurement rather than laying out an unbounded draft.
+
+U5 peer review also distinguishes actual resolved permission/model state from
+nullable client overrides. The official permission component consumes a resolved
+bundle. Native's null sandbox is not evidence for “Ask for approval”, and the
+catalog default is not the configured/thread model. Follow-up `76e3428` uses
+truthful inherited labels in wide, compact and Home until the supported bounded
+settings projection is implemented. Owner r2 actual public/installed captures
+were independently viewed; signed-in overlays and whole-row parity remain open.
 
 ### Evidence boundary and sources
 
@@ -4979,14 +5008,15 @@ Both remain explicit supported gaps in the [functional audit](reverse/CODEX_DESK
 not a generic Human review gate.
 
 
-Public release metadata was rechecked on 2026-11-12: latest stable remains
+The earlier release check reported
 [`rust-v0.167.1`](https://github.com/openai/codex/releases/tag/rust-v0.167.1)
-(published 2026-11-10). Existing public-stock probes therefore still target the
-current stable release. This does not make installed/private-source revisions
-identical. ADR-060 records the bounded typed reasoning seam; its shared machine gates and source-bound packaged replay now pass.
+(published 2026-11-10). That current-release claim is superseded by the verified
+`0.167.2` refresh above. Earlier `0.167.1` probes retain their exact version
+scope; they are not relabeled as current-stable runtime evidence. Installed
+and public runtime revisions remain distinct. ADR-060 records the bounded typed reasoning seam; its shared machine gates and source-bound packaged replay now pass.
 [Reasoning evidence](reverse/REASONING_PROJECTION_EVIDENCE.md) preserves the
 before/after, model-fixture boundary and peer red outcomes. First-part emphasis
-remains the independent presentation follow-up.
+was subsequently translated by `8f2baaa` / `17619b9`; current A7 evidence and remaining deltas belong to the Golden-State matrix.
 
 
 ## Known-empty new-thread history admission
@@ -5002,6 +5032,10 @@ The old-source app regression reproduces the premature read. Corrected strict
 analysis, 37 history/thread cases and one lifecycle-complete product case pass.
 The first product test lacked a post-input frame, and its next version waited for
 an intentionally active sidebar animation; both negative logs remain under
-`/var/tmp/native-ui-r0.BbOvHT/new-thread-history-*`. Actual-stock after-fix,
-shared release and targeted peer review remain pending. This is a typed simulated
-product test result, not a full-process E2E or real-account claim.
+`/var/tmp/native-ui-r0.BbOvHT/new-thread-history-*`. The later combined
+`b22e955` checkpoint passes 626 default cases/five skips,
+five direct-stock cases, memory/release/source checks and targeted peer review.
+[Packaged before/after evidence](reverse/NEW_THREAD_HISTORY_EVIDENCE.md)
+verifies new chat, first Send, warm return and public full-process restart.
+Those real App/Host/stock walks are distinct from the typed simulated product
+case, and neither establishes real-account or Human acceptance.

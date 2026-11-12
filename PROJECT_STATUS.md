@@ -106,80 +106,51 @@ permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Codex and Gemini remain equal peers. Live coordination uses the official
-  `agy` TUI, separate worktrees and one writer per overlapping surface.
-- **Track F / Codex:** combined source `03b23c4` integrates global stock-owned
-  MCP OAuth, default-timeout correction `0943cd9`, U2 `d725eba` and U3
-  `22bf94e` through normal merges. Shared gates and a fresh packaged public
-  stock authentication/reload replay pass. The supported global authentication
-  subset is MATCH; parallel/scoped/custom MCP workflows remain separate research.
-- **Track F / Codex checkpoint:** known-new-thread admission `732d2a4` is
-  validated in combined source `b22e955`. [Evidence](docs/reverse/NEW_THREAD_HISTORY_EVIDENCE.md)
-  records 626 default passes/five skips, five real-stock cases, pure-Dart,
-  analysis/memory/release and exact-source three-platform CI. Actual packaged
-  old/new public stock walks verify empty new chat, first Send, warm return and
-  full process restart; installed stock confirms empty chat/first Send. Ordinary
-  history failures stay visible and all owned workers exited.
-- **Track F / Codex active slice:** never-connected local startup retry,
-  `/var/tmp/native-codex-desktop-startup-retry`, branch
-  `agent/codex-desktop-startup-retry`. Two baseline regressions now reproduce:
-  no explicit Retry after failed discovery, and a late locator result overwrites
-  terminal Stopped with Not found after shutdown. Published source `e8ece87`
-  adds explicit retry admission, epoch-fenced startup/stream delivery and failed
-  session retirement without closing app gateway streams. Strict analysis and
-  the initial four cases pass; four existing runtime/Remote cases passed at
-  that source. A subsequent Starting-notification shutdown regression was
-  reproduced and fixed in `c8f5570` with a pre-launch epoch check; all six startup
-  cases now pass. Refreshed analysis/shared gates are pending for this follow-up.
-  Two intermediate widget-driver timeouts mixing real file
-  I/O/FakeAsync remain recorded. The widget now tests the typed discovery change;
-  real filesystem/process recovery belongs to the pending packaged-stock walk.
-  Shared gates, real-stock recovery and targeted peer audit remain pending.
-  This subset does not close hot crash/draft recovery.
-- **Published reasoning data correction:** `0286a4d`, integrated in main
-  `27db663`, passes 615 default cases/five skips, five enabled stock cases,
-  analysis/pure-Dart/memory/release and source-bound actual-stock comparison.
-  The former 240-character loss is closed. [Evidence](docs/reverse/REASONING_PROJECTION_EVIDENCE.md)
-  keeps peer P2s and test/build negatives distinct from Human acceptance.
-- **Track U / Gemini:** U4 source `6bf61a7` preserves A7 commits `8f2baaa`
-  and `17619b9`. Normal merge `e052953` combines that source with new-thread
-  admission. User Markdown, 80 px local image tiles and previews retain bounded
-  text/pills, a 10 MiB encoded-input limit, four active and 64 pending loads,
-  mounted-interest retirement and decoder ownership. Root directly inspected
-  owner r5 light/dark inner-Thought and preview captures. Four model fixture
-  calls and zero image-sentinel GETs are recorded. Root's first full combined
-  run had 624 passes/five skips/two old presentation assumptions; the adapted
-  selection/escaping cases now pass within 37 focused cases. A pending Copy
-  feedback timer in the first adaptation was a test-driver omission, now
-  completed before teardown. Combined `b22e955` rerun/build and packaged F
-  replay now pass. Source, tests and captures do not close signed-in/Human visual gates.
-- **Track U / Gemini active:** U5 A11 adaptive composer and permission-control
-  translation in `/var/tmp/native-gemini-u5-a11-composer`, branch
-  `agent/gemini-golden-ui-u5-a11-composer`, based on main `9e0c8a6`.
-  Gemini owns `codex_composer.dart`, `conversation.dart`,
-  `composer_model_picker.dart`, `official_codex_theme.dart` and
-  `test/app/composer_layout_test.dart`. Current build25894 evidence, not prior
-  TUI context, controls the translation. Unrelated Home expansion is excluded.
-  Source `3e8d381` and normal follow-up `76e3428` correct two accepted truth
-  findings: a null permission override does not mean approval is required, and
-  the catalog default is not the inherited runtime model. Root inspected the
-  actual follow-up and public/installed r2 captures; wide multiline, compact and
-  Home labels are truthful. Owner release/real-stock checks precede the pending
-  combined shared gate; signed-in official comparison remains a distinct gate.
-- Heavy validation is serialized via the official TUI lease. Codex released
-  its checkpoint workers for U5; Gemini has now explicitly returned the lease
-  and all U5 surfaces. Codex owns the combined checkpoint validation and
-  packaged startup-retry walk while Gemini stays source-only. No two heavy jobs
-  run together. Flutter tests use one worker, Cargo two jobs and CMake two jobs.
-  Codex owns RuntimeController/app-shell startup state, runtime tests and shared
-  docs. The writable surfaces do not overlap. All U4 surfaces are released.
+- Program remains `SELF_ITERATION`; both Desktop tracks have machine-actionable
+  work. Codex and Gemini remain equal peers using the official `agy` TUI and
+  isolated worktrees with one writer per surface.
+- **Combined source checkpoint `c3957c9`:** normal merge preserves startup
+  `e8ece87` / `c8f5570` and U5 `3e8d381` / `76e3428`. Format/analysis,
+  pure-Dart68, 637 default cases/five skips, five stock cases each on public
+  `0.167.2` and installed alpha, memory, Linux83 and source245 pass.
+  [Startup evidence](docs/reverse/STARTUP_RETRY_EVIDENCE.md) records old/new
+  actual packaged recovery on the same App PID, both first turns saved, and
+  public history after full process restart with no extra model call.
+  All owned workers exited. Driver timeouts/early captures and fixture warnings
+  remain preserved. Connected-workspace hot recovery stays `MISSING`.
+- **Track F / Codex next:** bounded authoritative inherited model/approval/
+  sandbox settings, from supported Start/Resume/settings notifications with
+  source/freshness and generation checks. Current nullable overrides/catalog
+  are not actual inherited settings. U5's neutral inherited labels close the
+  misleading claims; they do not close this functional `PARTIAL`. Never resume
+  a cold/queued thread merely to learn settings. Codex owns domain/protocol,
+  thread/settings controllers, app wiring, the model-picker functional seam
+  and related tests; not Gemini's conversation composition.
+- **Track U / Gemini next:** U6 A7/C Shell activity card in
+  `/var/tmp/native-gemini-u6-a7-shell-card`, branch
+  `agent/gemini-golden-ui-u6-a7-shell-card`, base `c3957c9`.
+  Current25894 evidence identifies full-row disclosure and the Shell command/
+  output/status structure (`152406.jKy0`, `225284.PuGl.d` / Footer).
+  Gemini owns activity-row/diff-output/conversation/theme presentation and
+  focused card tests, preserving bounded lazy output and full-output escape.
+  U5's old branch remains frozen; U4 first-part emphasis is already implemented
+  and must not be repeated because of the previously stale A7 table prose.
+- **Hosted checkpoint:** exact-source CI43140754985 macOS/Windows builds pass.
+  First verify failed before tests at dependency installation's five-minute
+  timeout. Only that job was rerun; attempt two passes verify, macOS and Windows
+  at the exact source SHA. The original failure remains preserved; no workflow
+  change was introduced. Safe main integration and its exact-HEAD CI follow.
+- **Heavy lease:** Codex explicitly returned it to Gemini after shared gates
+  and all packaged workers exited. Codex stays source/docs-only while Gemini
+  validates U6. Flutter tests use one worker, Cargo and CMake two jobs. Do not
+  start another heavy workload without peer coordination.
 
 ## Current checkpoints
 
 Git is canonical for the current HEAD and working tree. These are immutable
 source/validation checkpoints, rather than a second branch-state database.
 
-- **Main `9e0c8a6` integration checkpoint:**
+- **Prior main `9e0c8a6` integration checkpoint:**
   [CI43131012688](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43131012688)
   passed verify/Windows/macOS at the exact SHA. It preserves combined release
   source `b22e955` and the source-bound evidence documentation; startup retry
