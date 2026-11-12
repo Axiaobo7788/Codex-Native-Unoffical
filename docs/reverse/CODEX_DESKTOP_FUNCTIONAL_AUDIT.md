@@ -16,7 +16,7 @@ a functional `MATCH` below does not close a visual `PARTIAL`.
 - Fresh isolated schema exports, executable versions and schema fingerprints
   are in `/var/tmp/native-functional-audit-dgjz20ng/`. Each executable ran with
   an empty private HOME/CODEX_HOME. No installed runtime or account setting was
-  changed. Current public stable `0.167.1` was downloaded from the [official
+  changed. The initially current public stable `0.167.1` was downloaded from the [official
   release](https://github.com/openai/codex/releases/tag/rust-v0.167.1); its archive
   SHA-256 matched the release asset digest
   `64bcc99c32e434b4bcb0508a97df9b7aeecdb97e956d976fb13661096ec4e3e2`.
@@ -48,14 +48,16 @@ a functional `MATCH` below does not close a visual `PARTIAL`.
 
 ## Current binary/schema comparison
 
-All five executable versions and both schema modes were checked in this round.
+The initial five executable versions and both schema modes were checked; a
+later refresh adds current public stable `0.167.2` below.
 Counts describe methods, not completed product capabilities.
 
 | Binary | Client requests stable / experimental-only / total | Server requests stable / experimental-only | Server notifications | Client notifications |
 |---|---:|---:|---:|---:|
 | Installed `0.167.0-alpha.3.2` | 106 / 74 / 180 | 10 / 1 | 86 | 1 |
 | Cached public `0.167.0` | 106 / 74 / 180 | 10 / 1 | 86 | 1 |
-| Current public stable `0.167.1` | 106 / 74 / 180 | 10 / 1 | 86 | 1 |
+| Previously current public stable `0.167.1` | 106 / 74 / 180 | 10 / 1 | 86 | 1 |
+| Current public stable `0.167.2` | 106 / 74 / 180 | 10 / 1 | 86 | 1 |
 | Cached Desktop train `0.167.0-alpha.4.1` | 108 / 74 / 182 | 10 / 1 | 86 | 1 |
 | Cached public alpha `0.169.0-alpha.7` | 109 / 74 / 183 | 10 / 1 | 86 | 1 |
 
@@ -316,3 +318,37 @@ Current-build source refinement: `11951.da263ae686.js` defines a nullable
 model-language setting or a public cloud preference service. It does not yet
 establish exact supported renderer locales, fallback order or signed-in
 entitlements; those remain research before implementing an independent catalog.
+
+
+## Public-stable refresh — 0.167.2
+
+The [official latest release](https://github.com/openai/codex/releases/tag/rust-v0.167.2)
+was rechecked on 2026-11-12 after the source9e0c8a6 checkpoint: `0.167.2`,
+published 2026-11-11T22:44:46Z, supersedes `0.167.1`. The standalone Linux musl
+archive digest matches the publisher asset metadata:
+`8246e846c550ea21197fcc4067bc270dca895e94ea42ed6a282e6f4e0125b15f`.
+The isolated cache is `/var/tmp/native-stock-0.167.2-audit-r1/`, with release
+metadata, binary version and `schema-comparison.json`. Export used private
+HOME/CODEX_HOME, without an app-server runtime or account session.
+
+Canonical JSON contents of all 322 stable and 470 experimental schema files
+match the earlier `0.167.1` exports; no file/method addition, removal or changed
+JSON was found. Counts remain ClientRequest106/74/180, ServerRequest10/1,
+ServerNotification86 and ClientNotification1. Stable ClientRequest SHA-256 stays
+`94074a415950787a25e09ae3b4d9de312cc264eb0f021633dfca921d300cd42a`.
+This is protocol-shape evidence, not real-runtime/workflow parity. Existing
+`0.167.1` source-bound walks remain valid for that version; fresh packaged
+startup/turn behavior against `0.167.2` is pending and planned for the next
+coherent checkpoint.
+
+Private-profile `features list` also confirms `request_permissions_tool` and
+`exec_permission_approvals` remain under development/false, while
+`incremental_tools_legacy_gcp` is stable/true. These are inspected defaults,
+not a claim about every configured provider environment.
+
+Release notes describe incremental Google Vertex AI tool updates becoming the
+stock default. Native continues to use the stock harness; unchanged exported
+schemas do not prove real provider-account behavior. Vertex credentials and
+live-account interaction were not used. Installed Desktop ASAR SHA-256 remains
+`121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`,
+so current U5 renderer evidence is not invalidated by this runtime patch.
