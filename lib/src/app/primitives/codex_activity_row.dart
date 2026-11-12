@@ -219,6 +219,13 @@ class CodexActivityRow extends StatelessWidget {
 /// `.text-size-chat` line box, `6px` icon-to-label gap, `4px` label-to-chevron gap). Only
 /// becomes an interactive button with hover ink promotion and `14px` chevron
 /// when [hasDisclosure] is `true`.
+typedef CodexInlineHeaderLabelBuilder =
+    Widget Function(
+      BuildContext context,
+      bool active,
+      Color effectiveTextColor,
+    );
+
 class CodexInlineActivityHeader extends StatefulWidget {
   const CodexInlineActivityHeader({
     super.key,
@@ -236,6 +243,8 @@ class CodexInlineActivityHeader extends StatefulWidget {
     this.onToggle,
     this.disclosureTooltip,
     this.customTextWidget,
+    this.labelBuilder,
+    this.semanticLabelOverride,
   });
 
   final String label;
@@ -252,6 +261,8 @@ class CodexInlineActivityHeader extends StatefulWidget {
   final VoidCallback? onToggle;
   final String? disclosureTooltip;
   final Widget? customTextWidget;
+  final CodexInlineHeaderLabelBuilder? labelBuilder;
+  final String? semanticLabelOverride;
 
   bool get isInteractiveEnabled => hasDisclosure && onToggle != null;
 
@@ -327,6 +338,7 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
         Flexible(
           flex: 3,
           child:
+              widget.labelBuilder?.call(context, active, effectiveTextColor) ??
               widget.customTextWidget ??
               _buildLabelText(
                 theme: theme,
@@ -383,7 +395,10 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
         acc,
       if (hasStatus) widget.statusText!,
     ];
-    final semanticLabel = semanticParts.join(', ');
+    final overrideLabel = widget.semanticLabelOverride;
+    final semanticLabel = overrideLabel != null && overrideLabel.isNotEmpty
+        ? overrideLabel
+        : semanticParts.join(', ');
     Widget trigger = Semantics(
       container: true,
       button: true,
@@ -1495,10 +1510,12 @@ class CodexInlineDiffStatsAccessory extends StatelessWidget {
     super.key,
     required this.additions,
     required this.deletions,
+    this.fontSize = OfficialCodexTheme.chatCodeFontSize,
   });
 
   final int additions;
   final int deletions;
+  final double fontSize;
 
   static String? semanticLabelFor(int additions, int deletions) {
     final parts = <String>[
@@ -1514,11 +1531,11 @@ class CodexInlineDiffStatsAccessory extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final theme = OfficialCodexTheme.of(context);
-    const baseStyle = TextStyle(
-      fontSize: OfficialCodexTheme.chatCodeFontSize,
+    final baseStyle = TextStyle(
+      fontSize: fontSize,
       height: OfficialCodexTheme.activityChatLineHeight,
       fontWeight: FontWeight.w400,
-      fontFeatures: [FontFeature.tabularFigures()],
+      fontFeatures: const [FontFeature.tabularFigures()],
     );
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1929,6 +1946,814 @@ class _ShellHoverCopyIconButtonState extends State<_ShellHoverCopyIconButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Per-file change operation kind (`225284.O3Io.ap`).
+enum CodexFileChangeKind { add, delete, update, unknown }
+
+/// Per-file change execution status (`225284.O3Io.ap`).
+enum CodexFileChangeStatus { inProgress, applied, stopped, rejected }
+
+/// Per-file disclosed diff body state (`225284.O3Io.af` / `ag` / `am`).
+enum CodexFileDiffBodyState {
+  ready,
+  loading,
+  empty,
+  previewTooLarge,
+  unavailable,
+}
+
+/// Extracts the display basename of [rawPath] (`ai.Q0` in `225284.O3Io`).
+String codexPathBasename(String rawPath) {
+  final trimmed = rawPath.trim();
+  if (trimmed.isEmpty) {
+    return rawPath;
+  }
+  final normalized = trimmed.replaceAll(r'\', '/');
+  var end = normalized.length;
+  while (end > 1 && normalized.codeUnitAt(end - 1) == 0x2F) {
+    end--;
+  }
+  final stripped = normalized.substring(0, end);
+  final slash = stripped.lastIndexOf('/');
+  if (slash < 0 || slash == stripped.length - 1) {
+    return stripped;
+  }
+  return stripped.substring(slash + 1);
+}
+
+bool _isWindowsStylePath(String normalizedPath) {
+  if (normalizedPath.startsWith('//')) {
+    return true;
+  }
+  if (normalizedPath.length < 3 || normalizedPath.codeUnitAt(1) != 0x3A) {
+    return false;
+  }
+  final drive = normalizedPath.codeUnitAt(0);
+  final isLetter =
+      (drive >= 0x41 && drive <= 0x5A) || (drive >= 0x61 && drive <= 0x7A);
+  return isLetter && normalizedPath.codeUnitAt(2) == 0x2F;
+}
+
+String _stripTrailingPathSlashes(String normalizedPath) {
+  var end = normalizedPath.length;
+  final minLength =
+      normalizedPath.length >= 3 && normalizedPath.codeUnitAt(1) == 0x3A
+      ? 3
+      : 1;
+  while (end > minLength && normalizedPath.codeUnitAt(end - 1) == 0x2F) {
+    end--;
+  }
+  return normalizedPath.substring(0, end);
+}
+
+/// Relativizes [rawPath] against [cwd] matching `182735.g3QY.ph` (`@4486914`).
+///
+/// Normalizes `\` to `/`, strips trailing `/` on [cwd], and removes a leading
+/// `<cwd>/` prefix case-insensitively on Windows drive/UNC paths and
+/// case-sensitively on POSIX paths.
+String formatCodexWorkspaceRelativePath(String rawPath, {String? cwd}) {
+  if (rawPath.isEmpty) {
+    return rawPath;
+  }
+  final pathNorm = rawPath.replaceAll(r'\', '/');
+  if (cwd == null || cwd.trim().isEmpty) {
+    return pathNorm;
+  }
+  final cwdNorm = _stripTrailingPathSlashes(cwd.trim().replaceAll(r'\', '/'));
+  if (cwdNorm.isEmpty) {
+    return pathNorm;
+  }
+  final prefix = cwdNorm.endsWith('/') ? cwdNorm : '$cwdNorm/';
+  final caseInsensitive =
+      _isWindowsStylePath(pathNorm) || _isWindowsStylePath(cwdNorm);
+  if (caseInsensitive) {
+    final lowerPath = pathNorm.toLowerCase();
+    final lowerPrefix = prefix.toLowerCase();
+    if (lowerPath.startsWith(lowerPrefix) && pathNorm.length > prefix.length) {
+      return pathNorm.substring(prefix.length);
+    }
+    return pathNorm;
+  }
+  if (pathNorm.startsWith(prefix) && pathNorm.length > prefix.length) {
+    return pathNorm.substring(prefix.length);
+  }
+  return pathNorm;
+}
+
+/// Formats the monospace path tooltip for `225284.O3Io` (`relPath`, or
+/// `relOld → relNew` when [movePath] renames/moves [path]).
+String formatCodexFileChangeTooltipPath(
+  String path, {
+  String? movePath,
+  String? cwd,
+}) {
+  final relOld = formatCodexWorkspaceRelativePath(path, cwd: cwd);
+  if (movePath == null || movePath.isEmpty || movePath == path) {
+    return relOld;
+  }
+  final relNew = formatCodexWorkspaceRelativePath(movePath, cwd: cwd);
+  return '$relOld → $relNew';
+}
+
+/// Pure presentation descriptor for a single file entry inside a `fileChange`
+/// activity item (`225284.O3Io.au` -> `O3Io.ap`).
+@immutable
+class CodexPerFileChangeItem {
+  const CodexPerFileChangeItem({
+    required this.id,
+    required this.path,
+    this.movePath,
+    this.kind = CodexFileChangeKind.update,
+    this.additions = 0,
+    this.deletions = 0,
+    this.bodyState = CodexFileDiffBodyState.unavailable,
+    this.diffLines = const <String>[],
+    this.isUnifiedDiff = true,
+    this.truncated = false,
+    this.copyText,
+    this.onRetryPreview,
+  });
+
+  final String id;
+  final String path;
+  final String? movePath;
+  final CodexFileChangeKind kind;
+  final int additions;
+  final int deletions;
+  final CodexFileDiffBodyState bodyState;
+  final List<String> diffLines;
+  final bool isUnifiedDiff;
+  final bool truncated;
+  final String? copyText;
+  final VoidCallback? onRetryPreview;
+
+  String get effectivePath {
+    final moved = movePath;
+    return moved != null && moved.isNotEmpty ? moved : path;
+  }
+
+  String get displayName => codexPathBasename(effectivePath);
+
+  bool get showsExpandedCardHeader =>
+      bodyState == CodexFileDiffBodyState.ready ||
+      bodyState == CodexFileDiffBodyState.empty;
+}
+
+/// Collapsed-row `+A -D` + optional `6×6px` kind dot (`225284.O3Io.ap`
+/// `T[73]..T[88]` + `--color-chart-blue` / `--color-chart-red`).
+class CodexPerFileStatsAccessory extends StatelessWidget {
+  const CodexPerFileStatsAccessory({
+    super.key,
+    required this.additions,
+    required this.deletions,
+    this.kind = CodexFileChangeKind.update,
+  });
+
+  static const double kindDotDiameter = 6.0;
+  static const double kindDotGap = 6.0;
+
+  final int additions;
+  final int deletions;
+  final CodexFileChangeKind kind;
+
+  @override
+  Widget build(BuildContext context) {
+    if (additions <= 0 && deletions <= 0) {
+      return const SizedBox.shrink();
+    }
+    final theme = OfficialCodexTheme.of(context);
+    final Color? dotColor = switch (kind) {
+      CodexFileChangeKind.add => OfficialCodexTheme.chartBlue.withValues(
+        alpha: 0.70,
+      ),
+      CodexFileChangeKind.delete => theme.chartRed.withValues(alpha: 0.70),
+      CodexFileChangeKind.update || CodexFileChangeKind.unknown => null,
+    };
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CodexInlineDiffStatsAccessory(
+          additions: additions,
+          deletions: deletions,
+          fontSize: OfficialCodexTheme.shellCodeFontSize,
+        ),
+        if (dotColor != null) ...[
+          const SizedBox(width: kindDotGap),
+          Container(
+            key: ValueKey('o3io-kind-dot-${kind.name}'),
+            width: kindDotDiameter,
+            height: kindDotDiameter,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Disclosed per-file diff card (`225284.O3Io.af` / `ag` / `am`, `max-h-60` =
+/// `240px`, `--color-surface-tertiary` body surface).
+class CodexPerFileDiffCard extends StatefulWidget {
+  const CodexPerFileDiffCard({
+    super.key,
+    required this.item,
+    this.cwd,
+    this.indentStart = true,
+  });
+
+  static const double maxViewportHeight = 240.0;
+  static const int maxRenderedLines = 80;
+  static const double inlineStartIndent =
+      OfficialCodexTheme.activityInlineIconSize +
+      OfficialCodexTheme.activityInlineIconGap;
+
+  final CodexPerFileChangeItem item;
+  final String? cwd;
+  final bool indentStart;
+
+  @override
+  State<CodexPerFileDiffCard> createState() => _CodexPerFileDiffCardState();
+}
+
+class _CodexPerFileDiffCardState extends State<CodexPerFileDiffCard> {
+  bool _hovered = false;
+  bool _copyFocused = false;
+  bool _copied = false;
+  Timer? _copiedResetTimer;
+
+  @override
+  void dispose() {
+    _copiedResetTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleCopyDiff() async {
+    final item = widget.item;
+    final fallbackPayload = item.diffLines.isEmpty
+        ? item.effectivePath
+        : item.diffLines.join('\n');
+    final payload = item.copyText ?? fallbackPayload;
+    try {
+      await Clipboard.setData(ClipboardData(text: payload));
+    } on Object {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    _copiedResetTimer?.cancel();
+    setState(() => _copied = true);
+    _copiedResetTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
+  }
+
+  Widget _buildPlaceholder(
+    OfficialCodexThemeData theme, {
+    required String label,
+    VoidCallback? onRetry,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8.0, 28.0, 8.0, 32.0),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: OfficialCodexTheme.activityChatFontSize,
+                height: OfficialCodexTheme.activityChatLineHeight,
+                color: theme.shellDescriptionText.withValues(alpha: 0.80),
+              ),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 8.0),
+              CodexButton(
+                label: 'Retry',
+                variant: CodexButtonVariant.ghost,
+                compact: true,
+                onPressed: onRetry,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDiffLine(
+    OfficialCodexThemeData theme,
+    TextStyle codeStyle,
+    String line, {
+    required CodexFileChangeKind kind,
+    required bool isUnifiedDiff,
+  }) {
+    final bool isAdd;
+    final bool isDel;
+    final bool isHunk;
+    final String displayLine;
+    if (!isUnifiedDiff &&
+        (kind == CodexFileChangeKind.add ||
+            kind == CodexFileChangeKind.delete)) {
+      isAdd = kind == CodexFileChangeKind.add;
+      isDel = kind == CodexFileChangeKind.delete;
+      isHunk = false;
+      displayLine = '${isAdd ? '+' : '-'}$line';
+    } else {
+      isAdd = line.startsWith('+') && !line.startsWith('+++');
+      isDel = line.startsWith('-') && !line.startsWith('---');
+      isHunk = line.startsWith('@@');
+      displayLine = line;
+    }
+    final bg = isAdd
+        ? theme.diffAddedFill
+        : isDel
+        ? theme.diffRemovedFill
+        : Colors.transparent;
+    final fg = isAdd
+        ? theme.diffAddedText
+        : isDel
+        ? theme.diffRemovedText
+        : isHunk
+        ? theme.textMuted
+        : theme.textSecondary;
+    return ColoredBox(
+      color: bg,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 1.0),
+        child: Text(
+          displayLine.isEmpty ? ' ' : displayLine,
+          softWrap: false,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: codeStyle.copyWith(color: fg),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final item = widget.item;
+    final tooltipPath = formatCodexFileChangeTooltipPath(
+      item.path,
+      movePath: item.movePath,
+      cwd: widget.cwd,
+    );
+    const codeStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: OfficialCodexTheme.shellCodeFontSize,
+      height: 1.45,
+    );
+
+    final Widget cardBody;
+    switch (item.bodyState) {
+      case CodexFileDiffBodyState.previewTooLarge:
+        cardBody = _buildPlaceholder(theme, label: 'Diff too large to preview');
+      case CodexFileDiffBodyState.unavailable:
+        cardBody = _buildPlaceholder(
+          theme,
+          label: 'Diff preview unavailable',
+          onRetry: item.onRetryPreview,
+        );
+      case CodexFileDiffBodyState.loading:
+        cardBody = _buildPlaceholder(theme, label: 'Loading diff preview…');
+      case CodexFileDiffBodyState.empty:
+        cardBody = _buildPlaceholder(
+          theme,
+          label: item.kind == CodexFileChangeKind.delete
+              ? 'Contents deleted'
+              : 'No changes',
+        );
+      case CodexFileDiffBodyState.ready:
+        if (item.diffLines.isEmpty) {
+          cardBody = _buildPlaceholder(
+            theme,
+            label: item.kind == CodexFileChangeKind.delete
+                ? 'Contents deleted'
+                : 'No changes',
+          );
+        } else {
+          final visibleLines =
+              item.diffLines.length > CodexPerFileDiffCard.maxRenderedLines
+              ? item.diffLines.sublist(0, CodexPerFileDiffCard.maxRenderedLines)
+              : item.diffLines;
+          final isTruncated =
+              item.truncated ||
+              item.diffLines.length > CodexPerFileDiffCard.maxRenderedLines;
+          cardBody = ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxHeight: CodexPerFileDiffCard.maxViewportHeight,
+            ),
+            child: ListView.builder(
+              key: ValueKey('o3io-diff-scroll-${item.id}'),
+              primary: false,
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              itemCount: visibleLines.length + (isTruncated ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= visibleLines.length) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10.0,
+                      vertical: 2.0,
+                    ),
+                    child: Text(
+                      'Showing bounded diff preview',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: codeStyle.copyWith(color: theme.textMuted),
+                    ),
+                  );
+                }
+                return _buildDiffLine(
+                  theme,
+                  codeStyle,
+                  visibleLines[index],
+                  kind: item.kind,
+                  isUnifiedDiff: item.isUnifiedDiff,
+                );
+              },
+            ),
+          );
+        }
+    }
+
+    final showsHeader = item.showsExpandedCardHeader;
+    final canCopy =
+        showsHeader &&
+        item.bodyState == CodexFileDiffBodyState.ready &&
+        (item.diffLines.isNotEmpty ||
+            (item.copyText != null && item.copyText!.isNotEmpty));
+
+    return Padding(
+      padding: EdgeInsetsDirectional.only(
+        start: widget.indentStart ? CodexPerFileDiffCard.inlineStartIndent : 0,
+        top: 6.0,
+      ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Container(
+          key: ValueKey('o3io-diff-card-${item.id}'),
+          decoration: BoxDecoration(
+            color: theme.shellBackground,
+            borderRadius: BorderRadius.circular(8.0),
+            border: Border.all(
+              color: theme.hairlineBorder,
+              width: OfficialCodexTheme.hairlineBorderWidth,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showsHeader)
+                Container(
+                  key: ValueKey('o3io-diff-header-${item.id}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10.0,
+                    vertical: 4.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.hoverTint,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.hairlineBorder,
+                        width: OfficialCodexTheme.hairlineBorderWidth,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: CodexTooltip(
+                                message: tooltipPath,
+                                monospace: true,
+                                child: Text(
+                                  item.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: codeStyle.copyWith(
+                                    color: theme.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (item.additions > 0 || item.deletions > 0) ...[
+                              const SizedBox(width: 6.0),
+                              CodexInlineDiffStatsAccessory(
+                                additions: item.additions,
+                                deletions: item.deletions,
+                                fontSize: OfficialCodexTheme.shellCodeFontSize,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (canCopy) ...[
+                        const SizedBox(width: 6.0),
+                        _ShellHoverCopyIconButton(
+                          key: ValueKey('o3io-diff-copy-${item.id}'),
+                          tooltip: _copied ? 'Copied' : 'Copy diff',
+                          visible: _hovered || _copyFocused || _copied,
+                          copied: _copied,
+                          onFocusChanged: (focused) {
+                            if (_copyFocused != focused) {
+                              setState(() => _copyFocused = focused);
+                            }
+                          },
+                          onPressed: () => unawaited(_handleCopyDiff()),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              cardBody,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Per-file inline activity row (`225284.O3Io.ap` -> `152406.BI7J.o`).
+///
+/// Translates the official verb matrix (`Creating` / `Created` / `Stopped
+/// creating` / `Rejected`, `Deleting` / `Deleted` / `Stopped deleting` /
+/// `Rejected`, `Editing` / `Edited` / `Stopped editing` / `Rejected`), swaps
+/// the expanded header to `Created file` / `Deleted file` / `Edited file` only
+/// when the inner `af` filename card header is rendered (`ready` / `empty`),
+/// and hides the collapsed `+A -D` + `6×6px` dot accessory while that card
+/// header is visible so line counts are never duplicated.
+class CodexPerFileChangeRow extends StatelessWidget {
+  const CodexPerFileChangeRow({
+    super.key,
+    required this.item,
+    this.status = CodexFileChangeStatus.applied,
+    this.cwd,
+    this.leadingIcon,
+    this.showDiffDetails = true,
+    this.isExpanded = false,
+    this.onToggle,
+    this.indentCardStart = true,
+  });
+
+  final CodexPerFileChangeItem item;
+  final CodexFileChangeStatus status;
+  final String? cwd;
+  final Widget? leadingIcon;
+  final bool showDiffDetails;
+  final bool isExpanded;
+  final VoidCallback? onToggle;
+  final bool indentCardStart;
+
+  static String verbPrefixFor(
+    CodexFileChangeKind kind,
+    CodexFileChangeStatus status,
+  ) {
+    return switch (kind) {
+      CodexFileChangeKind.add => switch (status) {
+        CodexFileChangeStatus.inProgress => 'Creating ',
+        CodexFileChangeStatus.stopped => 'Stopped creating ',
+        CodexFileChangeStatus.rejected => 'Rejected ',
+        CodexFileChangeStatus.applied => 'Created ',
+      },
+      CodexFileChangeKind.delete => switch (status) {
+        CodexFileChangeStatus.inProgress => 'Deleting ',
+        CodexFileChangeStatus.stopped => 'Stopped deleting ',
+        CodexFileChangeStatus.rejected => 'Rejected ',
+        CodexFileChangeStatus.applied => 'Deleted ',
+      },
+      CodexFileChangeKind.update || CodexFileChangeKind.unknown => switch (
+        status
+      ) {
+        CodexFileChangeStatus.inProgress => 'Editing ',
+        CodexFileChangeStatus.stopped => 'Stopped editing ',
+        CodexFileChangeStatus.rejected => 'Rejected ',
+        CodexFileChangeStatus.applied => 'Edited ',
+      },
+    };
+  }
+
+  static String expandedGenericTitleFor(CodexFileChangeKind kind) {
+    return switch (kind) {
+      CodexFileChangeKind.add => 'Created file',
+      CodexFileChangeKind.delete => 'Deleted file',
+      CodexFileChangeKind.update || CodexFileChangeKind.unknown =>
+        'Edited file',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final canDisclose = showDiffDetails && onToggle != null;
+    final effectiveExpanded = canDisclose && isExpanded;
+    final usesGenericTitle =
+        effectiveExpanded &&
+        status == CodexFileChangeStatus.applied &&
+        item.showsExpandedCardHeader;
+    final displayName = item.displayName;
+    final verbPrefix = verbPrefixFor(item.kind, status);
+    final visibleSummary = usesGenericTitle
+        ? expandedGenericTitleFor(item.kind)
+        : '$verbPrefix$displayName';
+    final tooltipPath = formatCodexFileChangeTooltipPath(
+      item.path,
+      movePath: item.movePath,
+      cwd: cwd,
+    );
+    final showRowStats =
+        !usesGenericTitle && (item.additions > 0 || item.deletions > 0);
+    final statsSemantic = showRowStats
+        ? CodexInlineDiffStatsAccessory.semanticLabelFor(
+            item.additions,
+            item.deletions,
+          )
+        : null;
+    final semanticLabel = canDisclose
+        ? <String>[
+            'Toggle diff for $displayName',
+            visibleSummary,
+            if (statsSemantic != null) statsSemantic,
+          ].join(', ')
+        : null;
+
+    final header = CodexInlineActivityHeader(
+      key: ValueKey('o3io-row-header-${item.id}'),
+      label: visibleSummary,
+      leadingIcon:
+          leadingIcon ??
+          const Icon(
+            Icons.insert_drive_file_outlined,
+            size: OfficialCodexTheme.activityInlineIconSize,
+          ),
+      hasDisclosure: canDisclose,
+      isExpanded: effectiveExpanded,
+      onToggle: canDisclose ? onToggle : null,
+      semanticLabelOverride: semanticLabel,
+      accessory: showRowStats
+          ? CodexPerFileStatsAccessory(
+              additions: item.additions,
+              deletions: item.deletions,
+              kind: item.kind,
+            )
+          : null,
+      accessorySemanticLabel: statsSemantic,
+      labelBuilder: usesGenericTitle
+          ? null
+          : (context, active, effectiveTextColor) {
+              final fileColor = active
+                  ? theme.textPrimary
+                  : theme.activityChildText;
+              final baseStyle = TextStyle(
+                fontSize: OfficialCodexTheme.activityChatFontSize,
+                height: OfficialCodexTheme.activityChatLineHeight,
+                fontWeight: FontWeight.w400,
+                color: effectiveTextColor,
+              );
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(verbPrefix, maxLines: 1, style: baseStyle),
+                  Flexible(
+                    child: CodexTooltip(
+                      message: tooltipPath,
+                      monospace: true,
+                      child: Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: baseStyle.copyWith(
+                          color: fileColor,
+                          decoration: TextDecoration.underline,
+                          decorationStyle: TextDecorationStyle.dotted,
+                          decorationColor: fileColor.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+    );
+
+    if (!effectiveExpanded) {
+      return Align(alignment: AlignmentDirectional.centerStart, child: header);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Align(alignment: AlignmentDirectional.centerStart, child: header),
+        CodexPerFileDiffCard(
+          item: item,
+          cwd: cwd,
+          indentStart: indentCardStart,
+        ),
+      ],
+    );
+  }
+}
+
+/// Multi-file `fileChange` container (`225284.O3Io.au` +
+/// `e77f816560c6.css` `--conversation-patch-file-gap`).
+///
+/// Renders one independent [CodexPerFileChangeRow] per entry in [files] with
+/// `16px` gap on the standalone timeline and `4px` gap inside a grouped
+/// activity block (`225284 @ 143050`).
+class CodexFileChangeActivityList extends StatelessWidget {
+  const CodexFileChangeActivityList({
+    super.key,
+    required this.files,
+    this.status = CodexFileChangeStatus.applied,
+    this.cwd,
+    this.grouped = false,
+    this.showDiffDetails = true,
+    this.expandedFileIds = const <String>{},
+    this.onToggleFile,
+    this.totalFileCount,
+    this.leadingIcon,
+  });
+
+  final List<CodexPerFileChangeItem> files;
+  final CodexFileChangeStatus status;
+  final String? cwd;
+  final bool grouped;
+  final bool showDiffDetails;
+  final Set<String> expandedFileIds;
+  final ValueChanged<CodexPerFileChangeItem>? onToggleFile;
+  final int? totalFileCount;
+  final Widget? leadingIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    if (files.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final theme = OfficialCodexTheme.of(context);
+    final gap = grouped
+        ? OfficialCodexTheme.conversationGroupedItemGap
+        : OfficialCodexTheme.conversationItemGap;
+    final omittedCount =
+        totalFileCount != null && totalFileCount! > files.length
+        ? totalFileCount! - files.length
+        : 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < files.length; i++) ...[
+          if (i > 0) SizedBox(height: gap),
+          CodexPerFileChangeRow(
+            key: ValueKey('o3io-file-row-${files[i].id}'),
+            item: files[i],
+            status: status,
+            cwd: cwd,
+            leadingIcon: leadingIcon,
+            showDiffDetails: showDiffDetails,
+            isExpanded: expandedFileIds.contains(files[i].id),
+            onToggle: showDiffDetails && onToggleFile != null
+                ? () => onToggleFile!(files[i])
+                : null,
+          ),
+        ],
+        if (omittedCount > 0) ...[
+          SizedBox(height: gap),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              start: CodexPerFileDiffCard.inlineStartIndent,
+            ),
+            child: Text(
+              '+$omittedCount more ${omittedCount == 1 ? 'file' : 'files'} '
+              'not shown',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: OfficialCodexTheme.shellCodeFontSize,
+                height: OfficialCodexTheme.activityChatLineHeight,
+                color: theme.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

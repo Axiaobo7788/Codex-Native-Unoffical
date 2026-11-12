@@ -10,11 +10,13 @@ class CodexTooltip extends StatelessWidget {
     required this.message,
     required this.child,
     this.waitDuration = const Duration(milliseconds: 300),
+    this.monospace = false,
   });
 
   final String message;
   final Widget child;
   final Duration waitDuration;
+  final bool monospace;
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +45,9 @@ class CodexTooltip extends StatelessWidget {
           ),
         ],
       ),
-      textStyle: const TextStyle(
-        color: Color(0xFFFFFFFF),
+      textStyle: TextStyle(
+        color: const Color(0xFFFFFFFF),
+        fontFamily: monospace ? 'monospace' : null,
         fontSize: 12.0,
         fontWeight: FontWeight.w500,
         height: 1.33,

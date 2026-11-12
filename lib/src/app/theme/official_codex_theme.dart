@@ -174,6 +174,11 @@ abstract final class OfficialCodexTheme {
   // The shipped Desktop fallback resolves both roles through --blue-300.
   static const Color chartBlue = Color(0xFF339CFF);
   static const Color sidebarUnreadIndicatorColor = chartBlue;
+
+  // `--color-chart-red: var(--app-color-accent-red)` ->
+  // `light-dark(var(--red-500), var(--red-300))` (`e77f816560c6.css`).
+  static const Color lightChartRed = Color(0xFFE02E2A);
+  static const Color darkChartRed = Color(0xFFFF6764);
   static const BoxShadow shellPageShadow = BoxShadow(
     color: Color(0x0D000000),
     offset: Offset(0, 4),
@@ -522,6 +527,11 @@ final class OfficialCodexThemeData {
   /// used for shell header, `$ <command>`, and shell output text in `225284.PuGl.d`.
   Color get shellDescriptionText =>
       isDark ? const Color(0xB3DFDFDF) : const Color(0xB31A1C1F);
+
+  /// `--color-chart-red` (`225284.O3Io.ap` deleted-file indicator dot).
+  Color get chartRed => isDark
+      ? OfficialCodexTheme.darkChartRed
+      : OfficialCodexTheme.lightChartRed;
 
   static const dark = OfficialCodexThemeData(
     brightness: Brightness.dark,
