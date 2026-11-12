@@ -127,8 +127,10 @@ permission to lower the engineering or visual quality bar.
   terminal Stopped with Not found after shutdown. Current uncommitted source
   adds explicit retry admission, epoch-fenced startup/stream delivery and failed
   session retirement without closing app gateway streams. Strict analysis and
-  all four new cases pass; four existing runtime/Remote cases passed at the same
-  production source. Two intermediate widget-driver timeouts mixing real file
+  the initial four cases pass; four existing runtime/Remote cases passed at
+  that source. A subsequent Starting-notification shutdown regression was
+  reproduced and fixed with a pre-launch epoch check; all six startup cases
+  now pass. Refreshed analysis/shared gates are pending for this follow-up. Two intermediate widget-driver timeouts mixing real file
   I/O/FakeAsync remain recorded. The widget now tests the typed discovery change;
   real filesystem/process recovery belongs to the pending packaged-stock walk.
   Shared gates, real-stock recovery and targeted peer audit remain pending.

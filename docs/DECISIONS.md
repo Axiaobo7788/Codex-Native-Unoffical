@@ -2761,8 +2761,11 @@ model for the current measurement terminology.
   before hot recovery becomes safe. This is staged implementation, not a
   decision to exclude that supported workflow.
 - **Evidence boundary:** Two old-source regressions are red; four corrected
-  startup cases and strict analysis pass. Existing runtime/Remote cases also
-  pass at this production source. Unit/widget fixtures are not real-stock
+  startup cases and strict analysis pass at the initial source. A subsequent
+  synchronous Starting-listener shutdown regression is red-before-green; a
+  pre-launch epoch check closes it and all six startup cases pass. Existing
+  runtime/Remote cases pass at the initial source; refreshed shared gates remain
+  pending for the follow-up. Unit/widget fixtures are not real-stock
   process evidence. Shared/packaged-stock validation and targeted peer audit
   are pending at this source checkpoint. Mixed real-I/O/FakeAsync test-driver
   timeouts are retained rather than hidden by the later fixture correction.

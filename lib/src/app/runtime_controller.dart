@@ -1019,6 +1019,10 @@ class RuntimeController extends ChangeNotifier
           executablePath: executable,
         ),
       );
+      // A Starting listener may synchronously close the application.
+      if (!_isCurrentDesktopAttempt(epoch)) {
+        return;
+      }
       final transport = await _transportStarter(hostExecutable, executable);
       if (!_isCurrentDesktopAttempt(epoch)) {
         await transport.close();

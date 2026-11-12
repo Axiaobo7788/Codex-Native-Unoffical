@@ -119,6 +119,37 @@ void main() {
     },
   );
 
+  for (final phase in [
+    RuntimeConnectionState.locating,
+    RuntimeConnectionState.starting,
+  ]) {
+    test(
+      'shutdown from $phase notification prevents a later Host launch',
+      () async {
+        var launches = 0;
+        Future<void>? stopping;
+        final controller = RuntimeController(
+          locator: _DeferredLocator(Future.value('/fixture/codex')),
+          hostLocator: _FixedHostLocator(),
+          transportStarter: (_, _) async {
+            launches += 1;
+            throw StateError('Host launched after a terminal notification');
+          },
+        );
+        controller.addListener(() {
+          if (controller.snapshot.state == phase) {
+            stopping = controller.shutdown();
+          }
+        });
+        await controller.start();
+        await stopping;
+        expect(launches, 0);
+        expect(controller.snapshot.state, RuntimeConnectionState.stopped);
+        controller.dispose();
+      },
+    );
+  }
+
   test('shutdown closes a late Host startup without initializing it', () async {
     final child = _InitializeChild();
     final launched = Completer<void>();
