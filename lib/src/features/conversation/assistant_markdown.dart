@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -542,6 +543,13 @@ class UserMessageMarkdown extends StatelessWidget {
       fontFamilyFallback: theme.textTheme.bodyMedium?.fontFamilyFallback,
     );
     if (plainTextOnly || data.length > maxSourceCharacters) {
+      if (!includeSelectionArea) {
+        return Text(
+          source,
+          key: const ValueKey('user-bounded-text'),
+          style: bodyStyle,
+        );
+      }
       return SelectableText(
         source,
         key: const ValueKey('user-bounded-text'),
@@ -857,73 +865,78 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
             OfficialCodexTheme.chatCodeBlockMinLineHeight,
           ) /
           codeFontSize;
-      return Container(
-        key: const ValueKey('desktop-markdown-code-block'),
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: codeSurface,
-          border: Border.all(
-            color: codexTheme.hairlineBorder,
-            width: OfficialCodexTheme.codeBlockBorderWidth,
+      return CodexMarkdownCodeBlockBox(
+        child: Container(
+          key: const ValueKey('desktop-markdown-code-block'),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: codeSurface,
+            border: Border.all(
+              color: codexTheme.hairlineBorder,
+              width: OfficialCodexTheme.codeBlockBorderWidth,
+            ),
+            borderRadius: BorderRadius.circular(
+              OfficialCodexTheme.codeBlockRadius,
+            ),
           ),
-          borderRadius: BorderRadius.circular(
-            OfficialCodexTheme.codeBlockRadius,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight: OfficialCodexTheme.codeBlockHeaderHeight,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 6, 6, 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontSize: 13,
-                          height: 18 / 13,
-                          fontWeight: FontWeight.w500,
-                          color: palette.textPrimary,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: OfficialCodexTheme.codeBlockHeaderHeight,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 6, 6, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                fontSize: 13,
+                                height: 18 / 13,
+                                fontWeight: FontWeight.w500,
+                                color: palette.textPrimary,
+                              ),
                         ),
                       ),
-                    ),
-                    CodexIconButton(
-                      key: const ValueKey('desktop-markdown-code-copy'),
-                      size: 28,
-                      iconSize: 16,
-                      tooltip: _copied ? 'Copied' : 'Copy code',
-                      onPressed: _copyCode,
-                      icon: Icon(
-                        _copied ? Icons.check_rounded : Icons.copy_rounded,
-                        color: _copied ? palette.success : null,
+                      CodexMarkdownClipInertControl(
+                        child: CodexIconButton(
+                          key: const ValueKey('desktop-markdown-code-copy'),
+                          size: 28,
+                          iconSize: 16,
+                          tooltip: _copied ? 'Copied' : 'Copy code',
+                          onPressed: _copyCode,
+                          icon: Icon(
+                            _copied ? Icons.check_rounded : Icons.copy_rounded,
+                            color: _copied ? palette.success : null,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text(
-                widget.code,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                  fontSize: codeFontSize,
-                  height: codeLineHeight,
-                  color: palette.textPrimary,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  widget.code,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    fontSize: codeFontSize,
+                    height: codeLineHeight,
+                    color: palette.textPrimary,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -935,110 +948,273 @@ class _FencedCodeBlockViewState extends State<_FencedCodeBlockView> {
     final headerSurface = codexTheme.isDark
         ? const Color(0xFF1F201F)
         : const Color(0xFFEAEAEA);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: codeSurface,
-        border: Border.all(
-          color: codexTheme.hairlineBorder,
-          width: OfficialCodexTheme.hairlineBorderWidth,
+    return CodexMarkdownCodeBlockBox(
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: codeSurface,
+          border: Border.all(
+            color: codexTheme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+          borderRadius: BorderRadius.circular(
+            OfficialCodexTheme.activityRowRadius,
+          ),
         ),
-        borderRadius: BorderRadius.circular(
-          OfficialCodexTheme.activityRowRadius,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: headerSurface,
-              border: Border(
-                bottom: BorderSide(
-                  color: codexTheme.hairlineBorder,
-                  width: OfficialCodexTheme.hairlineBorderWidth,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontFamily: 'monospace',
-                    color: palette.textSecondary,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: headerSurface,
+                border: Border(
+                  bottom: BorderSide(
+                    color: codexTheme.hairlineBorder,
+                    width: OfficialCodexTheme.hairlineBorderWidth,
                   ),
                 ),
-                const Spacer(),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _copyCode,
-                  child: MouseRegion(
-                    onEnter: (_) => setState(() => _copyHovered = true),
-                    onExit: (_) => setState(() => _copyHovered = false),
-                    cursor: SystemMouseCursors.click,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _copyHovered
-                            ? codexTheme.hoverTint
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _copied ? Icons.check_rounded : Icons.copy_rounded,
-                            size: 13,
-                            color: _copied
-                                ? palette.success
-                                : (_copyHovered
-                                      ? palette.textPrimary
-                                      : palette.textSecondary),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontFamily: 'monospace',
+                      color: palette.textSecondary,
+                    ),
+                  ),
+                  const Spacer(),
+                  CodexMarkdownClipInertControl(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _copyCode,
+                      child: MouseRegion(
+                        onEnter: (_) => setState(() => _copyHovered = true),
+                        onExit: (_) => setState(() => _copyHovered = false),
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _copied ? 'Copied' : 'Copy',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: _copied
-                                      ? palette.success
-                                      : (_copyHovered
-                                            ? palette.textPrimary
-                                            : palette.textSecondary),
-                                ),
+                          decoration: BoxDecoration(
+                            color: _copyHovered
+                                ? codexTheme.hoverTint
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _copied
+                                    ? Icons.check_rounded
+                                    : Icons.copy_rounded,
+                                size: 13,
+                                color: _copied
+                                    ? palette.success
+                                    : (_copyHovered
+                                          ? palette.textPrimary
+                                          : palette.textSecondary),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _copied ? 'Copied' : 'Copy',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: _copied
+                                          ? palette.success
+                                          : (_copyHovered
+                                                ? palette.textPrimary
+                                                : palette.textSecondary),
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Text(
-              widget.code,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
-                fontSize: 12.5,
-                height: 1.5,
-                color: palette.textPrimary,
+                ],
               ),
             ),
-          ),
-        ],
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Text(
+                widget.code,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: palette.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+}
+
+/// Render-tree wrapper matching official `14353.dKZq`
+/// `[data-markdown-copy="code-block"]:not(pre)` so collapsed user-message
+/// viewports can expand `max-height` past `19lh` when a fenced code card
+/// straddles the clip boundary instead of slicing the card mid-frame.
+class CodexMarkdownCodeBlockBox extends SingleChildRenderObjectWidget {
+  const CodexMarkdownCodeBlockBox({super.key, required super.child});
+
+  @override
+  RenderCodexMarkdownCodeBlockBox createRenderObject(BuildContext context) =>
+      RenderCodexMarkdownCodeBlockBox();
+}
+
+class RenderCodexMarkdownCodeBlockBox extends RenderProxyBox {
+  Size? _laidOutSize;
+  Size? get laidOutSize => _laidOutSize;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _laidOutSize = size;
+  }
+}
+
+/// Marks an interactive Markdown control (such as a fenced code-block Copy
+/// button) so collapsed user-message viewports (`14353.dKZq` `IntersectionObserver`
+/// `intersectionRatio >= 1` rule for non-link controls) can synchronously gate
+/// pointer hit-testing, semantics (`aria-hidden="true"`), and keyboard focus
+/// (`inert`) whenever the control is partially or completely clipped.
+class CodexMarkdownClipInertControl extends StatefulWidget {
+  const CodexMarkdownClipInertControl({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<CodexMarkdownClipInertControl> createState() =>
+      _CodexMarkdownClipInertControlState();
+}
+
+class _CodexMarkdownClipInertControlState
+    extends State<CodexMarkdownClipInertControl> {
+  late final FocusNode _focusNode = FocusNode(
+    debugLabel: 'CodexMarkdownClipInertControl',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus.withExternalFocusNode(
+      focusNode: _focusNode,
+      includeSemantics: false,
+      child: _MarkdownClipInertRenderObjectWidget(
+        focusNode: _focusNode,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _MarkdownClipInertRenderObjectWidget
+    extends SingleChildRenderObjectWidget {
+  const _MarkdownClipInertRenderObjectWidget({
+    required this.focusNode,
+    required super.child,
+  });
+
+  final FocusNode focusNode;
+
+  @override
+  RenderCodexMarkdownClipInertControl createRenderObject(
+    BuildContext context,
+  ) => RenderCodexMarkdownClipInertControl(focusNode: focusNode);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderCodexMarkdownClipInertControl renderObject,
+  ) {
+    renderObject.focusNode = focusNode;
+  }
+}
+
+class RenderCodexMarkdownClipInertControl extends RenderProxyBox {
+  RenderCodexMarkdownClipInertControl({required FocusNode focusNode}) {
+    _focusNode = focusNode;
+  }
+
+  late FocusNode _focusNode;
+  FocusNode get focusNode => _focusNode;
+  set focusNode(FocusNode value) {
+    if (identical(_focusNode, value)) {
+      return;
+    }
+    _focusNode = value;
+    _focusNode
+      ..descendantsAreFocusable = !_inert
+      ..descendantsAreTraversable = !_inert;
+  }
+
+  bool _inert = false;
+  bool get inert => _inert;
+
+  Size? _laidOutSize;
+  Size? get laidOutSize => _laidOutSize;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _laidOutSize = size;
+  }
+
+  void setClippedInert(bool value) {
+    if (_inert == value) {
+      return;
+    }
+    _inert = value;
+    if (value && _focusNode.hasFocus) {
+      final targetNode = _focusNode;
+      scheduleMicrotask(() {
+        if (!attached || !identical(_focusNode, targetNode)) {
+          return;
+        }
+        targetNode
+          ..descendantsAreFocusable = !_inert
+          ..descendantsAreTraversable = !_inert;
+      });
+    } else {
+      _focusNode
+        ..descendantsAreFocusable = !value
+        ..descendantsAreTraversable = !value;
+    }
+    markNeedsSemanticsUpdate();
+  }
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (_inert) {
+      return false;
+    }
+    return super.hitTest(result, position: position);
+  }
+
+  @override
+  void visitChildrenForSemantics(RenderObjectVisitor visitor) {
+    if (_inert) {
+      return;
+    }
+    super.visitChildrenForSemantics(visitor);
   }
 }
 

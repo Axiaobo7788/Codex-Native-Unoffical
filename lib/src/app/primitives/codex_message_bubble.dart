@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../features/conversation/assistant_markdown.dart';
 import '../theme/official_codex_theme.dart';
@@ -17,22 +18,21 @@ import '../theme/official_codex_theme.dart';
 /// - `22px` borderless radius (`--radius-2xl`), `16×10` padding, `5%` ink fill
 /// - `14px` `.text-size-chat` (`sansFontSize.default = 14`) with `1.625`
 ///   `leading-relaxed` line box and zero compact-only negative letter-spacing
-/// - `20`-line collapse (`D = 20`, bounded measurement slice `B = 512 * D = 10,240`):
-///   in official `14353.dKZq`, `P($ ? R.slice(0, B) : R)` slices child source
-///   only when `R.length > B`; for `<= 10,240` chars, `dKZq` clips full children
-///   via CSS `max-height: 19lh` + `overflow-hidden`, toggles `inert` /
-///   `aria-hidden="true"` via `IntersectionObserver` only on clipped interactive
-///   descendants (`a[href]`, `button`, inputs, `[tabindex]`), appends an
-///   `aria-hidden` `'…'` line, and renders a `data-markdown-copy="exclude"`
-///   `'Show more'` / `'Show less'` button (`ghostUserMessage` + rotating
-///   `.icon-2xs` chevron), while `225284.y5H2` toolbar Copy copies the full
-///   prompt in both states.
-/// - Calibrated Flutter `SelectableText` tradeoff: because `SelectableText`
-///   (`EditableText`) scrolls internally under bounded `maxLines`/`maxHeight`
-///   and projects root-overlay selection handles outside a `ClipRect` if
-///   offscreen lines remain laid out, collapsed mode renders the measured
-///   `19`-line visible prefix (scoping collapsed selection to visible lines
-///   until expanded, while toolbar Copy still copies the full prompt).
+/// - `20`-line actual rendered-height collapse (`D = 20`, bounded measurement
+///   slice `B = 512 * D = 10,240`):
+///   - `189497.oQwr.ee` measures `collapsedHeightPx = Math.ceil(lineHeightPx * D)`
+///     and `contentHeightPx = Math.ceil(scrollHeight)`, collapsing iff
+///     `contentHeightPx > collapsedHeightPx + 1` (or `R.length > B`).
+///   - `14353.dKZq.S` passes `R` uncorrupted when `R.length <= B` (`P($ ? R.slice(0, B) : R)`),
+///     clips rendered children at `Math.ceil(lineHeightPx * (D - 1))` (`19lh`),
+///     expands the clip height to `Math.ceil(codeBlock.bottom)` when any
+///     `[data-markdown-copy="code-block"]:not(pre)` straddles the clip boundary
+///     (`!forceCollapsible`), gates clipped interactive descendants (`inert` +
+///     `aria-hidden="true"` with `intersectionRatio > 0` for links and `>= 1`
+///     for non-link controls), scopes collapsed text selection to the visible
+///     viewport while excluding `'…'` and `'Show more'` / `'Show less'`
+///     (`data-markdown-copy="exclude"`), and preserves `225284.y5H2` full-prompt
+///     toolbar Copy in both states.
 class CodexMessageBubble extends StatefulWidget {
   const CodexMessageBubble({
     super.key,
@@ -69,114 +69,81 @@ class CodexMessageBubble extends StatefulWidget {
 
 class _CodexMessageBubbleState extends State<CodexMessageBubble> {
   bool _isExpanded = false;
-  _CollapseLayoutCache? _layoutCache;
+  _LineHeightCache? _lineHeightCache;
+  late final _ClippedUserSelectionContainerDelegate _selectionDelegate =
+      _ClippedUserSelectionContainerDelegate();
 
   @override
   void didUpdateWidget(covariant CodexMessageBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.text != oldWidget.text) {
+      if (_isExpanded && _selectionDelegate.value.hasSelection) {
+        _selectionDelegate.dispatchSelectionEvent(const ClearSelectionEvent());
+      }
       _isExpanded = false;
-      _layoutCache = null;
-    } else if (widget.maxCollapsedLines != oldWidget.maxCollapsedLines) {
-      _layoutCache = null;
     }
+  }
+
+  @override
+  void dispose() {
+    _selectionDelegate.dispose();
+    super.dispose();
   }
 
   void _toggleExpanded() {
+    final nextExpanded = !_isExpanded;
+    if (!nextExpanded && _selectionDelegate.value.hasSelection) {
+      _selectionDelegate.dispatchSelectionEvent(const ClearSelectionEvent());
+    }
     setState(() {
-      _isExpanded = !_isExpanded;
+      _isExpanded = nextExpanded;
     });
   }
 
-  _CollapseLayoutCache _resolveCollapseLayout({
+  double _resolveSingleLineHeight({
     required TextStyle effectiveStyle,
     required TextDirection textDirection,
     required TextScaler textScaler,
-    required double maxTextWidth,
+    required Locale? locale,
   }) {
-    final safeCollapsedLines = math.max(1, widget.maxCollapsedLines);
-    final cached = _layoutCache;
+    final cached = _lineHeightCache;
     if (cached != null &&
-        (identical(cached.sourceText, widget.text) ||
-            cached.sourceText == widget.text) &&
-        cached.maxCollapsedLines == safeCollapsedLines &&
-        (cached.maxTextWidth - maxTextWidth).abs() < 0.01 &&
         cached.effectiveStyle == effectiveStyle &&
         cached.textDirection == textDirection &&
-        cached.textScaler == textScaler) {
-      return cached;
+        cached.textScaler == textScaler &&
+        cached.locale == locale) {
+      return cached.lineHeightPx;
     }
 
-    final collapsedBudget =
-        safeCollapsedLines *
-        OfficialCodexTheme.userMessageCollapsedCharsPerLine;
-    final measurementSource = _sliceCodeUnitsSafe(widget.text, collapsedBudget);
-    final exceededBudget = widget.text.length > measurementSource.length;
-
-    bool isCollapsible;
-    String collapsedText;
-
-    if (measurementSource.isEmpty) {
-      isCollapsible = false;
-      collapsedText = '';
-    } else {
-      final painter = TextPainter(
-        text: TextSpan(text: measurementSource, style: effectiveStyle),
-        textDirection: textDirection,
-        textScaler: textScaler,
-        maxLines: safeCollapsedLines,
-      );
-      try {
-        painter.layout(maxWidth: maxTextWidth);
-        final exceededLines = painter.didExceedMaxLines;
-        if (!exceededBudget && !exceededLines) {
-          isCollapsible = false;
-          collapsedText = widget.text;
-        } else {
-          isCollapsible = true;
-          final visibleLines = safeCollapsedLines > 2
-              ? safeCollapsedLines - 1
-              : safeCollapsedLines;
-          final metrics = painter.computeLineMetrics();
-          if (metrics.isEmpty) {
-            collapsedText = '';
-          } else {
-            final lastLineIndex = math.min(visibleLines, metrics.length) - 1;
-            var lineCenterY = 0.0;
-            for (var i = 0; i < lastLineIndex; i += 1) {
-              lineCenterY += metrics[i].height;
-            }
-            lineCenterY += metrics[lastLineIndex].height * 0.5;
-            final edgeX = textDirection == TextDirection.rtl
-                ? 0.0
-                : maxTextWidth;
-            final endOffset = painter
-                .getPositionForOffset(Offset(edgeX, lineCenterY))
-                .offset
-                .clamp(0, measurementSource.length);
-            collapsedText = _sliceCodeUnitsSafe(
-              measurementSource,
-              endOffset,
-            ).trimRight();
-          }
-        }
-      } finally {
-        painter.dispose();
-      }
+    final painter = TextPainter(
+      text: TextSpan(text: 'M', style: effectiveStyle),
+      textDirection: textDirection,
+      textScaler: textScaler,
+      locale: locale,
+      maxLines: 1,
+    );
+    late final double measured;
+    try {
+      painter.layout();
+      measured = painter.height > 0
+          ? painter.height
+          : textScaler.scale(
+              OfficialCodexTheme.userMessageFontSize *
+                  OfficialCodexTheme.userMessageLineHeight,
+            );
+    } finally {
+      painter.dispose();
     }
 
-    final nextCache = _CollapseLayoutCache(
-      sourceText: widget.text,
-      maxCollapsedLines: safeCollapsedLines,
-      maxTextWidth: maxTextWidth,
+    final nextCache = _LineHeightCache(
       effectiveStyle: effectiveStyle,
       textDirection: textDirection,
       textScaler: textScaler,
-      isCollapsible: isCollapsible,
-      collapsedText: collapsedText,
+      locale: locale,
+      lineHeightPx: measured,
     );
-    _layoutCache = nextCache;
-    return nextCache;
+    _lineHeightCache = nextCache;
+    return measured;
   }
 
   static String _sliceCodeUnitsSafe(String text, int maxCodeUnits) {
@@ -197,6 +164,7 @@ class _CodexMessageBubbleState extends State<CodexMessageBubble> {
   @override
   Widget build(BuildContext context) {
     final theme = OfficialCodexTheme.of(context);
+    final materialTheme = Theme.of(context);
     const horizontalPadding = OfficialCodexTheme.userMessageHorizontalPadding;
     const verticalPadding = OfficialCodexTheme.userMessageVerticalPadding;
     const fontSize = OfficialCodexTheme.userMessageFontSize;
@@ -205,11 +173,41 @@ class _CodexMessageBubbleState extends State<CodexMessageBubble> {
       color: theme.textPrimary,
       fontSize: fontSize,
       height: OfficialCodexTheme.userMessageLineHeight,
+      fontFamily: materialTheme.textTheme.bodyMedium?.fontFamily,
+      fontFamilyFallback:
+          materialTheme.textTheme.bodyMedium?.fontFamilyFallback,
     );
     final effectiveStyle = DefaultTextStyle.of(context).style
         .merge(messageStyle);
     final textDirection = Directionality.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
+    final locale = Localizations.maybeLocaleOf(context);
+    final lineHeightPx = _resolveSingleLineHeight(
+      effectiveStyle: effectiveStyle,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      locale: locale,
+    );
+
+    final safeCollapsedLines = math.max(1, widget.maxCollapsedLines);
+    final collapsedBudget =
+        safeCollapsedLines *
+        OfficialCodexTheme.userMessageCollapsedCharsPerLine;
+    final forceCollapsible =
+        !widget.forceExpanded && widget.text.length > collapsedBudget;
+    final showExpandedSource = _isExpanded || widget.forceExpanded;
+    final safeMaxExpanded = math.max(1, widget.maxExpandedCharacters);
+    final expandedTruncated =
+        showExpandedSource && widget.text.length > safeMaxExpanded;
+    final displayText = showExpandedSource
+        ? _sliceCodeUnitsSafe(widget.text, safeMaxExpanded)
+        : (forceCollapsible
+              ? _sliceCodeUnitsSafe(widget.text, collapsedBudget)
+              : widget.text);
+    final usePlainText =
+        displayText.isEmpty ||
+        widget.plainTextOnly ||
+        displayText.length > UserMessageMarkdown.maxSourceCharacters;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -222,30 +220,18 @@ class _CodexMessageBubbleState extends State<CodexMessageBubble> {
           rawMaxBubbleWidth,
           horizontalPadding * 2 + 1.0,
         );
-        final maxTextWidth = maxBubbleWidth - horizontalPadding * 2;
 
-        final collapseLayout = _resolveCollapseLayout(
-          effectiveStyle: effectiveStyle,
-          textDirection: textDirection,
-          textScaler: textScaler,
-          maxTextWidth: maxTextWidth,
-        );
-
-        final isCollapsible =
-            collapseLayout.isCollapsible && !widget.forceExpanded;
-        final showFull = _isExpanded || !isCollapsible || widget.forceExpanded;
-        final safeMaxExpanded = math.max(1, widget.maxExpandedCharacters);
-        final expandedTruncated =
-            showFull && widget.text.length > safeMaxExpanded;
-        final displayText = showFull
-            ? _sliceCodeUnitsSafe(widget.text, safeMaxExpanded)
-            : collapseLayout.collapsedText;
-        final showEllipsisLine =
-            (!showFull && isCollapsible) || expandedTruncated;
-        final usePlainText =
-            displayText.isEmpty ||
-            widget.plainTextOnly ||
-            displayText.length > UserMessageMarkdown.maxSourceCharacters;
+        final Widget contentChild = usePlainText
+            ? Text(
+                displayText,
+                key: const ValueKey('user-bounded-text'),
+                style: messageStyle,
+              )
+            : UserMessageMarkdown(
+                data: displayText,
+                includeSelectionArea: false,
+                externalLinkLauncher: widget.externalLinkLauncher,
+              );
 
         return Align(
           alignment: Alignment.centerRight,
@@ -274,29 +260,64 @@ class _CodexMessageBubbleState extends State<CodexMessageBubble> {
                       height: OfficialCodexTheme.userMessageAttachmentGap,
                     ),
                   ],
-                  if (usePlainText)
-                    SelectableText(
-                      displayText,
-                      key: const ValueKey('user-bounded-text'),
-                      style: messageStyle,
-                    )
-                  else
-                    UserMessageMarkdown(
-                      data: displayText,
-                      externalLinkLauncher: widget.externalLinkLauncher,
-                    ),
-                  if (showEllipsisLine)
-                    ExcludeSemantics(child: Text('…', style: messageStyle)),
-                  if (isCollapsible) ...[
-                    const SizedBox(
-                      height: OfficialCodexTheme.userMessageExpandGap,
-                    ),
-                    _UserMessageExpandButton(
-                      key: widget.expandKey,
+                  SelectionArea(
+                    child: _UserMessageCollapsibleLayout(
+                      expandedTruncated: expandedTruncated,
                       isExpanded: _isExpanded,
-                      onPressed: _toggleExpanded,
+                      lineHeightPx: lineHeightPx,
+                      textDirection: textDirection,
+                      selectionDelegate: _selectionDelegate,
+                      children: [
+                        SelectionContainer(
+                          delegate: _selectionDelegate,
+                          child: _UserMessageClipViewport(
+                            key: const ValueKey('user-message-clip-viewport'),
+                            lineHeightPx: lineHeightPx,
+                            maxCollapsedLines: safeCollapsedLines,
+                            forceCollapsible: forceCollapsible,
+                            forceExpanded: widget.forceExpanded,
+                            isExpanded: _isExpanded,
+                            child: contentChild,
+                          ),
+                        ),
+                        SelectionContainer.disabled(
+                          child: _UserMessageCollapseChromeBuilder(
+                            builder: (context, chromeConstraints) {
+                              if (!chromeConstraints.showEllipsis &&
+                                  !chromeConstraints.showToggle) {
+                                return const SizedBox.shrink();
+                              }
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (chromeConstraints.showEllipsis)
+                                    ExcludeSemantics(
+                                      child: Text('…', style: messageStyle),
+                                    ),
+                                  if (chromeConstraints.showToggle) ...[
+                                    const SizedBox(
+                                      height: OfficialCodexTheme
+                                          .userMessageExpandGap,
+                                    ),
+                                    _UserMessageExpandButton(
+                                      key:
+                                          widget.expandKey ??
+                                          const ValueKey(
+                                            'user-message-expand-toggle',
+                                          ),
+                                      isExpanded: chromeConstraints.isExpanded,
+                                      onPressed: _toggleExpanded,
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -307,26 +328,797 @@ class _CodexMessageBubbleState extends State<CodexMessageBubble> {
   }
 }
 
-final class _CollapseLayoutCache {
-  const _CollapseLayoutCache({
-    required this.sourceText,
-    required this.maxCollapsedLines,
-    required this.maxTextWidth,
+final class _LineHeightCache {
+  const _LineHeightCache({
     required this.effectiveStyle,
     required this.textDirection,
     required this.textScaler,
-    required this.isCollapsible,
-    required this.collapsedText,
+    required this.locale,
+    required this.lineHeightPx,
   });
 
-  final String sourceText;
-  final int maxCollapsedLines;
-  final double maxTextWidth;
   final TextStyle effectiveStyle;
   final TextDirection textDirection;
   final TextScaler textScaler;
-  final bool isCollapsible;
-  final String collapsedText;
+  final Locale? locale;
+  final double lineHeightPx;
+}
+
+class _UserMessageCollapsibleParentData
+    extends ContainerBoxParentData<RenderBox> {}
+
+class _UserMessageCollapsibleLayout extends MultiChildRenderObjectWidget {
+  const _UserMessageCollapsibleLayout({
+    required this.expandedTruncated,
+    required this.isExpanded,
+    required this.lineHeightPx,
+    required this.textDirection,
+    required this.selectionDelegate,
+    required super.children,
+  });
+
+  final bool expandedTruncated;
+  final bool isExpanded;
+  final double lineHeightPx;
+  final TextDirection textDirection;
+  final _ClippedUserSelectionContainerDelegate selectionDelegate;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderUserMessageCollapsibleLayout(
+      expandedTruncated: expandedTruncated,
+      isExpanded: isExpanded,
+      lineHeightPx: lineHeightPx,
+      textDirection: textDirection,
+      selectionDelegate: selectionDelegate,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderUserMessageCollapsibleLayout renderObject,
+  ) {
+    renderObject
+      ..expandedTruncated = expandedTruncated
+      ..isExpanded = isExpanded
+      ..lineHeightPx = lineHeightPx
+      ..textDirection = textDirection
+      ..selectionDelegate = selectionDelegate;
+  }
+}
+
+class _RenderUserMessageCollapsibleLayout extends RenderBox
+    with
+        ContainerRenderObjectMixin<
+          RenderBox,
+          _UserMessageCollapsibleParentData
+        >,
+        RenderBoxContainerDefaultsMixin<
+          RenderBox,
+          _UserMessageCollapsibleParentData
+        > {
+  _RenderUserMessageCollapsibleLayout({
+    required bool expandedTruncated,
+    required bool isExpanded,
+    required double lineHeightPx,
+    required TextDirection textDirection,
+    required _ClippedUserSelectionContainerDelegate selectionDelegate,
+  }) {
+    _expandedTruncated = expandedTruncated;
+    _isExpanded = isExpanded;
+    _lineHeightPx = lineHeightPx;
+    _textDirection = textDirection;
+    _selectionDelegate = selectionDelegate;
+  }
+
+  late bool _expandedTruncated;
+  set expandedTruncated(bool value) {
+    if (_expandedTruncated == value) {
+      return;
+    }
+    _expandedTruncated = value;
+    markNeedsLayout();
+  }
+
+  late bool _isExpanded;
+  set isExpanded(bool value) {
+    if (_isExpanded == value) {
+      return;
+    }
+    _isExpanded = value;
+    markNeedsLayout();
+  }
+
+  late double _lineHeightPx;
+  set lineHeightPx(double value) {
+    if ((_lineHeightPx - value).abs() < 1e-6) {
+      return;
+    }
+    _lineHeightPx = value;
+    markNeedsLayout();
+  }
+
+  late TextDirection _textDirection;
+  set textDirection(TextDirection value) {
+    if (_textDirection == value) {
+      return;
+    }
+    _textDirection = value;
+    _selectionDelegate.updateClipState(
+      isClipped: _selectionDelegate.isClipped,
+      lineHeightPx: _lineHeightPx,
+      textDirection: _textDirection,
+    );
+  }
+
+  late _ClippedUserSelectionContainerDelegate _selectionDelegate;
+  set selectionDelegate(_ClippedUserSelectionContainerDelegate value) {
+    if (identical(_selectionDelegate, value)) {
+      return;
+    }
+    _selectionDelegate = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _UserMessageCollapsibleParentData) {
+      child.parentData = _UserMessageCollapsibleParentData();
+    }
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      firstChild?.getMinIntrinsicWidth(height) ?? 0.0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      firstChild?.getMaxIntrinsicWidth(height) ?? 0.0;
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      firstChild?.getMinIntrinsicHeight(width) ?? 0.0;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      firstChild?.getMaxIntrinsicHeight(width) ?? 0.0;
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      defaultComputeDistanceToFirstActualBaseline(baseline);
+
+  @override
+  void performLayout() {
+    final viewport = firstChild as _RenderUserMessageClipViewport?;
+    if (viewport == null) {
+      size = constraints.smallest;
+      return;
+    }
+    final chrome = childAfter(viewport);
+
+    final childBoxConstraints = BoxConstraints(
+      minWidth: 0.0,
+      maxWidth: constraints.maxWidth,
+    );
+    viewport.layout(childBoxConstraints, parentUsesSize: true);
+    (_parentDataOf(viewport)).offset = Offset.zero;
+
+    _selectionDelegate.updateClipState(
+      isClipped: viewport.isActivelyClipped,
+      lineHeightPx: _lineHeightPx,
+      textDirection: _textDirection,
+    );
+
+    final showToggle = viewport.isCollapsible;
+    final showEllipsis =
+        (viewport.isActivelyClipped && viewport.showCollapsedEllipsis) ||
+        (!viewport.isActivelyClipped && _expandedTruncated);
+
+    var totalWidth = viewport.size.width;
+    var totalHeight = viewport.size.height;
+
+    if (chrome != null) {
+      chrome.layout(
+        _UserCollapseChromeConstraints(
+          minWidth: 0.0,
+          maxWidth: constraints.maxWidth,
+          minHeight: 0.0,
+          maxHeight: double.infinity,
+          showEllipsis: showEllipsis,
+          showToggle: showToggle,
+          isExpanded: _isExpanded,
+        ),
+        parentUsesSize: true,
+      );
+      _parentDataOf(chrome).offset = Offset(0.0, viewport.size.height);
+      totalWidth = math.max(totalWidth, chrome.size.width);
+      totalHeight += chrome.size.height;
+    }
+
+    size = constraints.constrain(Size(totalWidth, totalHeight));
+  }
+
+  static _UserMessageCollapsibleParentData _parentDataOf(RenderBox child) =>
+      child.parentData! as _UserMessageCollapsibleParentData;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    defaultPaint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    return defaultHitTestChildren(result, position: position);
+  }
+}
+
+class _UserMessageClipViewport extends SingleChildRenderObjectWidget {
+  const _UserMessageClipViewport({
+    super.key,
+    required this.lineHeightPx,
+    required this.maxCollapsedLines,
+    required this.forceCollapsible,
+    required this.forceExpanded,
+    required this.isExpanded,
+    required super.child,
+  });
+
+  final double lineHeightPx;
+  final int maxCollapsedLines;
+  final bool forceCollapsible;
+  final bool forceExpanded;
+  final bool isExpanded;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderUserMessageClipViewport(
+      lineHeightPx: lineHeightPx,
+      maxCollapsedLines: maxCollapsedLines,
+      forceCollapsible: forceCollapsible,
+      forceExpanded: forceExpanded,
+      isExpanded: isExpanded,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderUserMessageClipViewport renderObject,
+  ) {
+    renderObject
+      ..lineHeightPx = lineHeightPx
+      ..maxCollapsedLines = maxCollapsedLines
+      ..forceCollapsible = forceCollapsible
+      ..forceExpanded = forceExpanded
+      ..isExpanded = isExpanded;
+  }
+}
+
+class _RenderUserMessageClipViewport extends RenderProxyBox {
+  _RenderUserMessageClipViewport({
+    required double lineHeightPx,
+    required int maxCollapsedLines,
+    required bool forceCollapsible,
+    required bool forceExpanded,
+    required bool isExpanded,
+  }) {
+    _lineHeightPx = lineHeightPx;
+    _maxCollapsedLines = maxCollapsedLines;
+    _forceCollapsible = forceCollapsible;
+    _forceExpanded = forceExpanded;
+    _isExpanded = isExpanded;
+  }
+
+  final LayerHandle<ClipRectLayer> _clipLayerHandle =
+      LayerHandle<ClipRectLayer>();
+
+  late double _lineHeightPx;
+  set lineHeightPx(double value) {
+    if ((_lineHeightPx - value).abs() < 1e-6) {
+      return;
+    }
+    _lineHeightPx = value;
+    markNeedsLayout();
+  }
+
+  late int _maxCollapsedLines;
+  set maxCollapsedLines(int value) {
+    if (_maxCollapsedLines == value) {
+      return;
+    }
+    _maxCollapsedLines = value;
+    markNeedsLayout();
+  }
+
+  late bool _forceCollapsible;
+  set forceCollapsible(bool value) {
+    if (_forceCollapsible == value) {
+      return;
+    }
+    _forceCollapsible = value;
+    markNeedsLayout();
+  }
+
+  late bool _forceExpanded;
+  set forceExpanded(bool value) {
+    if (_forceExpanded == value) {
+      return;
+    }
+    _forceExpanded = value;
+    markNeedsLayout();
+  }
+
+  late bool _isExpanded;
+  set isExpanded(bool value) {
+    if (_isExpanded == value) {
+      return;
+    }
+    _isExpanded = value;
+    markNeedsLayout();
+  }
+
+  bool _isCollapsible = false;
+  bool get isCollapsible => _isCollapsible;
+
+  bool _isActivelyClipped = false;
+  bool get isActivelyClipped => _isActivelyClipped;
+
+  bool get showCollapsedEllipsis => _maxCollapsedLines > 2;
+
+  @override
+  void dispose() {
+    _clipLayerHandle.layer = null;
+    super.dispose();
+  }
+
+  double _clipIntrinsicHeight(double childHeight) {
+    if (_isExpanded || _forceExpanded) {
+      return childHeight;
+    }
+    final collapsedHeightPx = (_lineHeightPx * _maxCollapsedLines)
+        .ceilToDouble();
+    final isCollapsible =
+        _forceCollapsible || childHeight.ceilToDouble() > collapsedHeightPx + 1;
+    if (!isCollapsible) {
+      return childHeight;
+    }
+    final visibleLines = _maxCollapsedLines - (showCollapsedEllipsis ? 1 : 0);
+    return math.min(childHeight, (_lineHeightPx * visibleLines).ceilToDouble());
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) {
+    final raw = super.computeMinIntrinsicHeight(width);
+    return _clipIntrinsicHeight(raw);
+  }
+
+  @override
+  double computeMaxIntrinsicHeight(double width) {
+    final raw = super.computeMaxIntrinsicHeight(width);
+    return _clipIntrinsicHeight(raw);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final child = this.child;
+    if (child == null) {
+      return constraints.smallest;
+    }
+    final childSize = child.getDryLayout(
+      BoxConstraints(minWidth: 0.0, maxWidth: constraints.maxWidth),
+    );
+    return constraints.constrain(
+      Size(childSize.width, _clipIntrinsicHeight(childSize.height)),
+    );
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      _isCollapsible = false;
+      _isActivelyClipped = false;
+      size = constraints.smallest;
+      return;
+    }
+
+    child.layout(
+      BoxConstraints(minWidth: 0.0, maxWidth: constraints.maxWidth),
+      parentUsesSize: true,
+    );
+    final childSize = child.size;
+
+    final collapsedHeightPx = (_lineHeightPx * _maxCollapsedLines)
+        .ceilToDouble();
+    final contentHeightPx = childSize.height.ceilToDouble();
+    final isMeasuredCollapsible = contentHeightPx > collapsedHeightPx + 1.0;
+
+    _isCollapsible =
+        !_forceExpanded && (_forceCollapsible || isMeasuredCollapsible);
+    final wasClipped = _isActivelyClipped;
+    _isActivelyClipped = _isCollapsible && !_isExpanded;
+
+    var visibleHeight = childSize.height;
+    if (_isActivelyClipped) {
+      final visibleLineCount =
+          _maxCollapsedLines - (showCollapsedEllipsis ? 1 : 0);
+      var clipHeight = (_lineHeightPx * visibleLineCount).ceilToDouble();
+
+      if (!_forceCollapsible) {
+        _visitCodeBlockBoxes(child, (codeBox) {
+          final boxSize = codeBox.laidOutSize;
+          if (boxSize == null) {
+            return;
+          }
+          final bounds = MatrixUtils.transformRect(
+            codeBox.getTransformTo(child),
+            Offset.zero & boxSize,
+          );
+          if (bounds.top < clipHeight && bounds.bottom > clipHeight) {
+            clipHeight = bounds.bottom.ceilToDouble();
+          }
+        });
+      }
+      visibleHeight = math.min(childSize.height, clipHeight);
+    }
+
+    _syncClipInertControls(child, visibleHeight: visibleHeight);
+
+    size = constraints.constrain(Size(childSize.width, visibleHeight));
+    if (wasClipped != _isActivelyClipped) {
+      markNeedsPaint();
+      markNeedsSemanticsUpdate();
+    }
+  }
+
+  void _visitCodeBlockBoxes(
+    RenderObject node,
+    void Function(RenderCodexMarkdownCodeBlockBox codeBox) onCodeBox,
+  ) {
+    if (node is RenderCodexMarkdownCodeBlockBox) {
+      onCodeBox(node);
+      return;
+    }
+    node.visitChildren((child) => _visitCodeBlockBoxes(child, onCodeBox));
+  }
+
+  void _syncClipInertControls(
+    RenderBox contentRoot, {
+    required double visibleHeight,
+  }) {
+    void walk(RenderObject node) {
+      if (node is RenderCodexMarkdownClipInertControl) {
+        final controlSize = node.laidOutSize;
+        if (!_isActivelyClipped || controlSize == null) {
+          node.setClippedInert(false);
+        } else {
+          final bounds = MatrixUtils.transformRect(
+            node.getTransformTo(contentRoot),
+            Offset.zero & controlSize,
+          );
+          final isFullyVisible =
+              bounds.top >= -0.5 && bounds.bottom <= visibleHeight + 0.5;
+          node.setClippedInert(!isFullyVisible);
+        }
+      }
+      node.visitChildren(walk);
+    }
+
+    walk(contentRoot);
+  }
+
+  @override
+  Rect? describeApproximatePaintClip(RenderObject child) =>
+      _isActivelyClipped ? Offset.zero & size : null;
+
+  @override
+  Rect? describeSemanticsClip(RenderObject? child) =>
+      _isActivelyClipped ? Offset.zero & size : null;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (_isActivelyClipped) {
+      _clipLayerHandle.layer = context.pushClipRect(
+        needsCompositing,
+        offset,
+        Offset.zero & size,
+        super.paint,
+        clipBehavior: Clip.hardEdge,
+        oldLayer: _clipLayerHandle.layer,
+      );
+    } else {
+      _clipLayerHandle.layer = null;
+      super.paint(context, offset);
+    }
+  }
+}
+
+final class _UserCollapseChromeConstraints extends BoxConstraints {
+  const _UserCollapseChromeConstraints({
+    required super.minWidth,
+    required super.maxWidth,
+    required super.minHeight,
+    required super.maxHeight,
+    required this.showEllipsis,
+    required this.showToggle,
+    required this.isExpanded,
+  });
+
+  final bool showEllipsis;
+  final bool showToggle;
+  final bool isExpanded;
+
+  BoxConstraints get boxConstraints => BoxConstraints(
+    minWidth: minWidth,
+    maxWidth: maxWidth,
+    minHeight: minHeight,
+    maxHeight: maxHeight,
+  );
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is _UserCollapseChromeConstraints &&
+        super == other &&
+        other.showEllipsis == showEllipsis &&
+        other.showToggle == showToggle &&
+        other.isExpanded == isExpanded;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(super.hashCode, showEllipsis, showToggle, isExpanded);
+}
+
+class _UserMessageCollapseChromeBuilder
+    extends ConstrainedLayoutBuilder<_UserCollapseChromeConstraints> {
+  const _UserMessageCollapseChromeBuilder({required super.builder});
+
+  @override
+  RenderAbstractLayoutBuilderMixin<_UserCollapseChromeConstraints, RenderBox>
+  createRenderObject(BuildContext context) =>
+      _RenderUserCollapseChromeBuilder();
+}
+
+class _RenderUserCollapseChromeBuilder extends RenderBox
+    with
+        RenderObjectWithChildMixin<RenderBox>,
+        RenderObjectWithLayoutCallbackMixin,
+        RenderAbstractLayoutBuilderMixin<
+          _UserCollapseChromeConstraints,
+          RenderBox
+        > {
+  @override
+  double computeMinIntrinsicWidth(double height) => 0.0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => 0.0;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => 0.0;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => 0.0;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => constraints.smallest;
+
+  @override
+  void performLayout() {
+    final chromeConstraints = constraints as _UserCollapseChromeConstraints;
+    runLayoutCallback();
+    final child = this.child;
+    if (child != null) {
+      child.layout(chromeConstraints.boxConstraints, parentUsesSize: true);
+      size = chromeConstraints.constrain(child.size);
+    } else {
+      size = chromeConstraints.smallest;
+    }
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child != null) {
+      context.paintChild(child, offset);
+    }
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    return child?.hitTest(result, position: position) ?? false;
+  }
+}
+
+final class _ClippedUserSelectionContainerDelegate
+    extends StaticSelectionContainerDelegate {
+  bool _isClipped = false;
+  bool get isClipped => _isClipped;
+  double _lineHeightPx = 23.0;
+  TextDirection _textDirection = TextDirection.ltr;
+
+  void updateClipState({
+    required bool isClipped,
+    required double lineHeightPx,
+    required TextDirection textDirection,
+  }) {
+    _isClipped = isClipped;
+    _lineHeightPx = lineHeightPx;
+    _textDirection = textDirection;
+  }
+
+  double get _bottomEdgeInset =>
+      math.min(4.0, math.max(1.0, _lineHeightPx * 0.25));
+
+  Offset _topLeadingGlobalPosition() {
+    final containerToGlobal = getTransformTo(null);
+    final leadingX = _textDirection == TextDirection.rtl
+        ? containerSize.width
+        : 0.0;
+    final topY = math.min(1.0, containerSize.height * 0.5);
+    return MatrixUtils.transformPoint(
+      containerToGlobal,
+      Offset(leadingX, topY),
+    );
+  }
+
+  Offset _bottomTrailingGlobalPosition() {
+    final containerToGlobal = getTransformTo(null);
+    final trailingX = _textDirection == TextDirection.rtl
+        ? 0.0
+        : containerSize.width;
+    final bottomY = math.max(0.0, containerSize.height - _bottomEdgeInset);
+    return MatrixUtils.transformPoint(
+      containerToGlobal,
+      Offset(trailingX, bottomY),
+    );
+  }
+
+  Offset _clampGlobalPositionToVisibleEdge(Offset globalPosition) {
+    if (!_isClipped || !hasSize) {
+      return globalPosition;
+    }
+    final containerToGlobal = getTransformTo(null);
+    final globalToContainer = Matrix4.tryInvert(containerToGlobal);
+    if (globalToContainer == null) {
+      return globalPosition;
+    }
+    final local = MatrixUtils.transformPoint(globalToContainer, globalPosition);
+    if (local.dy < containerSize.height) {
+      return globalPosition;
+    }
+    return _bottomTrailingGlobalPosition();
+  }
+
+  bool _isSelectableBelowClip(Selectable selectable) {
+    if (!_isClipped || !hasSize) {
+      return false;
+    }
+    final toContainer = getTransformFrom(selectable);
+    Rect? union;
+    for (final box in selectable.boundingBoxes) {
+      final mapped = MatrixUtils.transformRect(toContainer, box);
+      union = union == null ? mapped : union.expandToInclude(mapped);
+    }
+    return union != null && union.top >= containerSize.height - 0.5;
+  }
+
+  @override
+  SelectionResult dispatchSelectionEventToChild(
+    Selectable selectable,
+    SelectionEvent event,
+  ) {
+    if (event is! ClearSelectionEvent && _isSelectableBelowClip(selectable)) {
+      selectable.dispatchSelectionEvent(const ClearSelectionEvent());
+      return SelectionResult.end;
+    }
+    return super.dispatchSelectionEventToChild(selectable, event);
+  }
+
+  @override
+  SelectionResult handleSelectAll(SelectAllSelectionEvent event) {
+    if (!_isClipped || !hasSize || containerSize.isEmpty) {
+      return super.handleSelectAll(event);
+    }
+    if (selectables.isEmpty) {
+      return SelectionResult.none;
+    }
+    super.handleClearSelection(const ClearSelectionEvent());
+    super.handleSelectionEdgeUpdate(
+      SelectionEdgeUpdateEvent.forStart(
+        globalPosition: _topLeadingGlobalPosition(),
+      ),
+    );
+    super.handleSelectionEdgeUpdate(
+      SelectionEdgeUpdateEvent.forEnd(
+        globalPosition: _bottomTrailingGlobalPosition(),
+      ),
+    );
+    return SelectionResult.none;
+  }
+
+  @override
+  SelectionResult handleSelectionEdgeUpdate(SelectionEdgeUpdateEvent event) {
+    if (!_isClipped || !hasSize) {
+      return super.handleSelectionEdgeUpdate(event);
+    }
+    final clampedGlobal = _clampGlobalPositionToVisibleEdge(
+      event.globalPosition,
+    );
+    if (clampedGlobal == event.globalPosition) {
+      return super.handleSelectionEdgeUpdate(event);
+    }
+    final updated = event.type == SelectionEventType.startEdgeUpdate
+        ? SelectionEdgeUpdateEvent.forStart(
+            globalPosition: clampedGlobal,
+            granularity: event.granularity,
+          )
+        : SelectionEdgeUpdateEvent.forEnd(
+            globalPosition: clampedGlobal,
+            granularity: event.granularity,
+          );
+    return super.handleSelectionEdgeUpdate(updated);
+  }
+
+  @override
+  SelectionResult handleSelectWord(SelectWordSelectionEvent event) {
+    if (_isClipped && hasSize) {
+      final clamped = _clampGlobalPositionToVisibleEdge(event.globalPosition);
+      if (clamped != event.globalPosition) {
+        return SelectionResult.end;
+      }
+    }
+    return super.handleSelectWord(event);
+  }
+
+  @override
+  SelectionResult handleSelectParagraph(SelectParagraphSelectionEvent event) {
+    if (_isClipped && hasSize) {
+      final clamped = _clampGlobalPositionToVisibleEdge(event.globalPosition);
+      if (clamped != event.globalPosition) {
+        return SelectionResult.end;
+      }
+    }
+    final result = super.handleSelectParagraph(event);
+    _clampEndPointIfPastClip();
+    return result;
+  }
+
+  @override
+  SelectionResult handleGranularlyExtendSelection(
+    GranularlyExtendSelectionEvent event,
+  ) {
+    final result = super.handleGranularlyExtendSelection(event);
+    _clampEndPointIfPastClip();
+    return result;
+  }
+
+  @override
+  SelectionResult handleDirectionallyExtendSelection(
+    DirectionallyExtendSelectionEvent event,
+  ) {
+    final result = super.handleDirectionallyExtendSelection(event);
+    _clampEndPointIfPastClip();
+    return result;
+  }
+
+  void _clampEndPointIfPastClip() {
+    if (!_isClipped || !hasSize) {
+      return;
+    }
+    final endPoint = value.endSelectionPoint;
+    if (endPoint != null &&
+        endPoint.localPosition.dy > containerSize.height + 0.5) {
+      super.handleSelectionEdgeUpdate(
+        SelectionEdgeUpdateEvent.forEnd(
+          globalPosition: _bottomTrailingGlobalPosition(),
+        ),
+      );
+    }
+  }
 }
 
 class _UserMessageExpandButton extends StatefulWidget {
