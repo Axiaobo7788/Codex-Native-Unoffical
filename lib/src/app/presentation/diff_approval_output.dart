@@ -530,6 +530,9 @@ class _HistoryEntryView extends StatelessWidget {
         id: item.id,
         kind: kind,
         text: overrideEntryText ?? item.text,
+        reasoningParts: overrideEntryText == null
+            ? item.reasoningParts
+            : const [],
         completed: true,
         status: item.status,
         attachments: effectiveAttachments,

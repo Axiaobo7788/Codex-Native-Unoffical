@@ -15,7 +15,12 @@ import '../../app/theme/official_codex_theme.dart';
 ///   `var(--spacing)` grid, `4px` `p + p`, `8px`/`4px` `h1..h3` spacing,
 ///   `ps-4` `16px` unordered list inset, and `225284.aS` digit-grouped
 ///   `ps-8`/`ps-10`/`ps-12`/`ps-14` ordered list insets).
-enum DesktopMarkdownVariant { assistant, reasoning }
+/// - [userMessage]: `14353.jHtb` + `006493501c2d.css` `.rich-text-user-turn`
+///   (`whitespace-pre-wrap` soft line breaks, `[&_ol]:!ps-6 [&_ul]:!ps-6`
+///   `24px` list inset, `[&>p]:!m-0 [&>p+p]:!mt-5` `20px` paragraph gap, and
+///   `4 * --markdown-space` (`1.0em`) spacing for `p/list`, `h4..h6`,
+///   `blockquote`, loose `li + li`, and intra-item/blockquote flow blocks).
+enum DesktopMarkdownVariant { assistant, reasoning, userMessage }
 
 /// Renders bounded Desktop Markdown in a single AST pass using the official
 /// Codex Desktop screen-CSS geometry for root edges, block adjacency, tight
@@ -378,6 +383,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     buildChildNode,
   }) {
     final isReasoning = widget.variant == DesktopMarkdownVariant.reasoning;
+    final isUserMessage = widget.variant == DesktopMarkdownVariant.userMessage;
     final isOrdered = listElement.tag == 'ol';
     final start = int.tryParse(listElement.attributes['start'] ?? '') ?? 1;
     final space = _blockSpacingUnit;
@@ -398,8 +404,16 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     }
 
     final rows = <Widget>[];
+    var previousItemHadExplicitParagraph = false;
     for (var itemIndex = 0; itemIndex < rawItems.length; itemIndex++) {
       final item = rawItems[itemIndex];
+      final hasExplicitParagraph = (item.children ?? const <md.Node>[]).any(
+        (child) => child is md.Element && child.tag == 'p',
+      );
+      if (isUserMessage && itemIndex > 0 && previousItemHadExplicitParagraph) {
+        rows.add(SizedBox(height: 4 * space));
+      }
+      previousItemHadExplicitParagraph = hasExplicitParagraph;
       final (:blocks, :taskChecked) = _normalizeListItemBlocks(item);
       final double itemMarkerGutterWidth;
       if (isReasoning) {
@@ -415,6 +429,12 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
         } else {
           itemMarkerGutterWidth = math.max(0.0, 4 * space - markerGap);
         }
+      } else if (isUserMessage) {
+        itemMarkerGutterWidth = math.max(
+          0.0,
+          textScaler.scale(OfficialCodexTheme.userMarkdownListInset) -
+              markerGap,
+        );
       } else {
         itemMarkerGutterWidth = defaultMarkerGutterWidth;
       }
@@ -456,17 +476,21 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
             _currentLocale,
           ),
         );
-      } else if (isReasoning) {
+      } else if (isReasoning || isUserMessage) {
         final bulletSize = textScaler.scale(4.5);
         final lineBoxHeight =
             textScaler.scale(
               baseStyle.fontSize ?? OfficialCodexTheme.activityChatFontSize,
             ) *
-            OfficialCodexTheme.activityChatLineHeight;
+            (isReasoning
+                ? OfficialCodexTheme.activityChatLineHeight
+                : OfficialCodexTheme.userMessageLineHeight);
         final topInset = math.max(0.0, (lineBoxHeight - bulletSize) / 2);
         final bulletColor =
             markerStyle.color ??
-            OfficialCodexTheme.lightActivityReasoningNestedText;
+            (isReasoning
+                ? OfficialCodexTheme.lightActivityReasoningNestedText
+                : OfficialCodexTheme.lightTextPrimary);
         marker = Padding(
           padding: EdgeInsets.only(top: topInset),
           child: SizedBox.square(
@@ -633,9 +657,18 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     return blocks;
   }
 
+  static bool _isUserContainerFlowTag(String? tag) =>
+      tag == 'p' || tag == 'ul' || tag == 'ol' || tag == 'blockquote';
+
   double _listItemChildGap(String? previousTag, String? currentTag) {
     final isReasoning = widget.variant == DesktopMarkdownVariant.reasoning;
+    final isUserMessage = widget.variant == DesktopMarkdownVariant.userMessage;
     final space = _blockSpacingUnit;
+    if (isUserMessage &&
+        _isUserContainerFlowTag(previousTag) &&
+        _isUserContainerFlowTag(currentTag)) {
+      return 4 * space;
+    }
     if (previousTag == 'p' && currentTag == 'p') {
       // Assistant `.ListItem > p + p { margin-top: 4 * S }`;
       // reasoning `.paragraph-gJJthE + .paragraph-gJJthE { margin-top: var(--spacing) }`.
@@ -662,6 +695,19 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
         'pre' => (top: 2, bottom: 2),
         'table' => (top: 2, bottom: 1),
         'hr' => (top: 2, bottom: 2),
+        _ => (top: 0, bottom: 0),
+      };
+    }
+    if (widget.variant == DesktopMarkdownVariant.userMessage) {
+      return switch (tag) {
+        'p' || 'ul' || 'ol' => (top: 0, bottom: 0),
+        'h1' => (top: 4, bottom: 2),
+        'h2' || 'h3' => (top: 4, bottom: 1),
+        'h4' || 'h5' || 'h6' => (top: 4, bottom: 4),
+        'blockquote' => (top: 4, bottom: 4),
+        'pre' => (top: 5, bottom: 5),
+        'table' => (top: 4, bottom: 0),
+        'hr' => (top: 7, bottom: 7),
         _ => (top: 0, bottom: 0),
       };
     }
@@ -709,13 +755,19 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
     final children = <Widget>[];
     for (var i = 0; i < blocks.length; i++) {
       if (i > 0) {
-        // `.Blockquote > .Paragraph { margin: 0 }` overrides `.Paragraph + .Paragraph`.
+        // `.Blockquote > .Paragraph { margin: 0 }` overrides `.Paragraph + .Paragraph`
+        // in assistant/reasoning, while `.rich-text-user-turn` sets `4 * space`
+        // between adjacent `p`, `ul`, `ol`, and `blockquote` children.
         final gap =
-            math.max(
-              _containerChildMargins(tags[i - 1]).bottom,
-              _containerChildMargins(tags[i]).top,
-            ) *
-            space;
+            (widget.variant == DesktopMarkdownVariant.userMessage &&
+                _isUserContainerFlowTag(tags[i - 1]) &&
+                _isUserContainerFlowTag(tags[i]))
+            ? 4 * space
+            : math.max(
+                    _containerChildMargins(tags[i - 1]).bottom,
+                    _containerChildMargins(tags[i]).top,
+                  ) *
+                  space;
         if (gap > 0) {
           children.add(SizedBox(height: gap));
         }
@@ -1028,6 +1080,7 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
       },
       imageBuilder: widget.imageBuilder,
       fitContent: true,
+      softLineBreak: widget.variant == DesktopMarkdownVariant.userMessage,
     );
   }
 
@@ -1042,6 +1095,13 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
   }
 
   double _adjacentGap(List<String?> tags, int index) {
+    if (widget.variant == DesktopMarkdownVariant.userMessage &&
+        tags[index - 1] == 'p' &&
+        tags[index] == 'p') {
+      return _currentTextScaler.scale(
+        OfficialCodexTheme.userMarkdownParagraphGap,
+      );
+    }
     final previous = _margins(
       tags[index - 1],
       index > 1 ? tags[index - 2] : null,
@@ -1070,6 +1130,28 @@ class _DesktopMarkdownBodyState extends State<DesktopMarkdownBody> {
         'pre' => (top: 2, bottom: 2),
         'table' => (top: 2, bottom: 1),
         'hr' => (top: 2, bottom: 2),
+        _ => null,
+      };
+    }
+    if (widget.variant == DesktopMarkdownVariant.userMessage) {
+      return switch (tag) {
+        'p' when previous == 'ul' || previous == 'ol' => (top: 4, bottom: 0),
+        'p' => (top: 0, bottom: 0),
+        'ul' || 'ol'
+            when previous == 'p' || previous == 'ul' || previous == 'ol' =>
+          (top: 4, bottom: 0),
+        'ul' || 'ol' => (top: 0, bottom: 0),
+        'h1' when previous == 'hr' => (top: 0, bottom: 2),
+        'h1' => (top: 4, bottom: 2),
+        'h2' || 'h3' when previous == 'hr' => (top: 0, bottom: 1),
+        'h2' || 'h3' => (top: 4, bottom: 1),
+        'h4' || 'h5' || 'h6' => (top: 4, bottom: 4),
+        'blockquote' => (top: 4, bottom: 4),
+        'pre' when previous == 'hr' => (top: 0, bottom: 5),
+        'pre' => (top: 5, bottom: 5),
+        'table' when previous == 'hr' => (top: 0, bottom: 0),
+        'table' => (top: 4, bottom: 0),
+        'hr' => (top: 7, bottom: 7),
         _ => null,
       };
     }

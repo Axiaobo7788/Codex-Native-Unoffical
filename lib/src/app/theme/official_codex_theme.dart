@@ -86,6 +86,24 @@ abstract final class OfficialCodexTheme {
   /// Maximum width of a thread attachment pill (`QAOE` `max-w-[320px]`).
   static const double userAttachmentPillMaxWidth = 320.0;
 
+  /// User-turn Markdown `.rich-text-user-turn` (`14353.jHtb` +
+  /// `006493501c2d.css`) vertical paragraph gap (`[&>p+p]:!mt-5` = `20px`)
+  /// and list inline-start inset (`[&_ol]:!ps-6 [&_ul]:!ps-6` = `24px`).
+  static const double userMarkdownParagraphGap = baseGrid * 5;
+  static const double userMarkdownListInset = baseGrid * 6;
+
+  /// Externalized user image attachment thumbnail geometry (`225284.GL6x.es`):
+  /// `size-20` (`80×80px`) outer `rounded-lg` (`8px`) button frame, inner
+  /// `rounded-md` (`6px`) `object-cover` clip, bounded `ResizeImage` decode
+  /// dimensions (`160px` thumbnail / `960px` modal preview), and `10 MiB`
+  /// encoded-file byte cap (`182735.smHt.RP`: `0xa00000`).
+  static const double userImageThumbnailSize = baseGrid * 20;
+  static const double userImageThumbnailRadius = 8.0;
+  static const double userImageThumbnailInnerRadius = 6.0;
+  static const int userImageThumbnailDecodePx = 160;
+  static const int userImagePreviewDecodePx = 960;
+  static const int userImageMaxEncodedBytes = 10 * 1024 * 1024;
+
   /// Inset workspace main panel top-left corner radius (12px).
   static const double mainSurfaceRadius = 12.0;
 

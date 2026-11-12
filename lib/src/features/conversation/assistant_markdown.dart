@@ -477,6 +477,174 @@ class ReasoningMarkdown extends StatelessWidget {
   }
 }
 
+/// Renders official Desktop user-turn Markdown (`14353.WB4T` -> `jHtb` +
+/// `AdJ5`, `006493501c2d.css` `.rich-text-user-turn`, and `0040d5ae1a9f.css`
+/// `[data-markdown-text-tone=user-message]`):
+/// - `14px` `.text-size-chat` (`OfficialCodexTheme.userMessageFontSize`) with
+///   `1.625` `leading-relaxed` (`OfficialCodexTheme.userMessageLineHeight`) and
+///   `textPrimary` (`--color-text-user-message`).
+/// - Preserves single `\n` soft line breaks (`whitespace-pre-wrap`), `24px`
+///   `[&_ol]:!ps-6 [&_ul]:!ps-6` list insets, `20px` `[&>p+p]:!mt-5` root
+///   paragraph gap, and `1.0em` (`4 * --markdown-space`) `.rich-text-user-turn`
+///   spacing for `p/list`, `h4..h6`, `blockquote`, loose `li + li`, and
+///   intra-item/blockquote flow blocks.
+/// - Tokenizes inline `![alt](href)` as literal `'!'` + link (`14353.AdJ5`
+///   `userMessageImage`), rendering `0` inline image widgets and `0` outbound
+///   image requests while preserving `ADR-058` (`16 KiB` AST cap + `128`-pill
+///   `WidgetSpan` cap + safe `http`/`https` link opening).
+class UserMessageMarkdown extends StatelessWidget {
+  const UserMessageMarkdown({
+    super.key,
+    required this.data,
+    this.plainTextOnly = false,
+    this.includeSelectionArea = true,
+    ExternalLinkLauncher? externalLinkLauncher,
+  }) : externalLinkLauncher =
+           externalLinkLauncher ?? AssistantMarkdown._launchExternal;
+
+  static const maxSourceCharacters = AssistantMarkdown.maxSourceCharacters;
+  static const _omittedPrefix =
+      '[Earlier user message text omitted from this view]\n\n';
+
+  static final md.ExtensionSet _userMessageExtensions = md.ExtensionSet(
+    const <md.BlockSyntax>[
+      _LiteralHtmlBlockSyntax(),
+      md.FencedCodeBlockSyntax(),
+      md.TableSyntax(),
+      md.UnorderedListWithCheckboxSyntax(),
+      md.OrderedListWithCheckboxSyntax(),
+    ],
+    <md.InlineSyntax>[
+      _UserMessageImageBangSyntax(),
+      md.StrikethroughSyntax(),
+      md.AutolinkExtensionSyntax(),
+    ],
+  );
+
+  final String data;
+  final bool plainTextOnly;
+  final bool includeSelectionArea;
+  final ExternalLinkLauncher externalLinkLauncher;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = _boundedSource(data);
+    final theme = Theme.of(context);
+    final palette = ThemeTokens.of(context);
+    final codexTheme = OfficialCodexTheme.of(context);
+    const fontSize = OfficialCodexTheme.userMessageFontSize;
+    const lineHeight = OfficialCodexTheme.userMessageLineHeight;
+    final bodyStyle = TextStyle(
+      color: codexTheme.textPrimary,
+      fontSize: fontSize,
+      height: lineHeight,
+      fontFamily: theme.textTheme.bodyMedium?.fontFamily,
+      fontFamilyFallback: theme.textTheme.bodyMedium?.fontFamilyFallback,
+    );
+    if (plainTextOnly || data.length > maxSourceCharacters) {
+      return SelectableText(
+        source,
+        key: const ValueKey('user-bounded-text'),
+        style: bodyStyle,
+      );
+    }
+
+    TextStyle desktopHeading(double sizeRatio, double lineBoxRatio) =>
+        bodyStyle.copyWith(
+          fontSize: fontSize * sizeRatio,
+          height: lineBoxRatio / sizeRatio,
+          fontWeight: FontWeight.w600,
+        );
+
+    final baseStyleSheet = MarkdownStyleSheet.fromTheme(theme);
+    final styleSheet = baseStyleSheet.copyWith(
+      a: bodyStyle.copyWith(
+        color: codexTheme.textPrimary,
+        decoration: TextDecoration.underline,
+        decorationStyle: TextDecorationStyle.dotted,
+        decorationColor: palette.textMuted,
+      ),
+      p: bodyStyle,
+      strong: bodyStyle.copyWith(fontWeight: FontWeight.bold),
+      em: bodyStyle.copyWith(fontStyle: FontStyle.italic),
+      del: bodyStyle.copyWith(decoration: TextDecoration.lineThrough),
+      code: bodyStyle.copyWith(
+        color: codexTheme.textPrimary,
+        backgroundColor: null,
+        fontFamily: 'monospace',
+        fontSize: fontSize * OfficialCodexTheme.inlineCodeFontScale,
+      ),
+      h1: desktopHeading(1.5, 2),
+      h2: desktopHeading(1.25, 1.75),
+      h3: desktopHeading(1.125, 1.75),
+      h4: desktopHeading(1, 1.5),
+      h5: bodyStyle.copyWith(fontWeight: FontWeight.w600),
+      h6: bodyStyle.copyWith(fontWeight: FontWeight.w600),
+      blockSpacing: OfficialCodexTheme.userMarkdownParagraphGap,
+      listBullet: bodyStyle.copyWith(fontWeight: FontWeight.w600),
+      blockquote: bodyStyle,
+      tableHead: bodyStyle.copyWith(fontWeight: FontWeight.w600),
+      tableBody: bodyStyle,
+      tableBorder: TableBorder.all(color: palette.border),
+      tableCellsPadding: const EdgeInsets.all(ThemeTokens.space2),
+      codeblockPadding: EdgeInsets.zero,
+      codeblockDecoration: const BoxDecoration(),
+    );
+
+    final body = DesktopMarkdownBody(
+      key: const ValueKey('user-message-markdown'),
+      data: source,
+      variant: DesktopMarkdownVariant.userMessage,
+      styleSheet: styleSheet,
+      bodyEm: MediaQuery.textScalerOf(context).scale(fontSize),
+      borderMedium: palette.borderStrong,
+      borderLight: codexTheme.hairlineBorder,
+      inlineCodeBackground: codexTheme.inlineCodeBackground,
+      inlineCodeRadius: OfficialCodexTheme.inlineCodeRadius,
+      inlineCodeHorizontalPadding:
+          OfficialCodexTheme.inlineCodeHorizontalPadding,
+      inlineCodeVerticalPadding: OfficialCodexTheme.inlineCodeVerticalPadding,
+      inlineCodeFontScale: OfficialCodexTheme.inlineCodeFontScale,
+      maxInlineCodePills: OfficialCodexTheme.maxInlineCodePills,
+      extensionSet: _userMessageExtensions,
+      builders: {
+        'pre': _CodeBlockBuilder(desktop: true, bodyFontSize: fontSize),
+      },
+      imageBuilder: (uri, title, alt) =>
+          AssistantMarkdown._blockedImage(context, uri, title, alt),
+      onTapLink: (text, href, title) => unawaited(
+        AssistantMarkdown._openExternalLink(
+          context,
+          href,
+          externalLinkLauncher,
+        ),
+      ),
+    );
+    return includeSelectionArea ? SelectionArea(child: body) : body;
+  }
+
+  static String _boundedSource(String value) {
+    if (value.length <= maxSourceCharacters) {
+      return value;
+    }
+    final retained = maxSourceCharacters - _omittedPrefix.length;
+    return '$_omittedPrefix${value.substring(value.length - retained)}';
+  }
+}
+
+/// Translates official `14353.AdJ5` `userMessageImage`:
+/// emits `'!'` as literal text before `'['` so `![alt](href)` parses through
+/// standard link syntax as `'!'` + `[alt](href)` rather than an `<img>` node.
+class _UserMessageImageBangSyntax extends md.InlineSyntax {
+  _UserMessageImageBangSyntax() : super(r'!(?=\[)', startCharacter: 0x21);
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    parser.addNode(md.Text('!'));
+    return true;
+  }
+}
+
 /// Optional clock override for deterministic widget testing of live reasoning
 /// elapsed duration (`225284.ak` `R` -> `"Thought for {elapsed}"`).
 class ReasoningClockScope extends InheritedWidget {

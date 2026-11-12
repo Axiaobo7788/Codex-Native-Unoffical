@@ -8168,13 +8168,30 @@ class _UserMessageEntryView extends StatelessWidget {
     final boundedAttachments = presentation.attachments
         .take(maxUserAttachments)
         .toList(growable: false);
-    final attachmentWidgets = [
-      for (var index = 0; index < boundedAttachments.length; index += 1)
-        _UserAttachmentChip(
-          key: ValueKey('user-attachment-${entry.id}-$index'),
-          attachment: boundedAttachments[index],
-        ),
-    ];
+    final imageThumbnailWidgets = <Widget>[];
+    final pillAttachmentWidgets = <Widget>[];
+    for (var index = 0; index < boundedAttachments.length; index += 1) {
+      final attachment = boundedAttachments[index];
+      final key = ValueKey('user-attachment-${entry.id}-$index');
+      final localImagePath = attachment.kind == UserAttachmentKind.image
+          ? _resolveLocalImageFilePath(attachment.path)
+          : null;
+      if (localImagePath != null) {
+        imageThumbnailWidgets.add(
+          _UserImageAttachmentThumbnail(
+            key: key,
+            attachment: attachment,
+            localFilePath: localImagePath,
+          ),
+        );
+      } else {
+        pillAttachmentWidgets.add(
+          _UserAttachmentChip(key: key, attachment: attachment),
+        );
+      }
+    }
+    final hasAnyAttachments =
+        imageThumbnailWidgets.isNotEmpty || pillAttachmentWidgets.isNotEmpty;
     final keySuffix = turnId ?? entry.id;
     final branch = siblingBranchInfo;
     final selectBranch = onSelectSiblingBranch;
@@ -8245,22 +8262,43 @@ class _UserMessageEntryView extends StatelessWidget {
           icon: const Icon(Icons.undo_rounded, size: 14),
         ),
     ];
-    final attachmentRow = attachmentWidgets.isEmpty
+    final attachmentRow = !hasAnyAttachments
         ? null
         : Align(
             key: ValueKey('user-attachments-row-${entry.id}'),
             alignment: Alignment.centerRight,
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 6,
-              runSpacing: 6,
-              children: attachmentWidgets,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (imageThumbnailWidgets.isNotEmpty)
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: OfficialCodexTheme.userMessageAttachmentGap,
+                    runSpacing: OfficialCodexTheme.userMessageAttachmentGap,
+                    children: imageThumbnailWidgets,
+                  ),
+                if (imageThumbnailWidgets.isNotEmpty &&
+                    pillAttachmentWidgets.isNotEmpty)
+                  const SizedBox(
+                    height: OfficialCodexTheme.userMessageAttachmentGap,
+                  ),
+                if (pillAttachmentWidgets.isNotEmpty)
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: OfficialCodexTheme.userMessageAttachmentGap,
+                    runSpacing: 6,
+                    children: pillAttachmentWidgets,
+                  ),
+              ],
             ),
           );
-    final bubble = (fullText.isNotEmpty || attachmentWidgets.isEmpty)
+    final bubble = (fullText.isNotEmpty || !hasAnyAttachments)
         ? CodexMessageBubble(
             key: ValueKey('user-message-bubble-${entry.id}'),
             text: fullText,
+            plainTextOnly: isSearchMatch,
+            forceExpanded: isSearchMatch,
             expandKey: ValueKey('user-expand-${entry.id}'),
           )
         : null;
@@ -8753,6 +8791,306 @@ class _UserAttachmentChipState extends State<_UserAttachmentChip> {
   }
 }
 
+/// Resolves strictly local filesystem paths (`file://` or scheme-less / Windows
+/// drive-letter paths) for bounded local image decoding, returning `null` for
+/// remote or inline schemes (`http:`, `https:`, `data:`, `blob:`) so user image
+/// attachments never trigger outbound network requests.
+String? _resolveLocalImageFilePath(String? rawPath) {
+  if (rawPath == null) {
+    return null;
+  }
+  final trimmed = rawPath.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (trimmed.toLowerCase().startsWith('file:')) {
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || uri.scheme.toLowerCase() != 'file') {
+      return null;
+    }
+    try {
+      final resolved = uri.toFilePath();
+      return resolved.isEmpty ? null : resolved;
+    } on UnsupportedError {
+      return null;
+    }
+  }
+  if (RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]+:').hasMatch(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+/// Translates official `225284.GL6x.es` externalized user image thumbnail:
+/// - `size-20` (`80×80px`) `rounded-lg` (`8px`) `border-strong` (`1px`) button
+///   tile with `focus-visible:ring-2` keyboard focus ring and inner
+///   `rounded-md` (`6px`) `BoxFit.cover` bitmap decoded via
+///   [BoundedLocalFileImage] (`10 MiB` encoded cap) + `ResizeImage` (`160×160`).
+/// - Missing, corrupt, non-regular, or oversize local image files render the
+///   official `size-20` `border-text-danger/20 bg-background-danger-surface/20`
+///   `"Failed"` tile (`10px`/`12px` danger text) without synchronous UI-thread
+///   disk checks or unbounded file reads.
+class _UserImageAttachmentThumbnail extends StatefulWidget {
+  const _UserImageAttachmentThumbnail({
+    super.key,
+    required this.attachment,
+    required this.localFilePath,
+  });
+
+  final UserAttachment attachment;
+  final String localFilePath;
+
+  @override
+  State<_UserImageAttachmentThumbnail> createState() =>
+      _UserImageAttachmentThumbnailState();
+}
+
+class _UserImageAttachmentThumbnailState
+    extends State<_UserImageAttachmentThumbnail> {
+  bool _focused = false;
+  late ImageProvider<Object> _thumbnailProvider = _createThumbnailProvider(
+    widget.localFilePath,
+  );
+
+  static ImageProvider<Object> _createThumbnailProvider(String path) =>
+      ResizeImage(
+        BoundedLocalFileImage(File(path)),
+        width: OfficialCodexTheme.userImageThumbnailDecodePx,
+        height: OfficialCodexTheme.userImageThumbnailDecodePx,
+        policy: ResizeImagePolicy.fit,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    BoundedLocalFileImage.retainWidgetInterest(widget.localFilePath);
+  }
+
+  @override
+  void didUpdateWidget(covariant _UserImageAttachmentThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.localFilePath != widget.localFilePath) {
+      final previousProvider = _thumbnailProvider;
+      BoundedLocalFileImage.retainWidgetInterest(widget.localFilePath);
+      _thumbnailProvider = _createThumbnailProvider(widget.localFilePath);
+      BoundedLocalFileImage.releaseWidgetInterest(
+        oldWidget.localFilePath,
+        evictProviders: <ImageProvider<Object>>[
+          previousProvider,
+          BoundedLocalFileImage(File(oldWidget.localFilePath)),
+        ],
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    BoundedLocalFileImage.releaseWidgetInterest(
+      widget.localFilePath,
+      evictProviders: <ImageProvider<Object>>[
+        _thumbnailProvider,
+        BoundedLocalFileImage(File(widget.localFilePath)),
+      ],
+    );
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
+    const size = OfficialCodexTheme.userImageThumbnailSize;
+    const outerRadius = OfficialCodexTheme.userImageThumbnailRadius;
+    const innerRadius = OfficialCodexTheme.userImageThumbnailInnerRadius;
+    final label = widget.attachment.label.isNotEmpty
+        ? widget.attachment.label
+        : 'User attachment';
+
+    void openPreview() => _showPreviewDialog(context);
+
+    final tile = SizedBox.square(
+      dimension: size,
+      child: Image(
+        image: _thumbnailProvider,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.medium,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+            Container(
+              width: size,
+              height: size,
+              padding: const EdgeInsets.all(1.0),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(outerRadius),
+                border: Border.all(
+                  color: _focused ? theme.focusRing : palette.borderStrong,
+                  width: _focused ? 2.0 : 1.0,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(innerRadius),
+                child: child,
+              ),
+            ),
+        errorBuilder: (context, error, stackTrace) => Container(
+          key: const ValueKey('user-image-thumbnail-failed'),
+          width: size,
+          height: size,
+          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: palette.danger.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(outerRadius),
+            border: Border.all(
+              color: _focused
+                  ? theme.focusRing
+                  : palette.danger.withValues(alpha: 0.20),
+              width: _focused ? 2.0 : 1.0,
+            ),
+          ),
+          child: Text(
+            'Failed',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: palette.danger,
+              fontSize: 10.0,
+              height: 12.0 / 10.0,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      image: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: openPreview,
+      child: FocusableActionDetector(
+        mouseCursor: SystemMouseCursors.click,
+        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              openPreview();
+              return null;
+            },
+          ),
+          ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+            onInvoke: (_) {
+              openPreview();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: openPreview,
+          child: tile,
+        ),
+      ),
+    );
+  }
+
+  void _showPreviewDialog(BuildContext context) {
+    final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
+    final previewPath = widget.localFilePath;
+    final rawProvider = BoundedLocalFileImage(File(previewPath));
+    final previewProvider = ResizeImage(
+      rawProvider,
+      width: OfficialCodexTheme.userImagePreviewDecodePx,
+      height: OfficialCodexTheme.userImagePreviewDecodePx,
+      policy: ResizeImagePolicy.fit,
+    );
+    BoundedLocalFileImage.retainWidgetInterest(previewPath);
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.modalSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OfficialCodexTheme.popoverRadius),
+          side: BorderSide(
+            color: theme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+        title: Text(widget.attachment.label),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: OfficialCodexTheme.maxContentWidth * 0.75,
+            maxHeight: 480,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                      OfficialCodexTheme.userImageThumbnailRadius,
+                    ),
+                    child: Image(
+                      key: const ValueKey('user-image-preview-bitmap'),
+                      image: previewProvider,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: palette.danger.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(
+                            OfficialCodexTheme.userImageThumbnailRadius,
+                          ),
+                          border: Border.all(
+                            color: palette.danger.withValues(alpha: 0.20),
+                          ),
+                        ),
+                        child: Text(
+                          'Image failed to load',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: palette.danger),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('Source', style: Theme.of(context).textTheme.labelSmall),
+                const SizedBox(height: 4),
+                SelectableText(
+                  widget.attachment.path ?? widget.localFilePath,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          CodexButton(
+            onPressed: () => Navigator.of(context).pop(),
+            label: 'Close',
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      BoundedLocalFileImage.releaseWidgetInterest(
+        previewPath,
+        evictProviders: <ImageProvider<Object>>[previewProvider, rawProvider],
+      );
+    });
+  }
+}
+
 class _ReasoningTimingScope extends InheritedWidget {
   const _ReasoningTimingScope({
     required this.version,
@@ -8841,6 +9179,29 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
     return text;
   }
 
+  /// Composes inline Desktop reasoning Markdown source from typed
+  /// `entry.reasoningParts` per `ADR-060` + official `182735.5b42af8792.js`
+  /// `v1hC.W`:
+  /// - Only when `first` is non-empty and `parts.length > 1`, wraps `first` as
+  ///   `'**$first**'` unless `first.startsWith('**')`, then joins all parts
+  ///   with `'\n\n'`.
+  /// - Otherwise returns `first` (so `parts = ['', ...]` yields `''`, matching
+  ///   `v1hC.W`, while `Execution` mode and in-conversation search continue to
+  ///   use unmodified `entry.text`).
+  static String _composeInlineReasoningSource(ConversationEntry entry) {
+    final parts = entry.reasoningParts;
+    if (parts.isEmpty) {
+      return _extractRawReasoningContent(entry.text);
+    }
+    final first = parts.first;
+    if (first.isNotEmpty && parts.length > 1) {
+      return first.startsWith('**')
+          ? parts.join('\n\n')
+          : ['**$first**', ...parts.skip(1)].join('\n\n');
+    }
+    return first;
+  }
+
   /// Matches `225284.ak` active body `O`:
   /// strips a leading `**heading**`, suppresses an incomplete leading `**`,
   /// and trims leading whitespace while streaming.
@@ -8915,13 +9276,15 @@ class _ReasoningEntryViewState extends State<_ReasoningEntryView> {
 
     final theme = OfficialCodexTheme.of(context);
     final rawContent = _extractRawReasoningContent(entry.text);
+    final inlineSource = _composeInlineReasoningSource(entry);
     final activeStreaming = !entry.completed;
     final normalizedBody = activeStreaming
-        ? _normalizeActiveReasoningBody(rawContent)
-        : _normalizeCompletedReasoningBody(rawContent);
+        ? _normalizeActiveReasoningBody(inlineSource)
+        : _normalizeCompletedReasoningBody(inlineSource);
     final rawTrimmed = rawContent.trim();
-    // Preserve visible/copyable matched text when in-conversation search
-    // matches a stripped leading heading on raw reasoning content.
+    // Preserve visible/copyable matched text in Execution mode and when
+    // in-conversation search matches a stripped leading heading on raw
+    // reasoning content (`ADR-060`).
     final bodyText = widget.forceExpanded && rawTrimmed.isNotEmpty
         ? rawTrimmed
         : normalizedBody;
