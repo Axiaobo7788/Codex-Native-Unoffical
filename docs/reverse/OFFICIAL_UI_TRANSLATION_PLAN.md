@@ -1,5 +1,11 @@
 # Official Codex UI Translation Plan
 
+> Current scheduling override (2026-11-12): implementation/polish is paused for
+> [Desktop Completion Gap Audit](DESKTOP_COMPLETION_GAP_AUDIT.md). That document
+> owns cross-layer completion and P0/P1/P2 ordering at main0e2a5b8; the scoped
+> evidence and historical implementation labels below remain useful, not whole-
+> product completion claims.
+
 _Last updated: 2026-11-10_
 
 ## Purpose

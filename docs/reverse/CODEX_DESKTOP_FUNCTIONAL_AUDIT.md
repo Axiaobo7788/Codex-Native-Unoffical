@@ -1,5 +1,11 @@
 # Codex Desktop functional capability and workflow audit
 
+> Current scheduling override (2026-11-12): implementation/polish is paused for
+> [Desktop Completion Gap Audit](DESKTOP_COMPLETION_GAP_AUDIT.md). That document
+> owns cross-layer completion and P0/P1/P2 ordering at main0e2a5b8; the scoped
+> evidence and historical implementation labels below remain useful, not whole-
+> product completion claims.
+
 Initial audit 2026-11-12 against Native
 `327ed906a0231ab4aac864956f224279fad2ad64`; the source-bound correction
 entries below track later main and peer commits explicitly.

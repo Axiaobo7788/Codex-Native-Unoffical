@@ -1,3 +1,11 @@
+> Historical independent peer audit from original commit `e6667dd`
+> (preserved via cherry-pick `ac6ca4b`). Its36-surface denominator and
+> independently grouped estimates are not the current completion contract.
+> Use [the canonical audit](../reverse/DESKTOP_COMPLETION_GAP_AUDIT.md) for
+> reconciled rows, scope, priorities and five distinct coverage denominators.
+> Narrative findings are preserved as peer input; only explicitly reconciled
+> claims are adopted by the canonical matrix.
+
 # Gemini Independent Desktop Completion Gap Audit (`main` @ `0e2a5b8`)
 
 - **Audit Date:** `2026-11-12`

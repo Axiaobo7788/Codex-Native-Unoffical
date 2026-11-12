@@ -1,5 +1,11 @@
 # Official Feature Matrix & Convergence Queue
 
+> Current scheduling override (2026-11-12): implementation/polish is paused for
+> [Desktop Completion Gap Audit](DESKTOP_COMPLETION_GAP_AUDIT.md). That document
+> owns cross-layer completion and P0/P1/P2 ordering at main0e2a5b8; the scoped
+> evidence and historical implementation labels below remain useful, not whole-
+> product completion claims.
+
 > **Audited Packages**:
 > - Installed Linux-packaged ChatGPT / Codex Desktop (`26.1103.60933`, build `25894`) for the post-consolidation static audit. Older rows retain their original evidence.
 > - Stock Bundled Runtime (`codex app-server 0.167.0-alpha.3.2`)
