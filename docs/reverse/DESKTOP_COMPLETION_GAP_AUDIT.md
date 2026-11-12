@@ -1,5 +1,11 @@
 # Desktop Completion Gap Audit
 
+> Superseded for convergence by [Full Desktop Convergence Audit](DESKTOP_FULL_CONVERGENCE_AUDIT.md).
+> This document remains the prior coverage inventory and historical evidence
+> index. Its VERIFIED labels are narrow implementation/stock proofs, not current
+> Desktop-convergence certification. New functional additions and all eight
+> dimensions are assessed in the new canonical audit; implementation is paused.
+
 Audit date: **2026-11-12**. Audited delivery baseline:
 **`0e2a5b80464f7ab6e3f5ab9034e9c37ecf6593ec` (main/origin/main)**.
 Mode: `SELF_ITERATION`, **audit only; implementation paused by the user**.

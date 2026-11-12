@@ -1,0 +1,271 @@
+{
+  "base": "6e77c8a78bb9441668dbe9f22c2a16fd500bb1db",
+  "productionEquivalentPacketSource": "5dd47587255b7de05b8633ca36f2e05921a76931",
+  "officialBuild": "25894",
+  "officialAsarSha256": "121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14",
+  "pairs": [
+    {
+      "id": "DR-wide",
+      "officialImage": "/var/tmp/native-full-convergence-20261112/official/corrected-wide.png",
+      "nativeImage": "/var/tmp/native-full-convergence-20261112/native/shell-differential/initial-wide.png",
+      "officialPixels": [
+        1191,
+        865
+      ],
+      "nativePixels": [
+        1191,
+        865
+      ],
+      "officialSha256": "0a0ff0e9959cd3cd45d5976cf2a6e40d81cf6307c7f1e7fe1208cd0c77d81a15",
+      "nativeSha256": "11d2446c9579be82d088739e866da97f99d3faa9c965169cadb3e0cce13ec8c1",
+      "officialViewport": {
+        "w": 1191,
+        "h": 865,
+        "dpr": 1
+      },
+      "precondition": "fresh isolated credential-free local profile",
+      "officialState": "sign-in; no app shell",
+      "nativeState": "connected Home; narrow Native legacy conversation shell",
+      "verdict": "DIVERGED onboarding, not authenticated Home/conversation comparison"
+    },
+    {
+      "id": "DR-normal",
+      "officialImage": "/var/tmp/native-full-convergence-20261112/official/corrected-normal.png",
+      "nativeImage": "/var/tmp/native-full-convergence-20261112/native/shell-differential/normal.png",
+      "officialPixels": [
+        820,
+        865
+      ],
+      "nativePixels": [
+        820,
+        865
+      ],
+      "officialSha256": "84abbc0598c75766f5efc70d0ebd97d02f4708e02c9b41725748d95cfe8926f5",
+      "nativeSha256": "86bd98bd29414b61adedc285c15da747f514c7abe30f3c16fef03ccef5a4bce3",
+      "officialViewport": {
+        "w": 820,
+        "h": 865,
+        "dpr": 1
+      },
+      "precondition": "fresh isolated credential-free local profile",
+      "officialState": "sign-in; no app shell",
+      "nativeState": "connected Home; narrow Native legacy conversation shell",
+      "verdict": "DIVERGED onboarding, not authenticated Home/conversation comparison"
+    },
+    {
+      "id": "DR-narrow",
+      "officialImage": "/var/tmp/native-full-convergence-20261112/official/corrected-narrow.png",
+      "nativeImage": "/var/tmp/native-full-convergence-20261112/native/shell-differential/narrow-conversation.png",
+      "officialPixels": [
+        700,
+        800
+      ],
+      "nativePixels": [
+        700,
+        800
+      ],
+      "officialSha256": "f8100fd0a664fda39671bde1ab5c2ecac8d10d8a9f30e9c3f287a86ca1096391",
+      "nativeSha256": "6b69356a3ad12e8811b331eacd1a8f0e1b3c65966cf1226280eb992b0a8e398f",
+      "officialViewport": {
+        "w": 700,
+        "h": 800,
+        "dpr": 1
+      },
+      "precondition": "fresh isolated credential-free local profile",
+      "officialState": "sign-in; no app shell",
+      "nativeState": "connected Home; narrow Native legacy conversation shell",
+      "verdict": "DIVERGED onboarding, not authenticated Home/conversation comparison"
+    }
+  ],
+  "nativeCtrlK": {
+    "image": "native/shell-differential/composer-ctrl-k.png",
+    "observed": "typed audit remains in focused Home composer; sidebar search did not open",
+    "evidence": "Native runtime + source; not a paired official shortcut run"
+  },
+  "negativeEvidence": [
+    "Initial official wide/normal screenshots clipped5px by offscreen window position; preserved originals, moved owned window to0,0 and recaptured exact sizes",
+    "Browser.getWindowForTarget returned Browser window not found; isolated X11 window position used instead; no product code changed",
+    "Official synthetic Tab did not establish a focused control in DOM; no cross-product keyboard parity claim",
+    "Signed-in official surfaces unavailable in clean profile; no credential read/copy/login or auth bypass"
+  ],
+  "ownedPidsGone": {
+    "1657359": true,
+    "1657340": true,
+    "1658701": true,
+    "1658907": true,
+    "1658909": true
+  },
+  "sourceAnchorChecks": [
+    {
+      "file": "webview/assets/async/499225.36a7812ae9.js",
+      "anchors": [
+        {
+          "anchor": "app-shell-sidebar",
+          "offset": 58876
+        },
+        {
+          "anchor": "sidebar.customize.installed",
+          "offset": 617362
+        },
+        {
+          "anchor": "automations.local",
+          "offset": 204252
+        },
+        {
+          "anchor": "reserveLeadingSlot",
+          "offset": 500219
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/961657.97fdcc5e7d.js",
+      "anchors": [
+        {
+          "anchor": "n<=960",
+          "offset": 141975
+        },
+        {
+          "anchor": "n<=720",
+          "offset": 142003
+        },
+        {
+          "anchor": "browser:min-[768px]",
+          "offset": 77318
+        },
+        {
+          "anchor": "app-shell-main",
+          "offset": 70202
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/14353.acaf5eaf67.js",
+      "anchors": [
+        {
+          "anchor": "bubble-vBnidZ",
+          "offset": 95
+        },
+        {
+          "anchor": "forceCollapsible",
+          "offset": 44090
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/309406.5b468e9851.js",
+      "anchors": [
+        {
+          "anchor": "Ceox",
+          "offset": 42843
+        },
+        {
+          "anchor": "quicksilver",
+          "offset": -1
+        },
+        {
+          "anchor": "goal",
+          "offset": 47527
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/927552.2a3666383e.js",
+      "anchors": [
+        {
+          "anchor": "reserveLeadingSlot",
+          "offset": 75274
+        },
+        {
+          "anchor": "merged",
+          "offset": 38313
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/634175.4437e0034c.js",
+      "anchors": [
+        {
+          "anchor": "isCodexHome",
+          "offset": 23120
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/656640.89962e391d.js",
+      "anchors": [
+        {
+          "anchor": "review",
+          "offset": 9867
+        },
+        {
+          "anchor": "compact",
+          "offset": 15669
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/966041.11e4e4a4b2.js",
+      "anchors": [
+        {
+          "anchor": "Stage",
+          "offset": 19999
+        },
+        {
+          "anchor": "Unstage",
+          "offset": 20205
+        },
+        {
+          "anchor": "Revert",
+          "offset": 20396
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/110557.82455d0c53.js",
+      "anchors": [
+        {
+          "anchor": "Terminal",
+          "offset": 79145
+        }
+      ]
+    },
+    {
+      "file": "webview/assets/async/881959.c5f8bc6d8d.js",
+      "anchors": [
+        {
+          "anchor": "automations.local",
+          "offset": -1
+        },
+        {
+          "anchor": "Run now",
+          "offset": -1
+        }
+      ]
+    }
+  ],
+  "scope": "Audit metadata only; screenshots/source extraction remain local; no product code edits, credentials or source payloads.",
+  "finalAuditCounts": {
+    "functional": {
+      "IMPLEMENTED BUT UNVERIFIED": 17,
+      "PARTIAL": 23,
+      "MISSING": 18
+    },
+    "functionalCorrespondence": 40,
+    "workflowDenominator": 58,
+    "surfaceCorrespondence": 24,
+    "surfaceDenominator": 36,
+    "sourceFacet": {
+      "DIRECTLY TRANSLATED": 11,
+      "APPROXIMATED": 19,
+      "FUNCTIONALLY EQUIVALENT": 10,
+      "MISSING": 20,
+      "RE-DESIGNED": 2,
+      "UNKNOWN": 2
+    },
+    "sourceExisting": 44,
+    "sourceTranslated": 21,
+    "sourceDenominator": 64
+  },
+  "productionCodeModified": false,
+  "documentationChanges": true
+}

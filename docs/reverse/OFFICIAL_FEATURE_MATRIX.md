@@ -1,10 +1,29 @@
 # Official Feature Matrix & Convergence Queue
 
-> Current scheduling override (2026-11-12): implementation/polish is paused for
-> [Desktop Completion Gap Audit](DESKTOP_COMPLETION_GAP_AUDIT.md). That document
-> owns cross-layer completion and P0/P1/P2 ordering at main0e2a5b8; the scoped
-> evidence and historical implementation labels below remain useful, not whole-
-> product completion claims.
+> Current execution override (2026-11-12):
+> [Full Desktop Convergence Audit](DESKTOP_FULL_CONVERGENCE_AUDIT.md) is canonical
+> for coverage versus convergence. Implementation/polish/fixes/branch merges are
+> paused; after audit commit/push STOP for Human confirmation. Earlier scoped
+> MATCH/VERIFIED/READY labels below are not whole-Desktop convergence or authority
+> to resume implementation.
+
+## Proposed implementation backlog — FROZEN_PENDING_BASELINE_CONFIRMATION
+
+These are proposed convergence contracts from the full audit, **not active
+implementation ownership or permission to merge existing feature branches**.
+Every row waits for the user's confirmation of the new baseline.
+
+| Slice | Outcome / contract | Evidence dependency |
+|---|---|---|
+| CV01 | Account/onboarding/re-authentication readback and cancel/error lifecycle | Supported stock-managed login; Human operates actual account/security interaction. |
+| CV02 | Coherent shell/compact/keyboard/persisted-layout contract | Resolve active official branch and command scopes; preserve controller/draft boundaries. |
+| CV03 | Live/saved/workspace Changes + Review/Git pane relationship | Bounded authoritative source and actual open-state eligibility/caller; sizing helper alone is insufficient. |
+| CV04 | Activity/per-file/output live/saved/large-payload contract | Review preserved unmerged branches, current source grouping and lazy lifecycle. |
+| CV05 | Composer/model/queue/Plan/attachment combined-state contract | Settings acknowledgement, true command semantics, legitimate pending combinations and draft ownership. |
+| CV06 | Settings/local developer workflow contract | Preference persistence, terminal/process/worktree/environment boundaries; source-backed public paths. |
+| CV07 | Projects/global versus scoped search/read-state contract | Explicit catalog scope/cursors/revisions, accessible current-state navigation. |
+| CV08 | Customize/install/auth/tool/rich-result contract | Catalog versus installed truth, supported scope/permissions, matched details and failure states. |
+| CV09 | Per-variant motion + paired light/dark/focus/resize/scroll contracts | Applied computed styles/caller predicates and temporal comparisons; no guessed global durations. |
 
 > **Audited Packages**:
 > - Installed Linux-packaged ChatGPT / Codex Desktop (`26.1103.60933`, build `25894`) for the post-consolidation static audit. Older rows retain their original evidence.
