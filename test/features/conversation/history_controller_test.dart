@@ -10,6 +10,50 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'old occurrence request cannot mark a replacement runtime unsupported',
+    () async {
+      final gateway = _OccurrenceHistoryGateway()
+        ..pendingOccurrence = Completer<HistoryOccurrencePage>();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('same'));
+      controller.searchOccurrences('old runtime');
+      controller.invalidateRuntime();
+      await controller.bindThread(_thread('same'), force: true);
+      controller.searchOccurrences('fresh runtime');
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.occurrenceRequests, hasLength(2));
+      expect(controller.occurrencePage, isNotNull);
+      gateway.pendingOccurrence!.completeError(
+        UnsupportedError('retired runtime'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.occurrenceUnsupported, isFalse);
+      expect(controller.occurrencePage, isNotNull);
+      expect(controller.occurrenceError, isNull);
+    },
+  );
+
+  test(
+    'runtime retirement drops old Host references but keeps bounded prose',
+    () async {
+      final gateway = _OutputHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('same'));
+      final before = controller.timelineItems.single;
+      expect(before.output?.reference, 'old-host-only');
+      controller.invalidateRuntime();
+      final after = controller.timelineItems.single;
+      expect(after.text, before.text);
+      expect(after.output?.reference, isNull);
+      expect(after.output?.available, isFalse);
+      expect(after.output?.exitCode, 2);
+      expect(controller.turns, hasLength(1));
+    },
+  );
+
+  test(
     'defers only known unmaterialized history and hydrates when readable',
     () async {
       final gateway = _KnownEmptyHistoryGateway();
@@ -577,4 +621,36 @@ class _KnownEmptyHistoryGateway extends _HistoryGateway
     }
     return super.listHistoryTurns(query);
   }
+}
+
+class _OutputHistoryGateway extends _HistoryGateway {
+  _OutputHistoryGateway() : super(turnCount: 1, itemsPerTurn: 1);
+  @override
+  Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query) async =>
+      const HistoryTurnPage(
+        turns: [
+          HistoryTurn(
+            id: 'one',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'one-command',
+                turnId: 'one',
+                kind: HistoryItemKind.activity,
+                text: 'Last known bounded command',
+                isCommand: true,
+                output: OutputDescriptor(
+                  reference: 'old-host-only',
+                  bytes: 12,
+                  storedBytes: 12,
+                  truncated: false,
+                  available: true,
+                  exitCode: 2,
+                ),
+              ),
+            ],
+          ),
+        ],
+        nextCursor: null,
+      );
 }

@@ -136,23 +136,27 @@ class RuntimeController extends ChangeNotifier
   StreamSubscription<ThreadAttachmentEvent>? _threadAttachmentEventSubscription;
   StreamSubscription<RemoteLifecycleState>? _remoteStateSubscription;
   StreamSubscription<RemoteOnboardingState>? _remoteOnboardingSubscription;
+  // Deliver accepted transport events in their owning epoch. An additional
+  // async relay would let queued old approvals/status repopulate projections
+  // after connection-loss invalidation. Streaming UI coalescing is unchanged.
   final StreamController<TurnEvent> _turnEvents =
-      StreamController<TurnEvent>.broadcast();
+      StreamController<TurnEvent>.broadcast(sync: true);
   final StreamController<ThreadLifecycleEvent> _threadEvents =
-      StreamController<ThreadLifecycleEvent>.broadcast();
+      StreamController<ThreadLifecycleEvent>.broadcast(sync: true);
   final StreamController<ApprovalEvent> _approvalEvents =
-      StreamController<ApprovalEvent>.broadcast();
+      StreamController<ApprovalEvent>.broadcast(sync: true);
   final StreamController<UserInputEvent> _userInputEvents =
-      StreamController<UserInputEvent>.broadcast();
+      StreamController<UserInputEvent>.broadcast(sync: true);
   final StreamController<McpElicitationEvent> _mcpElicitationEvents =
-      StreamController<McpElicitationEvent>.broadcast();
+      StreamController<McpElicitationEvent>.broadcast(sync: true);
   final StreamController<McpOauthEvent> _mcpOauthEvents =
-      StreamController<McpOauthEvent>.broadcast();
+      StreamController<McpOauthEvent>.broadcast(sync: true);
   final StreamController<RuntimeDiagnosticsEvent> _runtimeDiagnosticsEvents =
-      StreamController<RuntimeDiagnosticsEvent>.broadcast();
+      StreamController<RuntimeDiagnosticsEvent>.broadcast(sync: true);
   final StreamController<ThreadAttachmentEvent> _threadAttachmentEvents =
-      StreamController<ThreadAttachmentEvent>.broadcast();
+      StreamController<ThreadAttachmentEvent>.broadcast(sync: true);
   Future<void>? _startOperation;
+  Future<void>? _desktopRetirement;
   var _desktopStartInFlight = false;
   var _desktopEpoch = 0;
   var _hasConnectedDesktop = false;
@@ -215,9 +219,14 @@ class RuntimeController extends ChangeNotifier
   }
 
   void _invalidateMcpOauth() {
-    if (!_mcpOauthEvents.isClosed) {
-      _mcpOauthEvents.add(const McpOauthInvalidated());
-    }
+    final epoch = _desktopEpoch;
+    // A consumer can shut down while handling an OAuth completion. Do not
+    // recursively add to the same synchronous broadcast stream in that stack.
+    scheduleMicrotask(() {
+      if (epoch == _desktopEpoch && !_mcpOauthEvents.isClosed) {
+        _mcpOauthEvents.add(const McpOauthInvalidated());
+      }
+    });
   }
 
   @override
@@ -308,6 +317,23 @@ class RuntimeController extends ChangeNotifier
         _ => false,
       };
 
+  /// Explicit transport recovery after a previously connected local session.
+  /// Feature projections must retire old pending work on connection loss;
+  /// reconnecting never resumes a thread or replays a write by itself.
+  bool get canRecoverWorkspace =>
+      !_usesRemote &&
+      !_disposed &&
+      !_stopping &&
+      _hasConnectedDesktop &&
+      !_desktopStartInFlight &&
+      switch (_snapshot.state) {
+        RuntimeConnectionState.notFound ||
+        RuntimeConnectionState.hostNotFound ||
+        RuntimeConnectionState.error ||
+        RuntimeConnectionState.processExited => true,
+        _ => false,
+      };
+
   Future<void> start() {
     if (_usesRemote) {
       return _startRemote();
@@ -342,6 +368,61 @@ class RuntimeController extends ChangeNotifier
     }
     _startOperation = null;
     return start();
+  }
+
+  Future<void> recoverWorkspace() {
+    if (!canRecoverWorkspace) {
+      return _desktopStartInFlight
+          ? (_startOperation ?? Future<void>.value())
+          : Future<void>.value();
+    }
+    final operation = Completer<void>();
+    _startOperation = operation.future;
+    _desktopStartInFlight = true;
+    unawaited(
+      _recoverDesktop(operation.future).then<void>(
+        (_) => operation.complete(),
+        onError: (Object error, StackTrace stack) =>
+            operation.completeError(error, stack),
+      ),
+    );
+    return operation.future;
+  }
+
+  Future<void> _recoverDesktop(Future<void> operation) async {
+    bool current() =>
+        !_disposed && !_stopping && identical(_startOperation, operation);
+    try {
+      _setSnapshot(
+        const RuntimeSnapshot(
+          state: RuntimeConnectionState.starting,
+          message:
+              'Restarting the local Codex runtime. No work will be replayed.',
+        ),
+      );
+      if (!current()) return;
+      // Await old stream/request/process retirement before admitting a new
+      // Host. Application-owned gateway streams remain alive across sessions.
+      await _retireDesktopTransport();
+      if (!current()) return;
+      await _startDesktop();
+    } catch (error) {
+      if (current()) {
+        _setSnapshot(
+          RuntimeSnapshot(
+            state: RuntimeConnectionState.error,
+            message: 'Could not recover the local runtime: $error',
+          ),
+        );
+      }
+    } finally {
+      // A failure listener may admit another attempt during startup's final
+      // notification. A retired operation must not reset that newer admission.
+      if (identical(_startOperation, operation)) {
+        _desktopStartInFlight = false;
+        if (!_disposed && !_stopping) notifyListeners();
+      }
+    }
   }
 
   bool _isCurrentDesktopAttempt(int epoch) =>
@@ -1146,7 +1227,27 @@ class RuntimeController extends ChangeNotifier
 
   /// Retire a failed connection while keeping application-owned gateway streams
   /// alive for a fresh startup. Public shutdown remains terminal.
-  Future<void> _retireDesktopTransport() async {
+  Future<void> _retireDesktopTransport() {
+    final pending = _desktopRetirement;
+    if (pending != null) return pending;
+    final operation = Completer<void>();
+    _desktopRetirement = operation.future;
+    unawaited(
+      _closeDesktopTransport().then<void>(
+        (_) {
+          _desktopRetirement = null;
+          operation.complete();
+        },
+        onError: (Object error, StackTrace stack) {
+          _desktopRetirement = null;
+          operation.completeError(error, stack);
+        },
+      ),
+    );
+    return operation.future;
+  }
+
+  Future<void> _closeDesktopTransport() async {
     _desktopEpoch += 1;
     _invalidateMcpOauth();
     final transport = _transport;
@@ -1285,6 +1386,7 @@ class RuntimeController extends ChangeNotifier
         ),
       ),
     );
+    _retireFaultedDesktop();
   }
 
   void _handleProtocolError(ProtocolViolation error) {
@@ -1302,6 +1404,14 @@ class RuntimeController extends ChangeNotifier
         message: error.toString(),
       ),
     );
+    _retireFaultedDesktop();
+  }
+
+  void _retireFaultedDesktop() {
+    // Release pending RPCs and owned processes even if the user does not
+    // immediately recover. Recovery/shutdown join this same retirement.
+    // The original failure remains the visible cause if cleanup also fails.
+    unawaited(_retireDesktopTransport().catchError((Object _) {}));
   }
 
   void _handleTurnStreamError(Object error, StackTrace stackTrace) {

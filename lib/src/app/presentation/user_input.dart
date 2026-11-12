@@ -39,25 +39,31 @@ class _UserInputBanner extends StatelessWidget {
           );
         }
         if (request == null) {
-          return _McpElicitationCard(
+          return KeyedSubtree(
             key: ValueKey('mcp-elicitation-${elicitation!.requestId}'),
-            controller: controller,
-            request: elicitation,
-            pendingCount: controller.pendingElicitations.length,
-            errorMessage: error,
+            child: _McpElicitationCard(
+              key: ObjectKey(elicitation),
+              controller: controller,
+              request: elicitation,
+              pendingCount: controller.pendingElicitations.length,
+              errorMessage: error,
+            ),
           );
         }
         final isCurrentDesktop = desktop && request.threadId == activeThreadId;
-        return _UserInputCard(
+        return KeyedSubtree(
           key: ValueKey('user-input-${request.requestId}'),
-          controller: controller,
-          request: request,
-          pendingCount: controller.pending.length,
-          errorMessage: error,
-          desktop: desktop,
-          autoAdvance: isCurrentDesktop,
-          autofocusChoices: isCurrentDesktop && autofocusChoices,
-          interruptingRequest: interruptingRequest,
+          child: _UserInputCard(
+            key: ObjectKey(request),
+            controller: controller,
+            request: request,
+            pendingCount: controller.pending.length,
+            errorMessage: error,
+            desktop: desktop,
+            autoAdvance: isCurrentDesktop,
+            autofocusChoices: isCurrentDesktop && autofocusChoices,
+            interruptingRequest: interruptingRequest,
+          ),
         );
       },
     );

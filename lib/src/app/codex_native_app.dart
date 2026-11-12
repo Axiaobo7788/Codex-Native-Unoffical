@@ -99,6 +99,17 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   late final bool _ownsController;
   AppLifecycleListener? _lifecycleListener;
   var _requestedInitialThreads = false;
+  var _hadConnectedWorkspace = false;
+  var _runtimeProjectionVersion = 0;
+  var _refreshingRuntimeProjection = false;
+  ({
+    int runtimeVersion,
+    String? threadId,
+    int afterHistoryVersion,
+    List<ConversationEntry> entries,
+  })?
+  _pendingRecoveredHistory;
+  final _navigatorKey = GlobalKey<NavigatorState>();
   var _lastRevertVersion = 0;
 
   @override
@@ -128,6 +139,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     );
     _lastRevertVersion = _threadController.revertVersion;
     _controller.addListener(_handleRuntimeState);
+    _historyController.addListener(_handleRecoveredHistory);
     _threadController.addListener(_handleThreadSelection);
     _lifecycleListener = AppLifecycleListener(
       onHide: () => unawaited(_controller.handleAppHidden()),
@@ -142,6 +154,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   void dispose() {
     _lifecycleListener?.dispose();
     _controller.removeListener(_handleRuntimeState);
+    _historyController.removeListener(_handleRecoveredHistory);
     _threadController.removeListener(_handleThreadSelection);
     _approvalController.dispose();
     _userInputController.dispose();
@@ -160,6 +173,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Codex Native (Unofficial)',
       theme: ThemeTokens.lightTheme,
@@ -190,17 +204,107 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
   }
 
   void _handleRuntimeState() {
-    if (_controller.snapshot.state != RuntimeConnectionState.connected ||
-        _requestedInitialThreads) {
+    final connected =
+        _controller.snapshot.state == RuntimeConnectionState.connected;
+    if (!connected) {
+      if (!_controller.usesRemote && _requestedInitialThreads) {
+        _requestedInitialThreads = false;
+        _runtimeProjectionVersion += 1;
+        _pendingRecoveredHistory = null;
+        _refreshingRuntimeProjection = true;
+        // Dismiss session-bound modal readers/forms. Their Host references and
+        // server-request IDs cannot survive replacement of the local process.
+        _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+        // Invalidate before any replacement runtime can publish new requests.
+        // These methods preserve bounded saved projections and user intent.
+        _conversationController.invalidateRuntime();
+        _approvalController.invalidateRuntime();
+        _userInputController.invalidateRuntime();
+        _historyController.invalidateRuntime();
+        _settingsController.invalidateRuntime();
+        _threadController.invalidateRuntime();
+        _refreshingRuntimeProjection = false;
+      }
       return;
     }
+    if (_requestedInitialThreads) return;
     _requestedInitialThreads = true;
-    unawaited(_threadController.refresh());
     unawaited(_settingsController.refreshModels());
+    if (_hadConnectedWorkspace && !_controller.usesRemote) {
+      unawaited(_refreshRecoveredWorkspace(++_runtimeProjectionVersion));
+    } else {
+      _hadConnectedWorkspace = true;
+      unawaited(_threadController.refresh());
+    }
+  }
+
+  Future<void> _refreshRecoveredWorkspace(int version) async {
+    final selectedId = _threadController.selectedThread?.id;
+    _pendingRecoveredHistory = (
+      runtimeVersion: version,
+      threadId: selectedId,
+      afterHistoryVersion: _historyController.refreshVersion,
+      entries: _conversationController.entries,
+    );
+    bool current() =>
+        mounted &&
+        version == _runtimeProjectionVersion &&
+        _controller.snapshot.state == RuntimeConnectionState.connected;
+    _refreshingRuntimeProjection = true;
+    try {
+      await _threadController.refresh(preserveSelection: true);
+      if (!current()) return;
+      // Read metadata/history only. A cold thread (including one with queued
+      // work) must remain cold until the existing explicit-resume flow admits it.
+      if (selectedId != null &&
+          _threadController.selectedThread?.id == selectedId) {
+        await _threadController.selectThread(selectedId);
+      }
+      if (!current()) return;
+    } finally {
+      if (version == _runtimeProjectionVersion) {
+        _refreshingRuntimeProjection = false;
+      }
+    }
+    if (!current()) return;
+    final selected = _threadController.selectedThread;
+    if (selected != null &&
+        _threadController.selectedThreadNeedsDraftRecovery(selected.id)) {
+      // The fresh read did not establish this previous-session ID. Keep the
+      // bounded last-known projection with retired references; never turn an
+      // unavailable/ambiguous saved read into a fabricated empty history.
+      return;
+    }
+    await _historyController.bindThread(
+      selected,
+      force: true,
+      knownUnmaterialized:
+          selected != null && !_threadController.isMaterialized(selected.id),
+    );
+  }
+
+  void _handleRecoveredHistory() {
+    final pending = _pendingRecoveredHistory;
+    if (pending == null) return;
+    if (pending.runtimeVersion != _runtimeProjectionVersion ||
+        pending.threadId != _threadController.selectedThread?.id) {
+      _pendingRecoveredHistory = null;
+      return;
+    }
+    if (_historyController.loadingTurns ||
+        _historyController.errorMessage != null ||
+        _historyController.refreshVersion <= pending.afterHistoryVersion) {
+      return;
+    }
+    _pendingRecoveredHistory = null;
+    _conversationController.reconcileRecoveredHistory(pending.entries);
   }
 
   void _handleThreadSelection() {
     final selected = _threadController.selectedThread;
+    if (_pendingRecoveredHistory?.threadId != selected?.id) {
+      _pendingRecoveredHistory = null;
+    }
     _settingsController.bindThread(selected);
     if (_threadController.revertVersion != _lastRevertVersion) {
       _lastRevertVersion = _threadController.revertVersion;
@@ -212,6 +316,7 @@ class _CodexNativeAppState extends State<CodexNativeApp> {
     }
     _conversationController.bindThread(selected);
     _diffController.bindThread(selected);
+    if (_refreshingRuntimeProjection) return;
     // A just-created stock thread has no persisted history before its first
     // turn. Reuse the catalog's existing admission marker; never reinterpret
     // arbitrary history RPC failures as an empty conversation.

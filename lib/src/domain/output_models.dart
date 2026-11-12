@@ -19,6 +19,16 @@ class OutputDescriptor {
   final bool available;
   final int? exitCode;
 
+  /// Host spool references belong to one process session, never saved history.
+  OutputDescriptor withoutSessionReference() => OutputDescriptor(
+    reference: null,
+    bytes: bytes,
+    storedBytes: 0,
+    truncated: truncated,
+    available: false,
+    exitCode: exitCode,
+  );
+
   OutputDescriptor withExitCode(int? exitCode) => exitCode == this.exitCode
       ? this
       : OutputDescriptor(

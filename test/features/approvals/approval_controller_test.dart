@@ -19,6 +19,38 @@ void main() {
     await gateway.dispose();
   });
 
+  test('retired decision cannot settle a reused runtime request ID', () async {
+    ApprovalRequest request(String summary) => ApprovalRequest(
+      requestId: 1,
+      kind: ApprovalKind.command,
+      threadId: 'same-thread',
+      turnId: 'same-turn',
+      itemId: 'same-item',
+      summary: summary,
+      approveSupported: true,
+    );
+    final first = Completer<void>();
+    gateway.decisionGate = first;
+    gateway.events.add(ApprovalRequestedEvent(request: request('old')));
+    final oldDecision = controller.approve(1);
+    controller.invalidateRuntime();
+    expect(controller.pending, isEmpty);
+    final second = Completer<void>();
+    final replacement = request('new');
+    gateway.decisionGate = second;
+    gateway.events.add(ApprovalRequestedEvent(request: replacement));
+    final newDecision = controller.reject(1);
+    first.completeError(StateError('retired transport'));
+    await oldDecision;
+    expect(controller.pending.single, same(replacement));
+    expect(controller.isDeciding(1), isTrue);
+    expect(controller.errorMessage, isNull);
+    second.complete();
+    await newDecision;
+    expect(controller.pending, isEmpty);
+    expect(controller.isDeciding(1), isFalse);
+  });
+
   test('tracks and approves a pending request', () async {
     gateway.events.add(
       const ApprovalRequestedEvent(
@@ -69,6 +101,7 @@ class _FakeApprovalGateway implements ApprovalGateway {
   final StreamController<ApprovalEvent> events =
       StreamController<ApprovalEvent>.broadcast(sync: true);
   final List<(Object, ApprovalDecision)> decisions = [];
+  Completer<void>? decisionGate;
 
   @override
   Stream<ApprovalEvent> get approvalEvents => events.stream;
@@ -79,6 +112,7 @@ class _FakeApprovalGateway implements ApprovalGateway {
     required ApprovalDecision decision,
   }) async {
     decisions.add((requestId, decision));
+    await decisionGate?.future;
   }
 
   Future<void> dispose() => events.close();

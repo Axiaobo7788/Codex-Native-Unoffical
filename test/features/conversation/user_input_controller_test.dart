@@ -21,6 +21,31 @@ void main() {
     await gateway.dispose();
   });
 
+  test(
+    'runtime retirement clears questions and fences reused request ID',
+    () async {
+      final oldGate = Completer<void>();
+      gateway.responses['same'] = oldGate;
+      gateway.events.add(UserInputRequestedEvent(request: _request('same')));
+      final oldSubmit = controller.submit('same', const {});
+      controller.invalidateRuntime();
+      expect(controller.pending, isEmpty);
+      final freshGate = Completer<void>();
+      final replacement = _request('same');
+      gateway.responses['same'] = freshGate;
+      gateway.events.add(UserInputRequestedEvent(request: replacement));
+      final freshSubmit = controller.submit('same', const {});
+      oldGate.completeError(StateError('old runtime'));
+      await oldSubmit;
+      expect(controller.pending.single, same(replacement));
+      expect(controller.isSubmitting('same'), isTrue);
+      expect(controller.errorMessage, isNull);
+      freshGate.complete();
+      await freshSubmit;
+      expect(controller.pending, isEmpty);
+    },
+  );
+
   test('tracks a typed request and submits immutable answers', () async {
     gateway.events.add(UserInputRequestedEvent(request: _request('input-1')));
 

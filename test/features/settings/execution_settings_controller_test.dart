@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codex_native_unofficial/src/domain/execution_settings.dart';
 import 'package:codex_native_unofficial/src/domain/model_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
@@ -6,6 +8,53 @@ import 'package:codex_native_unofficial/src/features/settings/execution_settings
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('runtime invalidation retains explicit intent until fresh catalog validates', () async {
+    final gateway = _ModelGateway();
+    final controller = ExecutionSettingsController(gateway: gateway);
+    addTearDown(controller.dispose);
+    await controller.refreshModels();
+    controller.selectModel('other-model');
+    controller.selectReasoningEffort('high');
+    controller.invalidateRuntime();
+    controller.bindThread(null);
+    expect(controller.selectedModelId, 'other-model');
+    expect(controller.selectedReasoningEffort, 'high');
+    expect(controller.observedSettings, isNull);
+    expect(
+      () => controller.turnOptions(threadId: 'same', text: 'Keep intent'),
+      throwsStateError,
+    );
+    await controller.refreshModels();
+    expect(
+      controller.turnOptions(threadId: 'same', text: 'Keep intent').model,
+      'other-model-wire',
+    );
+    expect(controller.selectedReasoningEffort, 'high');
+  });
+
+  test(
+    'retired catalog completion cannot overwrite a new pending catalog',
+    () async {
+      final first = Completer<ModelPage>();
+      final gateway = _DeferredModels()..next = first;
+      final controller = ExecutionSettingsController(gateway: gateway);
+      addTearDown(controller.dispose);
+      final oldRead = controller.refreshModels();
+      controller.invalidateRuntime();
+      final second = Completer<ModelPage>();
+      gateway.next = second;
+      final freshRead = controller.refreshModels();
+      first.completeError(StateError('retired runtime'));
+      await oldRead;
+      expect(controller.loading, isTrue);
+      expect(controller.errorMessage, isNull);
+      second.complete(const ModelPage(models: [], nextCursor: null));
+      await freshRead;
+      expect(controller.loading, isFalse);
+      expect(controller.errorMessage, isNull);
+    },
+  );
+
   test(
     'uncatalogued actual model does not borrow recommendation capabilities',
     () async {
@@ -240,4 +289,10 @@ class _ModelGateway implements ModelGateway {
     ],
     nextCursor: null,
   );
+}
+
+class _DeferredModels implements ModelGateway {
+  late Completer<ModelPage> next;
+  @override
+  Future<ModelPage> listModels(ModelListQuery query) => next.future;
 }

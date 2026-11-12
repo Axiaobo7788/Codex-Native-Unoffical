@@ -1393,6 +1393,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   var _wasWindowShifted = false;
   var _lastHandledLoadOlderVersion = 0;
   var _lastHandledRevertVersion = 0;
+  var _lastRuntimeInvalidationVersion = 0;
   var _restorePagesLoaded = 0;
   var _restoreAlignmentPasses = 0;
   var _showJumpToLatest = false;
@@ -1406,6 +1407,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   bool? _usingChangesSidePane;
   var _searchOpen = false;
   var _checkingColdResume = false;
+  Object? _draftReplacementOperation;
+  String? _draftReplacementFromThreadId;
+  var _draftReplacementRuntimeVersion = 0;
   var _threadSelectionVersion = 0;
   var _activeSearchMatchIndex = 0;
   var _branchSequence = 1;
@@ -1528,6 +1532,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
     _lastHandledRevertVersion = widget.threadController?.revertVersion ?? 0;
+    _lastRuntimeInvalidationVersion =
+        widget.controller.runtimeInvalidationVersion;
     _composerFocusNode.addListener(_handleComposerFocusChanged);
     widget.controller.addListener(_handleConversationChanged);
     widget.approvalController.addListener(_handleComposerRequestsChanged);
@@ -1632,12 +1638,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (_linkedPrScanInFlight) {
       return;
     }
+    final runtimeVersion = _lastRuntimeInvalidationVersion;
     _linkedPrScanInFlight = true;
     if (mounted) {
       setState(_notifyLinkedPrViewChanged);
     }
     try {
-      while (mounted && _queuedLinkedPrThreadId != null) {
+      while (mounted &&
+          runtimeVersion == _lastRuntimeInvalidationVersion &&
+          _queuedLinkedPrThreadId != null) {
         final targetThreadId = _queuedLinkedPrThreadId!;
         _queuedLinkedPrThreadId = null;
         if (targetThreadId != _activeThreadId) {
@@ -1661,7 +1670,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
         try {
           final snapshot = await gateway.readLinkedPullRequests(targetThreadId);
-          if (!mounted || _activeThreadId != targetThreadId) {
+          if (!mounted ||
+              runtimeVersion != _lastRuntimeInvalidationVersion ||
+              _activeThreadId != targetThreadId) {
             continue;
           }
           setState(() {
@@ -1671,7 +1682,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             _notifyLinkedPrViewChanged();
           });
         } on Object catch (error) {
-          if (!mounted || _activeThreadId != targetThreadId) {
+          if (!mounted ||
+              runtimeVersion != _lastRuntimeInvalidationVersion ||
+              _activeThreadId != targetThreadId) {
             continue;
           }
           if (!gateway.supportsThreadAttachments) {
@@ -1698,8 +1711,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         }
       }
     } finally {
-      _linkedPrScanInFlight = false;
-      if (mounted) {
+      if (mounted && runtimeVersion == _lastRuntimeInvalidationVersion) {
+        _linkedPrScanInFlight = false;
         setState(_notifyLinkedPrViewChanged);
       }
     }
@@ -1713,6 +1726,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     if (gateway == null || !gateway.supportsThreadAttachmentWrites) {
       return;
     }
+    final runtimeVersion = _lastRuntimeInvalidationVersion;
     final rawUrl = _linkedPrUrlController.text.trim();
     if (rawUrl.isEmpty) {
       setState(() {
@@ -1737,7 +1751,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         url: rawUrl,
         headBranch: rawBranch.isEmpty ? null : rawBranch,
       );
-      if (!mounted || _activeThreadId != threadId) {
+      if (!mounted ||
+          runtimeVersion != _lastRuntimeInvalidationVersion ||
+          _activeThreadId != threadId) {
         return;
       }
       if (result.outcome == ThreadPullRequestLinkOutcome.scanIncomplete) {
@@ -1774,7 +1790,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       });
       _requestActiveThreadLinkedPrs(threadId);
     } on ArgumentError catch (error) {
-      if (!mounted || _activeThreadId != threadId) {
+      if (!mounted ||
+          runtimeVersion != _lastRuntimeInvalidationVersion ||
+          _activeThreadId != threadId) {
         return;
       }
       setState(() {
@@ -1786,7 +1804,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _notifyLinkedPrViewChanged();
       });
     } on Object catch (error) {
-      if (!mounted || _activeThreadId != threadId) {
+      if (!mounted ||
+          runtimeVersion != _lastRuntimeInvalidationVersion ||
+          _activeThreadId != threadId) {
         return;
       }
       if (!gateway.supportsThreadAttachments) {
@@ -1821,7 +1841,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _notifyLinkedPrViewChanged();
       });
     } finally {
-      if (mounted) {
+      if (mounted && runtimeVersion == _lastRuntimeInvalidationVersion) {
         setState(() {
           _linkedPrMutationInFlight = false;
           _notifyLinkedPrViewChanged();
@@ -2388,6 +2408,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ),
                   ],
                   if (resumeError != null) _resumeErrorBanner(resumeError),
+                  if (controller.entries.isNotEmpty &&
+                      widget.historyController.turns.isEmpty &&
+                      widget.historyController.errorMessage != null)
+                    _resumeErrorBanner(
+                      widget.historyController.errorMessage!,
+                      historyFailure: true,
+                    ),
                   _composer(controller),
                 ],
               ),
@@ -2878,6 +2905,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   String? _activeConversationResumeError(String? currentThreadId) {
+    if (currentThreadId != null &&
+        widget.threadController?.selectedThreadNeedsDraftRecovery(
+              currentThreadId,
+            ) ==
+            true) {
+      return ThreadListController.sessionDraftRecoveryMessage;
+    }
     final error = _conversationResumeError;
     final errorThreadId = _conversationResumeErrorThreadId;
     if (error == null ||
@@ -2920,8 +2954,14 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
   }
 
-  Widget _resumeErrorBanner(String message) {
+  Widget _resumeErrorBanner(String message, {bool historyFailure = false}) {
     final palette = ThemeTokens.of(context);
+    final threadId = widget.controller.thread?.id;
+    final canReplaceDraft =
+        !historyFailure &&
+        threadId != null &&
+        widget.threadController?.selectedThreadNeedsDraftRecovery(threadId) ==
+            true;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Center(
@@ -2930,7 +2970,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             maxWidth: OfficialCodexTheme.maxContentWidth,
           ),
           child: Semantics(
-            key: const ValueKey('conversation-resume-error-banner'),
+            key: ValueKey(
+              historyFailure
+                  ? 'conversation-history-error-banner'
+                  : 'conversation-resume-error-banner',
+            ),
             container: true,
             liveRegion: true,
             child: Container(
@@ -2956,7 +3000,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   Expanded(
                     child: Text(
                       message,
-                      key: const ValueKey('conversation-resume-error-text'),
+                      key: ValueKey(
+                        historyFailure
+                            ? 'conversation-history-error-text'
+                            : 'conversation-resume-error-text',
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall
@@ -2964,13 +3012,32 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     ),
                   ),
                   const SizedBox(width: ThemeTokens.space1),
-                  CodexIconButton(
-                    key: const ValueKey('conversation-resume-error-dismiss'),
-                    tooltip: 'Dismiss error',
-                    size: 24,
-                    onPressed: _clearConversationResumeError,
-                    icon: const Icon(Icons.close_rounded, size: 14),
-                  ),
+                  if (historyFailure)
+                    CodexButton(
+                      key: const ValueKey('conversation-history-retry'),
+                      label: 'Retry',
+                      onPressed: widget.historyController.loadingTurns
+                          ? null
+                          : () => unawaited(widget.historyController.refresh()),
+                    ),
+                  if (canReplaceDraft)
+                    CodexButton(
+                      key: const ValueKey('runtime-draft-new-conversation'),
+                      label: 'New conversation',
+                      onPressed:
+                          widget.threadController!.catalogBusy ||
+                              _draftReplacementOperation != null
+                          ? null
+                          : () => unawaited(_replaceUnavailableSessionDraft()),
+                    ),
+                  if (!historyFailure && !canReplaceDraft)
+                    CodexIconButton(
+                      key: const ValueKey('conversation-resume-error-dismiss'),
+                      tooltip: 'Dismiss error',
+                      size: 24,
+                      onPressed: _clearConversationResumeError,
+                      icon: const Icon(Icons.close_rounded, size: 14),
+                    ),
                 ],
               ),
             ),
@@ -2978,6 +3045,45 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         ),
       ),
     );
+  }
+
+  Future<void> _replaceUnavailableSessionDraft() async {
+    final threads = widget.threadController;
+    final oldThread = widget.controller.thread;
+    if (threads == null ||
+        oldThread == null ||
+        threads.catalogBusy ||
+        _draftReplacementOperation != null ||
+        !threads.selectedThreadNeedsDraftRecovery(oldThread.id)) {
+      return;
+    }
+    final operation = Object();
+    final runtimeVersion = widget.controller.runtimeInvalidationVersion;
+    setState(() {
+      _draftReplacementOperation = operation;
+      _draftReplacementFromThreadId = oldThread.id;
+      _draftReplacementRuntimeVersion = runtimeVersion;
+    });
+    try {
+      // This is an explicit new-thread action, never a retry of an unknown
+      // prior write. It creates no turn and never deletes the old stock store.
+      await threads.startThread(
+        widget.settingsController.threadOptions(oldThread.cwd),
+        replaceSessionDraftId: oldThread.id,
+      );
+    } on StateError catch (error) {
+      if (mounted && identical(_draftReplacementOperation, operation)) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message.toString())));
+      }
+    } finally {
+      if (mounted && identical(_draftReplacementOperation, operation)) {
+        setState(() {
+          _draftReplacementOperation = null;
+          _draftReplacementFromThreadId = null;
+        });
+      }
+    }
   }
 
   static String _formatCompactTokens(int count) {
@@ -6134,7 +6240,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   Future<void> _send() async {
-    if (_checkingColdResume) {
+    if (_checkingColdResume || _draftReplacementOperation != null) {
       return;
     }
     final text = _composerController.text;
@@ -6146,14 +6252,32 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     final selectionVersion = _threadSelectionVersion;
     var resumedForSend = false;
     if (widget.threadController case final threadController?) {
+      if (targetThreadId != null &&
+          threadController.selectedThreadNeedsDraftRecovery(targetThreadId)) {
+        _setConversationResumeError(
+          targetThreadId,
+          ThreadListController.sessionDraftRecoveryMessage,
+        );
+        return;
+      }
       if (targetThreadId == null) {
         final cwd = _activeProjectDirectory;
         if (cwd.isEmpty) {
           return;
         }
-        final created = await threadController.startThread(
-          widget.settingsController.threadOptions(cwd),
-        );
+        ThreadSummary? created;
+        try {
+          created = await threadController.startThread(
+            widget.settingsController.threadOptions(cwd),
+          );
+        } on StateError catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(error.message.toString())));
+          }
+          return;
+        }
         if (created == null) {
           return;
         }
@@ -7325,6 +7449,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       return;
     }
     final previousThreadId = _activeThreadId;
+    final preserveReplacementDraft =
+        _draftReplacementOperation != null &&
+        _draftReplacementFromThreadId == previousThreadId &&
+        _draftReplacementRuntimeVersion ==
+            widget.controller.runtimeInvalidationVersion;
     if (!_pendingThreadRestore && previousThreadId != null) {
       _captureThreadScrollBookmark(previousThreadId);
     }
@@ -7360,12 +7489,13 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _wasLoadingOlderTurns = widget.historyController.loadingOlderTurns;
     _wasWindowShifted = widget.historyController.canReturnToNewest;
     _lastHandledLoadOlderVersion = widget.historyController.loadOlderVersion;
-    if (widget.isOffstage &&
+    if (!preserveReplacementDraft &&
+        widget.isOffstage &&
         previousThreadId != null &&
         _composerController.text.isNotEmpty) {
       _composerController.clear();
     }
-    if (_composerAttachments.isNotEmpty) {
+    if (!preserveReplacementDraft && _composerAttachments.isNotEmpty) {
       _composerAttachments.clear();
     }
     if (_showJumpToLatest && mounted) {
@@ -7484,6 +7614,35 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   }
 
   void _handleConversationChanged() {
+    final runtimeVersion = widget.controller.runtimeInvalidationVersion;
+    if (runtimeVersion != _lastRuntimeInvalidationVersion) {
+      _lastRuntimeInvalidationVersion = runtimeVersion;
+      if (_activeThreadId case final threadId?) {
+        _captureThreadScrollBookmark(threadId);
+      }
+      // Cancel old preflight/submit completions without treating reconnect as
+      // a different-thread selection (which would clear attachments/draft).
+      _threadSelectionVersion += 1;
+      _draftReplacementOperation = null;
+      _draftReplacementFromThreadId = null;
+      _checkingColdResume = false;
+      _pendingBranchEdit = null;
+      _conversationResumeError = null;
+      _conversationResumeErrorThreadId = null;
+      _clearComposerStop();
+      _clearCommandOutputPreview();
+      _clearReasoningTimings();
+      _expandedLiveActivityGroupIds.clear();
+      _activeThreadLinkedPrs = null;
+      _queuedLinkedPrThreadId = null;
+      _linkedPrScanInFlight = false;
+      _linkedPrMutationInFlight = false;
+      _linkedPrLoadError = null;
+      _linkedPrMutationError = null;
+      _linkedPrMutationNotice = null;
+      _linkedPrsPopoverController.hide();
+      _timelineDetailsPopoverController.hide();
+    }
     if (_armedComposerStop != null &&
         _armedComposerStop != _desktopStopTarget) {
       _clearComposerStop();

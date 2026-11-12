@@ -2810,3 +2810,48 @@ model for the current measurement terminology.
   results, stock versions and runtime verification separately. Synthetic
   notification-order/eviction tests do not prove that the same rare interleaving
   was reproduced against a stock binary. Human visual acceptance remains open.
+
+
+## ADR-063 — Preserve one bounded workspace across explicit local runtime recovery
+
+- **Status:** Accepted for the local Desktop recovery implementation; source
+  integration and realistic validation are tracked separately in project status.
+- **Problem:** A connected runtime failure removed the workspace widget and its
+  unsent editor/attachments. Replacing the transport alone would also reuse old
+  request IDs, output spool references, pending callbacks and loaded-thread claims.
+- **Decision:** Keep the same local workspace mounted and inert behind the
+  existing opaque connection surface. Close session-bound Navigator readers and
+  deactivate anchored popovers. Explicit reconnect awaits coalesced old-transport
+  retirement before starting a fresh Host. Application-owned gateway streams stay
+  alive; terminal shutdown remains terminal and startup retry remains separate.
+- **Admission:** Invalidate bounded feature projections and fence their pending
+  completions by client runtime generations. Deliver accepted relay events within
+  the transport's epoch rather than queuing them past invalidation. Schedule OAuth
+  invalidation with an epoch guard so a completion listener can initiate shutdown
+  without recursively writing to a synchronous relay. These generations are not
+  stock revisions, persisted session IDs or replacement protocol semantics.
+- **Recovery:** Refresh only bounded catalogs, selected metadata and saved history.
+  Do not implicitly resume cold/queued work, acknowledge old server requests,
+  interrupt a new process, replay a turn or synthesize a successful stock outcome.
+  Retire Host references while retaining bounded last-known prose. A successful
+  fresh-history publication, including a later manual Retry, replaces only old
+  immutable live-entry identities and preserves new explicit work.
+- **Session-only drafts:** A pre-failure unmaterialized or ephemeral ID requires
+  fresh metadata before being treated as usable. Failed reads mean unavailable
+  or unconfirmed, not proof of deletion or of no accepted work. The user may
+  explicitly create a new conversation while retaining the editor, attachments
+  and project directory; this creates no turn, deletes no stock data and does not
+  retry an ambiguous previous operation. Arbitrary saved-thread failures keep
+  their normal explicit-resume/error path.
+- **Bounds:** Catalog/history/entry limits, inactive eviction, streaming coalescing,
+  lazy Markdown, per-file diffs and Host-owned bounded output remain unchanged.
+  The temporary reconciliation snapshot contains at most the current bounded
+  live entries and is released on successful refresh, thread change or loss of
+  its runtime generation. No full history or output payload is retained.
+- **Evidence:** Red-before-green unit/widget cases distinguish stale response
+  admission from visible draft retention. Controlled packaged Linux probes use
+  the real bundled Host and stock server with an isolated local model fixture;
+  these do not establish authenticated provider use, Human visual acceptance,
+  physical Windows/macOS behavior or an official automatic-recovery contract.
+  Preserve the first packaged session-only-ID failure and later correction
+  evidence separately. See [recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md).

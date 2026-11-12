@@ -41,6 +41,8 @@ class HistoryController extends ChangeNotifier {
   var _evictionVersion = 0;
   List<String> _lastEvictedItemIds = const [];
   var _generation = 0;
+  var _runtimeRevision = 0;
+  var _refreshVersion = 0;
   var _itemGeneration = 0;
   var _turnWindowRevision = 0;
   var _disposed = false;
@@ -63,6 +65,10 @@ class HistoryController extends ChangeNotifier {
   bool get canLoadOlderTurns => _turnCursor != null;
   bool get canReturnToNewest => _windowShifted;
   int get loadOlderVersion => _loadOlderVersion;
+
+  /// Client publication counter for an accepted newest-page read, not stock
+  /// revision metadata. Failed/stale reads never advance it.
+  int get refreshVersion => _refreshVersion;
   int get evictionVersion => _evictionVersion;
   List<String> get lastEvictedItemIds => _lastEvictedItemIds;
   bool get canLoadMoreItems =>
@@ -158,9 +164,10 @@ class HistoryController extends ChangeNotifier {
     if (_occurrenceRequestInFlight) {
       return;
     }
+    final runtime = _runtimeRevision;
     _occurrenceRequestInFlight = true;
     try {
-      while (!_disposed) {
+      while (!_disposed && runtime == _runtimeRevision) {
         final query = _pendingOccurrenceRequest;
         if (query == null) {
           break;
@@ -188,7 +195,7 @@ class HistoryController extends ChangeNotifier {
         }
       }
     } finally {
-      _occurrenceRequestInFlight = false;
+      if (runtime == _runtimeRevision) _occurrenceRequestInFlight = false;
     }
   }
 
@@ -203,6 +210,7 @@ class HistoryController extends ChangeNotifier {
     }
     final generation = _generation;
     final revision = _turnWindowRevision;
+    final runtime = _runtimeRevision;
     bool stillRequested() =>
         _isCurrent(thread.id, generation) &&
         identical(query, _occurrenceRequest) &&
@@ -247,8 +255,10 @@ class HistoryController extends ChangeNotifier {
       }
       return null;
     } finally {
-      _openingOccurrenceThreadId = null;
-      _notify();
+      if (runtime == _runtimeRevision) {
+        _openingOccurrenceThreadId = null;
+        _notify();
+      }
     }
   }
 
@@ -305,9 +315,12 @@ class HistoryController extends ChangeNotifier {
   Future<void> bindThread(
     ThreadSummary? thread, {
     bool knownUnmaterialized = false,
+    bool force = false,
   }) async {
     final deferHistory = thread != null && knownUnmaterialized;
-    if (_thread?.id == thread?.id && _knownUnmaterialized == deferHistory) {
+    if (!force &&
+        _thread?.id == thread?.id &&
+        _knownUnmaterialized == deferHistory) {
       _thread = thread;
       return;
     }
@@ -328,6 +341,52 @@ class HistoryController extends ChangeNotifier {
     if (thread != null && !_knownUnmaterialized) {
       await refresh();
     }
+  }
+
+  /// Keep the bounded last-known turn window while retiring old loads and
+  /// Host references. Recovery explicitly calls [bindThread] with `force: true`.
+  void invalidateRuntime() {
+    _runtimeRevision += 1;
+    _generation += 1;
+    _turnWindowRevision += 1;
+    _clearSelectedItems();
+    _resetOccurrenceSearch();
+    _occurrenceRequestInFlight = false;
+    _openingOccurrenceThreadId = null;
+    _readingSavedMcpText = false;
+    _loadingTurns = false;
+    _loadingOlderTurns = false;
+    _turnCursor = null;
+    _errorMessage = null;
+    for (var i = 0; i < _turns.length; i += 1) {
+      final turn = _turns[i];
+      _turns[i] = HistoryTurn(
+        id: turn.id,
+        status: turn.status,
+        startedAt: turn.startedAt,
+        completedAt: turn.completedAt,
+        reportedWorkDuration: turn.reportedWorkDuration,
+        items: [
+          for (final item in turn.items)
+            HistoryItem(
+              id: item.id,
+              turnId: item.turnId,
+              kind: item.kind,
+              text: item.text,
+              status: item.status,
+              exitCode: item.exitCode,
+              output: item.output?.withoutSessionReference(),
+              outputDeferred: item.outputDeferred,
+              isCommand: item.isCommand,
+              commandAction: item.commandAction,
+              canReadMcpText: item.canReadMcpText,
+              reasoningParts: item.reasoningParts,
+              attachments: item.attachments,
+            ),
+        ],
+      );
+    }
+    _notify();
   }
 
   Future<void> refresh() async {
@@ -355,6 +414,7 @@ class HistoryController extends ChangeNotifier {
       _windowShifted = false;
       _lastEvictedItemIds = const [];
       _clearSelectedItems();
+      _refreshVersion += 1;
     } catch (error) {
       if (_isCurrent(thread.id, generation)) {
         _errorMessage = error.toString();
@@ -588,6 +648,7 @@ class HistoryController extends ChangeNotifier {
       throw StateError('A saved MCP read is already in progress.');
     }
     final itemGeneration = _itemGeneration;
+    final runtime = _runtimeRevision;
     _readingSavedMcpText = true;
     try {
       final result = await local.readSavedMcpText(
@@ -602,7 +663,7 @@ class HistoryController extends ChangeNotifier {
       }
       return null;
     } finally {
-      _readingSavedMcpText = false;
+      if (runtime == _runtimeRevision) _readingSavedMcpText = false;
     }
   }
 

@@ -117,6 +117,19 @@ theme maps them into controls and keeps separate roles for opaque control
 colors and composited semantic states. See [project status](../PROJECT_STATUS.md)
 for the current workstream.
 
+## Local Desktop recovery
+
+A local runtime failure retires the process session rather than the mounted
+workspace. The opaque connection surface disables the retained workspace and
+session-bound overlays; unsent editor state remains bounded and client-owned.
+Explicit reconnect joins old Host retirement before launching a new process.
+Gateway streams survive, while feature generations fence old callbacks and
+server-request IDs and invalidate opaque output references. Recovery reads fresh
+bounded metadata/history without loading cold queued work or replaying writes.
+A previous-session draft that cannot be read has an explicit new-conversation
+path; failed reads do not establish that a previous operation was never accepted.
+See ADR-063 and the source-bound recovery evidence for limits and validation.
+
 ## Remote model
 
 The phone is a control plane.

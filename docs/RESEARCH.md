@@ -5080,3 +5080,16 @@ history memory and Linux83. Exact main CI43158612189 passes all three jobs;
 a branch verify dependency-install timeout before code checks is preserved
 and only that job was rerun. U7 actual-height clipping and runtime workspace recovery
 continue as independent material work; no Desktop completion claim is made.
+
+
+## Local workspace recovery: source and real-process distinction
+
+The current Desktop functional audit led to a reproduced local draft-loss
+boundary and three peer-reviewed stale-session risks. The controlled public
+stock0.167.2 packet establishes same-App recovery and no replay for saved/active
+threads, but also reproduces the old session-only-ID failure. The later explicit
+replacement correction remains a separate source/runtime claim until its own
+packet is exercised. See [recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md)
+and ADR-063. Current build25894 static process-manager observations do not prove
+an official automatic crash-recovery or state-database repair workflow; neither
+is inferred or copied into Native.

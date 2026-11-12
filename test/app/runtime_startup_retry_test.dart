@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/domain/runtime_snapshot.dart';
+import 'package:codex_native_unofficial/src/domain/mcp_oauth_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/transport/process/child_process.dart';
 import 'package:codex_native_unofficial/src/transport/process/process_transport.dart';
@@ -17,6 +18,208 @@ import 'package:flutter_test/flutter_test.dart';
 // contracts through production transport/adapters. They launch no stock process;
 // packaged real-stock startup verification is a separate evidence class.
 void main() {
+  test(
+    'OAuth completion can retire the runtime without recursive relay writes',
+    () async {
+      final child = _InitializeChild();
+      final controller = RuntimeController(
+        locator: _DeferredLocator(Future.value('/fixture/codex')),
+        hostLocator: _FixedHostLocator(),
+        transportStarter: (_, _) => _transport(child),
+      );
+      Future<void>? stopping;
+      final events = <McpOauthEvent>[];
+      final subscription = controller.mcpOauthEvents.listen((event) {
+        events.add(event);
+        if (event is McpOauthCompleted) stopping = controller.shutdown();
+      });
+      try {
+        await controller.start();
+        final completed = jsonEncode({
+          'method': 'mcpServer/oauthLogin/completed',
+          'params': {
+            'name': 'fixture-mcp',
+            'success': true,
+            'loginId': 'fixture-login',
+          },
+        });
+        child.output.add(utf8.encode('$completed\n'));
+        await pumpEventQueue();
+        await stopping;
+        expect(stopping, isNotNull);
+        expect(events.whereType<McpOauthCompleted>(), hasLength(1));
+        expect(events.whereType<McpOauthInvalidated>(), hasLength(1));
+        expect(controller.snapshot.state, RuntimeConnectionState.stopped);
+      } finally {
+        await subscription.cancel();
+        await controller.shutdown();
+        controller.dispose();
+        await child.dispose();
+      }
+    },
+  );
+
+  test(
+    'queued runtime relay never delivers a notification after retirement',
+    () async {
+      final child = _InitializeChild();
+      late ProcessTransport transport;
+      final controller = RuntimeController(
+        locator: _DeferredLocator(Future.value('/fixture/codex')),
+        hostLocator: _FixedHostLocator(),
+        transportStarter: (_, _) async => transport = await _transport(child),
+      );
+      Future<void>? stopping;
+      StreamSubscription<ThreadLifecycleEvent>? stopSubscription;
+      final deliveryStillCurrent = <bool>[];
+      final relay = controller.threadEvents.listen((event) {
+        deliveryStillCurrent.add(controller.supportsThreadAttachments);
+      });
+      try {
+        await controller.start();
+        expect(controller.supportsThreadAttachments, isTrue);
+        // This second transport listener retires the epoch after RuntimeController
+        // forwards to its application relay but before async relay delivery.
+        stopSubscription = transport.threadEvents.listen((_) {
+          stopping = controller.shutdown();
+        });
+        child.status('at-retirement-boundary');
+        await pumpEventQueue();
+        await stopping;
+        expect(stopping, isNotNull);
+        expect(deliveryStillCurrent, isNot(contains(false)));
+      } finally {
+        await stopSubscription?.cancel();
+        await relay.cancel();
+        await controller.shutdown();
+        controller.dispose();
+        await child.dispose();
+      }
+    },
+  );
+
+  test(
+    'connected recovery retires one session before one admitted restart',
+    () async {
+      final children = [_InitializeChild(), _InitializeChild()];
+      var launches = 0;
+      final controller = RuntimeController(
+        locator: _DeferredLocator(Future.value('/fixture/codex')),
+        hostLocator: _FixedHostLocator(),
+        transportStarter: (_, _) {
+          if (launches != 0) expect(children.first.closeInputCount, 1);
+          return _transport(children[launches++]);
+        },
+      );
+      final events = <ThreadLifecycleEvent>[];
+      final subscription = controller.threadEvents.listen(events.add);
+      try {
+        await controller.recoverWorkspace();
+        expect(launches, 0);
+        await controller.start();
+        children.first.exit(42);
+        await pumpEventQueue();
+        expect(controller.canRecoverWorkspace, isTrue);
+        expect(controller.canRetryStartup, isFalse);
+        final recovery = controller.recoverWorkspace();
+        expect(identical(recovery, controller.recoverWorkspace()), isTrue);
+        await recovery;
+        expect(launches, 2);
+        expect(controller.snapshot.state, RuntimeConnectionState.connected);
+        children.first.status('retired-session');
+        children.last.status('fresh-session');
+        await pumpEventQueue();
+        expect(
+          events.whereType<ThreadStatusChangedEvent>().map((e) => e.threadId),
+          ['fresh-session'],
+        );
+      } finally {
+        await subscription.cancel();
+        await controller.shutdown();
+        controller.dispose();
+        for (final child in children) {
+          await child.dispose();
+        }
+      }
+    },
+  );
+
+  test('shutdown during recovery admission prevents another Host', () async {
+    final child = _InitializeChild();
+    var launches = 0;
+    final controller = RuntimeController(
+      locator: _DeferredLocator(Future.value('/fixture/codex')),
+      hostLocator: _FixedHostLocator(),
+      transportStarter: (_, _) {
+        launches += 1;
+        return _transport(child);
+      },
+    );
+    Future<void>? stopping;
+    try {
+      await controller.start();
+      child.exit(42);
+      await pumpEventQueue();
+      controller.addListener(() {
+        if (controller.snapshot.state == RuntimeConnectionState.starting) {
+          stopping = controller.shutdown();
+        }
+      });
+      await controller.recoverWorkspace();
+      await stopping;
+      expect(launches, 1);
+      expect(controller.snapshot.state, RuntimeConnectionState.stopped);
+      expect(controller.canRecoverWorkspace, isFalse);
+    } finally {
+      await controller.shutdown();
+      controller.dispose();
+      await child.dispose();
+    }
+  });
+
+  test('an older recovery cannot reset a reentrant retry admission', () async {
+    final children = [
+      _InitializeChild(),
+      _InitializeChild(failInitialize: true),
+      _InitializeChild(),
+    ];
+    final third = Completer<ProcessTransport>();
+    var launches = 0;
+    final controller = RuntimeController(
+      locator: _DeferredLocator(Future.value('/fixture/codex')),
+      hostLocator: _FixedHostLocator(),
+      transportStarter: (_, _) {
+        final index = launches++;
+        return index == 2 ? third.future : _transport(children[index]);
+      },
+    );
+    Future<void>? retry;
+    try {
+      await controller.start();
+      children.first.exit(42);
+      await pumpEventQueue();
+      controller.addListener(() {
+        if (launches == 2 && controller.canRecoverWorkspace) {
+          retry = controller.recoverWorkspace();
+        }
+      });
+      await controller.recoverWorkspace();
+      await pumpEventQueue();
+      expect(launches, 3);
+      expect(identical(controller.recoverWorkspace(), retry), isTrue);
+      third.complete(await _transport(children.last));
+      await retry;
+      expect(controller.snapshot.state, RuntimeConnectionState.connected);
+    } finally {
+      if (!third.isCompleted) third.complete(await _transport(children.last));
+      await controller.shutdown();
+      controller.dispose();
+      for (final child in children) {
+        await child.dispose();
+      }
+    }
+  });
+
   testWidgets(
     'failed discovery can be retried explicitly on the same runtime instance',
     (tester) async {
@@ -107,7 +310,7 @@ void main() {
         expect(
           launches,
           2,
-        ); // Hot workspace recovery is deliberately not exposed.
+        ); // Startup retry remains distinct from explicit workspace recovery.
       } finally {
         await subscription.cancel();
         await controller.shutdown();

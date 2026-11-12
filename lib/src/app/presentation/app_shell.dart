@@ -1,6 +1,6 @@
 part of '../codex_native_app.dart';
 
-class RuntimeStatusScreen extends StatelessWidget {
+class RuntimeStatusScreen extends StatefulWidget {
   const RuntimeStatusScreen({
     super.key,
     required this.controller,
@@ -29,11 +29,26 @@ class RuntimeStatusScreen extends StatelessWidget {
   final McpOauthController? mcpOauthController;
 
   @override
+  State<RuntimeStatusScreen> createState() => _RuntimeStatusScreenState();
+}
+
+class _RuntimeStatusScreenState extends State<RuntimeStatusScreen> {
+  var _hasLocalWorkspace = false;
+
+  @override
+  void didUpdateWidget(covariant RuntimeStatusScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      _hasLocalWorkspace = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: AnimatedBuilder(
-          animation: controller,
+          animation: widget.controller,
           builder: (context, _) => _body(context),
         ),
       ),
@@ -41,19 +56,35 @@ class RuntimeStatusScreen extends StatelessWidget {
   }
 
   Widget _body(BuildContext context) {
+    final controller = widget.controller;
+    final connected =
+        controller.snapshot.state == RuntimeConnectionState.connected;
+    if (!controller.usesRemote && connected) _hasLocalWorkspace = true;
+    if (controller.usesRemote) _hasLocalWorkspace = false;
+    if (_hasLocalWorkspace) {
+      // Keep one bounded workspace, including its editor/attachments, mounted
+      // across local runtime loss. The existing opaque connection surface still
+      // owns interaction while disconnected; no writes or automatic resume are
+      // admitted through the hidden workspace.
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          TickerMode(
+            enabled: connected,
+            child: ExcludeSemantics(
+              excluding: !connected,
+              child: ExcludeFocus(
+                excluding: !connected,
+                child: IgnorePointer(ignoring: !connected, child: _workspace()),
+              ),
+            ),
+          ),
+          if (!connected) _RuntimeConnectionScreen(controller: controller),
+        ],
+      );
+    }
     return switch (controller.snapshot.state) {
-      RuntimeConnectionState.connected => _ConnectedWorkspace(
-        runtimeController: controller,
-        threadController: threadController,
-        conversationController: conversationController,
-        historyController: historyController,
-        approvalController: approvalController,
-        userInputController: userInputController,
-        settingsController: settingsController,
-        diffController: diffController,
-        mcpOauthController: mcpOauthController,
-        defaultWorkingDirectory: defaultWorkingDirectory,
-      ),
+      RuntimeConnectionState.connected => _workspace(),
       RuntimeConnectionState.remoteReadOnly => _StandaloneSurface(
         controller: controller,
         child: _RemoteReadOnlyPanel(controller: controller),
@@ -62,7 +93,7 @@ class RuntimeStatusScreen extends StatelessWidget {
         controller: controller,
         child: _RemotePairingPanel(
           controller: controller,
-          scannerLauncher: remotePairingScannerLauncher,
+          scannerLauncher: widget.remotePairingScannerLauncher,
         ),
       ),
       RuntimeConnectionState.remoteCredentialRecoveryRequired ||
@@ -73,6 +104,19 @@ class RuntimeStatusScreen extends StatelessWidget {
       _ => _RuntimeConnectionScreen(controller: controller),
     };
   }
+
+  Widget _workspace() => _ConnectedWorkspace(
+    runtimeController: widget.controller,
+    threadController: widget.threadController,
+    conversationController: widget.conversationController,
+    historyController: widget.historyController,
+    approvalController: widget.approvalController,
+    userInputController: widget.userInputController,
+    settingsController: widget.settingsController,
+    diffController: widget.diffController,
+    mcpOauthController: widget.mcpOauthController,
+    defaultWorkingDirectory: widget.defaultWorkingDirectory,
+  );
 }
 
 class _ConnectedWorkspace extends StatefulWidget {
@@ -112,7 +156,12 @@ typedef _DesktopNavigationEntry = ({
   _EcosystemSection customizeSection,
 });
 
-typedef _EcosystemContextKey = ({String cwd, String? threadId});
+typedef _EcosystemContextKey = ({
+  String cwd,
+  String? threadId,
+  int runtimeVersion,
+  bool connected,
+});
 
 class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
   static const _maxNavigationEntries = 32;
@@ -172,6 +221,10 @@ class _ConnectedWorkspaceState extends State<_ConnectedWorkspace> {
     cwd: (widget.threadController.selectedThread?.cwd ?? _workingDirectory)
         .trim(),
     threadId: widget.threadController.selectedThread?.id,
+    runtimeVersion: widget.conversationController.runtimeInvalidationVersion,
+    connected:
+        widget.runtimeController.snapshot.state ==
+        RuntimeConnectionState.connected,
   );
 
   void _disposeCustomizeController() {
@@ -1578,6 +1631,14 @@ class _RuntimeConnectionScreen extends StatelessWidget {
                     key: const ValueKey('runtime-startup-retry'),
                     label: 'Retry startup',
                     onPressed: () => unawaited(controller.retryStartup()),
+                  ),
+                ],
+                if (controller.canRecoverWorkspace) ...[
+                  const SizedBox(height: ThemeTokens.space5),
+                  CodexButton(
+                    key: const ValueKey('runtime-workspace-recover'),
+                    label: 'Reconnect runtime',
+                    onPressed: () => unawaited(controller.recoverWorkspace()),
                   ),
                 ],
                 const SizedBox(height: ThemeTokens.space5),

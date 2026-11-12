@@ -69,11 +69,27 @@ class _CodexPopoverAnchorState extends State<CodexPopoverAnchor> {
   final _link = LayerLink();
   late CodexPopoverController _controller;
   OverlayEntry? _entry;
+  var _inactiveHideScheduled = false;
 
   @override
   void initState() {
     super.initState();
     _bindController();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!TickerMode.valuesOf(context).enabled) _hideWhenInactive();
+  }
+
+  void _hideWhenInactive() {
+    if (_inactiveHideScheduled) return;
+    _inactiveHideScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inactiveHideScheduled = false;
+      if (mounted && !TickerMode.valuesOf(context).enabled) _controller.hide();
+    });
   }
 
   @override
@@ -167,6 +183,10 @@ class _CodexPopoverAnchorState extends State<CodexPopoverAnchor> {
   }
 
   void _showPopover() {
+    if (!TickerMode.valuesOf(context).enabled) {
+      _hideWhenInactive();
+      return;
+    }
     if (_entry != null) return;
     final overlay = Overlay.maybeOf(context);
     if (overlay == null) return;

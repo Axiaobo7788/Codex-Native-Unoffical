@@ -45,6 +45,16 @@ final class UserInputController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool isSubmitting(Object requestId) => submittingRequestId == requestId;
 
+  /// Invalidates answers/decisions only in the client. No response is sent to
+  /// a retired server, and a reused request ID cannot inherit old submission.
+  void invalidateRuntime() {
+    _pending.clear();
+    _pendingElicitations.clear();
+    _submission = null;
+    _errorMessage = null;
+    _notify();
+  }
+
   Future<void> submit(
     Object requestId,
     Map<String, List<String>> answers,

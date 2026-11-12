@@ -19,6 +19,9 @@ class ExecutionSettingsController extends ChangeNotifier {
   ThreadExecutionSettings? _observedSettings;
   String? _errorMessage;
   var _loading = false;
+  var _runtimeGeneration = 0;
+  var _waitingForFreshCatalog = false;
+  var _disposed = false;
 
   List<CodexModel> get models => _models;
   String? get selectedModelId => _selectedModelId;
@@ -77,26 +80,45 @@ class ExecutionSettingsController extends ChangeNotifier {
       const [];
 
   Future<void> refreshModels() async {
-    if (_loading) {
+    if (_loading || _disposed) {
       return;
     }
+    final generation = _runtimeGeneration;
     _loading = true;
     _errorMessage = null;
     notifyListeners();
     try {
       final page = await gateway.listModels(const ModelListQuery());
+      if (_disposed || generation != _runtimeGeneration) return;
       _models = page.models;
+      _waitingForFreshCatalog = false;
       if (_selectedModelId != null && effectiveModel == null) {
         _selectedModelId = null;
         _selectedReasoningEffort = null;
       }
       _revalidateReasoningEffort();
     } catch (error) {
-      _errorMessage = error.toString();
+      if (!_disposed && generation == _runtimeGeneration) {
+        _errorMessage = error.toString();
+      }
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (!_disposed && generation == _runtimeGeneration) {
+        _loading = false;
+        notifyListeners();
+      }
     }
+  }
+
+  void invalidateRuntime() {
+    _runtimeGeneration += 1;
+    _loading = false;
+    _models = const [];
+    _waitingForFreshCatalog = true;
+    _observedSettings = null;
+    _errorMessage = null;
+    // Keep explicit user intent until the next real model catalog can validate
+    // it. Inherited values and old catalog capabilities are no longer current.
+    notifyListeners();
   }
 
   void selectModel(String? modelId) {
@@ -118,6 +140,7 @@ class ExecutionSettingsController extends ChangeNotifier {
   }
 
   void _revalidateReasoningEffort() {
+    if (_waitingForFreshCatalog) return;
     final effort = _selectedReasoningEffort;
     if (effort != null &&
         !availableReasoningEfforts.any((option) => option.value == effort)) {
@@ -135,30 +158,53 @@ class ExecutionSettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  ThreadStartOptions threadOptions(String cwd) => ThreadStartOptions(
-    cwd: cwd,
-    model: effectiveModel == null || _selectedModelId == null
-        ? null
-        : effectiveModel!.model,
-    approvalPolicy: _approvalPolicy,
-    sandbox: _sandbox,
-  );
+  void _requireExplicitModelAvailable() {
+    if ((_waitingForFreshCatalog && _selectedReasoningEffort != null) ||
+        (_selectedModelId != null && effectiveModel == null)) {
+      throw StateError(
+        'The selected model is not available in the current '
+        'runtime catalog. Wait for models to load or select another model.',
+      );
+    }
+  }
+
+  ThreadStartOptions threadOptions(String cwd) {
+    _requireExplicitModelAvailable();
+    return ThreadStartOptions(
+      cwd: cwd,
+      model: effectiveModel == null || _selectedModelId == null
+          ? null
+          : effectiveModel!.model,
+      approvalPolicy: _approvalPolicy,
+      sandbox: _sandbox,
+    );
+  }
 
   TurnStartOptions turnOptions({
     required String threadId,
     required String text,
     List<UserAttachment> attachments = const [],
     String? clientUserMessageId,
-  }) => TurnStartOptions(
-    threadId: threadId,
-    text: text,
-    attachments: attachments,
-    clientUserMessageId: clientUserMessageId,
-    model: effectiveModel == null || _selectedModelId == null
-        ? null
-        : effectiveModel!.model,
-    reasoningEffort: _selectedReasoningEffort,
-    approvalPolicy: _approvalPolicy,
-    sandbox: _sandbox,
-  );
+  }) {
+    _requireExplicitModelAvailable();
+    return TurnStartOptions(
+      threadId: threadId,
+      text: text,
+      attachments: attachments,
+      clientUserMessageId: clientUserMessageId,
+      model: effectiveModel == null || _selectedModelId == null
+          ? null
+          : effectiveModel!.model,
+      reasoningEffort: _selectedReasoningEffort,
+      approvalPolicy: _approvalPolicy,
+      sandbox: _sandbox,
+    );
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _runtimeGeneration += 1;
+    super.dispose();
+  }
 }

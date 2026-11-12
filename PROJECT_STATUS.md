@@ -110,19 +110,27 @@ permission to lower the engineering or visual quality bar.
   normally integrated and pushed. It preserves Codex settings `9fc19d3` /
   evidence `5c46c44`, saved-title scope `cafcf12`, and Gemini U6 `df46ace` /
   `e9a9697` / `7301289` through a normal merge. Main working tree is clean.
-- Codex owns Track F. The loaded-thread inherited settings correction and
-  active saved-title cross-provider discovery are integrated. Next preflight
-  is connected-workspace runtime loss/recovery: preserve draft/route identity,
-  fence old pending requests and refresh bounded projections without implicit
-  cold/queued resume. Runtime loss currently destroys the workspace widget;
-  recovery stays `MISSING` until implemented and realistically verified.
-- Gemini owns Track U7 A6 user-bubble rendered-height clipping/selection, based
-  on current25894 `dKZq/oQwr` evidence. Its accepted isolated branch is
-  `agent/gemini-golden-ui-u7-a6-user-bubble`; preflight is complete and source
-  translation follows the integrated `7d0282d`. U6 is frozen at `7301289`.
-- Gemini has the exclusive heavy lease following Codex's completed shared
-  packet. Codex remains source/docs/CI-only until explicit handoff. Flutter
-  tests use one worker, Cargo/CMake two jobs; no overlapping heavy workloads.
+- Codex owns Track F. Loaded inherited settings and saved-title discovery are
+  integrated. The isolated workspace-recovery slice now retains one mounted
+  editor/draft/attachment state, retires session-local operations and Host
+  references, and admits explicit local reconnection without automatic resume
+  or write replay. Peer-found stale relay notifications, root popovers and lost
+  session-only IDs have regression cases and corrections. Latest 108 targeted
+  cases and the 18-case lifecycle/Retry follow-up pass; current shared gates,
+  new-source packaged session-draft replacement and integration remain pending.
+- The earlier isolated Linux packet verifies real owned stock/Host termination,
+  same-App recovery, bounded saved history, retained draft/attachment, active
+  unconfirmed outcomes and no extra model call. It also **reproduces** the old
+  session-only ID failure. That packet is not evidence that the later fix has
+  passed real use. See [recovery evidence](docs/reverse/WORKSPACE_RECOVERY_EVIDENCE.md).
+- Gemini U7 A6 actual-height clipping/selection is frozen at `44a8809`; its
+  independent peer audit is durable at `3c18450`. Neither is integrated yet.
+  The peers refreshed the official agy session after the long audit. Gemini
+  continues read-only current25894 evidence/targeted review; conversation
+  lifecycle surfaces were explicitly released to Codex.
+- Codex currently owns the exclusive heavy lease. All earlier owned App/Host/
+  stock/model workers exited. Flutter uses one worker and Cargo/CMake two jobs;
+  no overlapping heavy workloads. Gemini has zero heavy/runtime workers.
 - Live coordination remains official agy TUI-only. Peers are equal; one writer
   per overlapping surface. Codex will negotiate any runtime-generation bridge
   inside Gemini's conversation presentation instead of writing over it.

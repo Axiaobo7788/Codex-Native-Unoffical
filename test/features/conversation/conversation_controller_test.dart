@@ -31,6 +31,56 @@ void main() {
     await gateway.dispose();
   });
 
+  test('saved recovery retires old identities without deleting a new explicit turn', () async {
+    await controller.submit('Old acknowledged work');
+    controller.invalidateRuntime();
+    final oldProjection = controller.entries;
+    await controller.submit('New explicit work');
+    final activeTurn = controller.activeTurnId;
+    controller.reconcileRecoveredHistory(oldProjection);
+    expect(
+      controller.entries.where((e) => e.text == 'Old acknowledged work'),
+      isEmpty,
+    );
+    expect(
+      controller.entries.where((e) => e.text == 'New explicit work'),
+      hasLength(1),
+    );
+    expect(controller.activeTurnId, activeTurn);
+    expect(controller.busy, isTrue);
+  });
+
+  test(
+    'runtime loss ends the old stream without a successful stock outcome',
+    () async {
+      final reply = Completer<TurnHandle>();
+      gateway.nextStartCompleter = reply;
+      final oldSubmit = controller.submit('Unacknowledged draft');
+      expect(controller.busy, isTrue);
+      controller.invalidateRuntime();
+      expect(controller.busy, isFalse);
+      expect(controller.activeTurnId, isNull);
+      expect(controller.latestWarning, contains('unconfirmed'));
+      expect(
+        controller.entries.where(
+          (entry) => entry.text == 'Unacknowledged draft',
+        ),
+        isEmpty,
+      );
+      final fresh = controller.submit('Explicit new work');
+      reply.complete(
+        const TurnHandle(id: 'retired', status: TurnRuntimeStatus.inProgress),
+      );
+      await oldSubmit;
+      await fresh;
+      expect(controller.activeTurnId, isNot('retired'));
+      expect(
+        controller.entries.where((entry) => entry.text == 'Explicit new work'),
+        hasLength(1),
+      );
+    },
+  );
+
   test('submits user text and tracks turn lifecycle', () async {
     expect(await controller.submit('  Hello Codex  '), isTrue);
 

@@ -949,9 +949,16 @@ class _ThreadPanelState extends State<_ThreadPanel> {
       setState(() => _workingDirectory = cwd);
       widget.onWorkingDirectoryChanged?.call(cwd);
     }
-    await widget.controller.startThread(
-      widget.settingsController.threadOptions(cwd),
-    );
+    try {
+      await widget.controller.startThread(
+        widget.settingsController.threadOptions(cwd),
+      );
+    } on StateError catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message.toString())));
+      }
+    }
   }
 
   Future<void> _revealProjectDirectory(String path) async {

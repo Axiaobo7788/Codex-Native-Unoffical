@@ -48,6 +48,7 @@ class ConversationEntry {
     String? stockItemId,
     String? status,
     int? exitCode,
+    OutputDescriptor? commandOutput,
     List<UserAttachment>? attachments,
     List<String>? reasoningParts,
   }) => ConversationEntry(
@@ -60,7 +61,7 @@ class ConversationEntry {
     status: status ?? this.status,
     exitCode: exitCode ?? this.exitCode,
     commandActions: commandActions,
-    commandOutput: commandOutput,
+    commandOutput: commandOutput ?? this.commandOutput,
     reasoningParts: reasoningParts ?? this.reasoningParts,
     attachments: attachments ?? this.attachments,
   );
@@ -125,6 +126,7 @@ class ConversationController extends ChangeNotifier {
   var _disposed = false;
   var _localEntrySequence = 0;
   var _bindingGeneration = 0;
+  var _runtimeInvalidationVersion = 0;
   late final String _clientMessageNonce = _newClientMessageNonce();
 
   List<ConversationEntry> get entries => List.unmodifiable(_entries);
@@ -137,6 +139,19 @@ class ConversationController extends ChangeNotifier {
   String? get activeReviewDescription => _activeReviewDescription;
   bool get reviewModeActive => _activeReviewDescription != null;
   bool get busy => _busy;
+  int get runtimeInvalidationVersion => _runtimeInvalidationVersion;
+
+  /// The newly read stock window replaces only the retained old projection.
+  /// A new explicit turn may already have added/replaced immutable entries;
+  /// those must survive the old history read's completion.
+  void reconcileRecoveredHistory(List<ConversationEntry> oldProjection) {
+    final retired = HashSet<ConversationEntry>.identity()
+      ..addAll(oldProjection);
+    final before = _entries.length;
+    _entries.removeWhere(retired.contains);
+    if (_entries.length != before) _notify();
+  }
+
   bool get canInterrupt => _busy && _interruptReady;
   bool get canSteer =>
       _busy &&
@@ -228,6 +243,49 @@ class ConversationController extends ChangeNotifier {
     _activeReviewDescription = null;
     _busy = false;
     _steeringUserEntryId = null;
+    _startingReview = false;
+    _interruptReady = false;
+    _notify();
+  }
+
+  /// Retire session-local operations without replacing the selected thread or
+  /// its mounted composer. No server completion/interrupt is synthesized.
+  void invalidateRuntime() {
+    final hadWork = _busy || _startingReview;
+    final optimisticIds = {_startingUserEntryId, _steeringUserEntryId};
+    _bindingGeneration += 1;
+    _runtimeInvalidationVersion += 1;
+    _flushDeltas();
+    _entries.removeWhere(
+      (entry) => optimisticIds.contains(entry.id) && entry.stockItemId == null,
+    );
+    for (var i = 0; i < _entries.length; i += 1) {
+      final entry = _entries[i];
+      if (!entry.completed || entry.commandOutput != null) {
+        // End rendering a dead stream, while explicitly keeping its outcome
+        // unconfirmed rather than calling it a completed stock operation.
+        _entries[i] = entry.copyWith(
+          completed: true,
+          status: entry.completed ? entry.status : 'unconfirmed',
+          commandOutput: entry.commandOutput?.withoutSessionReference(),
+        );
+      }
+    }
+    _reasoningSummaries.clear();
+    _mcpBaseSummaries.clear();
+    _startingUserEntryId = null;
+    _steeringUserEntryId = null;
+    _activeTurnId = null;
+    _activeReviewDescription = null;
+    _latestTurnPlan = null;
+    _tokenUsage = null;
+    _latestModelReroute = null;
+    _processWarning = null;
+    _latestWarning = hadWork
+        ? 'The runtime disconnected. The active work is unconfirmed. '
+              'Reconnect to inspect saved history before retrying.'
+        : null;
+    _busy = false;
     _startingReview = false;
     _interruptReady = false;
     _notify();
@@ -386,6 +444,7 @@ class ConversationController extends ChangeNotifier {
       return false;
     }
 
+    final generation = _bindingGeneration;
     _startingReview = true;
     _busy = true;
     _notify();
@@ -393,7 +452,7 @@ class ConversationController extends ChangeNotifier {
       final handle = await effectiveStarter(
         ReviewStartOptions(threadId: currentThread.id, target: target),
       );
-      if (_disposed || _thread?.id != currentThread.id) {
+      if (!_isCurrentBinding(generation) || _thread?.id != currentThread.id) {
         return true;
       }
       // Do not resurrect an already-completed review if its lifecycle raced
@@ -405,7 +464,7 @@ class ConversationController extends ChangeNotifier {
       _notify();
       return true;
     } catch (error) {
-      if (!_disposed && _thread?.id == currentThread.id) {
+      if (_isCurrentBinding(generation) && _thread?.id == currentThread.id) {
         _busy = false;
         _interruptReady = false;
         _activeTurnId = null;
@@ -415,7 +474,7 @@ class ConversationController extends ChangeNotifier {
       }
       return false;
     } finally {
-      if (!_disposed) {
+      if (_isCurrentBinding(generation)) {
         _startingReview = false;
         _notify();
       }
@@ -428,9 +487,11 @@ class ConversationController extends ChangeNotifier {
     if (currentThread == null || turnId == null || !canInterrupt) {
       return;
     }
+    final generation = _bindingGeneration;
     try {
       await gateway.interruptTurn(threadId: currentThread.id, turnId: turnId);
     } catch (error) {
+      if (!_isCurrentBinding(generation)) return;
       _appendError(error.toString());
       _notify();
     }

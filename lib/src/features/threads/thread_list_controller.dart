@@ -62,6 +62,7 @@ class ThreadListController extends ChangeNotifier {
   final List<ThreadSummary> _threads = [];
   final List<ThreadSection> _sections = [];
   final Set<String> _unmaterializedThreadIds = {};
+  final Set<String> _retiredSessionDraftIds = {};
   final Set<String> _pinnedThreadIds = {};
   // Local ordering for in-flight snapshots. Stock revisions remain opaque.
   final Map<String, int> _readReceiptVersions = {};
@@ -88,6 +89,50 @@ class ThreadListController extends ChangeNotifier {
   var _loadingMore = false;
   var _mutating = false;
   var _disposed = false;
+  var _runtimeGeneration = 0;
+
+  bool _isCurrentRuntime(int generation) =>
+      !_disposed && generation == _runtimeGeneration;
+
+  /// Keep bounded metadata and selection, retiring session-local settings and
+  /// old async work before a new Host can reuse request IDs.
+  void invalidateRuntime() {
+    _retiredSessionDraftIds.addAll(_unmaterializedThreadIds);
+    _retiredSessionDraftIds.addAll([
+      for (final row in _threads)
+        if (row.ephemeral) row.id,
+      if (_selectedThread case final selected? when selected.ephemeral)
+        selected.id,
+    ]);
+    _runtimeGeneration += 1;
+    _catalogRevision += 1;
+    _goalProjectionRevision += 1;
+    _readReceiptVersion += 1;
+    _readReceiptVersions.clear();
+    _loading = false;
+    _loadingMore = false;
+    _mutating = false;
+    _refreshCatalogPending = false;
+    _nextCursor = null;
+    _goalOperationThreadId = null;
+    _pendingGoalHydrationThreadId = null;
+    _hydratingGoal = false;
+    _goalEventObserved = false;
+    _errorMessage = null;
+    for (var i = 0; i < _threads.length; i += 1) {
+      _threads[i] = _threads[i].copyWith(
+        status: ThreadRuntimeStatus.notLoaded,
+        clearExecutionSettings: true,
+      );
+    }
+    if (_selectedThread case final selected?) {
+      _selectedThread = selected.copyWith(
+        status: ThreadRuntimeStatus.notLoaded,
+        clearExecutionSettings: true,
+      );
+    }
+    _notify();
+  }
 
   List<ThreadSummary> get threads => List.unmodifiable(_threads);
   List<ThreadSection> get sections => List.unmodifiable(_sections);
@@ -174,6 +219,7 @@ class ThreadListController extends ChangeNotifier {
     }
     final version = _readReceiptVersion;
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
@@ -182,20 +228,24 @@ class ThreadListController extends ChangeNotifier {
         expectedRevision: seenReceipt.revision,
         unread: !seenReceipt.unread,
       );
-      if (!_disposed && !_receiptChangedAfter(threadId, version)) {
+      if (_isCurrentRuntime(generation) &&
+          !_receiptChangedAfter(threadId, version)) {
         _applyReadReceipt(threadId, receipt);
       }
     } on UnsupportedError {
-      if (!_disposed) {
+      if (_isCurrentRuntime(generation)) {
         _errorMessage = 'This runtime cannot change saved read status.';
       }
     } catch (_) {
-      if (!_disposed) {
+      if (!_isCurrentRuntime(generation)) return;
+      if (_isCurrentRuntime(generation)) {
         await _refreshReceiptAfterFailedWrite(threadId, seenReceipt);
       }
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -203,10 +253,11 @@ class ThreadListController extends ChangeNotifier {
     String threadId,
     ThreadReadReceipt seenReceipt,
   ) async {
+    final generation = _runtimeGeneration;
     final version = _readReceiptVersion;
     try {
       final latest = await gateway.readThread(threadId);
-      if (!_disposed &&
+      if (_isCurrentRuntime(generation) &&
           latest.id == threadId &&
           !_receiptChangedAfter(threadId, version)) {
         _applyReadReceipt(threadId, latest.readReceipt);
@@ -214,7 +265,7 @@ class ThreadListController extends ChangeNotifier {
     } catch (_) {
       // Keep the last displayed receipt. The next explicit action can retry.
     }
-    if (!_disposed) {
+    if (_isCurrentRuntime(generation)) {
       final current = _findThread(threadId)?.readReceipt;
       _errorMessage =
           current != null && current.revision != seenReceipt.revision
@@ -249,7 +300,16 @@ class ThreadListController extends ChangeNotifier {
       thread.isPersistedPinned || _pinnedThreadIds.contains(thread.id);
 
   bool isMaterialized(String threadId) =>
-      !_unmaterializedThreadIds.contains(threadId);
+      !_unmaterializedThreadIds.contains(threadId) &&
+      !_retiredSessionDraftIds.contains(threadId);
+
+  bool selectedThreadNeedsDraftRecovery(String threadId) =>
+      _selectedThread?.id == threadId &&
+      _retiredSessionDraftIds.contains(threadId);
+
+  static const sessionDraftRecoveryMessage =
+      'This conversation is not available in the current runtime. '
+      'Nothing was replayed. Start a new conversation to keep this draft.';
 
   bool canPersistPinForThread(ThreadSummary thread) {
     if (_disposed || _showArchived || !supportsThreadSections) {
@@ -356,12 +416,13 @@ class ThreadListController extends ChangeNotifier {
       return false;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final receiptVersion = _readReceiptVersion;
       final latest = await gateway.readThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       if (latest.id != threadId) {
@@ -395,18 +456,21 @@ class ThreadListController extends ChangeNotifier {
           sectionId: targetSectionId,
         ),
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       _applySectionChanged(threadId, targetSectionId);
       _invalidateSectionOrder();
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -513,6 +577,7 @@ class ThreadListController extends ChangeNotifier {
     if (_disposed || catalogBusy) {
       return;
     }
+    final generation = _runtimeGeneration;
     final revision = _catalogRevision;
     final receiptVersion = _readReceiptVersion;
     _refreshCatalogPending = false;
@@ -579,12 +644,14 @@ class ThreadListController extends ChangeNotifier {
       _nextCursor = cursor;
       _synchronizeSelection(preserveSelection: preserveSelection);
     } catch (error) {
-      if (revision == _catalogRevision) {
+      if (_isCurrentRuntime(generation) && revision == _catalogRevision) {
         _errorMessage = _boundedError(error);
       }
     } finally {
-      _loading = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _loading = false;
+        _notify();
+      }
     }
   }
 
@@ -593,6 +660,7 @@ class ThreadListController extends ChangeNotifier {
     if (_disposed || cursor == null || !canLoadMore || catalogBusy) {
       return;
     }
+    final generation = _runtimeGeneration;
     final revision = _catalogRevision;
     final receiptVersion = _readReceiptVersion;
     _loadingMore = true;
@@ -621,37 +689,53 @@ class ThreadListController extends ChangeNotifier {
       _nextCursor = page.nextCursor;
       _synchronizeSelection();
     } catch (error) {
-      if (revision == _catalogRevision) {
+      if (_isCurrentRuntime(generation) && revision == _catalogRevision) {
         _errorMessage = _boundedError(error);
       }
     } finally {
-      _loadingMore = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _loadingMore = false;
+        _notify();
+      }
     }
   }
 
-  Future<ThreadSummary?> startThread(ThreadStartOptions options) async {
+  Future<ThreadSummary?> startThread(
+    ThreadStartOptions options, {
+    String? replaceSessionDraftId,
+  }) async {
     if (_mutating) {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final thread = await gateway.startThread(options);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       _unmaterializedThreadIds.add(thread.id);
+      if (replaceSessionDraftId != null &&
+          _retiredSessionDraftIds.remove(replaceSessionDraftId)) {
+        // Evict only the local unavailable projection. Never delete a rollout
+        // or infer that a possibly accepted operation did not reach stock.
+        _unmaterializedThreadIds.remove(replaceSessionDraftId);
+        _threads.removeWhere((row) => row.id == replaceSessionDraftId);
+      }
       final retained = _replaceOrPrepend(thread);
       _activateThread(retained);
       return retained;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -659,7 +743,8 @@ class ThreadListController extends ChangeNotifier {
     if (_mutating) {
       return null;
     }
-    if (_unmaterializedThreadIds.contains(threadId)) {
+    if (_unmaterializedThreadIds.contains(threadId) &&
+        !_retiredSessionDraftIds.contains(threadId)) {
       final index = _threads.indexWhere((thread) => thread.id == threadId);
       if (index != -1) {
         _activateThread(_threads[index]);
@@ -669,15 +754,17 @@ class ThreadListController extends ChangeNotifier {
       }
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final receiptVersion = _readReceiptVersion;
       final thread = await gateway.readThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       _unmaterializedThreadIds.remove(threadId);
+      _retiredSessionDraftIds.remove(threadId);
       final retainedThread = _replaceInPlace(
         _acceptReceiptSnapshot(thread, receiptVersion),
       );
@@ -685,11 +772,14 @@ class ThreadListController extends ChangeNotifier {
       _queueSelectedGoalHydration(threadId);
       return retainedThread;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -700,12 +790,16 @@ class ThreadListController extends ChangeNotifier {
     if (_disposed || _mutating) {
       return const ThreadResumeOutcome.skipped();
     }
+    if (_retiredSessionDraftIds.contains(threadId)) {
+      return const ThreadResumeOutcome.failed(sessionDraftRecoveryMessage);
+    }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final thread = await gateway.resumeThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return const ThreadResumeOutcome.skipped();
       }
       _unmaterializedThreadIds.remove(threadId);
@@ -714,15 +808,17 @@ class ThreadListController extends ChangeNotifier {
       _queueSelectedGoalHydration(threadId);
       return ThreadResumeOutcome.loaded(retainedThread);
     } catch (error) {
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return const ThreadResumeOutcome.skipped();
       }
       final message = _boundedError(error);
       _errorMessage = message;
       return ThreadResumeOutcome.failed(message);
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -732,21 +828,25 @@ class ThreadListController extends ChangeNotifier {
     }
     final trimmed = name.trim();
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       await gateway.renameThread(threadId: threadId, name: trimmed);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       _applyNameUpdate(threadId, trimmed.isEmpty ? null : trimmed);
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -755,11 +855,12 @@ class ThreadListController extends ChangeNotifier {
       return false;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       await gateway.archiveThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       _applyStatusUpdate(threadId, ThreadRuntimeStatus.notLoaded);
@@ -775,11 +876,14 @@ class ThreadListController extends ChangeNotifier {
       _invalidateSavedSearch();
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -788,11 +892,12 @@ class ThreadListController extends ChangeNotifier {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final thread = await gateway.unarchiveThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       _invalidateSectionOrder();
@@ -811,11 +916,14 @@ class ThreadListController extends ChangeNotifier {
         return retained;
       }
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -829,11 +937,12 @@ class ThreadListController extends ChangeNotifier {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final thread = await gateway.forkThread(options);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       if (_showArchived) {
@@ -847,11 +956,14 @@ class ThreadListController extends ChangeNotifier {
       _activateThread(retained);
       return retained;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -863,6 +975,7 @@ class ThreadListController extends ChangeNotifier {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
@@ -870,7 +983,7 @@ class ThreadListController extends ChangeNotifier {
         threadId: threadId,
         beforeTurnId: beforeTurnId,
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       final retainedThread = _replaceInPlace(_retainReceipt(thread));
@@ -882,11 +995,14 @@ class ThreadListController extends ChangeNotifier {
       _invalidateSavedSearch();
       return retainedThread;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -900,20 +1016,24 @@ class ThreadListController extends ChangeNotifier {
       return false;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       await gateway.compactThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -922,11 +1042,12 @@ class ThreadListController extends ChangeNotifier {
       return false;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       await gateway.deleteThread(threadId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       _pinnedThreadIds.remove(threadId);
@@ -941,11 +1062,14 @@ class ThreadListController extends ChangeNotifier {
       _invalidateSavedSearch();
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -962,9 +1086,11 @@ class ThreadListController extends ChangeNotifier {
   }
 
   Future<void> _drainSelectedGoalHydration() async {
+    final generation = _runtimeGeneration;
     _hydratingGoal = true;
     try {
-      while (_pendingGoalHydrationThreadId != null) {
+      while (_isCurrentRuntime(generation) &&
+          _pendingGoalHydrationThreadId != null) {
         final threadId = _pendingGoalHydrationThreadId!;
         _pendingGoalHydrationThreadId = null;
         final gateway = _goalGateway;
@@ -983,7 +1109,8 @@ class ThreadListController extends ChangeNotifier {
           // goal request can surface its bounded error.
           continue;
         }
-        if (_selectedThread?.id != threadId ||
+        if (!_isCurrentRuntime(generation) ||
+            _selectedThread?.id != threadId ||
             !canManageGoal(threadId) ||
             revision != _goalProjectionRevision) {
           continue;
@@ -996,7 +1123,7 @@ class ThreadListController extends ChangeNotifier {
         _notify();
       }
     } finally {
-      _hydratingGoal = false;
+      if (_isCurrentRuntime(generation)) _hydratingGoal = false;
     }
   }
 
@@ -1035,6 +1162,7 @@ class ThreadListController extends ChangeNotifier {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _goalOperationThreadId = threadId;
     _goalProjectionRevision += 1;
     _goalEventObserved = false;
@@ -1042,7 +1170,7 @@ class ThreadListController extends ChangeNotifier {
     _notify();
     try {
       final goal = await request(gateway);
-      if (!canManageGoal(threadId)) {
+      if (!_isCurrentRuntime(generation) || !canManageGoal(threadId)) {
         return null;
       }
       if (_goalEventObserved) {
@@ -1055,15 +1183,18 @@ class ThreadListController extends ChangeNotifier {
       }
       return (goal: goal);
     } catch (error) {
-      if (!_disposed) {
+      if (!_isCurrentRuntime(generation)) return null;
+      if (_isCurrentRuntime(generation)) {
         _errorMessage = _boundedError(error);
       }
       return null;
     } finally {
-      _goalOperationThreadId = null;
-      _goalEventObserved = false;
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _goalOperationThreadId = null;
+        _goalEventObserved = false;
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -1087,23 +1218,27 @@ class ThreadListController extends ChangeNotifier {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       final section = await sectionGateway.createThreadSection(
         ThreadSectionCreateOptions(name: trimmed, appearance: appearance),
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       _upsertSection(section);
       return section;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -1135,6 +1270,7 @@ class ThreadListController extends ChangeNotifier {
       return null;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
@@ -1146,7 +1282,7 @@ class ThreadListController extends ChangeNotifier {
           clearAppearance: clearAppearance,
         ),
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return null;
       }
       _upsertSection(updated);
@@ -1160,11 +1296,14 @@ class ThreadListController extends ChangeNotifier {
       }
       return updated;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return null;
       _errorMessage = _boundedError(error);
       return null;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -1185,11 +1324,12 @@ class ThreadListController extends ChangeNotifier {
       return false;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
       await sectionGateway.deleteThreadSection(normalizedId);
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       _sections.removeWhere((section) => section.id == normalizedId);
@@ -1216,11 +1356,14 @@ class ThreadListController extends ChangeNotifier {
       }
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -1239,6 +1382,7 @@ class ThreadListController extends ChangeNotifier {
       return false;
     }
     _mutating = true;
+    final generation = _runtimeGeneration;
     _errorMessage = null;
     _notify();
     try {
@@ -1249,18 +1393,21 @@ class ThreadListController extends ChangeNotifier {
           beforeThreadId: beforeThreadId,
         ),
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return false;
       }
       _applySectionChanged(threadId, sectionId);
       _invalidateSectionOrder();
       return true;
     } catch (error) {
+      if (!_isCurrentRuntime(generation)) return false;
       _errorMessage = _boundedError(error);
       return false;
     } finally {
-      _mutating = false;
-      _notify();
+      if (_isCurrentRuntime(generation)) {
+        _mutating = false;
+        _notify();
+      }
     }
   }
 
@@ -1306,6 +1453,9 @@ class ThreadListController extends ChangeNotifier {
     if (current == null || current.id != threadId) {
       return const ThreadResumeOutcome.skipped();
     }
+    if (selectedThreadNeedsDraftRecovery(threadId)) {
+      return const ThreadResumeOutcome.failed(sessionDraftRecoveryMessage);
+    }
     if (!selectedThreadNeedsResume(threadId)) {
       return ThreadResumeOutcome.loaded(current);
     }
@@ -1323,6 +1473,7 @@ class ThreadListController extends ChangeNotifier {
       case ThreadStatusChangedEvent(:final threadId, :final status):
         if (status != ThreadRuntimeStatus.notLoaded) {
           _unmaterializedThreadIds.remove(threadId);
+          _retiredSessionDraftIds.remove(threadId);
         }
         _applyStatusUpdate(threadId, status);
         _notify();
@@ -1571,6 +1722,7 @@ class ThreadListController extends ChangeNotifier {
   }
 
   Future<void> _refreshSectionsWithThreads(List<ThreadSummary> threads) async {
+    final generation = _runtimeGeneration;
     final sectionGateway = _sectionGateway;
     if (sectionGateway == null) {
       _mergeThreadEmbeddedSections(threads);
@@ -1580,22 +1732,23 @@ class ThreadListController extends ChangeNotifier {
       final page = await sectionGateway.listThreadSections(
         const ThreadSectionListQuery(limit: maxRetainedSections),
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return;
       }
       _sections
         ..clear()
         ..addAll(page.sections.take(maxRetainedSections));
     } catch (error) {
-      _errorMessage = _boundedError(error);
+      if (_isCurrentRuntime(generation)) _errorMessage = _boundedError(error);
     }
-    _mergeThreadEmbeddedSections(threads);
+    if (_isCurrentRuntime(generation)) _mergeThreadEmbeddedSections(threads);
   }
 
   Future<void> _reloadSectionsAndResolveThread(
     String threadId,
     String sectionId,
   ) async {
+    final generation = _runtimeGeneration;
     final sectionGateway = _sectionGateway;
     if (sectionGateway == null || _disposed) {
       return;
@@ -1604,7 +1757,7 @@ class ThreadListController extends ChangeNotifier {
       final page = await sectionGateway.listThreadSections(
         const ThreadSectionListQuery(limit: maxRetainedSections),
       );
-      if (_disposed) {
+      if (!_isCurrentRuntime(generation)) {
         return;
       }
       for (final section in page.sections) {
@@ -1803,6 +1956,7 @@ class ThreadListController extends ChangeNotifier {
       if (keepSelected && selectedId != null) selectedId,
     };
     _unmaterializedThreadIds.retainAll(retainedIds);
+    _retiredSessionDraftIds.retainAll(retainedIds);
     if (selectedId == null) {
       _preserveOutsideCatalog = false;
       return;

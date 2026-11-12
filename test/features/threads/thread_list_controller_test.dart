@@ -8,6 +8,117 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'old unmaterialized ID requires a fresh read before resume admission',
+    () async {
+      final gateway = _SessionDraftGateway();
+      final controller = ThreadListController(gateway: gateway);
+      addTearDown(gateway.dispose);
+      addTearDown(controller.dispose);
+      await controller.startThread(
+        const ThreadStartOptions(cwd: '/draft-project'),
+      );
+      controller.invalidateRuntime();
+      expect(controller.selectedThreadNeedsDraftRecovery('new'), isTrue);
+      expect(
+        (await controller.ensureSelectedThreadLoadedWithOutcome('new'))
+            .isFailed,
+        isTrue,
+      );
+      expect(gateway.resumeIds, isEmpty);
+      gateway.failRead = true;
+      await controller.selectThread('new');
+      expect(controller.selectedThreadNeedsDraftRecovery('new'), isTrue);
+      expect(controller.errorMessage, contains('temporary read unavailable'));
+      expect(
+        (await controller.resumeThreadWithOutcome('new')).isFailed,
+        isTrue,
+      );
+      expect(gateway.resumeIds, isEmpty);
+      gateway.failRead = false;
+      await controller.selectThread('new');
+      expect(controller.selectedThreadNeedsDraftRecovery('new'), isFalse);
+      expect(gateway.resumeIds, isEmpty);
+      expect(controller.isMaterialized('new'), isTrue);
+    },
+  );
+
+  test('ephemeral thread becomes unavailable across runtime loss', () async {
+    final row = ThreadSummary(
+      id: 'ephemeral',
+      sessionId: 'ephemeral',
+      preview: 'Ephemeral',
+      cwd: '/workspace',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      status: ThreadRuntimeStatus.idle,
+      ephemeral: true,
+    );
+    final gateway = _SessionDraftGateway()
+      ..pages.add(ThreadPage(threads: [row], nextCursor: null));
+    final controller = ThreadListController(gateway: gateway);
+    addTearDown(gateway.dispose);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    await controller.selectThread('ephemeral');
+    // Metadata fields follow the real selected row; this fixture deliberately
+    // returns an ephemeral read as well as an ephemeral catalog entry.
+    gateway.events.add(
+      const ThreadStatusChangedEvent(
+        threadId: 'ephemeral',
+        status: ThreadRuntimeStatus.idle,
+      ),
+    );
+    controller.invalidateRuntime();
+    expect(controller.selectedThreadNeedsDraftRecovery('ephemeral'), isTrue);
+    expect(
+      (await controller.ensureSelectedThreadLoadedWithOutcome('ephemeral'))
+          .isFailed,
+      isTrue,
+    );
+    expect(gateway.resumeIds, isEmpty);
+  });
+
+  for (final failOld in [false, true]) {
+    test(
+      'runtime retirement fences old resume completion (failure=$failOld)',
+      () async {
+        final gateway = _FakeThreadGateway()
+          ..pages.add(ThreadPage(threads: [_thread('same')], nextCursor: null));
+        final controller = ThreadListController(gateway: gateway);
+        addTearDown(gateway.dispose);
+        addTearDown(controller.dispose);
+        await controller.refresh();
+        await controller.selectThread('same');
+        final first = Completer<ThreadSummary>();
+        gateway.pendingResume = first;
+        final oldResume = controller.resumeThreadWithOutcome('same');
+        controller.invalidateRuntime();
+        expect(controller.selectedThread?.id, 'same');
+        expect(
+          controller.selectedThread?.status,
+          ThreadRuntimeStatus.notLoaded,
+        );
+        final second = Completer<ThreadSummary>();
+        gateway.pendingResume = second;
+        final newResume = controller.resumeThreadWithOutcome('same');
+        if (failOld) {
+          first.completeError(StateError('old runtime'));
+        } else {
+          first.complete(_thread('old-runtime-reply'));
+        }
+        expect((await oldResume).status, ThreadResumeStatus.skipped);
+        expect(controller.mutating, isTrue);
+        expect(controller.selectedThread?.id, 'same');
+        expect(controller.errorMessage, isNull);
+        second.complete(_thread('same', status: ThreadRuntimeStatus.idle));
+        expect((await newResume).status, ThreadResumeStatus.loaded);
+        expect(controller.selectedThread?.id, 'same');
+        expect(controller.mutating, isFalse);
+      },
+    );
+  }
+
+  test(
     'notLoaded then active cannot resurrect a retired settings snapshot',
     () async {
       const retired = ThreadExecutionSettings(
@@ -1507,3 +1618,24 @@ ThreadSummary _thread(
   section: section,
   sectionEnteredAtSeconds: sectionEnteredAtSeconds,
 );
+
+class _SessionDraftGateway extends _FakeThreadGateway {
+  bool failRead = false;
+  @override
+  Future<ThreadSummary> readThread(String threadId) async {
+    if (failRead) throw StateError('temporary read unavailable');
+    if (threadId == 'ephemeral') {
+      return ThreadSummary(
+        id: threadId,
+        sessionId: threadId,
+        preview: 'Ephemeral',
+        cwd: '/workspace',
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+        status: ThreadRuntimeStatus.idle,
+        ephemeral: true,
+      );
+    }
+    return super.readThread(threadId);
+  }
+}
