@@ -404,28 +404,32 @@ final class HistoryProtocolAdapter {
         text: _bounded(_optionalString(value, 'text') ?? ''),
       ),
       'reasoning' => _reasoningItem(id, turnId, value['summary']),
-      'commandExecution' => HistoryItem(
-        id: id,
-        turnId: turnId,
-        kind: HistoryItemKind.activity,
-        text: _bounded(
-          'Command: ${_optionalString(value, 'command') ?? 'command'}',
-        ),
-        status: _optionalString(value, 'status'),
-        output: value['_codexNativeOutput'] == null
-            ? null
-            : OutputProtocolAdapter.descriptorFromItem(
-                value['_codexNativeOutput'],
-              ),
-        // `outputDeferred` belongs to ThreadItemEntry, not the nested
-        // commandExecution item. Keep the optional nested check for older
-        // app-server builds that emitted the flag there.
-        outputDeferred: outputDeferred || value['outputDeferred'] == true,
-        isCommand: true,
-        commandAction: includeCommandAction
-            ? _parseExplorationAction(value['commandActions'])
-            : null,
-      ),
+      'commandExecution' => () {
+        final exitCode = _optionalInt32(value['exitCode']);
+        return HistoryItem(
+          id: id,
+          turnId: turnId,
+          kind: HistoryItemKind.activity,
+          text: _bounded(
+            'Command: ${_optionalString(value, 'command') ?? 'command'}',
+          ),
+          status: _optionalString(value, 'status'),
+          exitCode: exitCode,
+          output: value['_codexNativeOutput'] == null
+              ? null
+              : OutputProtocolAdapter.descriptorFromItem(
+                  value['_codexNativeOutput'],
+                ).withExitCode(exitCode),
+          // `outputDeferred` belongs to ThreadItemEntry, not the nested
+          // commandExecution item. Keep the optional nested check for older
+          // app-server builds that emitted the flag there.
+          outputDeferred: outputDeferred || value['outputDeferred'] == true,
+          isCommand: true,
+          commandAction: includeCommandAction
+              ? _parseExplorationAction(value['commandActions'])
+              : null,
+        );
+      }(),
       'fileChange' => HistoryItem(
         id: id,
         turnId: turnId,
@@ -601,6 +605,12 @@ final class HistoryProtocolAdapter {
     }
     return value;
   }
+
+  static const _minInt32 = -2147483648;
+  static const _maxInt32 = 2147483647;
+
+  static int? _optionalInt32(Object? value) =>
+      value is int && value >= _minInt32 && value <= _maxInt32 ? value : null;
 
   static String? _optionalString(JsonObject object, String key) {
     final value = object[key];

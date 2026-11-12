@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -854,6 +856,698 @@ class _CodexActivityDividerState extends State<CodexActivityDivider> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+final RegExp _leadingPromptPattern = RegExp(r'^\$\s+');
+final RegExp _shellLcPrefixPattern = RegExp(
+  r'^(?:(?:/usr)?/bin/)?(?:zsh|bash)\s+-lc\s+',
+);
+final RegExp _nonWhitespaceOutputPattern = RegExp(r'\S');
+
+String _stripNativeCommandPrefix(String rawCommand) {
+  final trimmed = rawCommand.trim();
+  if (trimmed.startsWith('Command: ')) {
+    return trimmed.substring('Command: '.length).trim();
+  }
+  return trimmed;
+}
+
+/// Detects the display shell header label (`225284.kq2V` + `972499.EWyk`) from
+/// [rawCommand] before `-lc` unwrapping, falling back to `'Shell'`.
+String detectCodexShellLabel(String rawCommand) {
+  var text = _stripNativeCommandPrefix(rawCommand);
+  if (text.isEmpty) {
+    return 'Shell';
+  }
+  text = text.replaceFirst(_leadingPromptPattern, '').trimLeft();
+  if (text.isEmpty) {
+    return 'Shell';
+  }
+  String? executable;
+  final firstChar = text[0];
+  if (firstChar == "'" || firstChar == '"') {
+    final endQuote = text.indexOf(firstChar, 1);
+    if (endQuote > 1) {
+      final inner = text.substring(1, endQuote).trim();
+      if (endQuote + 1 < text.length) {
+        executable = inner;
+      } else {
+        text = inner;
+      }
+    }
+  }
+  if (executable == null) {
+    final wsIndex = text.indexOf(RegExp(r'\s'));
+    executable = wsIndex == -1 ? text : text.substring(0, wsIndex);
+  }
+  if (executable.isEmpty) {
+    return 'Shell';
+  }
+  final slashIndex = executable.lastIndexOf('/');
+  final backslashIndex = executable.lastIndexOf(r'\');
+  final sep = slashIndex > backslashIndex ? slashIndex : backslashIndex;
+  final base = (sep >= 0 ? executable.substring(sep + 1) : executable)
+      .toLowerCase();
+  return switch (base) {
+    'bash' || 'bash.exe' || 'git-bash.exe' => 'bash',
+    'zsh' || 'zsh.exe' => 'zsh',
+    'sh' || 'sh.exe' => 'sh',
+    'cmd' || 'cmd.exe' => 'cmd',
+    'powershell' || 'powershell.exe' || 'pwsh' || 'pwsh.exe' => 'PowerShell',
+    _ => 'Shell',
+  };
+}
+
+String _stripOuterShellQuotes(String input) {
+  var current = input.trim();
+  for (var i = 0; i < 8; i++) {
+    if (current.length >= 3 &&
+        current.startsWith(r"$'") &&
+        current.endsWith("'")) {
+      current = current
+          .substring(2, current.length - 1)
+          .replaceAll(r"\'", "'")
+          .trim();
+      continue;
+    }
+    if (current.length >= 2 &&
+        ((current.startsWith("'") && current.endsWith("'")) ||
+            (current.startsWith('"') && current.endsWith('"')))) {
+      final isDouble = current.startsWith('"');
+      current = current
+          .substring(1, current.length - 1)
+          .replaceAll('\'"\'"\'', "'");
+      if (isDouble) {
+        current = current.replaceAll(r'\"', '"');
+      }
+      current = current.trim();
+      continue;
+    }
+    break;
+  }
+  return current;
+}
+
+String _normalizePromptAndQuotes(String input) {
+  var text = input.trim().replaceFirst(_leadingPromptPattern, '');
+  if (text.startsWith("'") && text.endsWith('\'"\'"\'')) {
+    text = "$text''";
+  }
+  text = text.replaceAll('\'"\'"\'', "'");
+  return _stripOuterShellQuotes(text);
+}
+
+/// Unwraps shell `-lc` invocations and outer shell quotes (`225284.PuGl.g`).
+String unwrapCodexShellCommand(String rawCommand) {
+  final stripped = _stripNativeCommandPrefix(rawCommand);
+  if (stripped.isEmpty) {
+    return '';
+  }
+  final normalized = _stripOuterShellQuotes(
+    _normalizePromptAndQuotes(stripped),
+  );
+  final match = _shellLcPrefixPattern.firstMatch(normalized);
+  if (match != null) {
+    final inner = normalized.substring(match.end).trim();
+    return _normalizePromptAndQuotes(_stripOuterShellQuotes(inner));
+  }
+  final rawMatch = _shellLcPrefixPattern.firstMatch(stripped);
+  if (rawMatch != null) {
+    final inner = stripped.substring(rawMatch.end).trim();
+    return _normalizePromptAndQuotes(_stripOuterShellQuotes(inner));
+  }
+  return normalized;
+}
+
+/// Official expanded shell execution card (`225284.PuGl.d` + `PuGl.d.Footer`).
+///
+/// Renders:
+/// - `8px`-radius (`rounded-lg`), `1px` `border-strong` (`shellCardBorder`)
+///   elevated card frame;
+/// - shell header bar (`Shell` / `bash` / `zsh` / `sh` / `cmd` / `PowerShell`);
+/// - interactive `$ <unwrapped command>` block (`line-clamp-2` default,
+///   click/Enter/Space expands) with hover/focus `Copy command`;
+/// - `144px` (`max-h-36`) bottom-anchored (`reverse: true`) monospace output
+///   viewport (`"No output"` placeholder when completed and whitespace-only)
+///   with hover/focus `Copy output`;
+/// - `PuGl.d.Footer` status (`✓ Success`, `Exit code {code|unknown}`, `Stopped`)
+///   alongside optional Host-spooled full-output controls.
+class CodexShellExecutionCard extends StatefulWidget {
+  const CodexShellExecutionCard({
+    super.key,
+    required this.rawCommand,
+    required this.output,
+    this.loading = false,
+    this.errorMessage,
+    this.isInProgress = false,
+    this.status,
+    this.exitCode,
+    this.storedBytesNotice,
+    this.trailingFooterAction,
+  });
+
+  final String rawCommand;
+  final String output;
+  final bool loading;
+  final String? errorMessage;
+  final bool isInProgress;
+  final String? status;
+  final int? exitCode;
+  final String? storedBytesNotice;
+  final Widget? trailingFooterAction;
+
+  @override
+  State<CodexShellExecutionCard> createState() =>
+      _CodexShellExecutionCardState();
+}
+
+class _CodexShellExecutionCardState extends State<CodexShellExecutionCard> {
+  String? _expandedForCommand;
+  bool _commandHovered = false;
+  bool _commandFocused = false;
+  bool _copyCommandFocused = false;
+  bool _copiedCommand = false;
+  bool _outputHovered = false;
+  bool _copyOutputFocused = false;
+  bool _copiedOutput = false;
+  Timer? _copiedCommandTimer;
+  Timer? _copiedOutputTimer;
+
+  @override
+  void dispose() {
+    _copiedCommandTimer?.cancel();
+    _copiedOutputTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleCopyCommand(String commandText) async {
+    await Clipboard.setData(ClipboardData(text: commandText));
+    if (!mounted) {
+      return;
+    }
+    _copiedCommandTimer?.cancel();
+    setState(() => _copiedCommand = true);
+    _copiedCommandTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() => _copiedCommand = false);
+      }
+    });
+  }
+
+  Future<void> _handleCopyOutput() async {
+    await Clipboard.setData(ClipboardData(text: widget.output));
+    if (!mounted) {
+      return;
+    }
+    _copiedOutputTimer?.cancel();
+    setState(() => _copiedOutput = true);
+    _copiedOutputTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() => _copiedOutput = false);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final shellLabel = detectCodexShellLabel(widget.rawCommand);
+    final unwrappedCommand = unwrapCodexShellCommand(widget.rawCommand);
+    final commandExpanded =
+        unwrappedCommand.isNotEmpty && _expandedForCommand == unwrappedCommand;
+    final showCommandBlock = unwrappedCommand.isNotEmpty;
+    final showCopyCommand =
+        _commandHovered ||
+        _commandFocused ||
+        _copyCommandFocused ||
+        _copiedCommand;
+    final showCopyOutput =
+        _outputHovered || _copyOutputFocused || _copiedOutput;
+    final statusNorm = widget.status?.trim() ?? '';
+    final inProgress = widget.isInProgress || statusNorm == 'inProgress';
+
+    return Container(
+      key: const ValueKey('command-output-preview-surface'),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: theme.elevatedSurface,
+        border: Border.all(
+          color: theme.shellCardBorder,
+          width: OfficialCodexTheme.shellCardBorderWidth,
+        ),
+        borderRadius: BorderRadius.circular(
+          OfficialCodexTheme.activityRowRadius,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            key: const ValueKey('shell-card-header'),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            child: Text(
+              shellLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: OfficialCodexTheme.shellHeaderFontSize,
+                height: 1.4,
+                color: theme.shellDescriptionText,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          if (showCommandBlock)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0.0),
+              child: MouseRegion(
+                onEnter: (_) => setState(() => _commandHovered = true),
+                onExit: (_) => setState(() => _commandHovered = false),
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 24.0),
+                      child: Semantics(
+                        container: true,
+                        button: true,
+                        expanded: commandExpanded,
+                        label: '\$ $unwrappedCommand',
+                        onTap: () => setState(
+                          () => _expandedForCommand = unwrappedCommand,
+                        ),
+                        excludeSemantics: true,
+                        child: FocusableActionDetector(
+                          onShowFocusHighlight: (focused) {
+                            if (_commandFocused != focused) {
+                              setState(() => _commandFocused = focused);
+                            }
+                          },
+                          actions: {
+                            ActivateIntent: CallbackAction<ActivateIntent>(
+                              onInvoke: (_) {
+                                setState(
+                                  () => _expandedForCommand = unwrappedCommand,
+                                );
+                                return null;
+                              },
+                            ),
+                          },
+                          shortcuts: const {
+                            SingleActivator(LogicalKeyboardKey.enter):
+                                ActivateIntent(),
+                            SingleActivator(LogicalKeyboardKey.space):
+                                ActivateIntent(),
+                          },
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => setState(
+                              () => _expandedForCommand = unwrappedCommand,
+                            ),
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: CustomPaint(
+                                foregroundPainter: _commandFocused
+                                    ? _InlineFocusRingPainter(
+                                        color: theme.focusRing,
+                                      )
+                                    : null,
+                                child: Text.rich(
+                                  key: const ValueKey(
+                                    'shell-card-command-toggle',
+                                  ),
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '\$ ',
+                                        style: TextStyle(
+                                          color: theme.textMuted,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: unwrappedCommand,
+                                        style: TextStyle(
+                                          color: theme.shellDescriptionText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: commandExpanded
+                                      ? null
+                                      : OfficialCodexTheme
+                                            .shellCommandCollapsedLines,
+                                  overflow: commandExpanded
+                                      ? TextOverflow.clip
+                                      : TextOverflow.ellipsis,
+                                  softWrap: true,
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize:
+                                        OfficialCodexTheme.shellCodeFontSize,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    PositionedDirectional(
+                      top: 0.0,
+                      end: 0.0,
+                      child: _ShellHoverCopyIconButton(
+                        key: const ValueKey('shell-card-copy-command'),
+                        tooltip: 'Copy command',
+                        visible: showCopyCommand,
+                        copied: _copiedCommand,
+                        onFocusChanged: (focused) {
+                          if (_copyCommandFocused != focused) {
+                            setState(() => _copyCommandFocused = focused);
+                          }
+                        },
+                        onPressed: () =>
+                            unawaited(_handleCopyCommand(unwrappedCommand)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          _buildOutputSection(
+            context,
+            theme: theme,
+            inProgress: inProgress,
+            showCopyOutput: showCopyOutput,
+          ),
+          _buildFooter(
+            context,
+            theme: theme,
+            inProgress: inProgress,
+            statusNorm: statusNorm,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutputSection(
+    BuildContext context, {
+    required OfficialCodexThemeData theme,
+    required bool inProgress,
+    required bool showCopyOutput,
+  }) {
+    final textStyle = Theme.of(context).textTheme.bodySmall;
+    if (widget.loading) {
+      return Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Text(
+          'Loading output preview…',
+          style: textStyle?.copyWith(color: theme.shellDescriptionText),
+        ),
+      );
+    }
+    if (widget.errorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Text(
+          'Could not load output preview.',
+          style: textStyle?.copyWith(color: theme.danger),
+        ),
+      );
+    }
+    final hasNonWhitespace = _nonWhitespaceOutputPattern.hasMatch(
+      widget.output,
+    );
+    final displayOutput = hasNonWhitespace
+        ? widget.output
+        : (inProgress ? '' : 'No output');
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _outputHovered = true),
+      onExit: (_) => setState(() => _outputHovered = false),
+      child: Stack(
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: 20.0,
+              maxHeight: OfficialCodexTheme.commandOutputPreviewHeight,
+            ),
+            child: SingleChildScrollView(
+              key: const ValueKey('command-output-preview-scroll'),
+              primary: false,
+              reverse: true,
+              child: Align(
+                alignment: AlignmentDirectional.topStart,
+                child: SingleChildScrollView(
+                  primary: false,
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: SelectionArea(
+                      child: Text(
+                        displayOutput,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: OfficialCodexTheme.shellCodeFontSize,
+                          fontWeight: FontWeight.w500,
+                          height: 1.45,
+                          color: theme.shellDescriptionText,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          PositionedDirectional(
+            top: 2.0,
+            end: 10.0,
+            child: _ShellHoverCopyIconButton(
+              key: const ValueKey('shell-card-copy-output'),
+              tooltip: 'Copy output',
+              visible: showCopyOutput,
+              copied: _copiedOutput,
+              onFocusChanged: (focused) {
+                if (_copyOutputFocused != focused) {
+                  setState(() => _copyOutputFocused = focused);
+                }
+              },
+              onPressed: () => unawaited(_handleCopyOutput()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter(
+    BuildContext context, {
+    required OfficialCodexThemeData theme,
+    required bool inProgress,
+    required String statusNorm,
+  }) {
+    final footerStyle = TextStyle(
+      fontSize: OfficialCodexTheme.activityChatFontSize,
+      height: OfficialCodexTheme.activityChatLineHeight,
+      color: theme.textMuted,
+    );
+    final noticeStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: theme.textSecondary);
+
+    Widget? statusWidget;
+    if (!inProgress) {
+      if (statusNorm == 'interrupted') {
+        statusWidget = Text(
+          'Stopped',
+          key: const ValueKey('shell-card-status-footer'),
+          style: footerStyle,
+        );
+      } else if (widget.exitCode != null) {
+        final isSuccess =
+            widget.exitCode == 0 &&
+            statusNorm != 'failed' &&
+            statusNorm != 'declined';
+        if (isSuccess) {
+          statusWidget = _buildSuccessStatus(footerStyle, theme);
+        } else {
+          final codeText = widget.exitCode == 0
+              ? 'unknown'
+              : widget.exitCode.toString();
+          statusWidget = Text(
+            'Exit code $codeText',
+            key: const ValueKey('shell-card-status-footer'),
+            style: footerStyle,
+          );
+        }
+      } else if (statusNorm == 'completed') {
+        statusWidget = _buildSuccessStatus(footerStyle, theme);
+      } else if (statusNorm == 'failed' || statusNorm == 'declined') {
+        statusWidget = Text(
+          'Exit code unknown',
+          key: const ValueKey('shell-card-status-footer'),
+          style: footerStyle,
+        );
+      }
+    }
+
+    final hasLeadingControls =
+        widget.storedBytesNotice != null || widget.trailingFooterAction != null;
+    if (!hasLeadingControls && statusWidget == null) {
+      return const Padding(
+        key: ValueKey('shell-card-footer'),
+        padding: EdgeInsets.fromLTRB(10.0, 2.0, 10.0, 4.0),
+        child: SizedBox(height: 4.0),
+      );
+    }
+
+    return Padding(
+      key: const ValueKey('shell-card-footer'),
+      padding: const EdgeInsets.fromLTRB(10.0, 2.0, 10.0, 4.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final leadingChildren = <Widget>[
+            if (widget.storedBytesNotice != null)
+              Text(widget.storedBytesNotice!, style: noticeStyle),
+            if (widget.trailingFooterAction != null)
+              widget.trailingFooterAction!,
+          ];
+          if (leadingChildren.isEmpty) {
+            return Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: statusWidget,
+            );
+          }
+          if (statusWidget == null) {
+            return Wrap(
+              spacing: 8.0,
+              runSpacing: 4.0,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: leadingChildren,
+            );
+          }
+          return Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 8.0,
+            runSpacing: 4.0,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 4.0,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: leadingChildren,
+              ),
+              statusWidget,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSuccessStatus(
+    TextStyle footerStyle,
+    OfficialCodexThemeData theme,
+  ) => Row(
+    key: const ValueKey('shell-card-status-footer'),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(
+        Icons.check_rounded,
+        size: OfficialCodexTheme.activityInlineIconSize,
+        color: theme.textMuted,
+      ),
+      const SizedBox(width: 4.0),
+      Text('Success', style: footerStyle),
+    ],
+  );
+}
+
+class _ShellHoverCopyIconButton extends StatefulWidget {
+  const _ShellHoverCopyIconButton({
+    super.key,
+    required this.tooltip,
+    required this.visible,
+    required this.copied,
+    required this.onFocusChanged,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final bool visible;
+  final bool copied;
+  final ValueChanged<bool> onFocusChanged;
+  final VoidCallback onPressed;
+
+  @override
+  State<_ShellHoverCopyIconButton> createState() =>
+      _ShellHoverCopyIconButtonState();
+}
+
+class _ShellHoverCopyIconButtonState extends State<_ShellHoverCopyIconButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final active = widget.visible || _hovered;
+    return Opacity(
+      opacity: active ? 1.0 : 0.0,
+      child: CodexTooltip(
+        message: widget.tooltip,
+        child: Semantics(
+          button: true,
+          label: widget.tooltip,
+          onTap: widget.onPressed,
+          excludeSemantics: true,
+          child: FocusableActionDetector(
+            onShowFocusHighlight: widget.onFocusChanged,
+            onShowHoverHighlight: (hovering) {
+              if (_hovered != hovering) {
+                setState(() => _hovered = hovering);
+              }
+            },
+            actions: {
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) {
+                  widget.onPressed();
+                  return null;
+                },
+              ),
+            },
+            shortcuts: const {
+              SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onPressed,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
+                  width: 22.0,
+                  height: 22.0,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _hovered ? theme.hoverTint : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6.0),
+                  ),
+                  child: Icon(
+                    widget.copied ? Icons.check_rounded : Icons.copy_rounded,
+                    size: OfficialCodexTheme.activityInlineIconSize,
+                    color: active ? theme.textPrimary : theme.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

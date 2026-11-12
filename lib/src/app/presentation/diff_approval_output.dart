@@ -535,6 +535,7 @@ class _HistoryEntryView extends StatelessWidget {
             : const [],
         completed: true,
         status: item.status,
+        exitCode: item.exitCode,
         attachments: effectiveAttachments,
       ),
       attachments: effectiveAttachments,
@@ -655,17 +656,22 @@ class _InlineCommandOutput extends StatelessWidget {
   const _InlineCommandOutput({
     required this.viewer,
     required this.openFullOutput,
+    this.rawCommand = '',
+    this.status,
+    this.completed = true,
+    this.exitCode,
   });
 
   final OutputViewerController viewer;
   final Widget openFullOutput;
+  final String rawCommand;
+  final String? status;
+  final bool completed;
+  final int? exitCode;
 
   @override
   Widget build(BuildContext context) {
-    final theme = OfficialCodexTheme.of(context);
-    final textStyle = Theme.of(context).textTheme.bodySmall;
     final chunk = viewer.chunk;
-    final output = viewer.text;
     return Padding(
       padding: const EdgeInsetsDirectional.only(
         start:
@@ -673,68 +679,18 @@ class _InlineCommandOutput extends StatelessWidget {
             OfficialCodexTheme.activityInlineIconGap,
         top: OfficialCodexTheme.conversationGroupedItemGap,
       ),
-      child: Container(
-        key: const ValueKey('command-output-preview-surface'),
-        padding: const EdgeInsets.all(ThemeTokens.space2),
-        decoration: BoxDecoration(
-          color: theme.elevatedSurface,
-          border: Border.all(color: theme.hairlineBorder),
-          borderRadius: BorderRadius.circular(
-            OfficialCodexTheme.activityRowRadius,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (viewer.loading)
-              Text('Loading output preview…', style: textStyle)
-            else if (viewer.errorMessage != null)
-              Text(
-                'Could not load output preview.',
-                style: textStyle?.copyWith(color: theme.danger),
-              )
-            else
-              ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxHeight: OfficialCodexTheme.commandOutputPreviewHeight,
-                ),
-                child: SingleChildScrollView(
-                  key: const ValueKey('command-output-preview-scroll'),
-                  primary: false,
-                  child: SingleChildScrollView(
-                    primary: false,
-                    scrollDirection: Axis.horizontal,
-                    child: SelectionArea(
-                      child: Text(
-                        output.isEmpty ? 'No output' : output,
-                        softWrap: false,
-                        style: textStyle?.copyWith(
-                          fontFamily: 'monospace',
-                          color: theme.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            const SizedBox(height: ThemeTokens.space2),
-            Wrap(
-              alignment: chunk != null && chunk.offset > 0
-                  ? WrapAlignment.spaceBetween
-                  : WrapAlignment.end,
-              spacing: ThemeTokens.space2,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                if (chunk != null && chunk.offset > 0)
-                  Text(
-                    'Last ${chunk.data.length} stored bytes',
-                    style: textStyle?.copyWith(color: theme.textSecondary),
-                  ),
-                openFullOutput,
-              ],
-            ),
-          ],
-        ),
+      child: CodexShellExecutionCard(
+        rawCommand: rawCommand,
+        output: viewer.text,
+        loading: viewer.loading,
+        errorMessage: viewer.errorMessage,
+        isInProgress: !completed || status?.trim() == 'inProgress',
+        status: status,
+        exitCode: exitCode ?? viewer.descriptor.exitCode,
+        storedBytesNotice: chunk != null && chunk.offset > 0
+            ? 'Last ${chunk.data.length} stored bytes'
+            : null,
+        trailingFooterAction: openFullOutput,
       ),
     );
   }

@@ -1153,6 +1153,49 @@ Outer actual user request after envelope.
     expect(chatCaps.supportsSkillsAndMcp, isFalse);
     expect(chatCaps.supportsBranchNavigation, isTrue);
   });
+
+  test('projects bounded int32 commandExecution exitCode onto HistoryItem and OutputDescriptor', () async {
+    const nativeOut = {
+      'available': true,
+      'bytes': 16,
+      'ref': 'fedcba9876543210fedcba9876543210',
+      'storedBytes': 16,
+      'truncated': false,
+    };
+    final exitAdapter = HistoryProtocolAdapter(
+      request: (method, [params = const {}]) async => {
+        'data': [
+          for (final (id, status, rawExit) in <(String, String, Object?)>[
+            ('cmd-0', 'completed', 0),
+            ('cmd-2', 'failed', 2),
+            ('cmd-sig', 'failed', -9),
+            ('cmd-declined', 'declined', null),
+            ('cmd-overflow', 'failed', 0x100000000),
+            ('cmd-bad-type', 'failed', '2'),
+          ])
+            {
+              'turnId': 'turn-1',
+              'item': {
+                'id': id,
+                'type': 'commandExecution',
+                'command': 'echo $id',
+                'status': status,
+                'exitCode': rawExit,
+                '_codexNativeOutput': nativeOut,
+              },
+            },
+        ],
+        'nextCursor': null,
+      },
+    );
+
+    final page = await exitAdapter.listItems(
+      const HistoryItemQuery(threadId: 'thread-1', turnId: 'turn-1'),
+    );
+    const expected = <int?>[0, 2, -9, null, null, null];
+    expect(page.items.map((item) => item.exitCode).toList(), expected);
+    expect(page.items.map((item) => item.output?.exitCode).toList(), expected);
+  });
 }
 
 Map<String, Object?> _textBlock(String text) => {'type': 'text', 'text': text};

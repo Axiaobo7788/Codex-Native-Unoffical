@@ -191,6 +191,7 @@ class ActivityEvent extends TurnEvent {
     required this.summary,
     required this.status,
     required this.completed,
+    this.exitCode,
     this.commandActions = const {},
     this.commandOutput,
   });
@@ -199,6 +200,7 @@ class ActivityEvent extends TurnEvent {
   final String summary;
   final String status;
   final bool completed;
+  final int? exitCode;
   final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
 }

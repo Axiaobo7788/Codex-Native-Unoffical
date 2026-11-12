@@ -20,6 +20,7 @@ class HistoryItem {
     required this.kind,
     required this.text,
     this.status,
+    this.exitCode,
     this.output,
     this.outputDeferred = false,
     this.isCommand = false,
@@ -34,6 +35,7 @@ class HistoryItem {
   final HistoryItemKind kind;
   final String text;
   final String? status;
+  final int? exitCode;
   final OutputDescriptor? output;
   final bool outputDeferred;
   final bool isCommand;
