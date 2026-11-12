@@ -2359,28 +2359,52 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Long message starts collapsed (>20 lines): UserMessageMarkdown renders
-      // the visible 19-line prefix (excluding '…' and 'Show more'), while
+      // Long message starts collapsed (>20 lines): UserMessageMarkdown holds
+      // the full uncorrupted prompt clipped at 19lh, collapsed selection copies
+      // only the 19 visible lines (excluding '…' and 'Show more'), and
       // 225284.y5H2 toolbar Copy message copies the full prompt in both states.
       expect(find.text('Show more'), findsOneWidget);
-      expect(find.textContaining('User instruction line 25'), findsNothing);
       final collapsedMarkdown = find.descendant(
         of: bubble,
         matching: find.byKey(const ValueKey('user-message-markdown')),
       );
+      final collapsedClipViewport = find.descendant(
+        of: bubble,
+        matching: find.byKey(const ValueKey('user-message-clip-viewport')),
+      );
       expect(collapsedMarkdown, findsOneWidget);
+      expect(
+        tester.getSize(collapsedClipViewport).height,
+        lessThan(tester.getSize(collapsedMarkdown).height),
+      );
       final collapsedBubbleText = tester.widget<Text>(
         find
             .descendant(of: collapsedMarkdown, matching: find.byType(Text))
             .first,
       );
+      expect(collapsedBubbleText.textSpan!.toPlainText(), longPrompt);
+
+      final bubbleSelectable = tester.state<SelectableRegionState>(
+        find.descendant(of: bubble, matching: find.byType(SelectableRegion)),
+      );
+      bubbleSelectable.selectAll(SelectionChangedCause.keyboard);
+      await tester.pump();
+      Actions.invoke(
+        tester.element(collapsedMarkdown),
+        CopySelectionTextIntent.copy,
+      );
+      await tester.pump();
       expect(
-        collapsedBubbleText.textSpan!.toPlainText(),
+        copiedText,
         List.generate(
           19,
           (index) => 'User instruction line ${index + 1}',
         ).join('\n'),
       );
+      bubbleSelectable.clearSelection();
+      await tester.pump();
+
+      copiedText = null;
       await tester.tap(find.byKey(const ValueKey('user-copy-hist-user-long')));
       await tester.pump();
       expect(copiedText, longPrompt);

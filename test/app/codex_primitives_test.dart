@@ -252,6 +252,12 @@ void main() {
           );
 
           final toggle = find.byKey(const ValueKey('expand-25'));
+          final clipViewport = find.byKey(
+            const ValueKey('user-message-clip-viewport'),
+          );
+          final markdownFinder = find.byKey(
+            const ValueKey('user-message-markdown'),
+          );
           expect(find.text('Show more'), findsOneWidget);
           expect(find.text('…'), findsOneWidget);
           expect(
@@ -259,27 +265,87 @@ void main() {
                 tester.getBottomLeft(find.text('…')).dy,
             closeTo(OfficialCodexTheme.userMessageExpandGap, 0.01),
           );
-          expect(find.textContaining('Prompt line 19'), findsOneWidget);
-          expect(find.textContaining('Prompt line 25'), findsNothing);
+          // Full <= 10,240-char source is preserved uncorrupted inside
+          // UserMessageMarkdown (`14353.dKZq.S` `P(R)`), while the viewport
+          // clips at `19lh`.
           final collapsedRendered = tester.widget<Text>(
             find
-                .descendant(
-                  of: find.byKey(const ValueKey('user-message-markdown')),
-                  matching: find.byType(Text),
-                )
+                .descendant(of: markdownFinder, matching: find.byType(Text))
                 .first,
           );
-          final collapsedPlain = collapsedRendered.textSpan!.toPlainText();
+          expect(collapsedRendered.textSpan!.toPlainText(), twentyFiveLines);
+          final collapsedViewportHeight = tester.getSize(clipViewport).height;
+          final fullMarkdownHeight = tester.getSize(markdownFinder).height;
           expect(
-            collapsedPlain,
-            List.generate(19, (index) => 'Prompt line ${index + 1}').join('\n'),
+            collapsedViewportHeight,
+            closeTo((fullMarkdownHeight / 25.0 * 19.0).ceilToDouble(), 1.0),
           );
-          expect(collapsedPlain, isNot(contains('…')));
-          expect(collapsedPlain, isNot(contains('Show more')));
-          expect(
-            find.semantics.byLabel(RegExp(r'Prompt line 25')),
-            findsNothing,
+
+          String? copiedSelection;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copiedSelection =
+                    (call.arguments as Map<Object?, Object?>)['text']
+                        as String?;
+              }
+              return null;
+            },
           );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+
+          final selectableState = tester.state<SelectableRegionState>(
+            find.descendant(
+              of: find.byType(CodexMessageBubble),
+              matching: find.byType(SelectableRegion),
+            ),
+          );
+          final expectedCollapsedSelection = List.generate(
+            19,
+            (index) => 'Prompt line ${index + 1}',
+          ).join('\n');
+
+          selectableState.selectAll(SelectionChangedCause.keyboard);
+          await tester.pump();
+          Actions.invoke(
+            tester.element(markdownFinder),
+            CopySelectionTextIntent.copy,
+          );
+          await tester.pump();
+          expect(copiedSelection, expectedCollapsedSelection);
+          expect(copiedSelection, isNot(contains('Prompt line 20')));
+          expect(copiedSelection, isNot(contains('…')));
+          expect(copiedSelection, isNot(contains('Show more')));
+
+          // Dragging past the bottom of the bubble also clamps to line 19.
+          copiedSelection = null;
+          selectableState.clearSelection();
+          await tester.pump();
+          final viewportRect = tester.getRect(clipViewport);
+          final drag = await tester.startGesture(
+            viewportRect.topLeft + const Offset(2, 4),
+            kind: PointerDeviceKind.mouse,
+          );
+          await tester.pump();
+          await drag.moveTo(
+            Offset(viewportRect.right - 2, tester.getRect(toggle).bottom + 24),
+          );
+          await tester.pump();
+          await drag.up();
+          await tester.pump();
+          Actions.invoke(
+            tester.element(markdownFinder),
+            CopySelectionTextIntent.copy,
+          );
+          await tester.pump();
+          expect(copiedSelection, expectedCollapsedSelection);
+          selectableState.clearSelection();
+          await tester.pump();
+
           expect(
             tester
                 .widget<AnimatedRotation>(
@@ -301,18 +367,20 @@ void main() {
 
           expect(find.text('Show less'), findsOneWidget);
           expect(find.text('…'), findsNothing);
-          expect(find.textContaining('Prompt line 25'), findsOneWidget);
-          final expandedRendered = tester.widget<Text>(
-            find
-                .descendant(
-                  of: find.byKey(const ValueKey('user-message-markdown')),
-                  matching: find.byType(Text),
-                )
-                .first,
+          expect(
+            tester.getSize(clipViewport).height,
+            closeTo(fullMarkdownHeight, 0.01),
           );
-          final expandedPlain = expandedRendered.textSpan!.toPlainText();
-          expect(expandedPlain, twentyFiveLines);
-          expect(expandedPlain, isNot(contains('Show less')));
+          copiedSelection = null;
+          selectableState.selectAll(SelectionChangedCause.keyboard);
+          await tester.pump();
+          Actions.invoke(
+            tester.element(markdownFinder),
+            CopySelectionTextIntent.copy,
+          );
+          await tester.pump();
+          expect(copiedSelection, twentyFiveLines);
+          expect(copiedSelection, isNot(contains('Show less')));
           expect(
             tester
                 .widget<AnimatedRotation>(
@@ -325,7 +393,8 @@ void main() {
             0.5,
           );
 
-          // Keyboard Enter collapses back to 20-line preview.
+          // Keyboard Enter collapses back to 19lh preview and clears stale
+          // expanded selection.
           final focusNode = Focus.of(
             tester.element(
               find.descendant(
@@ -340,7 +409,11 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(find.text('Show more'), findsOneWidget);
-          expect(find.textContaining('Prompt line 25'), findsNothing);
+          expect(
+            tester.getSize(clipViewport).height,
+            closeTo(collapsedViewportHeight, 0.01),
+          );
+          expect(focusNode.hasFocus, isTrue);
 
           // Expanding and then updating `text` resets expansion to collapsed (`189497.oQwr.ee` parity).
           await tester.tap(toggle);
@@ -364,7 +437,10 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.text('Show more'), findsOneWidget);
-          expect(find.textContaining('Updated line 26'), findsNothing);
+          expect(
+            tester.getSize(clipViewport).height,
+            closeTo(collapsedViewportHeight, 0.01),
+          );
         } finally {
           semantics.dispose();
         }
@@ -420,6 +496,198 @@ void main() {
         expect(expandedTextWidget.textSpan!.toPlainText().length, 11000);
         expect(find.text('…'), findsOneWidget);
         expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'collapses multi-block Markdown by actual rendered height, expands clip past straddling fenced code cards, and gates below-fold links and code copy controls',
+      (tester) async {
+        tester.view.physicalSize = const Size(1200, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        final semantics = tester.ensureSemantics();
+        try {
+          String? copiedClipboard;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copiedClipboard =
+                    (call.arguments as Map<Object?, Object?>)['text']
+                        as String?;
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+
+          final launchedUris = <Uri>[];
+
+          // 1. Multi-block Markdown with <= 20 raw `\n` lines whose wrapped
+          //    blocks + block spacing exceed `20lh + 1px` (`189497.oQwr.ee`):
+          //    collapses without corrupting the AST, while below-fold links and
+          //    code-block Copy controls are inert (`14353.dKZq.S`).
+          final multiBlockPrompt = <String>[
+            '## Architecture audit summary',
+            'First wrapped paragraph explaining why user bubble collapse must measure actual rendered height rather than counting raw newline characters in source text so rich Markdown stays intact.',
+            'Second wrapped paragraph verifying that `[&>p+p]:!mt-5` paragraph spacing, headings, list items, and blockquotes contribute to the 20lh threshold without plain-text slicing.',
+            '- Verify `189497.oQwr.ee` `contentHeightPx > collapsedHeightPx + 1` subpixel tolerance across standard desktop reading columns.',
+            '- Verify `14353.dKZq.S` preserves full Markdown children when `text.length <= 10240` and excludes collapse chrome from selection.',
+            '> Quoted note confirming below-fold interactive controls stay inert and excluded from focus and semantics until expanded.',
+            'Third wrapped paragraph pushing the trailing reference link and fenced snippet past the 20lh collapse boundary for hit-test and semantics verification.',
+            'See [Below fold spec](https://example.com/below-fold) for details.',
+            '```dart\nfinal belowFold = 42;\n```',
+          ].join('\n\n');
+          expect(
+            '\n'.allMatches(multiBlockPrompt).length,
+            lessThanOrEqualTo(18),
+          );
+
+          await tester.pumpWidget(
+            wrap(
+              SizedBox(
+                width: 672.0,
+                child: CodexMessageBubble(
+                  text: multiBlockPrompt,
+                  expandKey: const ValueKey('expand-multiblock'),
+                  externalLinkLauncher: (uri) async {
+                    launchedUris.add(uri);
+                    return true;
+                  },
+                ),
+              ),
+            ),
+          );
+
+          expect(find.text('Show more'), findsOneWidget);
+          expect(find.text('…'), findsOneWidget);
+          // Rich Markdown AST is intact (heading + code card mounted, not sliced).
+          expect(find.text('Architecture audit summary'), findsOneWidget);
+          final codeBlockFinder = find.byKey(
+            const ValueKey('desktop-markdown-code-block'),
+          );
+          final codeCopyFinder = find.byKey(
+            const ValueKey('desktop-markdown-code-copy'),
+          );
+          expect(codeBlockFinder, findsOneWidget);
+          expect(codeCopyFinder, findsOneWidget);
+
+          final clipViewport = find.byKey(
+            const ValueKey('user-message-clip-viewport'),
+          );
+          final viewportBottom = tester.getBottomLeft(clipViewport).dy;
+          expect(
+            tester.getTopLeft(codeBlockFinder).dy,
+            greaterThanOrEqualTo(viewportBottom),
+          );
+
+          // Below-fold link & code Copy button are unclickable, hidden from
+          // semantics (`aria-hidden="true"`), and unfocusable (`inert`).
+          expect(find.semantics.byLabel('Below fold spec'), findsNothing);
+          expect(find.semantics.byLabel('Copy code'), findsNothing);
+          expect(codeCopyFinder.hitTestable(), findsNothing);
+
+          await tester.tap(codeCopyFinder, warnIfMissed: false);
+          await tester.pump();
+          expect(copiedClipboard, isNull);
+
+          final copyButtonFocus = Focus.of(
+            tester.element(
+              find.descendant(
+                of: codeCopyFinder,
+                matching: find.byType(GestureDetector),
+              ),
+            ),
+          );
+          expect(copyButtonFocus.canRequestFocus, isFalse);
+
+          // Expanding restores full visibility, link activation, semantics, and
+          // Copy code button interactivity + focusability.
+          await tester.tap(find.byKey(const ValueKey('expand-multiblock')));
+          await tester.pumpAndSettle();
+          expect(find.text('Show less'), findsOneWidget);
+          expect(find.semantics.byLabel('Below fold spec'), findsOneWidget);
+          expect(copyButtonFocus.canRequestFocus, isTrue);
+
+          tester.semantics.tap(find.semantics.byLabel('Below fold spec'));
+          await tester.pumpAndSettle();
+          expect(launchedUris, <Uri>[
+            Uri.parse('https://example.com/below-fold'),
+          ]);
+
+          await tester.tap(codeCopyFinder);
+          await tester.pump();
+          expect(copiedClipboard, 'final belowFold = 42;');
+          // Advance past _FencedCodeBlockView's 2-second "Copied" reset timer.
+          await tester.pump(const Duration(seconds: 3));
+
+          // 2. Straddling fenced code block (`top < 19lh && bottom > 19lh`,
+          //    `!forceCollapsible`): `14353.dKZq.S` expands `clipHeight` to
+          //    `ceil(codeBlock.bottom)` so the code card is never sliced
+          //    mid-frame and its Copy button stays active while trailing prose
+          //    below the code card remains clipped.
+          copiedClipboard = null;
+          final straddlingPrompt = <String>[
+            List.generate(15, (i) => 'Lead line ${i + 1}').join('\n'),
+            '```dart\nfinal straddleA = 1;\nfinal straddleB = 2;\nfinal straddleC = 3;\nfinal straddleD = 4;\n```',
+            List.generate(8, (i) => 'Trailing below card ${i + 1}').join('\n'),
+          ].join('\n\n');
+
+          await tester.pumpWidget(
+            wrap(
+              SizedBox(
+                width: 672.0,
+                child: CodexMessageBubble(
+                  text: straddlingPrompt,
+                  expandKey: const ValueKey('expand-straddle'),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.text('Show more'), findsOneWidget);
+          expect(find.text('…'), findsOneWidget);
+
+          final straddleViewportTop = tester.getTopLeft(clipViewport).dy;
+          final straddleViewportHeight = tester.getSize(clipViewport).height;
+          final straddleCardTop =
+              tester.getTopLeft(codeBlockFinder).dy - straddleViewportTop;
+          final straddleCardBottom =
+              tester.getBottomLeft(codeBlockFinder).dy - straddleViewportTop;
+          final markdownTotalHeight = tester
+              .getSize(find.byKey(const ValueKey('user-message-markdown')))
+              .height;
+
+          // Code card starts above 19lh, extends past 19lh, and viewport
+          // expands to `ceil(straddleCardBottom)` while still clipping trailing prose.
+          expect(straddleCardTop, lessThan(19.0 * 23.0));
+          expect(straddleCardBottom, greaterThan(19.0 * 23.0));
+          expect(
+            straddleViewportHeight,
+            closeTo(straddleCardBottom.ceilToDouble(), 1.0),
+          );
+          expect(straddleViewportHeight, lessThan(markdownTotalHeight - 40.0));
+
+          // Because the straddling code card is fully unclipped, its Copy
+          // button is hit-testable and focusable even while collapsed!
+          expect(codeCopyFinder.hitTestable(), findsOneWidget);
+          await tester.tap(codeCopyFinder);
+          await tester.pump();
+          expect(
+            copiedClipboard,
+            'final straddleA = 1;\nfinal straddleB = 2;\nfinal straddleC = 3;\nfinal straddleD = 4;',
+          );
+          await tester.pump(const Duration(seconds: 3));
+        } finally {
+          semantics.dispose();
+        }
       },
     );
   });
