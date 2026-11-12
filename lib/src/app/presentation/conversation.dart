@@ -1364,6 +1364,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   late final FocusNode _composerFocusNode;
   ({String threadId, String turnId})? _armedComposerStop;
   Timer? _composerStopTimer;
+  bool? _lockedComposerSingleLine;
+  var _lastStableComposerSingleLine = true;
   final _composerInputKey = GlobalKey();
   final _approvalBannerKey = GlobalKey();
   final _userInputBannerKey = GlobalKey();
@@ -5570,11 +5572,36 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     }
   }
 
+  double _measureBoundedSingleLineWidth(
+    BuildContext context,
+    String text,
+    TextStyle? style, {
+    int maxChars = OfficialCodexTheme.composerSingleLineMeasureCharCap,
+  }) {
+    if (text.isEmpty) {
+      return 0.0;
+    }
+    final slice = text.length > maxChars ? text.substring(0, maxChars) : text;
+    final painter = TextPainter(
+      text: TextSpan(text: slice, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    );
+    try {
+      painter.layout();
+      return painter.width;
+    } finally {
+      painter.dispose();
+    }
+  }
+
   Widget _composer(
     ConversationController controller, {
     bool isHeroCentered = false,
   }) {
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     final thread = controller.thread;
     final projectCwd = thread?.cwd ?? _activeProjectDirectory;
     final capabilities = _activeCapabilities;
@@ -5588,341 +5615,502 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         (thread != null || canCreateOnSend) && (!controller.busy || canSteer);
     final desktopComposer = widget.hasDesktopShell && !isHeroCentered;
     final showStop = desktopComposer && controller.canInterrupt;
-    final input = CallbackShortcuts(
-      key: _composerInputKey,
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.enter): () {
-          if (enabled) {
-            unawaited(_send());
-          }
-        },
-        const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-            _insertComposerNewline,
-      },
-      child: TextField(
-        key: const ValueKey('conversation-composer'),
-        controller: _composerController,
-        focusNode: _composerFocusNode,
-        enabled: enabled,
-        minLines: isHeroCentered ? 2 : 1,
-        maxLines: 6,
-        textInputAction: TextInputAction.newline,
-        decoration: InputDecoration(
-          isDense: desktopComposer,
-          hintText: thread == null && !canCreateOnSend
-              ? 'Select or create a thread'
-              : canSteer
-              ? 'Steer active turn in Codex'
-              : 'Send a message to Codex',
-          filled: false,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          disabledBorder: InputBorder.none,
-          contentPadding: desktopComposer
-              ? const EdgeInsets.fromLTRB(2, 5, 8, 5)
-              : const EdgeInsets.fromLTRB(2, 2, 8, 8),
-        ),
-      ),
-    );
     return Container(
       color: isHeroCentered ? Colors.transparent : palette.canvas,
       padding: isHeroCentered
           ? EdgeInsets.zero
           : const EdgeInsets.fromLTRB(16, 8, 16, 14),
-      child: Center(
-        child: CodexComposer(
-          key: const ValueKey('floating_composer'),
-          surfaceKey: const ValueKey('composer-surface'),
-          isFocused: _composerFocusNode.hasFocus,
-          showFocusBorder: !desktopComposer,
-          radius: desktopComposer
-              ? OfficialCodexTheme.composerRadiusPill
-              : OfficialCodexTheme.composerRadius,
-          padding: desktopComposer
-              ? const EdgeInsets.all(8)
-              : const EdgeInsets.fromLTRB(14, 10, 8, 8),
-          backgroundColor: desktopComposer
-              ? OfficialCodexTheme.of(context).workspaceBackground
-              : null,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_composerAttachments.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (
-                        var index = 0;
-                        index < _composerAttachments.length;
-                        index += 1
-                      )
-                        _ComposerAttachmentDraftChip(
-                          key: ValueKey('composer-attachment-chip-$index'),
-                          removeKey: ValueKey(
-                            'composer-attachment-remove-$index',
+      child: LayoutBuilder(
+        builder: (context, outerConstraints) {
+          return AnimatedBuilder(
+            animation: Listenable.merge([
+              _composerController,
+              widget.settingsController,
+            ]),
+            builder: (context, _) {
+              final viewportWidth = MediaQuery.sizeOf(context).width;
+              final composerOuterWidth = math.min(
+                outerConstraints.maxWidth,
+                OfficialCodexTheme.maxContentWidth,
+              );
+              final width = math.max(
+                0.0,
+                composerOuterWidth - (desktopComposer ? 16.0 : 22.0),
+              );
+              final compactComposer = width < 560;
+              final controlTextScale = math.max(
+                1.0,
+                MediaQuery.textScalerOf(context).scale(12) / 12,
+              );
+              final iconOnly = width < 320 * controlTextScale;
+              final busyReserve = !desktopComposer && controller.busy
+                  ? 76.0
+                  : 0.0;
+              final singleLineMaxModelLabelWidth =
+                  (width - (compactComposer ? 260 : 455) - busyReserve).clamp(
+                    52.0,
+                    148.0,
+                  );
+              final composerTextStyle = desktopComposer
+                  ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: OfficialCodexTheme.chatFontSize,
+                      height:
+                          OfficialCodexTheme.composerLineHeight /
+                          OfficialCodexTheme.chatFontSize,
+                      color: theme.textPrimary,
+                    )
+                  : null;
+              final modelLabelStyle = Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(fontWeight: FontWeight.w500);
+              final usageWidth =
+                  desktopComposer &&
+                      !compactComposer &&
+                      controller.tokenUsage != null
+                  ? 14.0 + ThemeTokens.space1
+                  : 0.0;
+              final singleLineModelWidth = iconOnly
+                  ? 28.0
+                  : _measureBoundedSingleLineWidth(
+                          context,
+                          _composerModelSummaryLabel(
+                            widget.settingsController,
+                            useDesktopPicker: desktopComposer,
                           ),
-                          attachment: _composerAttachments[index],
-                          onRemove: () {
-                            setState(() {
-                              _composerAttachments.removeAt(index);
-                            });
-                          },
+                          modelLabelStyle,
+                          maxChars: 128,
+                        ).clamp(0.0, singleLineMaxModelLabelWidth) +
+                        36.0;
+              final singleLinePermissionsWidth =
+                  capabilities.supportsSandboxConfiguration ? 28.0 : 0.0;
+              const leadingInlineWidth =
+                  28.0 + OfficialCodexTheme.composerSingleLineControlGap;
+              const primaryGapAndActionWidth =
+                  OfficialCodexTheme.composerPrimaryActionLeadingGap +
+                  OfficialCodexTheme.sendButtonDiameter;
+              final singleLineInputSlotWidth = math.max(
+                0.0,
+                width -
+                    leadingInlineWidth -
+                    usageWidth -
+                    singleLineModelWidth -
+                    singleLinePermissionsWidth -
+                    primaryGapAndActionWidth,
+              );
+              final singleLineTextMaxWidth = math.max(
+                0.0,
+                singleLineInputSlotWidth - 16.0,
+              );
+              final canInlineDesktopRow =
+                  desktopComposer &&
+                  _composerAttachments.isEmpty &&
+                  viewportWidth >=
+                      OfficialCodexTheme.composerSingleLineBreakpoint &&
+                  width >= 360.0;
+              final draft = _composerController.value;
+              final isComposing =
+                  draft.composing.isValid && !draft.composing.isCollapsed;
+              final bool inlineInput;
+              if (!canInlineDesktopRow || draft.text.contains('\n')) {
+                _lockedComposerSingleLine = null;
+                _lastStableComposerSingleLine = false;
+                inlineInput = false;
+              } else if (isComposing) {
+                _lockedComposerSingleLine ??= _lastStableComposerSingleLine;
+                inlineInput = _lockedComposerSingleLine!;
+              } else {
+                final fitsSingleLine =
+                    draft.text.isEmpty ||
+                    (draft.text.length <=
+                            OfficialCodexTheme
+                                .composerSingleLineMeasureCharCap &&
+                        _measureBoundedSingleLineWidth(
+                              context,
+                              draft.text,
+                              composerTextStyle,
+                            ) <=
+                            singleLineTextMaxWidth);
+                _lockedComposerSingleLine = null;
+                _lastStableComposerSingleLine = fitsSingleLine;
+                inlineInput = fitsSingleLine;
+              }
+
+              final showMultilinePermissionsLabel =
+                  desktopComposer &&
+                  !inlineInput &&
+                  capabilities.supportsSandboxConfiguration &&
+                  width >=
+                      OfficialCodexTheme.composerFooterLabelCollapseWidth *
+                          controlTextScale;
+              final multilinePermissionsReserve =
+                  !capabilities.supportsSandboxConfiguration
+                  ? 0.0
+                  : showMultilinePermissionsLabel
+                  ? OfficialCodexTheme.composerSingleLineControlGap +
+                        OfficialCodexTheme.composerPermissionsLabelMaxWidth
+                  : OfficialCodexTheme.composerSingleLineControlGap + 28.0;
+              final maxModelLabelWidth = desktopComposer && !inlineInput
+                  ? (width -
+                            28.0 -
+                            multilinePermissionsReserve -
+                            usageWidth -
+                            primaryGapAndActionWidth -
+                            48.0)
+                        .clamp(52.0, 190.0)
+                  : singleLineMaxModelLabelWidth;
+
+              final input = CallbackShortcuts(
+                key: _composerInputKey,
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter): () {
+                    if (enabled) {
+                      unawaited(_send());
+                    }
+                  },
+                  const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                      _insertComposerNewline,
+                },
+                child: TextField(
+                  key: const ValueKey('conversation-composer'),
+                  controller: _composerController,
+                  focusNode: _composerFocusNode,
+                  enabled: enabled,
+                  style: composerTextStyle,
+                  selectionControls: desktopComposer
+                      ? desktopTextSelectionHandleControls
+                      : null,
+                  minLines: isHeroCentered ? 2 : 1,
+                  maxLines: 6,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    isDense: desktopComposer,
+                    hintMaxLines: inlineInput ? 1 : null,
+                    hintText: thread == null && !canCreateOnSend
+                        ? 'Select or create a thread'
+                        : canSteer
+                        ? 'Steer active turn in Codex'
+                        : 'Send a message to Codex',
+                    hintStyle: desktopComposer
+                        ? composerTextStyle?.copyWith(
+                            color: theme.textPrimary.withValues(
+                              alpha:
+                                  OfficialCodexTheme.composerPlaceholderOpacity,
+                            ),
+                          )
+                        : null,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    contentPadding: desktopComposer
+                        ? inlineInput
+                              ? const EdgeInsets.fromLTRB(2, 4, 8, 4)
+                              : const EdgeInsets.symmetric(vertical: 2)
+                        : const EdgeInsets.fromLTRB(2, 2, 8, 8),
+                  ),
+                ),
+              );
+
+              final attachControl = CodexPopoverAnchor(
+                controller: _composerAttachPopoverController,
+                targetAnchor: Alignment.topLeft,
+                followerAnchor: Alignment.bottomLeft,
+                width: 210,
+                offset: const Offset(0, -6),
+                popoverBuilder: (context, close) =>
+                    CodexMenu<UserAttachmentKind>(
+                      items: [
+                        const CodexMenuItem(
+                          value: UserAttachmentKind.mention,
+                          label: 'Attach file (@mention)',
+                          icon: Icon(Icons.description_outlined),
                         ),
+                        const CodexMenuItem(
+                          value: UserAttachmentKind.image,
+                          label: 'Attach image',
+                          icon: Icon(Icons.image_outlined),
+                        ),
+                        if (capabilities.supportsSkillsAndMcp)
+                          const CodexMenuItem(
+                            value: UserAttachmentKind.skill,
+                            label: 'Attach skill (\$skill)',
+                            icon: Icon(Icons.auto_fix_high_outlined),
+                          ),
+                        const CodexMenuItem(
+                          value: UserAttachmentKind.pastedText,
+                          label: 'Attach snippet',
+                          icon: Icon(Icons.notes_rounded),
+                        ),
+                      ],
+                      onSelected: (kind) {
+                        close();
+                        unawaited(_promptAddAttachment(kind));
+                      },
+                    ),
+                child: CodexIconButton(
+                  key: const ValueKey('composer-attach-button'),
+                  tooltip: 'Add attachment',
+                  size: 28.0,
+                  onPressed: enabled
+                      ? _composerAttachPopoverController.toggle
+                      : null,
+                  icon: const Icon(Icons.add_rounded, size: 17),
+                ),
+              );
+
+              final hasDraft =
+                  draft.text.trim().isNotEmpty ||
+                  _composerAttachments.isNotEmpty;
+              final showSteer = canSteer && hasDraft;
+              final primaryActionSize = widget.hasDesktopShell
+                  ? OfficialCodexTheme.sendButtonDiameter
+                  : 34.0;
+              final primaryActionIconSize = widget.hasDesktopShell
+                  ? OfficialCodexTheme.sendButtonIconSize
+                  : 18.0;
+              final stopIconSize = widget.hasDesktopShell
+                  ? OfficialCodexTheme.sendButtonIconSize
+                  : 17.0;
+              final Widget primaryAction;
+              if (showStop && !showSteer) {
+                final armed =
+                    _armedComposerStop != null &&
+                    _armedComposerStop == _desktopStopTarget;
+                primaryAction = CodexIconButton(
+                  key: const ValueKey('composer-stop-button'),
+                  tooltip: armed ? 'Press Esc again to stop' : 'Stop turn',
+                  size: primaryActionSize,
+                  iconSize: stopIconSize,
+                  shape: BoxShape.circle,
+                  variant: CodexButtonVariant.primary,
+                  onPressed: _stopComposerTurn,
+                  icon: armed
+                      ? Builder(
+                          builder: (context) => Text(
+                            'Esc',
+                            maxLines: 1,
+                            softWrap: false,
+                            textScaler: TextScaler.noScaling,
+                            style: TextStyle(
+                              color: IconTheme.of(context).color,
+                              fontSize: widget.hasDesktopShell ? 10.5 : 11,
+                              height: 1.0,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        )
+                      : Icon(Icons.stop_rounded, size: stopIconSize),
+                );
+              } else {
+                primaryAction = CodexIconButton(
+                  key: const ValueKey('composer-send-button'),
+                  tooltip: canSteer ? 'Steer turn (Enter)' : 'Send (Enter)',
+                  size: primaryActionSize,
+                  iconSize: primaryActionIconSize,
+                  shape: BoxShape.circle,
+                  variant: CodexButtonVariant.primary,
+                  disabledOpacity: 0.5,
+                  onPressed: enabled && (!desktopComposer || hasDraft)
+                      ? _send
+                      : null,
+                  icon: Icon(
+                    canSteer && !desktopComposer
+                        ? Icons.subdirectory_arrow_right_rounded
+                        : Icons.arrow_upward_rounded,
+                    size: primaryActionIconSize,
+                  ),
+                );
+              }
+
+              final permissionsInLeading = desktopComposer && !inlineInput;
+              final controls = Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  attachControl,
+                  if (inlineInput) ...[
+                    const SizedBox(
+                      width: OfficialCodexTheme.composerSingleLineControlGap,
+                    ),
+                    Expanded(child: input),
+                  ] else if (permissionsInLeading &&
+                      capabilities.supportsSandboxConfiguration) ...[
+                    const SizedBox(
+                      width: OfficialCodexTheme.composerSingleLineControlGap,
+                    ),
+                    _ExecutionSettingsButton(
+                      controller: widget.settingsController,
+                      iconOnly: !showMultilinePermissionsLabel,
+                      useSandboxMenu: true,
+                      alignMenuStart: true,
+                    ),
+                  ] else
+                    const SizedBox(width: 2),
+                  if (!inlineInput && desktopComposer) const Spacer(),
+                  if (controller.tokenUsage case final usage?
+                      when desktopComposer && !compactComposer) ...[
+                    _composerContextUsage(usage),
+                    const SizedBox(width: ThemeTokens.space1),
+                  ],
+                  _ComposerModelSummaryButton(
+                    controller: widget.settingsController,
+                    maxLabelWidth: maxModelLabelWidth,
+                    iconOnly: iconOnly,
+                    useDesktopPicker: desktopComposer,
+                  ),
+                  if (!permissionsInLeading &&
+                      capabilities.supportsSandboxConfiguration)
+                    _ExecutionSettingsButton(
+                      controller: widget.settingsController,
+                      iconOnly: desktopComposer || iconOnly,
+                      useSandboxMenu: desktopComposer,
+                    ),
+                  if (!desktopComposer &&
+                      projectCwd.isNotEmpty &&
+                      !isHeroCentered &&
+                      !compactComposer &&
+                      capabilities.supportsWorkingDirectorySelection) ...[
+                    const SizedBox(width: 4),
+                    CodexTooltip(
+                      message: projectCwd,
+                      child: GestureDetector(
+                        onTap: thread == null ? _chooseProjectDirectory : null,
+                        child: MouseRegion(
+                          cursor: thread == null
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder_outlined,
+                                  size: 13,
+                                  color: palette.textMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 110,
+                                  ),
+                                  child: Text(
+                                    _projectName(projectCwd),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: palette.textSecondary,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (!desktopComposer) const Spacer(),
+                  if (controller.busy &&
+                      !showStop &&
+                      width >= 240 * controlTextScale)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        'Working…',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                  if (desktopComposer)
+                    const SizedBox(
+                      width: OfficialCodexTheme.composerPrimaryActionLeadingGap,
+                    ),
+                  primaryAction,
+                ],
+              );
+
+              return Center(
+                child: CodexComposer(
+                  key: const ValueKey('floating_composer'),
+                  surfaceKey: const ValueKey('composer-surface'),
+                  isFocused: _composerFocusNode.hasFocus,
+                  showFocusBorder: !desktopComposer,
+                  useDesktopSurface: desktopComposer,
+                  radius: !desktopComposer
+                      ? OfficialCodexTheme.composerRadius
+                      : inlineInput
+                      ? OfficialCodexTheme.composerRadiusPill
+                      : OfficialCodexTheme.composerMultilineRadius,
+                  padding: desktopComposer
+                      ? const EdgeInsets.all(8)
+                      : const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_composerAttachments.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (
+                                var index = 0;
+                                index < _composerAttachments.length;
+                                index += 1
+                              )
+                                _ComposerAttachmentDraftChip(
+                                  key: ValueKey(
+                                    'composer-attachment-chip-$index',
+                                  ),
+                                  removeKey: ValueKey(
+                                    'composer-attachment-remove-$index',
+                                  ),
+                                  attachment: _composerAttachments[index],
+                                  onRemove: () {
+                                    setState(() {
+                                      _composerAttachments.removeAt(index);
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (!inlineInput)
+                        desktopComposer
+                            ? Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  OfficialCodexTheme
+                                          .composerMultilineInputHorizontalPadding -
+                                      9.0,
+                                  2,
+                                  OfficialCodexTheme
+                                          .composerMultilineInputHorizontalPadding -
+                                      9.0,
+                                  OfficialCodexTheme.composerInputFooterGap,
+                                ),
+                                child: input,
+                              )
+                            : input,
+                      controls,
                     ],
                   ),
                 ),
-              ],
-              LayoutBuilder(
-                builder: (context, rowConstraints) {
-                  final width = rowConstraints.maxWidth;
-                  final compactComposer = width < 560;
-                  final controlTextScale = math.max(
-                    1.0,
-                    MediaQuery.textScalerOf(context).scale(12) / 12,
-                  );
-                  final iconOnly = width < 320 * controlTextScale;
-                  // The Desktop primary action occupies the same slot during
-                  // a turn. Narrow workspaces put the input above the controls.
-                  final inlineInput = desktopComposer && width >= 360;
-                  final busyReserve = !desktopComposer && controller.busy
-                      ? 76.0
-                      : 0.0;
-                  final maxModelLabelWidth =
-                      (width - (compactComposer ? 260 : 455) - busyReserve)
-                          .clamp(52.0, 148.0);
-                  final controls = Row(
-                    crossAxisAlignment: inlineInput
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.center,
-                    children: [
-                      CodexPopoverAnchor(
-                        controller: _composerAttachPopoverController,
-                        targetAnchor: Alignment.topLeft,
-                        followerAnchor: Alignment.bottomLeft,
-                        width: 210,
-                        offset: const Offset(0, -6),
-                        popoverBuilder: (context, close) =>
-                            CodexMenu<UserAttachmentKind>(
-                              items: [
-                                const CodexMenuItem(
-                                  value: UserAttachmentKind.mention,
-                                  label: 'Attach file (@mention)',
-                                  icon: Icon(Icons.description_outlined),
-                                ),
-                                const CodexMenuItem(
-                                  value: UserAttachmentKind.image,
-                                  label: 'Attach image',
-                                  icon: Icon(Icons.image_outlined),
-                                ),
-                                if (capabilities.supportsSkillsAndMcp)
-                                  const CodexMenuItem(
-                                    value: UserAttachmentKind.skill,
-                                    label: 'Attach skill (\$skill)',
-                                    icon: Icon(Icons.auto_fix_high_outlined),
-                                  ),
-                                const CodexMenuItem(
-                                  value: UserAttachmentKind.pastedText,
-                                  label: 'Attach snippet',
-                                  icon: Icon(Icons.notes_rounded),
-                                ),
-                              ],
-                              onSelected: (kind) {
-                                close();
-                                unawaited(_promptAddAttachment(kind));
-                              },
-                            ),
-                        child: CodexIconButton(
-                          key: const ValueKey('composer-attach-button'),
-                          tooltip: 'Add attachment',
-                          size: 28.0,
-                          onPressed: enabled
-                              ? _composerAttachPopoverController.toggle
-                              : null,
-                          icon: const Icon(Icons.add_rounded, size: 17),
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      if (inlineInput) Expanded(child: input),
-                      if (!inlineInput && desktopComposer) const Spacer(),
-                      if (controller.tokenUsage case final usage?
-                          when desktopComposer && !compactComposer) ...[
-                        _composerContextUsage(usage),
-                        const SizedBox(width: ThemeTokens.space1),
-                      ],
-                      _ComposerModelSummaryButton(
-                        controller: widget.settingsController,
-                        maxLabelWidth: maxModelLabelWidth,
-                        iconOnly: iconOnly,
-                        useDesktopPicker: desktopComposer,
-                      ),
-                      if (capabilities.supportsSandboxConfiguration)
-                        _ExecutionSettingsButton(
-                          controller: widget.settingsController,
-                          iconOnly: desktopComposer || iconOnly,
-                          useSandboxMenu: desktopComposer,
-                        ),
-                      if (!desktopComposer &&
-                          projectCwd.isNotEmpty &&
-                          !isHeroCentered &&
-                          !compactComposer &&
-                          capabilities.supportsWorkingDirectorySelection) ...[
-                        const SizedBox(width: 4),
-                        CodexTooltip(
-                          message: projectCwd,
-                          child: GestureDetector(
-                            onTap: thread == null
-                                ? _chooseProjectDirectory
-                                : null,
-                            child: MouseRegion(
-                              cursor: thread == null
-                                  ? SystemMouseCursors.click
-                                  : SystemMouseCursors.basic,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.folder_outlined,
-                                      size: 13,
-                                      color: palette.textMuted,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 110,
-                                      ),
-                                      child: Text(
-                                        _projectName(projectCwd),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: palette.textSecondary,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (!desktopComposer) const Spacer(),
-                      if (controller.busy &&
-                          !showStop &&
-                          width >= 240 * controlTextScale)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Text(
-                            'Working…',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ),
-                      if (desktopComposer)
-                        const SizedBox(width: ThemeTokens.space2),
-                      ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _composerController,
-                        builder: (context, draft, _) {
-                          final hasDraft =
-                              draft.text.trim().isNotEmpty ||
-                              _composerAttachments.isNotEmpty;
-                          final showSteer = canSteer && hasDraft;
-                          final primaryActionSize = widget.hasDesktopShell
-                              ? OfficialCodexTheme.sendButtonDiameter
-                              : 34.0;
-                          final primaryActionIconSize = widget.hasDesktopShell
-                              ? OfficialCodexTheme.sendButtonIconSize
-                              : 18.0;
-                          final stopIconSize = widget.hasDesktopShell
-                              ? OfficialCodexTheme.sendButtonIconSize
-                              : 17.0;
-                          if (showStop && !showSteer) {
-                            final armed =
-                                _armedComposerStop != null &&
-                                _armedComposerStop == _desktopStopTarget;
-                            return CodexIconButton(
-                              key: const ValueKey('composer-stop-button'),
-                              tooltip: armed
-                                  ? 'Press Esc again to stop'
-                                  : 'Stop turn',
-                              size: primaryActionSize,
-                              iconSize: stopIconSize,
-                              shape: BoxShape.circle,
-                              variant: CodexButtonVariant.primary,
-                              onPressed: _stopComposerTurn,
-                              icon: armed
-                                  ? Builder(
-                                      builder: (context) => Text(
-                                        'Esc',
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        textScaler: TextScaler.noScaling,
-                                        style: TextStyle(
-                                          color: IconTheme.of(context).color,
-                                          fontSize: widget.hasDesktopShell
-                                              ? 10.5
-                                              : 11,
-                                          height: 1.0,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    )
-                                  : Icon(
-                                      Icons.stop_rounded,
-                                      size: stopIconSize,
-                                    ),
-                            );
-                          }
-                          return CodexIconButton(
-                            key: const ValueKey('composer-send-button'),
-                            tooltip: canSteer
-                                ? 'Steer turn (Enter)'
-                                : 'Send (Enter)',
-                            size: primaryActionSize,
-                            iconSize: primaryActionIconSize,
-                            shape: BoxShape.circle,
-                            variant: CodexButtonVariant.primary,
-                            disabledOpacity: 0.5,
-                            onPressed: enabled && (!desktopComposer || hasDraft)
-                                ? _send
-                                : null,
-                            icon: Icon(
-                              canSteer && !desktopComposer
-                                  ? Icons.subdirectory_arrow_right_rounded
-                                  : Icons.arrow_upward_rounded,
-                              size: primaryActionIconSize,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [if (!inlineInput) input, controls],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -7286,6 +7474,8 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _reconcileLiveOutputPreview();
     _reconcileLiveReasoningTimings();
     if (previousThreadId != _activeThreadId) {
+      _lockedComposerSingleLine = null;
+      _lastStableComposerSingleLine = true;
       final thread = widget.controller.thread;
       if (thread != null &&
           widget.controller.entries.isEmpty &&
@@ -9742,11 +9932,13 @@ class _ExecutionSettingsButton extends StatefulWidget {
     required this.controller,
     this.iconOnly = false,
     this.useSandboxMenu = false,
+    this.alignMenuStart = false,
   });
 
   final ExecutionSettingsController controller;
   final bool iconOnly;
   final bool useSandboxMenu;
+  final bool alignMenuStart;
 
   @override
   State<_ExecutionSettingsButton> createState() =>
@@ -9760,6 +9952,7 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
   void didUpdateWidget(covariant _ExecutionSettingsButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if ((oldWidget.useSandboxMenu && !widget.useSandboxMenu) ||
+        oldWidget.alignMenuStart != widget.alignMenuStart ||
         oldWidget.controller != widget.controller) {
       _menu.hide();
     }
@@ -9784,13 +9977,23 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final palette = ThemeTokens.of(context);
+    final theme = OfficialCodexTheme.of(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
         final sandbox = controller.sandbox;
         final fullAccess = sandbox == SandboxModeOverride.dangerFullAccess;
         final label = _sandboxLabel(sandbox);
-        final color = fullAccess ? palette.warning : palette.textSecondary;
+        final desktopTriggerColor = fullAccess
+            ? palette.warning
+            : widget.iconOnly
+            ? palette.textSecondary
+            : theme.textMuted;
+        final color = widget.useSandboxMenu
+            ? desktopTriggerColor
+            : fullAccess
+            ? palette.warning
+            : palette.textSecondary;
         final onPressed = controller.loading
             ? null
             : widget.useSandboxMenu
@@ -9804,87 +10007,122 @@ class _ExecutionSettingsButtonState extends State<_ExecutionSettingsButton> {
             : Icon(
                 fullAccess
                     ? Icons.gpp_maybe_outlined
-                    : widget.iconOnly
+                    : widget.useSandboxMenu || widget.iconOnly
                     ? Icons.shield_outlined
                     : Icons.tune_rounded,
                 size: 15,
                 color: color,
               );
+        final Widget button;
         if (widget.iconOnly) {
-          final button = CodexIconButton(
+          button = CodexIconButton(
             key: const ValueKey('execution-settings-button'),
             tooltip: 'Execution settings: $label',
             size: 28,
             onPressed: onPressed,
             icon: icon,
           );
-          if (!widget.useSandboxMenu) return button;
-          return CodexPopoverAnchor(
-            controller: _menu,
-            width: 228,
-            targetAnchor: Alignment.topRight,
-            followerAnchor: Alignment.bottomRight,
-            offset: const Offset(0, -6),
-            popoverBuilder: (menuContext, close) =>
-                CodexMenu<({SandboxModeOverride? mode, bool advanced})>(
-                  header: Text(
-                    'Sandbox',
-                    style: Theme.of(menuContext).textTheme.labelMedium,
-                  ),
-                  selectedValue: (mode: sandbox, advanced: false),
-                  items: [
-                    for (final mode in [null, ...SandboxModeOverride.values])
-                      CodexMenuItem(
-                        value: (mode: mode, advanced: false),
-                        label: _sandboxLabel(mode),
-                        icon: Icon(
-                          mode == SandboxModeOverride.dangerFullAccess
-                              ? Icons.gpp_maybe_outlined
-                              : Icons.shield_outlined,
-                          color: mode == SandboxModeOverride.dangerFullAccess
-                              ? palette.warning
-                              : null,
-                        ),
-                      ),
-                    CodexMenuItem(
-                      value: (mode: null, advanced: true),
-                      label: 'Advanced settings…',
-                      icon: const Icon(Icons.tune_rounded),
+        } else if (widget.useSandboxMenu) {
+          button = CodexButton(
+            key: const ValueKey('execution-settings-button'),
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
+            onPressed: onPressed,
+            tooltip: 'Execution settings: $label',
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: OfficialCodexTheme.composerPermissionsLabelMaxWidth,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  icon,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: color, fontWeight: FontWeight.w500),
                     ),
-                  ],
-                  onSelected: (option) {
-                    close();
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted || controller != widget.controller) return;
-                      if (option.advanced) {
-                        _showAdvancedSettings();
-                      } else if (option.mode != sandbox) {
-                        unawaited(
-                          _applySandboxOverride(
-                            this.context,
-                            controller,
-                            option.mode,
-                          ),
-                        );
-                      }
-                    });
-                  },
-                ),
-            child: button,
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          button = CodexButton(
+            key: const ValueKey('execution-settings-button'),
+            variant: CodexButtonVariant.ghost,
+            size: CodexButtonSize.sm,
+            onPressed: onPressed,
+            icon: icon,
+            tooltip: 'Execution settings: $label',
+            label: switch (sandbox) {
+              null => 'Defaults',
+              SandboxModeOverride.workspaceWrite => 'Workspace',
+              _ => label,
+            },
           );
         }
-        return CodexButton(
-          key: const ValueKey('execution-settings-button'),
-          variant: CodexButtonVariant.ghost,
-          size: CodexButtonSize.sm,
-          onPressed: onPressed,
-          icon: icon,
-          tooltip: 'Execution settings: $label',
-          label: switch (sandbox) {
-            null => 'Defaults',
-            SandboxModeOverride.workspaceWrite => 'Workspace',
-            _ => label,
-          },
+        if (!widget.useSandboxMenu) return button;
+        return CodexPopoverAnchor(
+          controller: _menu,
+          width: 228,
+          targetAnchor: widget.alignMenuStart
+              ? Alignment.topLeft
+              : Alignment.topRight,
+          followerAnchor: widget.alignMenuStart
+              ? Alignment.bottomLeft
+              : Alignment.bottomRight,
+          offset: const Offset(0, -6),
+          popoverBuilder: (menuContext, close) =>
+              CodexMenu<({SandboxModeOverride? mode, bool advanced})>(
+                header: Text(
+                  'Sandbox',
+                  style: Theme.of(menuContext).textTheme.labelMedium,
+                ),
+                selectedValue: (mode: sandbox, advanced: false),
+                items: [
+                  for (final mode in [null, ...SandboxModeOverride.values])
+                    CodexMenuItem(
+                      value: (mode: mode, advanced: false),
+                      label: _sandboxLabel(mode),
+                      icon: Icon(
+                        mode == SandboxModeOverride.dangerFullAccess
+                            ? Icons.gpp_maybe_outlined
+                            : Icons.shield_outlined,
+                        color: mode == SandboxModeOverride.dangerFullAccess
+                            ? palette.warning
+                            : null,
+                      ),
+                    ),
+                  CodexMenuItem(
+                    value: (mode: null, advanced: true),
+                    label: 'Advanced settings…',
+                    icon: const Icon(Icons.tune_rounded),
+                  ),
+                ],
+                onSelected: (option) {
+                  close();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted || controller != widget.controller) return;
+                    if (option.advanced) {
+                      _showAdvancedSettings();
+                    } else if (option.mode != sandbox) {
+                      unawaited(
+                        _applySandboxOverride(
+                          this.context,
+                          controller,
+                          option.mode,
+                        ),
+                      );
+                    }
+                  });
+                },
+              ),
+          child: button,
         );
       },
     );
