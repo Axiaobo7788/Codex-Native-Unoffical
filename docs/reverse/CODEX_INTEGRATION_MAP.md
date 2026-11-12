@@ -1,5 +1,17 @@
 # ChatGPT Desktop Codex Integration & Remote Architecture Map (Recalibrated)
 
+> **Current-build qualification (2026-11-12):** This map retains historical
+> `early-bootstrap-920` ASAR offsets/string counts. That chunk is absent from
+> the currently installed build25894 archive
+> (`121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`);
+> the current archive contains bootstrap815, and the local-process manager
+> inspected in this round is in chunk339. Treat the historical
+> static caller/offset claims as revalidation-required before implementation.
+> The version-bound schema evidence is separate; the
+> [current functional audit](CODEX_DESKTOP_FUNCTIONAL_AUDIT.md) adds verified
+> public0.167.2 exports. Do not mechanically substitute new chunk names while
+> retaining old offsets or infer current recovery behavior from the old map.
+
 > **Evidence Sources**:
 > - `PUBLIC_SOURCE`: Stock `/opt/codex-desktop/resources/codex app-server generate-json-schema` (stable and `--experimental`, `codex-cli 0.167.0-alpha.3.2`) + `codex app-server --help` + `codex exec-server --help`.
 > - `STATIC_BUNDLE`: `.vite/build/early-bootstrap-920-a204a41244c4b913.js` (`@886000..990000`, `@1168648`, `@1644000..1666500`), cross-checked via `python3 tools/reverse/inspect_chatgpt_desktop.py --evidence-report`.

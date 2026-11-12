@@ -352,3 +352,16 @@ schemas do not prove real provider-account behavior. Vertex credentials and
 live-account interaction were not used. Installed Desktop ASAR SHA-256 remains
 `121edc7be15b6870fbef8b10ec637be9baef4a629471d80e1192385cf40a4b14`,
 so current U5 renderer evidence is not invalidated by this runtime patch.
+
+
+Current local-recovery source preflight (build25894): the native-process
+manager in `.vite/build/early-bootstrap-339-104173bc8fd02c8b.js` distinguishes
+transport reconnect support from process closure. Its non-reconnecting closure
+path rejects pending initialization and can broadcast a fatal error; generic
+websocket reconnect code is not proof of automatic local workspace recovery.
+Nearby Retry/Back Up and Rebuild strings belong to a state-database recovery
+flow and do not establish ordinary crash-retry behavior. No database/user data
+operation was performed or adopted. These are static observations; a matched
+private-profile official live crash walk remains unrun. Historical chunk920
+references in the integration map are now explicitly qualified rather than
+silently reused as current evidence.
