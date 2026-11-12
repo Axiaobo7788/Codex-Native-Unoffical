@@ -16,13 +16,6 @@ typedef _CommandOutputPresentation = ({
   VoidCallback? onTogglePreview,
   String? previewTooltip,
 });
-typedef _InlinePatchPresentation = ({
-  Widget? detail,
-  bool hasInlinePreview,
-  bool previewExpanded,
-  VoidCallback? onTogglePreview,
-  String? previewTooltip,
-});
 
 enum _ActivityGroupability { standalone, groupable, omitted }
 
@@ -1243,7 +1236,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   static const _maxRetainedThreadDags = 32;
   static const _maxMeasuredItemHeights = 512;
   static const _maxTrackedReasoningTimings = 64;
-  static const _maxExpandedInlinePatches = 16;
   static const _maxRestorePages = 10;
   static const _maxRestoreAlignmentPasses = 32;
   static const _followThresholdPixels = 160.0;
@@ -1308,7 +1300,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   _commandOutputPreview;
   var _commandPreviewReading = false;
   final Set<String> _expandedLiveActivityGroupIds = <String>{};
-  final LinkedHashSet<String> _expandedInlinePatchKeys = LinkedHashSet();
   final LinkedHashMap<String, DateTime> _liveReasoningStartedAtById =
       LinkedHashMap();
   final LinkedHashMap<String, Duration> _completedReasoningElapsedById =
@@ -1833,7 +1824,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _goalEditorDraft = null;
       _reopenGoalFromHeader = false;
       _clearCommandOutputPreview();
-      _expandedInlinePatchKeys.clear();
       _timelineDetailsPopoverController.hide();
     }
     if (!oldWidget.isOffstage && widget.isOffstage) {
@@ -1871,7 +1861,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   void dispose() {
     _clearComposerStop();
     _clearCommandOutputPreview();
-    _expandedInlinePatchKeys.clear();
     _interruptingQuestion.dispose();
     unawaited(_attachmentEventSubscription?.cancel());
     widget.threadController?.removeListener(_handleThreadListChanged);
@@ -5171,18 +5160,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 exitCode: item.exitCode,
                               )
                             : null,
-                        inlinePatch:
-                            commandGroup == null && overrideText == null
-                            ? _inlinePatchFor(
-                                itemKey: 'saved:${item.turnId}:${item.id}',
-                                turnId: item.turnId,
-                                resolvedActivity: _resolveHistoryInlineActivity(
-                                  item,
-                                  inlineActivity: widget.hasDesktopShell,
-                                  detailMode: _detailMode,
-                                ),
-                              )
-                            : null,
                         overrideEntryText: overrideText,
                         overrideAttachments: overrideAttachments,
                         siblingBranchInfo:
@@ -5373,17 +5350,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           detailMode: _detailMode,
                           searchOpen: _searchOpen,
                         );
-                  final inlinePatch = useInlinePreviewDisclosure
-                      ? null
-                      : _inlinePatchFor(
-                          itemKey: 'live:$liveTurnId:${entry.id}',
-                          turnId: liveTurnId,
-                          resolvedActivity: resolvedLiveActivity,
-                        );
-                  final useInlinePatchDisclosure =
-                      widget.hasDesktopShell &&
-                      !useInlinePreviewDisclosure &&
-                      (inlinePatch?.hasInlinePreview ?? false);
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -5400,26 +5366,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       trailingAction: useInlinePreviewDisclosure
                           ? null
                           : commandOutput?.action,
-                      activityDetail: useInlinePatchDisclosure
-                          ? inlinePatch?.detail
-                          : commandOutput?.detail,
-                      hasActivityDisclosure:
-                          useInlinePreviewDisclosure ||
-                          useInlinePatchDisclosure,
-                      activityExpanded: useInlinePreviewDisclosure
-                          ? (commandOutput?.previewExpanded ?? false)
-                          : (useInlinePatchDisclosure &&
-                                (inlinePatch?.previewExpanded ?? false)),
+                      activityDetail: commandOutput?.detail,
+                      hasActivityDisclosure: useInlinePreviewDisclosure,
+                      activityExpanded:
+                          useInlinePreviewDisclosure &&
+                          (commandOutput?.previewExpanded ?? false),
                       onToggleActivity: useInlinePreviewDisclosure
                           ? commandOutput?.onTogglePreview
-                          : (useInlinePatchDisclosure
-                                ? inlinePatch?.onTogglePreview
-                                : null),
+                          : null,
                       activityDisclosureTooltip: useInlinePreviewDisclosure
                           ? commandOutput?.previewTooltip
-                          : (useInlinePatchDisclosure
-                                ? inlinePatch?.previewTooltip
-                                : null),
+                          : null,
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:
@@ -6795,126 +6752,10 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _detailMode = mode;
       if (mode == PresentationDetailMode.prose) {
         _clearCommandOutputPreview();
-        _expandedInlinePatchKeys.clear();
       } else {
-        if (mode != PresentationDetailMode.commands) {
-          _expandedInlinePatchKeys.clear();
-        }
         _reconcileLiveOutputPreview();
       }
     });
-  }
-
-  bool _isUnambiguousSingleItemTurnPatch({
-    required String itemKey,
-    required String turnId,
-    required _ResolvedInlineActivity resolvedActivity,
-    required DiffSnapshot snapshot,
-  }) {
-    if (!snapshot.truncated) {
-      if (snapshot.files.length != resolvedActivity.editedFileCount) {
-        return false;
-      }
-      final expectedAdd = resolvedActivity.diffAdditions;
-      final expectedDel = resolvedActivity.diffDeletions;
-      if (expectedAdd != null &&
-          expectedDel != null &&
-          (snapshot.additions != expectedAdd ||
-              snapshot.deletions != expectedDel)) {
-        return false;
-      }
-    } else if (snapshot.files.length > resolvedActivity.editedFileCount) {
-      return false;
-    }
-
-    if (itemKey.startsWith('live:')) {
-      var liveFileChanges = 0;
-      for (final entry in widget.controller.entries) {
-        if (entry.turnId == turnId &&
-            entry.kind == ConversationEntryKind.activity &&
-            entry.text.startsWith('File changes:')) {
-          liveFileChanges += 1;
-          if (liveFileChanges > 1) {
-            return false;
-          }
-        }
-      }
-      return liveFileChanges == 1;
-    }
-
-    if (widget.historyController.selectedTurnId == turnId &&
-        widget.historyController.canLoadMoreItems) {
-      return false;
-    }
-    var savedFileChanges = 0;
-    for (final item in widget.historyController.timelineItems) {
-      if (item.turnId == turnId &&
-          item.kind == HistoryItemKind.activity &&
-          item.text.startsWith('File changes:')) {
-        savedFileChanges += 1;
-        if (savedFileChanges > 1) {
-          return false;
-        }
-      }
-    }
-    return savedFileChanges == 1;
-  }
-
-  _InlinePatchPresentation? _inlinePatchFor({
-    required String itemKey,
-    required String turnId,
-    required _ResolvedInlineActivity? resolvedActivity,
-  }) {
-    if (!widget.hasDesktopShell ||
-        _detailMode != PresentationDetailMode.commands ||
-        _searchOpen ||
-        turnId.isEmpty ||
-        resolvedActivity == null ||
-        resolvedActivity.segmentKind != _ActivityGroupSegmentKind.fileEdit ||
-        !resolvedActivity.completed ||
-        resolvedActivity.isError ||
-        resolvedActivity.isWarning) {
-      return null;
-    }
-    final snapshot = widget.diffController.snapshot;
-    if (snapshot == null ||
-        snapshot.turnId != turnId ||
-        snapshot.files.isEmpty ||
-        !_isUnambiguousSingleItemTurnPatch(
-          itemKey: itemKey,
-          turnId: turnId,
-          resolvedActivity: resolvedActivity,
-          snapshot: snapshot,
-        )) {
-      return null;
-    }
-    final expanded = _expandedInlinePatchKeys.contains(itemKey);
-    final tooltip = expanded ? 'Hide file diff' : 'Show file diff';
-    return (
-      detail: expanded
-          ? CodexInlinePatchPreviewCard(
-              key: ValueKey('inline-patch-preview-$itemKey'),
-              files: snapshot.files,
-              truncated: snapshot.truncated,
-            )
-          : null,
-      hasInlinePreview: true,
-      previewExpanded: expanded,
-      onTogglePreview: () {
-        setState(() {
-          if (_expandedInlinePatchKeys.contains(itemKey)) {
-            _expandedInlinePatchKeys.remove(itemKey);
-          } else {
-            _expandedInlinePatchKeys.add(itemKey);
-            while (_expandedInlinePatchKeys.length >
-                _maxExpandedInlinePatches) {
-              _expandedInlinePatchKeys.remove(_expandedInlinePatchKeys.first);
-            }
-          }
-        });
-      },
-      previewTooltip: tooltip,
-    );
   }
 
   _CommandOutputPresentation? _commandOutputFor(
@@ -7247,33 +7088,15 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           items.any((item) => item.id == key.itemId);
     }
 
-    bool containsPatchPreview() => items.any(
-      (item) =>
-          _expandedInlinePatchKeys.contains('saved:${item.turnId}:${item.id}'),
-    );
-
     return _SavedCommandGroup(
       key: ValueKey('saved-command-group-${items.first.id}'),
       label: summary.label,
       iconData: summary.icon,
       itemCount: items.length,
-      initiallyExpanded: containsPreview() || containsPatchPreview(),
+      initiallyExpanded: containsPreview(),
       onCollapse: () {
-        final hasOutput = containsPreview();
-        final hasPatch = containsPatchPreview();
-        if (hasOutput || hasPatch) {
-          setState(() {
-            if (hasOutput) {
-              _clearCommandOutputPreview();
-            }
-            if (hasPatch) {
-              for (final item in items) {
-                _expandedInlinePatchKeys.remove(
-                  'saved:${item.turnId}:${item.id}',
-                );
-              }
-            }
-          });
+        if (containsPreview()) {
+          setState(_clearCommandOutputPreview);
         }
       },
       itemBuilder: (context, index) {
@@ -7299,15 +7122,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   exitCode: item.exitCode,
                 )
               : null,
-          inlinePatch: _inlinePatchFor(
-            itemKey: 'saved:${item.turnId}:${item.id}',
-            turnId: item.turnId,
-            resolvedActivity: _resolveHistoryInlineActivity(
-              item,
-              inlineActivity: true,
-              detailMode: _detailMode,
-            ),
-          ),
         );
       },
     );
@@ -7350,11 +7164,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             if (containsPreview()) {
               _clearCommandOutputPreview();
             }
-            for (final entry in entries) {
-              _expandedInlinePatchKeys.remove(
-                'live:${entry.turnId ?? ''}:${entry.id}',
-              );
-            }
           }
         });
       },
@@ -7380,17 +7189,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         final useInlinePreviewDisclosure =
             widget.hasDesktopShell &&
             (commandOutput?.hasInlinePreview ?? false);
-        final inlinePatch = useInlinePreviewDisclosure
-            ? null
-            : _inlinePatchFor(
-                itemKey: 'live:$liveTurnId:${entry.id}',
-                turnId: liveTurnId,
-                resolvedActivity: resolved,
-              );
-        final useInlinePatchDisclosure =
-            widget.hasDesktopShell &&
-            !useInlinePreviewDisclosure &&
-            (inlinePatch?.hasInlinePreview ?? false);
         return _ConversationEntryView(
           key: ValueKey(entry.id),
           entry: entry,
@@ -7404,23 +7202,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           trailingAction: useInlinePreviewDisclosure
               ? null
               : commandOutput?.action,
-          activityDetail: useInlinePatchDisclosure
-              ? inlinePatch?.detail
-              : commandOutput?.detail,
-          hasActivityDisclosure:
-              useInlinePreviewDisclosure || useInlinePatchDisclosure,
-          activityExpanded: useInlinePreviewDisclosure
-              ? (commandOutput?.previewExpanded ?? false)
-              : (useInlinePatchDisclosure &&
-                    (inlinePatch?.previewExpanded ?? false)),
+          activityDetail: commandOutput?.detail,
+          hasActivityDisclosure: useInlinePreviewDisclosure,
+          activityExpanded:
+              useInlinePreviewDisclosure &&
+              (commandOutput?.previewExpanded ?? false),
           onToggleActivity: useInlinePreviewDisclosure
               ? commandOutput?.onTogglePreview
-              : (useInlinePatchDisclosure
-                    ? inlinePatch?.onTogglePreview
-                    : null),
+              : null,
           activityDisclosureTooltip: useInlinePreviewDisclosure
               ? commandOutput?.previewTooltip
-              : (useInlinePatchDisclosure ? inlinePatch?.previewTooltip : null),
+              : null,
           turnId: liveTurnId.isEmpty ? null : liveTurnId,
         );
       },
@@ -7433,23 +7225,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _expandedLiveActivityGroupIds.removeWhere(
         (id) => !currentIds.contains(id),
       );
-    }
-    if (_expandedInlinePatchKeys.isNotEmpty) {
-      final currentLiveKeys = <String>{
-        for (final entry in widget.controller.entries)
-          'live:${entry.turnId ?? ''}:${entry.id}',
-      };
-      final selectedTurnId = widget.historyController.selectedTurnId;
-      _expandedInlinePatchKeys.removeWhere((key) {
-        if (key.startsWith('live:')) {
-          return !currentLiveKeys.contains(key);
-        }
-        if (key.startsWith('saved:')) {
-          return selectedTurnId == null ||
-              !key.startsWith('saved:$selectedTurnId:');
-        }
-        return true;
-      });
     }
     final key = _commandOutputPreview?.key;
     if (key != null && !key.saved && !_keepsLiveOutputPreview(key)) {
@@ -7575,7 +7350,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _activeThreadId = nextThreadId;
     _interruptingQuestion.value = null;
     _expandedLiveActivityGroupIds.clear();
-    _expandedInlinePatchKeys.clear();
     _clearReasoningTimings();
     _clearCommandOutputPreview();
     _showChanges = false;
@@ -7749,7 +7523,6 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _clearCommandOutputPreview();
       _clearReasoningTimings();
       _expandedLiveActivityGroupIds.clear();
-      _expandedInlinePatchKeys.clear();
       _activeThreadLinkedPrs = null;
       _queuedLinkedPrThreadId = null;
       _linkedPrScanInFlight = false;

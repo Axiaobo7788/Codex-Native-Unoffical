@@ -420,7 +420,6 @@ class _HistoryEntryView extends StatelessWidget {
     this.inlineActivity = false,
     this.revealAssistantCopy = false,
     this.commandOutput,
-    this.inlinePatch,
     this.groupedCommands,
     this.showDetailsHeader = true,
     this.bottomGap,
@@ -444,7 +443,6 @@ class _HistoryEntryView extends StatelessWidget {
   final bool inlineActivity;
   final bool revealAssistantCopy;
   final _CommandOutputPresentation? commandOutput;
-  final _InlinePatchPresentation? inlinePatch;
   final Widget? groupedCommands;
   final bool showDetailsHeader;
   final double? bottomGap;
@@ -527,10 +525,6 @@ class _HistoryEntryView extends StatelessWidget {
         inlineActivity &&
         item.isCommand &&
         (commandOutput?.hasInlinePreview ?? false);
-    final useInlinePatchDisclosure =
-        inlineActivity &&
-        !useInlinePreviewDisclosure &&
-        (inlinePatch?.hasInlinePreview ?? false);
     return _ConversationEntryView(
       entry: ConversationEntry(
         id: item.id,
@@ -563,21 +557,17 @@ class _HistoryEntryView extends StatelessWidget {
       revealAssistantCopy: revealAssistantCopy,
       bottomGap: bottomGap,
       resolvedActivity: resolvedActivity,
-      activityDetail: useInlinePatchDisclosure
-          ? inlinePatch?.detail
-          : commandOutput?.detail,
-      hasActivityDisclosure:
-          useInlinePreviewDisclosure || useInlinePatchDisclosure,
-      activityExpanded: useInlinePreviewDisclosure
-          ? (commandOutput?.previewExpanded ?? false)
-          : (useInlinePatchDisclosure &&
-                (inlinePatch?.previewExpanded ?? false)),
+      activityDetail: commandOutput?.detail,
+      hasActivityDisclosure: useInlinePreviewDisclosure,
+      activityExpanded:
+          useInlinePreviewDisclosure &&
+          (commandOutput?.previewExpanded ?? false),
       onToggleActivity: useInlinePreviewDisclosure
           ? commandOutput?.onTogglePreview
-          : (useInlinePatchDisclosure ? inlinePatch?.onTogglePreview : null),
+          : null,
       activityDisclosureTooltip: useInlinePreviewDisclosure
           ? commandOutput?.previewTooltip
-          : (useInlinePatchDisclosure ? inlinePatch?.previewTooltip : null),
+          : null,
       leadingHeader: detailsHeader,
       trailingAction: item.isCommand
           ? (useInlinePreviewDisclosure
