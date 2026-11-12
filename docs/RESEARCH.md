@@ -5059,3 +5059,24 @@ from the corrected unique-ID saved replay. Full652/five skips, final targeted41,
 pure68, strict analysis, Linux83 and both process probes pass. This does not
 close Home/cold configuration discovery, complete control fidelity or Human
 acceptance. Hosted new-source CI is a separate pending checkpoint.
+
+
+### Shared settings / U6 Shell / all-provider title checkpoint — 7d0282d
+
+[Source-bound combined evidence](reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md)
+records the normal peer merge and distinct simulated, real-process and packaged
+checks. Current25894 title fallback explicitly uses all providers only for active
+unsectioned title search. Fresh public0.167.2/installed probes reproduce old one
+result versus corrected three, with unchanged normal catalog scope and cold
+foreign history. Packaged shared source displays the actual provider mismatch
+without submitting the draft or calling the model, including compact layout.
+
+U6 maps the measured quiet disclosure/PuGl Shell card and retains public nullable
+int32 exitCode through typed live/history data, without expanding the bounded
+output preview. Owner real-stock light/dark/installed captures and independently
+checked worker cleanup remain source-scoped. Shared source passes 660 default
+cases/five skips, five real-stock cases per binary, pure68/strict analysis,
+history memory and Linux83. Exact main CI43158612189 passes all three jobs;
+a branch verify dependency-install timeout before code checks is preserved
+and only that job was rerun. U7 actual-height clipping and runtime workspace recovery
+continue as independent material work; no Desktop completion claim is made.

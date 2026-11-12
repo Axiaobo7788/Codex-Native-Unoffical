@@ -106,176 +106,115 @@ permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Program remains `SELF_ITERATION`; both Desktop tracks have machine-actionable
-  work. Codex and Gemini remain equal peers using the official `agy` TUI and
-  isolated worktrees with one writer per surface.
-- **Combined source checkpoint `c3957c9`:** normal merge preserves startup
-  `e8ece87` / `c8f5570` and U5 `3e8d381` / `76e3428`. Format/analysis,
-  pure-Dart68, 637 default cases/five skips, five stock cases each on public
-  `0.167.2` and installed alpha, memory, Linux83 and source245 pass.
-  [Startup evidence](docs/reverse/STARTUP_RETRY_EVIDENCE.md) records old/new
-  actual packaged recovery on the same App PID, both first turns saved, and
-  public history after full process restart with no extra model call.
-  All owned workers exited. Driver timeouts/early captures and fixture warnings
-  remain preserved. Connected-workspace hot recovery stays `MISSING`.
-- **Track F / Codex source9fc19d3:** bounded acknowledged loaded-thread
-  model/provider/effort/policy projection, 100-entry cache, unload/eviction/order/
-  generation fences, and existing model/execution-control access. Writable
-  overrides remain separate. Full652/five skips, pure68/strict analysis, final
-  protocol/settings/memory41, both real-stock probes and Linux83 pass.
-  [Packaged evidence](docs/reverse/INHERITED_SETTINGS_EVIDENCE.md) verifies
-  public cold unknown→explicit Send High/read-only, Advanced inherited values,
-  new chat Medium, compact and warm switches, and restart/saved replay. A seeded
-  duplicate-ID fixture negative and corrected unique-ID run are retained. Both
-  owned App/Host/stock trees and model fixtures exited. Home/current-cwd preview
-  remains PARTIAL. Branch is pushed; coherent UI integration/CI remains pending.
-- **Track F next correction, active title search:** fresh public0.167.2
-  schema and rechecked25894 fallback confirm all-provider discovery only for
-  local active/unsectioned title searches. The normal/archived/section catalog
-  scopes and Remote contract are preserved. Format/pure68/strict analysis and
-  76 targeted cases pass. Real old/new Host-backed probes on public0.167.2 and
-  installed alpha find one configured-provider result before, three across
-  providers after, with one-row cursor pages and unchanged ordinary lists.
-  Metadata/history inspection stays cold; explicit foreign resume returns the
-  truthful stock modelProviderMismatch. Packaged search/failure replay and
-  combined integration remain pending.
-- **Track U / Gemini sourcedf46ace + e9a9697:** U6 A7/C Shell card and row
-  disclosure, followed by nullable bounded public exitCode projection and
-  calibrated unknown/footer status. Gemini owns the isolated U6 worktree and
-  has the exclusive heavy lease after Codex completed its packet. Targeted
-  validation and real-stock/capture handoff are pending. Codex released only
-  independent command DTO/adapters/controller surfaces for the correction;
-  the viewer descriptor bridges exitCode without concurrent conversation writes.
-  U7 A6 rendered-height clipping remains the next evidenced UI candidate.
-- **Hosted checkpoint:** exact-source CI43140754985 macOS/Windows builds pass.
-  First verify failed before tests at dependency installation's five-minute
-  timeout. Only that job was rerun; attempt two passes verify, macOS and Windows
-  at the exact source SHA. The original failure remains preserved; no workflow
-  change was introduced. Safe main integration and its exact-HEAD CI follow.
-- **Heavy lease:** Codex explicitly returned it to Gemini after shared gates
-  and all packaged workers exited. Codex stays source/docs-only while Gemini
-  validates U6. Flutter tests use one worker, Cargo and CMake two jobs. Do not
-  start another heavy workload without peer coordination.
+- Current shared implementation checkpoint is `7d0282d131ceda57aa2dfa66c9f6cffc2f007b1a`,
+  normally integrated and pushed. It preserves Codex settings `9fc19d3` /
+  evidence `5c46c44`, saved-title scope `cafcf12`, and Gemini U6 `df46ace` /
+  `e9a9697` / `7301289` through a normal merge. Main working tree is clean.
+- Codex owns Track F. The loaded-thread inherited settings correction and
+  active saved-title cross-provider discovery are integrated. Next preflight
+  is connected-workspace runtime loss/recovery: preserve draft/route identity,
+  fence old pending requests and refresh bounded projections without implicit
+  cold/queued resume. Runtime loss currently destroys the workspace widget;
+  recovery stays `MISSING` until implemented and realistically verified.
+- Gemini owns Track U7 A6 user-bubble rendered-height clipping/selection, based
+  on current25894 `dKZq/oQwr` evidence. Its accepted isolated branch is
+  `agent/gemini-golden-ui-u7-a6-user-bubble`; preflight is complete and source
+  translation follows the integrated `7d0282d`. U6 is frozen at `7301289`.
+- Gemini has the exclusive heavy lease following Codex's completed shared
+  packet. Codex remains source/docs/CI-only until explicit handoff. Flutter
+  tests use one worker, Cargo/CMake two jobs; no overlapping heavy workloads.
+- Live coordination remains official agy TUI-only. Peers are equal; one writer
+  per overlapping surface. Codex will negotiate any runtime-generation bridge
+  inside Gemini's conversation presentation instead of writing over it.
 
-## Current checkpoints
+## Current verification checkpoint
 
-Git is canonical for the current HEAD and working tree. These are immutable
-source/validation checkpoints, rather than a second branch-state database.
+- **Source `7d0282d` machine gates:** format 208/zero changes, strict analysis 0,
+  pure-Dart 68, 660 default Flutter cases/five explicit stock skips. Five enabled
+  direct-stock cases pass separately on public `0.167.2` and installed alpha.
+  History retains 100/1,000 turns and discards ten 3 MiB command payloads.
+  Cargo format and two-job Linux/83-system-library bundle closure pass. Rust
+  source is unchanged; local Clippy/100-test history is not relabeled as a new
+  local run. Hosted CI runs its own complete Rust gate.
+- Frozen shared packet:
+  `/var/tmp/native-desktop-settings-u6-7d0282d-r1/bundle/`,
+  AOT `393b320fc16111e22f507202d0052110cd3b1b651af6a286e2aa61b44e7af554`,
+  Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
+  Its recorded binary identities remain unchanged after the owned replay.
+- **Agent real-use:** [settings evidence](docs/reverse/INHERITED_SETTINGS_EVIDENCE.md)
+  verifies acknowledged loaded settings and neutral cold values.
+  [Combined evidence](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md) records
+  real old/new provider search, packaged all-provider title discovery, readable
+  foreign history, truthful mismatch/draft preservation and zero model calls.
+  U6's public light/dark and installed-light stock runs show actual Shell
+  success/exit-code2 cards; Codex inspected source, captures and process exit.
+  All owned App/Host/stock/model workers exited. These are not Human acceptance.
+- **Hosted exact-source gates:** `5c46c44` CI43156192343 passes all three jobs.
+  Source9fc's earlier run was cancelled by normal branch concurrency when its
+  documentation follow-up was pushed; it is not called green. For `7d0282d`,
+  branch CI43157353142 first passes macOS/Windows but verify times out during
+  dependency installation before code checks. Only failed job130980357409 was
+  rerun. Exact main [CI43158612189](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43158612189) now passes verify, macOS and Windows.
+  Branch attempt two also passes at the same SHA. The first timeout is
+  preserved; no CI policy/workflow change was made.
+- Private seeded duplicate assistant IDs, early captures, coordinate mistakes
+  and Xvfb/ATK/model-metadata warnings remain in source-bound evidence. Corrected
+  fixture passes do not erase them. ASCII worktree analysis does not establish
+  a fix for the original Unicode-path Flutter/LSP framing failure.
 
-- **Prior main `9e0c8a6` integration checkpoint:**
-  [CI43131012688](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43131012688)
-  passed verify/Windows/macOS at the exact SHA. It preserves combined release
-  source `b22e955` and the source-bound evidence documentation; startup retry
-  and U5 are subsequent work, not part of that verified checkpoint.
+## Current architecture truth
 
-- **Prior main checkpoint `27db663b8a4d29b658401d7c03abf6b4f37d09ec`:**
-  [main CI43119069301](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43119069301)
-  and [branch CI43116961616](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43116961616)
-  both passed all three platforms at the exact SHA. It contains reasoning
-  source `0286a4d`, MCP authentication/timeouts, U2/U3, and all earlier catalog,
-  typography and cold-resume corrections. New-thread admission and U4 are not
-  integrated into that checkpoint.
-- **Current combined release source `b22e955`:**
-  [exact-source CI43128650668](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43128650668)
-  passes all three jobs; 626 default/five stock cases, pure-Dart/analysis/memory,
-  Linux 83-library closure and source-bound public/installed walks pass. AOT
-  `6168b2d8…`, 244 selected tracked inputs unchanged. [Evidence](docs/reverse/NEW_THREAD_HISTORY_EVIDENCE.md)
-  records failures and scope. Git remains canonical for current integration.
-- **Published new-thread source `732d2a4`:**
-  [CI43122125258](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43122125258)
-  completed successfully at the exact SHA. This is not the combined U4 source or
-  the pending local packaged-stock walkthrough.
-- **Previous combined source `03b23c4` / main `abd0e41`:** shared 607-case
-  checkpoint and actual global MCP login/reload pass; exact main
-  [43113451050](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43113451050)
-  passed all platforms. Detailed source-bound results remain in
-  [MCP evidence](docs/reverse/MCP_OAUTH_ACCESS_EVIDENCE.md).
-- Older A6/A7/Customize/question/Goal narratives remain in
-  [history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md).
-  [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) remains the visual
-  contract. A6/A7 and the overall primary screen remain PARTIAL. A green source
-  checkpoint is not Human acceptance or Desktop completion.
+- The stock Codex harness owns intelligence, sessions and tool semantics.
+  Desktop uses pure-Dart typed adapters through bundled Rust Host stdio; the
+  core client does not require Node/Electron or reimplement the agent loop.
+- Conversation state is bounded: paginated history, virtualized lists, bounded
+  inactive/live projections and coalesced streaming. Markdown/images are
+  bounded; command output and per-file diffs remain lazy. Upstream deferOutput
+  acceptance is not proof of deferred loading; whole-item fallback limitations
+  remain explicit.
+- Loaded settings are stock acknowledgement, never catalog-default inference.
+  The 100-entry metadata/invalidation cache uses local generation/order fences;
+  null writable overrides stay null until the user selects them. Home/current-
+  cwd preview and complete provider editing remain separate supported gaps.
+- Explicit local active/unsectioned saved-title search includes all providers,
+  matching current official fallback. Normal, archived and section catalogs
+  keep their existing scope. Foreign history is readable without resume;
+  current public/installed stock reject foreign resume with a visible mismatch.
+  No automatic provider/configuration switch is performed.
+- A7/C Shell disclosure uses the current measured component structure and a
+  bounded 4 KiB inline output preview. Nullable int32 exitCode flows through
+  typed adapters to the footer. Full output remains separately available.
+- Local MCP global OAuth/resource/tool flows remain stock-owned and bounded.
+  Their browser evidence uses a controlled GIO handler, not real account/
+  external-browser/portal acceptance. Scope/concurrency expansion stays
+  separately classified in the functional audit.
+- Remote remains readOnlyCodex. No thread/turn writes, approvals, diffs or
+  command-output read parity is claimed. Mobile, Chat/Work/Responses and other
+  expansion remain deferred under the Desktop completion scope above.
 
-## Current public-stock refresh
+## Remaining work and Human gates
 
-Public stable is now `0.167.2`; its official asset digest matches and isolated
-schema exports are canonically identical to `0.167.1` (322 stable/470
-experimental files). Counts are unchanged. This is static protocol evidence;
-new packaged runtime walks are pending. Keep the existing `0.167.1` actual-use
-records version-scoped. The installed Desktop ASAR remains build25894/hash121edc7b….
-See the [functional audit](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md#public-stable-refresh--01672).
+- Both tracks still have machine-actionable work. The
+  [functional audit](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md) and
+  [living matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md) remain canonical for
+  supported missing/partial workflows, including hot recovery, Home settings,
+  account lifecycle, global content search and queue/terminal management.
+- [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) remains PARTIAL.
+  U6 Shell cards and acknowledged controls do not close saved-activity hierarchy,
+  every popover/state, Home, Changes, Review, compact or dark comparisons. U7
+  rendered-height clipping is active, not delegated to a generic Human gate.
+- **NOT YET HUMAN VERIFIED:** matched signed-in official visual comparison,
+  subjective interaction/long-session acceptance and unavailable physical
+  platform checks remain surface-scoped. Physical Android checks are deferred
+  outside this Desktop phase. No whole-program Human stop is justified.
+- Global stop predicate is false. Continue the independent F/U ownership pair
+  after every integration/checkpoint. Do not expand into another product phase.
 
-## Current product and architecture
+## Durable history
 
-- Desktop uses the bundled Rust `codex-native-host` and stock `codex app-server`. The local workflow includes thread management, turn streaming and steering, approvals, model and execution controls, bounded diff/output, stock review, and supported Skills/Plugins/Apps/MCP administration. Availability can depend on installed stock version, configuration and account.
-- Local startup/crash recovery is a newly reopened functional gap: the start
-  Future is cached and the disconnected page has no retry/restart action.
-  Previous stop/restart MATCH wording was corrected. The dedicated real-process
-  failure/recovery replay is pending; recovery must preserve thread/draft
-  identity and retire old runtime-generation projections without running queued
-  work implicitly.
-- The wide native desktop shell has a 52 logical px navigation rail and a 288 px contextual sidebar by default. The 340 px total left area is resizable, and the reading and composer column is capped at 672 px. Plugins opens an inline Customize destination on wide Desktop. Below 760 px Native uses compact Threads navigation and retains the ecosystem dialog. `OfficialCodexTheme` owns the geometry and colors, and the responsive shell keeps one active conversation state.
-- Codex is the only wired product. Prose, Commands and Execution are timeline detail choices. The internal Work and Chat capability profiles and backend interfaces are compatibility seams. Independent ChatGPT Chat, Work orchestration and Responses backends are absent.
-- App-server owns persisted conversation state. Flutter retains bounded thread/history/active-turn projections, virtualizes lists, coalesces streaming, evicts inactive history, and lazily loads bounded output and diffs. Host spooling keeps large command payloads off the Flutter heap and preserves opaque MCP result fields with the same key name. Installed stock and sampled public `0.167.0` returned the sampled command output inline. Public alpha `0.169.0-alpha.7` deferred eligible commands through the existing Native fetch path. Experimental `thread/items/read` returns the stored item.
-- Saved turns expose a detail disclosure in Commands and Execution even when a work duration cannot be shown. Opening it loads one bounded turn item page. A failed first read leaves the summary in place and can be retried.
-- The global sidebar groups and filters loaded threads. Local Section browsing and explicit saved-thread search reuse its 100-thread working-set cap. Section definitions remain capped at 64. Switching scopes preserves the active conversation outside the list. Sidebar, Section rows, and saved-thread search currently use the configured stock provider. Cross-provider visibility and cold resume are separate research questions.
-- Saved local threads can show an unread marker from stock. The sidebar Mark as read and Mark as unread actions use the displayed revision. A conflict refreshes the receipt and requires a fresh user action.
-- Local composer Send checks queue presence before implicitly resuming a cold thread. Pending or inconclusive results offer a separate Resume and retain the draft. Identified local user items appear in the live timeline. Stock IDs drive deduplication, and a local start or steer keeps its existing visual row when echoed.
-- Interactive request submission keeps one typed operation token. Late completion cannot clear another submission or remove a reused ID after authoritative resolution. Typed resolution retires an active write even after projection eviction. The supported adapter suppresses duplicate pending IDs and shares the 32-request budget. Projection eviction preserves serialization.
-- Conversation Find filters loaded messages. A separate action searches saved messages on eligible local stock threads, one 16-hit page at a time. Opening a hit verifies a bounded turn window before replacing the current one. Legacy threads retain loaded-message Find.
-- Stock Pinned is protected by its reserved ID. Eligible unsectioned pins use stock membership after a fresh read. Custom-section threads and runtimes without that built-in retain explicitly labeled session pins.
-- Local Goal actions load the selected thread’s persisted goal on demand and support explicit paused creation, objective changes, pause/resume, and confirmed clear. Stock owns continuation. Desktop Review offers working-tree, base-branch, commit/ref, and custom targets through stock `review/start`. Both Review entry points apply the cold queue admission rule.
-- Local Runtime details displays a bounded read-only provider list when stock supports it. The list keeps display names, provider kinds and the default marker. Older versions show an availability message.
-- Local MCP resource/tool inputs use dialogs; server elicitation stays with the initiating ecosystem operation, on the wide Customize surface or inside the compact dialog. Direct actions on a cold thread require explicit resume. A global resource read remains available without a selected thread. Eligible saved MCP activity in Commands and Execution offers a one-item local read with a 32 KiB text preview.
-- The local conversation header reads stored GitHub and GitLab review references for the selected thread with one in-flight scan and one replaceable pending target. The user can open a link or explicitly add one to a saved thread. Add checks existing canonical and legacy links before writing. Removing references, managed worktrees, and cloud attachments remain separate surfaces.
-- Skills, Plugins, Apps and MCP can load independently. Plugin refresh keeps the cached catalog on RPC failure and serializes catalog mutations through readback. Successful partial catalogs retain usable rows. Partial, paginated or 100-capped inventories qualify loaded counts and empty/search wording. Failed source paths and raw parser messages are omitted from the typed snapshot; retained catalogs remain bounded.
-- Direct Host Remote is read-only. The transport allows bounded model/thread metadata and history reads and sequenced lifecycle projection. Android currently presents pairing, connection recovery and model/thread metadata. Thread/turn writes, approvals, diffs, and command-output reads remain outside the Remote contract. Official Remote support is experimental host-side control through stock schema. There is no Native mobile client for the official relay.
-
-## Verification and pending gates
-
-- Current reasoning systems source: format 204 files/zero changes, strict
-  analysis, 68-root pure-Dart boundary, 615 default Flutter cases/five skips,
-  five enabled installed-stock cases and history memory benchmark pass.
-  The first release invocation omitted the Cargo job environment and was
-  intentionally terminated with its owned process tree (exit 143). The rerun
-  explicitly used `CARGO_BUILD_JOBS=2` and CMake `--parallel 2` and passed
-  release/83-library closure. All 218 tracked application/test/tool/Linux/build
-  input hashes matched before/after. Rust source is unchanged; prior 100-test
-  evidence remains distinct. Real packaged reasoning replay now passes with
-  independently seeded profiles: baseline `03b23c4` versus `0286a4d`, AOT
-  `9f9c6d2a…`, same U3 UI. Full multiline/list/sentinel content is visible; ten
-  fixture model calls, zero image GETs, zero observed overflow/Unhandled. All
-  owned workers exited. This does not close Human or first-part UI gates.
-- Prior source `03b23c4`: format 203 files/zero changes, strict analysis, 68-root
-  pure-Dart boundary, 607 default Flutter cases/five opt-in skips, five enabled
-  real-stock cases, history 100/1,000 plus ten 3 MiB outputs, two-job Linux
-  release/83-library closure, existing MCP and installed/public name-only OAuth
-  smoke pass. Rust is unchanged from `0cdf0e8`, whose fmt/Clippy/100 tests pass.
-  All 376 tracked files matched before/after gates. These counts mix unit,
-  widget and simulated integration; they are not full-process E2E. ASCII-path
-  validation does not establish a fix for the original Unicode-path LSP issue.
-- Frozen source-bound bundle: `/var/tmp/native-desktop-mcp-u3-03b23c4-r1/`,
-  AOT `85539d98…`, Host `73218b92…`. Fresh real App → Host → public stock
-  `0.167.1` authentication and Reload config pass, with one local authorization/
-  PKCE exchange and 18 authenticated MCP calls. One unmaterialized empty thread
-  was inadvertently created during compact navigation; persisted thread count
-  stays zero, and its actual history failure is preserved for correction.
-- Prior `0cdf0e8` bundle/replay at
-  `/var/tmp/native-desktop-mcp-u2-0cdf0e8-r1/` verifies installed/public login,
-  navigation/resize, compact close/reopen, same-handoff retry and credential
-  persistence after full process restart. Initial invalid URI-handler setup,
-  peer red tests, intermediate animation timeout and modal focus failure remain
-  preserved. Successful callback uses a controlled GIO `.desktop` URI handler;
-  portal OpenURI counters were zero. External browser/account acceptance and
-  in-app runtime crash recovery are not established by these checks.
-- U3 actual light/dark captures have been independently inspected, including the
-  live 240-character flattening corrected by source `0286a4d`. Owned
-  App/Host/stock/Xvfb/provider/portal/DBus workers exited after packaged replay.
-  Private driver/accessibility and fixture metadata warnings remain recorded.
-- **NOT YET HUMAN VERIFIED:** matched signed-in official live captures,
-  subjective interaction/visual acceptance and unavailable physical-platform
-  checks remain surface-scoped. Known machine-actionable Golden-State rows
-  continue; there is no whole-primary-UI Human stop gate.
-- Physical Android TLS/Keystore/camera/cross-network checks remain deferred
-  outside the current Desktop target. Account security-notice routing still
-  needs a verified public identity contract. See the [living queue](docs/reverse/OFFICIAL_FEATURE_MATRIX.md#36-active-queue-after-consolidation).
+Git is canonical for actual HEAD/worktrees. Earlier status/checkpoint narratives
+are preserved in [the 7d snapshot](docs/history/PROJECT_STATUS_at_7d0282d.md),
+[Desktop UI history](docs/history/DESKTOP_UI_CHECKPOINTS_through_9a75ddc.md)
+and the source-bound evidence linked from the functional audit. ADRs remain in
+[Decisions](docs/DECISIONS.md); old test counts are historical evidence, not
+current verification claims.
