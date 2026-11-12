@@ -5039,3 +5039,23 @@ five direct-stock cases, memory/release/source checks and targeted peer review.
 verifies new chat, first Send, warm return and public full-process restart.
 Those real App/Host/stock walks are distinct from the typed simulated product
 case, and neither establishes real-account or Human acceptance.
+
+
+### Loaded-thread inherited settings — source9fc19d3
+
+[Source-bound evidence](reverse/INHERITED_SETTINGS_EVIDENCE.md) separates
+nullable writable overrides from acknowledged Start/Resume/Fork and stable
+settings-notification values. Both public0.167.2 and installed alpha acknowledge
+the actual configured model even when model/list recommends another default;
+Fork resets to configured medium while Resume retains parent high in the owned
+fixture. The current public release API still identifies rust-v0.167.2.
+
+Bounded100 metadata and invalidation records plus local generation/order fences
+close reproduced unload/eviction races. Public packaged controls show known
+model/effort/never/read-only without changing override intent, including cold
+unknown→explicitSend, new chat medium, compact and warm switches. A duplicate
+assistant ID caused by resetting a seeded model fixture is preserved separately
+from the corrected unique-ID saved replay. Full652/five skips, final targeted41,
+pure68, strict analysis, Linux83 and both process probes pass. This does not
+close Home/cold configuration discovery, complete control fidelity or Human
+acceptance. Hosted new-source CI is a separate pending checkpoint.

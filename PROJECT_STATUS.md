@@ -118,28 +118,25 @@ permission to lower the engineering or visual quality bar.
   public history after full process restart with no extra model call.
   All owned workers exited. Driver timeouts/early captures and fixture warnings
   remain preserved. Connected-workspace hot recovery stays `MISSING`.
-- **Track F / Codex active:** bounded acknowledged inherited settings in the
-  isolated `agent/codex-desktop-effective-settings` worktree. Start/Resume/Fork
-  and settings notifications feed typed read-side model/provider/effort/policy
-  metadata; writable overrides stay separate. Peer review exposed unload
-  resurrection and uncatalogued-model capability leakage; regression tests
-  also reproduced eviction allowing an older reply. Corrections preserve the
-  100-entry bound and admit unknown settings after invalidation/eviction.
-  Existing execution controls expose known inherited values, with no implicit
-  cold/queued resume. Full652/five skips, pure-Dart68, strict analysis and
-  real Host→stock settings probes on public0.167.2/installed alpha pass; a final
-  41-case protocol/settings/memory gate includes the metadata admission follow-up.
-  Packaged replay and integration remain in progress. This is not a Desktop
-  completion or Human acceptance claim.
-- **Track U / Gemini next:** U6 A7/C Shell activity card in
-  `/var/tmp/native-gemini-u6-a7-shell-card`, branch
-  `agent/gemini-golden-ui-u6-a7-shell-card`, base `c3957c9`.
-  Current25894 evidence identifies full-row disclosure and the Shell command/
-  output/status structure (`152406.jKy0`, `225284.PuGl.d` / Footer).
-  Gemini owns activity-row/diff-output/conversation/theme presentation and
-  focused card tests, preserving bounded lazy output and full-output escape.
-  U5's old branch remains frozen; U4 first-part emphasis is already implemented
-  and must not be repeated because of the previously stale A7 table prose.
+- **Track F / Codex source9fc19d3:** bounded acknowledged loaded-thread
+  model/provider/effort/policy projection, 100-entry cache, unload/eviction/order/
+  generation fences, and existing model/execution-control access. Writable
+  overrides remain separate. Full652/five skips, pure68/strict analysis, final
+  protocol/settings/memory41, both real-stock probes and Linux83 pass.
+  [Packaged evidence](docs/reverse/INHERITED_SETTINGS_EVIDENCE.md) verifies
+  public cold unknown→explicit Send High/read-only, Advanced inherited values,
+  new chat Medium, compact and warm switches, and restart/saved replay. A seeded
+  duplicate-ID fixture negative and corrected unique-ID run are retained. Both
+  owned App/Host/stock trees and model fixtures exited. Home/current-cwd preview
+  remains PARTIAL. Branch is pushed; coherent UI integration/CI remains pending.
+- **Track U / Gemini sourcedf46ace + e9a9697:** U6 A7/C Shell card and row
+  disclosure, followed by nullable bounded public exitCode projection and
+  calibrated unknown/footer status. Gemini owns the isolated U6 worktree and
+  has the exclusive heavy lease after Codex completed its packet. Targeted
+  validation and real-stock/capture handoff are pending. Codex released only
+  independent command DTO/adapters/controller surfaces for the correction;
+  the viewer descriptor bridges exitCode without concurrent conversation writes.
+  U7 A6 rendered-height clipping remains the next evidenced UI candidate.
 - **Hosted checkpoint:** exact-source CI43140754985 macOS/Windows builds pass.
   First verify failed before tests at dependency installation's five-minute
   timeout. Only that job was rerun; attempt two passes verify, macOS and Windows
