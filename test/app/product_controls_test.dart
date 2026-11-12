@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codex_native_unofficial/src/app/codex_native_app.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_button.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_composer.dart';
-import 'package:codex_native_unofficial/src/app/primitives/codex_sidebar_row.dart';
 import 'package:codex_native_unofficial/src/app/primitives/codex_menu.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_message_bubble.dart';
+import 'package:codex_native_unofficial/src/app/primitives/codex_sidebar_row.dart';
 import 'package:codex_native_unofficial/src/app/runtime_controller.dart';
 import 'package:codex_native_unofficial/src/app/theme/official_codex_theme.dart';
 import 'package:codex_native_unofficial/src/app/theme_tokens.dart';
@@ -2354,16 +2356,23 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Long message starts collapsed (>20 lines): calibrated Flutter SelectableText
-      // holds the visible 19-line prefix (excluding '…' and 'Show more'), while
+      // Long message starts collapsed (>20 lines): UserMessageMarkdown renders
+      // the visible 19-line prefix (excluding '…' and 'Show more'), while
       // 225284.y5H2 toolbar Copy message copies the full prompt in both states.
       expect(find.text('Show more'), findsOneWidget);
       expect(find.textContaining('User instruction line 25'), findsNothing);
-      final collapsedBubbleText = tester.widget<SelectableText>(
-        find.descendant(of: bubble, matching: find.byType(SelectableText)),
+      final collapsedMarkdown = find.descendant(
+        of: bubble,
+        matching: find.byKey(const ValueKey('user-message-markdown')),
+      );
+      expect(collapsedMarkdown, findsOneWidget);
+      final collapsedBubbleText = tester.widget<Text>(
+        find
+            .descendant(of: collapsedMarkdown, matching: find.byType(Text))
+            .first,
       );
       expect(
-        collapsedBubbleText.data,
+        collapsedBubbleText.textSpan!.toPlainText(),
         List.generate(
           19,
           (index) => 'User instruction line ${index + 1}',
@@ -2373,7 +2382,7 @@ void main() {
       await tester.pump();
       expect(copiedText, longPrompt);
 
-      // Expand to full height: SelectableText now holds full text and Copy message still copies full text.
+      // Expand to full height: UserMessageMarkdown now holds full text and Copy message still copies full text.
       copiedText = null;
       await tester.tap(
         find.byKey(const ValueKey('user-expand-hist-user-long')),
@@ -2381,14 +2390,399 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Show less'), findsOneWidget);
       expect(find.textContaining('User instruction line 25'), findsOneWidget);
-      final expandedBubbleText = tester.widget<SelectableText>(
-        find.descendant(of: bubble, matching: find.byType(SelectableText)),
+      final expandedBubbleText = tester.widget<Text>(
+        find
+            .descendant(
+              of: find.descendant(
+                of: bubble,
+                matching: find.byKey(const ValueKey('user-message-markdown')),
+              ),
+              matching: find.byType(Text),
+            )
+            .first,
       );
-      expect(expandedBubbleText.data, longPrompt);
+      expect(expandedBubbleText.textSpan!.toPlainText(), longPrompt);
       await tester.tap(find.byKey(const ValueKey('user-copy-hist-user-long')));
       await tester.pump();
       expect(copiedText, longPrompt);
       await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'A6 user turns render bounded 80x80 local image thumbnails, Failed fallback for missing files, and zero-GET pill fallback for remote image URLs',
+    (tester) async {
+      final tempDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('native-a6-thumb-test-'),
+      );
+      addTearDown(() async {
+        await tester.runAsync(() async {
+          if (tempDir != null && await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+      });
+
+      final validPngPath = '${tempDir!.path}/valid.png';
+      final missingPngPath = '${tempDir.path}/missing.png';
+      final oversizePngPath = '${tempDir.path}/oversize.png';
+      await tester.runAsync(() async {
+        final pngBytes = base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        );
+        await File(validPngPath).writeAsBytes(pngBytes, flush: true);
+        final raf = await File(oversizePngPath).open(mode: FileMode.writeOnly);
+        try {
+          await raf.truncate(OfficialCodexTheme.userImageMaxEncodedBytes + 1);
+        } finally {
+          await raf.close();
+        }
+      });
+
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final runtime = _ProductRuntimeController()
+        ..historyTurns = [
+          HistoryTurn(
+            id: 'turn-a6-images',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'hist-user-images',
+                turnId: 'turn-a6-images',
+                kind: HistoryItemKind.user,
+                text: 'Inspect `local_thumb` and ![remote doc](https://example.com/doc.png):\n\n- Check geometry\n- Check bounds',
+                attachments: [
+                  UserAttachment(
+                    kind: UserAttachmentKind.image,
+                    label: 'valid.png',
+                    path: validPngPath,
+                  ),
+                  UserAttachment(
+                    kind: UserAttachmentKind.image,
+                    label: 'missing.png',
+                    path: missingPngPath,
+                  ),
+                  UserAttachment(
+                    kind: UserAttachmentKind.image,
+                    label: 'oversize.png',
+                    path: oversizePngPath,
+                  ),
+                  const UserAttachment(
+                    kind: UserAttachmentKind.image,
+                    label: 'remote.png',
+                    path: 'https://example.com/remote.png',
+                  ),
+                ],
+              ),
+              const HistoryItem(
+                id: 'hist-assistant-images',
+                turnId: 'turn-a6-images',
+                kind: HistoryItemKind.assistant,
+                text: 'Inspected local attachments.',
+              ),
+            ],
+          ),
+        ];
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+
+      // Let FileImage decode valid.png and report PathNotFoundException on missing.png.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 120)),
+      );
+      await tester.pumpAndSettle();
+
+      final validTile = find.byKey(
+        const ValueKey('user-attachment-hist-user-images-0'),
+      );
+      final missingTile = find.byKey(
+        const ValueKey('user-attachment-hist-user-images-1'),
+      );
+      final oversizeTile = find.byKey(
+        const ValueKey('user-attachment-hist-user-images-2'),
+      );
+      final remotePill = find.byKey(
+        const ValueKey('user-attachment-hist-user-images-3'),
+      );
+      final bubble = find.byKey(
+        const ValueKey('user-message-bubble-hist-user-images'),
+      );
+
+      // Local image tiles render exact official size-20 (80x80) geometry with 8px gap.
+      expect(tester.getSize(validTile), const Size(80.0, 80.0));
+      expect(tester.getSize(missingTile), const Size(80.0, 80.0));
+      expect(tester.getSize(oversizeTile), const Size(80.0, 80.0));
+      expect(
+        tester.getTopLeft(missingTile).dx - tester.getTopRight(validTile).dx,
+        8.0,
+      );
+      expect(
+        tester.getTopLeft(oversizeTile).dx - tester.getTopRight(missingTile).dx,
+        8.0,
+      );
+
+      // Valid local image uses BoundedLocalFileImage(10 MiB) + ResizeImage(160x160).
+      final validImage = tester.widget<Image>(
+        find.descendant(of: validTile, matching: find.byType(Image)),
+      );
+      expect(validImage.image, isA<ResizeImage>());
+      final resized = validImage.image as ResizeImage;
+      expect(resized.width, 160);
+      expect(resized.height, 160);
+      expect(resized.imageProvider, isA<BoundedLocalFileImage>());
+      expect(
+        (resized.imageProvider as BoundedLocalFileImage).maxEncodedBytes,
+        OfficialCodexTheme.userImageMaxEncodedBytes,
+      );
+
+      // Missing and oversize local images render official GL6x.es Failed danger tiles without unhandled exceptions.
+      for (final failedTile in [missingTile, oversizeTile]) {
+        expect(
+          find.descendant(
+            of: failedTile,
+            matching: find.byKey(const ValueKey('user-image-thumbnail-failed')),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: failedTile, matching: find.text('Failed')),
+          findsOneWidget,
+        );
+      }
+
+      // Remote https:// image attachment stays a safe pill with 0 Image widgets.
+      expect(
+        find.descendant(of: remotePill, matching: find.byType(Image)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: remotePill, matching: find.text('remote.png')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(bubble).dy - tester.getBottomLeft(remotePill).dy,
+        8.0,
+      );
+
+      // User bubble renders UserMessageMarkdown (inline code pill + list + AdJ5 !link).
+      expect(
+        find.descendant(
+          of: bubble,
+          matching: find.byKey(const ValueKey('user-message-markdown')),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('local_thumb'), findsOneWidget);
+      expect(find.text('Check geometry'), findsOneWidget);
+
+      // Keyboard Enter on valid local thumbnail opens bounded 960x960 preview modal + Source path.
+      final validFocus = Focus.of(
+        tester.element(
+          find.descendant(
+            of: validTile,
+            matching: find.byType(GestureDetector),
+          ),
+        ),
+      );
+      validFocus.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      final previewBitmap = find.byKey(
+        const ValueKey('user-image-preview-bitmap'),
+      );
+      expect(previewBitmap, findsOneWidget);
+      final previewImage = tester.widget<Image>(previewBitmap);
+      expect(previewImage.image, isA<ResizeImage>());
+      expect((previewImage.image as ResizeImage).width, 960);
+      expect(
+        (previewImage.image as ResizeImage).imageProvider,
+        isA<BoundedLocalFileImage>(),
+      );
+      expect(find.text(validPngPath), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Oversize local thumbnail still opens preview dialog safely: bitmap shows
+      // 'Image failed to load' without unbounded read while preserving Source path metadata.
+      await tester.tap(oversizeTile);
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 80)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Image failed to load'), findsOneWidget);
+      expect(find.text(oversizePngPath), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'two visible user messages with 16 valid local images each decode all 32 thumbnails without queue-eviction Failed tiles',
+    (tester) async {
+      expect(BoundedLocalFileImage.debugActiveLoadCount, 0);
+      expect(BoundedLocalFileImage.debugPendingLoadCount, 0);
+      tester.view.physicalSize = const Size(1600, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final tempDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('native-a6-32-thumbs-test-'),
+      );
+      addTearDown(() async {
+        await tester.runAsync(() async {
+          if (tempDir != null && await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+      });
+
+      final pngBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      );
+      final firstPaths = <String>[];
+      final secondPaths = <String>[];
+      await tester.runAsync(() async {
+        for (var i = 0; i < 16; i += 1) {
+          final pathA = '${tempDir!.path}/msg-a-$i.png';
+          final pathB = '${tempDir.path}/msg-b-$i.png';
+          await File(pathA).writeAsBytes(pngBytes, flush: true);
+          await File(pathB).writeAsBytes(pngBytes, flush: true);
+          firstPaths.add(pathA);
+          secondPaths.add(pathB);
+        }
+      });
+
+      final runtime = _ProductRuntimeController()
+        ..historyTurns = [
+          HistoryTurn(
+            id: 'turn-32-b',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'hist-user-32-b',
+                turnId: 'turn-32-b',
+                kind: HistoryItemKind.user,
+                text: 'Second batch of 16 screenshots.',
+                attachments: [
+                  for (var i = 0; i < 16; i += 1)
+                    UserAttachment(
+                      kind: UserAttachmentKind.image,
+                      label: 'msg-b-$i.png',
+                      path: secondPaths[i],
+                    ),
+                ],
+              ),
+              const HistoryItem(
+                id: 'hist-assistant-32-b',
+                turnId: 'turn-32-b',
+                kind: HistoryItemKind.assistant,
+                text: 'Reviewed second batch.',
+              ),
+            ],
+          ),
+          HistoryTurn(
+            id: 'turn-32-a',
+            status: TurnRuntimeStatus.completed,
+            items: [
+              HistoryItem(
+                id: 'hist-user-32-a',
+                turnId: 'turn-32-a',
+                kind: HistoryItemKind.user,
+                text: 'First batch of 16 screenshots.',
+                attachments: [
+                  for (var i = 0; i < 16; i += 1)
+                    UserAttachment(
+                      kind: UserAttachmentKind.image,
+                      label: 'msg-a-$i.png',
+                      path: firstPaths[i],
+                    ),
+                ],
+              ),
+              const HistoryItem(
+                id: 'hist-assistant-32-a',
+                turnId: 'turn-32-a',
+                kind: HistoryItemKind.assistant,
+                text: 'Reviewed first batch.',
+              ),
+            ],
+          ),
+        ];
+      addTearDown(runtime.closeStreams);
+
+      await tester.pumpWidget(CodexNativeApp(runtimeController: runtime));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controls thread'));
+      await tester.pumpAndSettle();
+
+      bool allDecoded() {
+        for (var i = 0; i < 16; i += 1) {
+          for (final prefix in ['hist-user-32-a', 'hist-user-32-b']) {
+            final tile = find.byKey(ValueKey('user-attachment-$prefix-$i'));
+            final raw = find.descendant(
+              of: tile,
+              matching: find.byType(RawImage),
+            );
+            if (raw.evaluate().isEmpty ||
+                tester.widget<RawImage>(raw).image == null) {
+              return false;
+            }
+          }
+        }
+        return BoundedLocalFileImage.debugActiveLoadCount == 0 &&
+            BoundedLocalFileImage.debugPendingLoadCount == 0;
+      }
+
+      // 32 images across 4 concurrency slots = 8 waves (~7 real I/O + codec
+      // futures per wave under FakeAsync, plus engine codec.getNextFrame()).
+      for (var step = 0; step < 120 && !allDecoded(); step += 1) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 15)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 16; i += 1) {
+        final tileA = find.byKey(ValueKey('user-attachment-hist-user-32-a-$i'));
+        final tileB = find.byKey(ValueKey('user-attachment-hist-user-32-b-$i'));
+        expect(tileA, findsOneWidget);
+        expect(tileB, findsOneWidget);
+        expect(
+          tester
+              .widget<RawImage>(
+                find.descendant(of: tileA, matching: find.byType(RawImage)),
+              )
+              .image,
+          isNotNull,
+        );
+        expect(
+          tester
+              .widget<RawImage>(
+                find.descendant(of: tileB, matching: find.byType(RawImage)),
+              )
+              .image,
+          isNotNull,
+        );
+      }
+      expect(
+        find.byKey(const ValueKey('user-image-thumbnail-failed')),
+        findsNothing,
+      );
+      expect(BoundedLocalFileImage.debugActiveLoadCount, 0);
+      expect(BoundedLocalFileImage.debugPendingLoadCount, 0);
       expect(tester.takeException(), isNull);
     },
   );

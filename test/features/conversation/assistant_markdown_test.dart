@@ -2268,6 +2268,204 @@ Paragraph before list.
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'UserMessageMarkdown translates official 25894 .rich-text-user-turn geometry, AdJ5 image-to-link tokenization, whitespace-pre-wrap line breaks, and ADR-058 caps',
+    (tester) async {
+      Widget wrapUser(
+        Widget child, {
+        OfficialCodexThemeData themeData = OfficialCodexThemeData.light,
+      }) => MaterialApp(
+        home: OfficialCodexThemeProvider(
+          data: themeData,
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 470, child: child),
+            ),
+          ),
+        ),
+      );
+
+      final launched = <Uri>[];
+      await tester.pumpWidget(
+        wrapUser(
+          UserMessageMarkdown(
+            data: [
+              'First line\nSecond line',
+              'Second paragraph with `code_pill` and ![arch diagram](https://example.com/arch.png) plus `![lit](https://x.test/a.png)`.',
+              '- Bullet alpha\n- Bullet beta',
+              '1. Ordered one\n2. Ordered two',
+              'After list paragraph.',
+              '#### Heading four',
+              '> Quoted first\n>\n> Quoted second',
+              'Trailing paragraph.',
+            ].join('\n\n'),
+            externalLinkLauncher: (uri) async {
+              launched.add(uri);
+              return true;
+            },
+          ),
+        ),
+      );
+
+      final root = find.byKey(const ValueKey('user-message-markdown'));
+      expect(root, findsOneWidget);
+      // AdJ5 tokenizes ![alt](href) into literal '!' + clickable link with 0 image widgets.
+      expect(
+        find.byKey(const ValueKey('blocked-markdown-image')),
+        findsNothing,
+      );
+      expect(find.byType(Image), findsNothing);
+
+      final p1 = find.text('First line\nSecond line');
+      expect(p1, findsOneWidget);
+      final p1Style = tester.widget<Text>(p1).textSpan!.style!;
+      expect(p1Style.fontSize, 14.0);
+      expect(p1Style.height, 1.625);
+      expect(p1Style.color, OfficialCodexThemeData.light.textPrimary);
+
+      final p2 = find.textContaining(
+        'Second paragraph with ',
+        findRichText: true,
+      );
+      expect(p2, findsOneWidget);
+      expect(find.text('![lit](https://x.test/a.png)'), findsOneWidget);
+
+      // Tap tokenized AdJ5 link text 'arch diagram'.
+      final p2Rich = tester.widget<RichText>(
+        find.descendant(
+          of: root,
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is RichText && w.text.toPlainText().contains('!arch diagram'),
+          ),
+        ),
+      );
+      TapGestureRecognizer? archTap;
+      p2Rich.text.visitChildren((span) {
+        if (span is TextSpan &&
+            span.text == 'arch diagram' &&
+            span.recognizer is TapGestureRecognizer) {
+          archTap = span.recognizer! as TapGestureRecognizer;
+          return false;
+        }
+        return true;
+      });
+      expect(archTap, isNotNull);
+      archTap!.onTap!();
+      await tester.pump();
+      expect(launched, [Uri.parse('https://example.com/arch.png')]);
+
+      // Root spacing: p+p = 20px (!mt-5), p+ul = 14px, ul+ol = 14px, ol+p = 14px,
+      // p+h4 = 14px, h4+blockquote = 14px, blockquote+p = 14px.
+      expect(
+        tester
+            .widget<SizedBox>(
+              find.byKey(const ValueKey('desktop-markdown-gap-1')),
+            )
+            .height,
+        20.0,
+      );
+      for (var gapIdx = 2; gapIdx <= 7; gapIdx++) {
+        expect(
+          tester
+              .widget<SizedBox>(
+                find.byKey(ValueKey('desktop-markdown-gap-$gapIdx')),
+              )
+              .height,
+          14.0,
+        );
+      }
+
+      // List insets: [&_ul]:!ps-6 [&_ol]:!ps-6 -> exact 24.0px gutter floor
+      // (18.75px marker minWidth + 5.25px markerGap = 24.0px; in Ahem font '1.'
+      // measures 28.5px so ordered text sits at max(24.0, 28.5 + 5.25)).
+      final rootLeft = tester.getTopLeft(root).dx;
+      expect(
+        tester.getTopLeft(find.text('Bullet alpha')).dx - rootLeft,
+        closeTo(24.0, 0.01),
+      );
+      final orderedMarkerFinder = find.text('1.');
+      final orderedGutterBox = tester.widget<ConstrainedBox>(
+        find
+            .ancestor(
+              of: orderedMarkerFinder,
+              matching: find.byWidgetPredicate(
+                (w) => w is ConstrainedBox && w.constraints.minWidth > 0,
+              ),
+            )
+            .first,
+      );
+      expect(orderedGutterBox.constraints.minWidth + 5.25, closeTo(24.0, 0.01));
+      final measuredOrderedMarkerWidth = tester
+          .getSize(orderedMarkerFinder)
+          .width;
+      expect(
+        tester.getTopLeft(find.text('Ordered one')).dx - rootLeft,
+        closeTo(math.max(24.0, measuredOrderedMarkerWidth + 5.25), 0.01),
+      );
+      // Tight li + li gap is 0.0px.
+      expect(
+        tester.getTopLeft(find.text('Bullet beta')).dy -
+            tester.getBottomLeft(find.text('Bullet alpha')).dy,
+        closeTo(0.0, 0.01),
+      );
+      // Blockquote p + p gap is 14.0px (4 * 3.5px).
+      expect(
+        tester.getTopLeft(find.text('Quoted second')).dy -
+            tester.getBottomLeft(find.text('Quoted first')).dy,
+        closeTo(14.0, 0.01),
+      );
+
+      // Loose list li:has(>p)+li and intra-item p+ul gaps are 14.0px.
+      await tester.pumpWidget(
+        wrapUser(
+          const UserMessageMarkdown(
+            data: '- Loose one\n\n  - Nested child\n\n- Loose two',
+          ),
+        ),
+      );
+      expect(
+        tester.getTopLeft(find.text('Nested child')).dy -
+            tester.getBottomLeft(find.text('Loose one')).dy,
+        closeTo(14.0, 0.01),
+      );
+      expect(
+        tester.getTopLeft(find.text('Loose two')).dy -
+            tester.getBottomLeft(find.text('Nested child')).dy,
+        closeTo(14.0, 0.01),
+      );
+
+      // ADR-058 128-pill WidgetSpan cap and >16 KiB SelectableText fallback.
+      final manyPills = List.generate(132, (i) => '`u$i`').join(' ');
+      await tester.pumpWidget(wrapUser(UserMessageMarkdown(data: manyPills)));
+      var widgetSpanCount = 0;
+      for (final rich in tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byKey(const ValueKey('user-message-markdown')),
+          matching: find.byType(RichText),
+        ),
+      )) {
+        rich.text.visitChildren((span) {
+          if (span is WidgetSpan) {
+            widgetSpanCount += 1;
+          }
+          return true;
+        });
+      }
+      expect(
+        widgetSpanCount,
+        lessThanOrEqualTo(OfficialCodexTheme.maxInlineCodePills),
+      );
+
+      final oversized =
+          'u-${List.filled(UserMessageMarkdown.maxSourceCharacters + 32, 'x').join()}';
+      await tester.pumpWidget(wrapUser(UserMessageMarkdown(data: oversized)));
+      expect(find.byKey(const ValueKey('user-bounded-text')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 final class _SmallBoostNonlinearScaler extends TextScaler {

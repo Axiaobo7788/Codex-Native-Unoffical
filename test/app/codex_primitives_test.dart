@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show SemanticsAction;
 
 import 'package:codex_native_unofficial/src/app/primitives/codex_activity_row.dart';
@@ -192,12 +196,18 @@ void main() {
         expect(decoration.borderRadius, BorderRadius.circular(22.0));
         expect(decoration.border, isNull);
 
-        final selectable = tester.widget<SelectableText>(
-          find.descendant(of: bubble, matching: find.byType(SelectableText)),
+        final markdownRoot = find.descendant(
+          of: bubble,
+          matching: find.byKey(const ValueKey('user-message-markdown')),
         );
-        expect(selectable.style?.fontSize, 14.0);
-        expect(selectable.style?.height, 1.625);
-        expect(selectable.style?.letterSpacing, isNull);
+        expect(markdownRoot, findsOneWidget);
+        final renderedText = tester.widget<Text>(
+          find.descendant(of: markdownRoot, matching: find.byType(Text)).first,
+        );
+        final spanStyle = renderedText.textSpan?.style;
+        expect(spanStyle?.fontSize, 14.0);
+        expect(spanStyle?.height, 1.625);
+        expect(spanStyle?.letterSpacing, isNull);
         expect(find.text('Show more'), findsNothing);
       },
     );
@@ -251,15 +261,21 @@ void main() {
           );
           expect(find.textContaining('Prompt line 19'), findsOneWidget);
           expect(find.textContaining('Prompt line 25'), findsNothing);
-          final collapsedSelectable = tester.widget<SelectableText>(
-            find.byType(SelectableText),
+          final collapsedRendered = tester.widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('user-message-markdown')),
+                  matching: find.byType(Text),
+                )
+                .first,
           );
+          final collapsedPlain = collapsedRendered.textSpan!.toPlainText();
           expect(
-            collapsedSelectable.data,
+            collapsedPlain,
             List.generate(19, (index) => 'Prompt line ${index + 1}').join('\n'),
           );
-          expect(collapsedSelectable.data, isNot(contains('…')));
-          expect(collapsedSelectable.data, isNot(contains('Show more')));
+          expect(collapsedPlain, isNot(contains('…')));
+          expect(collapsedPlain, isNot(contains('Show more')));
           expect(
             find.semantics.byLabel(RegExp(r'Prompt line 25')),
             findsNothing,
@@ -286,11 +302,17 @@ void main() {
           expect(find.text('Show less'), findsOneWidget);
           expect(find.text('…'), findsNothing);
           expect(find.textContaining('Prompt line 25'), findsOneWidget);
-          final expandedSelectable = tester.widget<SelectableText>(
-            find.byType(SelectableText),
+          final expandedRendered = tester.widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('user-message-markdown')),
+                  matching: find.byType(Text),
+                )
+                .first,
           );
-          expect(expandedSelectable.data, twentyFiveLines);
-          expect(expandedSelectable.data, isNot(contains('Show less')));
+          final expandedPlain = expandedRendered.textSpan!.toPlainText();
+          expect(expandedPlain, twentyFiveLines);
+          expect(expandedPlain, isNot(contains('Show less')));
           expect(
             tester
                 .widget<AnimatedRotation>(
@@ -370,19 +392,32 @@ void main() {
         );
 
         expect(find.text('Show more'), findsOneWidget);
-        final collapsedSelectable = tester.widget<SelectableText>(
-          find.byType(SelectableText),
+        final collapsedTextWidget = tester.widget<Text>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('user-message-markdown')),
+                matching: find.byType(Text),
+              )
+              .first,
         );
-        expect(collapsedSelectable.data!.length, lessThanOrEqualTo(10240));
+        expect(
+          collapsedTextWidget.textSpan!.toPlainText().length,
+          lessThanOrEqualTo(10240),
+        );
         expect(tester.takeException(), isNull);
 
         await tester.tap(find.byKey(const ValueKey('expand-huge')));
         await tester.pumpAndSettle();
 
-        final expandedSelectable = tester.widget<SelectableText>(
-          find.byType(SelectableText),
+        final expandedTextWidget = tester.widget<Text>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('user-message-markdown')),
+                matching: find.byType(Text),
+              )
+              .first,
         );
-        expect(expandedSelectable.data!.length, 11000);
+        expect(expandedTextWidget.textSpan!.toPlainText().length, 11000);
         expect(find.text('…'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
@@ -1088,4 +1123,410 @@ void main() {
       },
     );
   });
+
+  group('BoundedLocalFileImage', () {
+    test('enforces async stat admission before open and caps TOCTOU mid-read growth at maxEncodedBytes + 1', () async {
+      // 1. Oversize stat() rejects with 0 file opens and 0 bytes read.
+      final oversizeFile = _InstrumentedFile(
+        path: '/virtual/oversize-50mb.png',
+        statType: FileSystemEntityType.file,
+        statSize: 50 * 1024 * 1024,
+        openedLength: 50 * 1024 * 1024,
+        backingBytes: Uint8List(0),
+      );
+      await expectLater(
+        BoundedLocalFileImage.readBoundedEncodedBytes(
+          oversizeFile,
+          maxEncodedBytes: 4096,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(oversizeFile.openCalls, 0);
+      expect(oversizeFile.totalBytesRead, 0);
+
+      // 2. Non-regular path (e.g. directory / FIFO) rejects before open.
+      final nonRegularFile = _InstrumentedFile(
+        path: '/virtual/not-a-regular-file',
+        statType: FileSystemEntityType.directory,
+        statSize: 128,
+        openedLength: 128,
+        backingBytes: Uint8List(128),
+      );
+      await expectLater(
+        BoundedLocalFileImage.readBoundedEncodedBytes(
+          nonRegularFile,
+          maxEncodedBytes: 4096,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(nonRegularFile.openCalls, 0);
+
+      // 3. TOCTOU mid-read growth: stat and fstat report 1024 <= 4096,
+      //    but backing stream yields 128 KiB. Reader stops at 4097 bytes
+      //    (maxEncodedBytes + 1) and closes the RandomAccessFile handle.
+      final growingFile = _InstrumentedFile(
+        path: '/virtual/growing.png',
+        statType: FileSystemEntityType.file,
+        statSize: 1024,
+        openedLength: 1024,
+        backingBytes: Uint8List(128 * 1024),
+      );
+      await expectLater(
+        BoundedLocalFileImage.readBoundedEncodedBytes(
+          growingFile,
+          maxEncodedBytes: 4096,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(growingFile.openCalls, 1);
+      expect(growingFile.totalBytesRead, 4097);
+      expect(growingFile.lastHandleClosed, isTrue);
+    });
+
+    testWidgets(
+      'evicts failed empty/corrupt cache keys so subsequent valid writes decode cleanly',
+      (tester) async {
+        final tempDir = await tester.runAsync(
+          () => Directory.systemTemp.createTemp('native-bounded-img-test-'),
+        );
+        addTearDown(() async {
+          await tester.runAsync(() async {
+            if (tempDir != null && await tempDir.exists()) {
+              await tempDir.delete(recursive: true);
+            }
+          });
+        });
+
+        final targetPath = '${tempDir!.path}/recoverable.png';
+        await tester.runAsync(() async {
+          await File(targetPath).writeAsBytes(const <int>[], flush: true);
+        });
+
+        ImageProvider<Object> buildProvider() => ResizeImage(
+          BoundedLocalFileImage(File(targetPath), maxEncodedBytes: 4096),
+          width: 160,
+          height: 160,
+          policy: ResizeImagePolicy.fit,
+        );
+
+        await tester.pumpWidget(
+          wrap(
+            Image(
+              key: const ValueKey('attempt-1'),
+              image: buildProvider(),
+              errorBuilder: (context, error, stackTrace) =>
+                  const Text('Failed-1'),
+            ),
+          ),
+        );
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Failed-1'), findsOneWidget);
+
+        // Replace empty file with a valid 1x1 PNG; retry must not stick on evicted error.
+        await tester.runAsync(() async {
+          final pngBytes = base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          );
+          await File(targetPath).writeAsBytes(pngBytes, flush: true);
+        });
+
+        await tester.pumpWidget(
+          wrap(
+            Image(
+              key: const ValueKey('attempt-2'),
+              image: buildProvider(),
+              frameBuilder: (context, child, frame, sync) => frame == null
+                  ? const Text('Loading-2')
+                  : const Text('Ready-2'),
+              errorBuilder: (context, error, stackTrace) =>
+                  const Text('Failed-2'),
+            ),
+          ),
+        );
+        for (
+          var step = 0;
+          step < 16 && find.text('Ready-2').evaluate().isEmpty;
+          step += 1
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Ready-2'), findsOneWidget);
+        expect(find.text('Failed-2'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'relinquishes ImmutableBuffer ownership to decode without double-disposing on decoder failure',
+      (tester) async {
+        final pngBytes = base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        );
+        final provider = BoundedLocalFileImage(
+          _InstrumentedFile(
+            path: '/virtual/decoder-disposes-then-fails.png',
+            statType: FileSystemEntityType.file,
+            statSize: pngBytes.length,
+            openedLength: pngBytes.length,
+            backingBytes: pngBytes,
+          ),
+          maxEncodedBytes: 4096,
+        );
+        PaintingBinding.instance.imageCache.putIfAbsent(
+          provider,
+          () => provider.loadImage(provider, (buffer, {getTargetSize}) async {
+            // Simulate instantiateImageCodecWithSize disposing buffer in its
+            // finally block when codec instantiation fails after header parse.
+            buffer.dispose();
+            throw const FormatException('corrupt frame payload');
+          }),
+        );
+        Object? capturedError;
+        final completer = provider.loadImage(provider, (
+          buffer, {
+          getTargetSize,
+        }) async {
+          buffer.dispose();
+          throw const FormatException('corrupt frame payload');
+        });
+        final listener = ImageStreamListener(
+          (image, synchronousCall) {},
+          onError: (exception, stackTrace) {
+            capturedError = exception;
+          },
+        );
+        completer.addListener(listener);
+        for (var step = 0; step < 12 && capturedError == null; step += 1) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+        completer.removeListener(listener);
+        await tester.pump();
+
+        expect(capturedError, isA<FormatException>());
+        expect(
+          (capturedError as FormatException).message,
+          'corrupt frame payload',
+        );
+        expect(BoundedLocalFileImage.debugActiveLoadCount, 0);
+        expect(
+          PaintingBinding.instance.imageCache.containsKey(provider),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets(
+      'bounds pending load queue at 64 and immediately retires detached listener or widget requests',
+      (tester) async {
+        expect(BoundedLocalFileImage.debugActiveLoadCount, 0);
+        expect(BoundedLocalFileImage.debugPendingLoadCount, 0);
+
+        final blockers = List<Completer<FileStat>>.generate(
+          BoundedLocalFileImage.maxConcurrentLoads,
+          (_) => Completer<FileStat>(),
+        );
+        final activeStreams = <ImageStream>[];
+        final activeListeners = <ImageStreamListener>[];
+        for (var i = 0; i < BoundedLocalFileImage.maxConcurrentLoads; i += 1) {
+          final provider = BoundedLocalFileImage(
+            _InstrumentedFile(
+              path: '/virtual/blocker-$i.png',
+              statType: FileSystemEntityType.file,
+              statSize: 128,
+              openedLength: 128,
+              backingBytes: Uint8List(0),
+              pendingStat: blockers[i].future,
+            ),
+            maxEncodedBytes: 4096,
+          );
+          final stream = provider.resolve(ImageConfiguration.empty);
+          final listener = ImageStreamListener(
+            (image, synchronousCall) {},
+            onError: (exception, stackTrace) {},
+          );
+          stream.addListener(listener);
+          activeStreams.add(stream);
+          activeListeners.add(listener);
+        }
+        await tester.pump();
+        expect(
+          BoundedLocalFileImage.debugActiveLoadCount,
+          BoundedLocalFileImage.maxConcurrentLoads,
+        );
+
+        // Enqueue 78 requests while all 4 active slots are blocked: queue must
+        // never exceed maxPendingLoads (64), retiring older overflowed entries.
+        var overflowErrors = 0;
+        final queuedStreams = <ImageStream>[];
+        final queuedListeners = <ImageStreamListener>[];
+        for (var i = 0; i < 78; i += 1) {
+          final path = '/virtual/queued-$i.png';
+          BoundedLocalFileImage.retainWidgetInterest(path);
+          final provider = BoundedLocalFileImage(
+            _InstrumentedFile(
+              path: path,
+              statType: FileSystemEntityType.notFound,
+              statSize: 0,
+              openedLength: 0,
+              backingBytes: Uint8List(0),
+            ),
+            maxEncodedBytes: 4096,
+          );
+          final stream = provider.resolve(ImageConfiguration.empty);
+          final listener = ImageStreamListener(
+            (image, synchronousCall) {},
+            onError: (exception, stackTrace) {
+              overflowErrors += 1;
+            },
+          );
+          stream.addListener(listener);
+          queuedStreams.add(stream);
+          queuedListeners.add(listener);
+          expect(
+            BoundedLocalFileImage.debugPendingLoadCount,
+            lessThanOrEqualTo(BoundedLocalFileImage.maxPendingLoads),
+          );
+        }
+        await tester.pump();
+        expect(
+          BoundedLocalFileImage.debugPendingLoadCount,
+          BoundedLocalFileImage.maxPendingLoads,
+        );
+        expect(overflowErrors, 14);
+
+        // Release widget interest for the first 32 surviving queued paths (14..45)
+        // and detach stream listeners for the remaining 32 (46..77): all 64
+        // pending waiters must retire immediately even while blockers hold slots.
+        for (var i = 0; i < 46; i += 1) {
+          BoundedLocalFileImage.releaseWidgetInterest('/virtual/queued-$i.png');
+        }
+        expect(BoundedLocalFileImage.debugPendingLoadCount, 32);
+        for (var i = 46; i < 78; i += 1) {
+          queuedStreams[i].removeListener(queuedListeners[i]);
+          BoundedLocalFileImage.releaseWidgetInterest('/virtual/queued-$i.png');
+        }
+        await tester.pump();
+        expect(BoundedLocalFileImage.debugPendingLoadCount, 0);
+        expect(BoundedLocalFileImage.debugTrackedInterestCount, 0);
+
+        for (var i = 0; i < queuedStreams.length; i += 1) {
+          queuedStreams[i].removeListener(queuedListeners[i]);
+        }
+        for (final blocker in blockers) {
+          blocker.complete(
+            const _FakeFileStat(type: FileSystemEntityType.notFound, size: 0),
+          );
+        }
+        await tester.pumpAndSettle();
+        for (var i = 0; i < activeStreams.length; i += 1) {
+          activeStreams[i].removeListener(activeListeners[i]);
+        }
+        await tester.pump();
+        expect(BoundedLocalFileImage.debugActiveLoadCount, 0);
+        expect(BoundedLocalFileImage.debugPendingLoadCount, 0);
+        expect(BoundedLocalFileImage.debugTrackedInterestCount, 0);
+      },
+    );
+  });
+}
+
+class _InstrumentedFile implements File {
+  _InstrumentedFile({
+    required this.path,
+    required this.statType,
+    required this.statSize,
+    required this.openedLength,
+    required this.backingBytes,
+    this.pendingStat,
+  });
+
+  @override
+  final String path;
+  final FileSystemEntityType statType;
+  final int statSize;
+  final int openedLength;
+  final Uint8List backingBytes;
+  final Future<FileStat>? pendingStat;
+
+  int openCalls = 0;
+  int totalBytesRead = 0;
+  bool lastHandleClosed = false;
+
+  @override
+  Future<FileStat> stat() =>
+      pendingStat ??
+      Future<FileStat>.value(_FakeFileStat(type: statType, size: statSize));
+
+  @override
+  Future<RandomAccessFile> open({FileMode mode = FileMode.read}) async {
+    openCalls += 1;
+    return _InstrumentedRandomAccessFile(this);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeFileStat implements FileStat {
+  const _FakeFileStat({required this.type, required this.size});
+
+  @override
+  final FileSystemEntityType type;
+
+  @override
+  final int size;
+
+  @override
+  DateTime get accessed => DateTime.fromMillisecondsSinceEpoch(0);
+
+  @override
+  DateTime get changed => DateTime.fromMillisecondsSinceEpoch(0);
+
+  @override
+  DateTime get modified => DateTime.fromMillisecondsSinceEpoch(0);
+
+  @override
+  int get mode => 0;
+
+  @override
+  String modeString() => '';
+}
+
+class _InstrumentedRandomAccessFile implements RandomAccessFile {
+  _InstrumentedRandomAccessFile(this._owner);
+
+  final _InstrumentedFile _owner;
+  int _offset = 0;
+
+  @override
+  Future<int> length() async => _owner.openedLength;
+
+  @override
+  Future<Uint8List> read(int count) async {
+    if (_offset >= _owner.backingBytes.length || count <= 0) {
+      return Uint8List(0);
+    }
+    final end = math.min(_offset + count, _owner.backingBytes.length);
+    final chunk = Uint8List.sublistView(_owner.backingBytes, _offset, end);
+    _offset = end;
+    _owner.totalBytesRead += chunk.length;
+    return chunk;
+  }
+
+  @override
+  Future<void> close() async {
+    _owner.lastHandleClosed = true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
