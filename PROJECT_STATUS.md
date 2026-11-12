@@ -124,8 +124,15 @@ permission to lower the engineering or visual quality bar.
   `/var/tmp/native-codex-desktop-startup-retry`, branch
   `agent/codex-desktop-startup-retry`. Two baseline regressions now reproduce:
   no explicit Retry after failed discovery, and a late locator result overwrites
-  terminal Stopped with Not found after shutdown. No production correction is
-  implemented yet. This subset does not close hot crash/draft recovery.
+  terminal Stopped with Not found after shutdown. Current uncommitted source
+  adds explicit retry admission, epoch-fenced startup/stream delivery and failed
+  session retirement without closing app gateway streams. Strict analysis and
+  all four new cases pass; four existing runtime/Remote cases passed at the same
+  production source. Two intermediate widget-driver timeouts mixing real file
+  I/O/FakeAsync remain recorded. The widget now tests the typed discovery change;
+  real filesystem/process recovery belongs to the pending packaged-stock walk.
+  Shared gates, real-stock recovery and targeted peer audit remain pending.
+  This subset does not close hot crash/draft recovery.
 - **Published reasoning data correction:** `0286a4d`, integrated in main
   `27db663`, passes 615 default cases/five skips, five enabled stock cases,
   analysis/pure-Dart/memory/release and source-bound actual-stock comparison.
@@ -143,21 +150,30 @@ permission to lower the engineering or visual quality bar.
   feedback timer in the first adaptation was a test-driver omission, now
   completed before teardown. Combined `b22e955` rerun/build and packaged F
   replay now pass. Source, tests and captures do not close signed-in/Human visual gates.
-- **Heavy validation is Codex-owned** after Gemini's explicit release, with
-  zero owner replay workers left. Gemini is source-only while Codex runs the
-  combined checkpoint. Flutter uses `--concurrency=1`, Cargo two jobs and CMake
-  `--parallel 2`. All U4 surfaces are released; shared docs remain Codex-owned.
-  Next functional preparation is never-connected local startup retry, distinct
-  from still-missing hot crash recovery and draft restoration.
-- Next U ownership is being negotiated from refreshed build25894 evidence;
-  no new UI surface is assumed closed. Codex owns runtime/app-shell startup
-  state and shared docs; Gemini remains the presentation owner. No overlapping
-  writes or concurrent heavy validation.
+- **Track U / Gemini active:** U5 A11 adaptive composer and permission-control
+  translation in `/var/tmp/native-gemini-u5-a11-composer`, branch
+  `agent/gemini-golden-ui-u5-a11-composer`, based on main `9e0c8a6`.
+  Gemini owns `codex_composer.dart`, `conversation.dart`,
+  `composer_model_picker.dart`, `official_codex_theme.dart` and
+  `test/app/composer_layout_test.dart`. Current build25894 evidence, not prior
+  TUI context, controls the translation. Unrelated Home expansion is excluded.
+- Heavy validation is serialized via the official TUI lease. Codex released
+  its checkpoint workers and the exclusive lease to Gemini for U5. A bounded
+  short loan may be negotiated for Root's startup targets; no two heavy jobs
+  run together. Flutter tests use one worker, Cargo two jobs and CMake two jobs.
+  Codex owns RuntimeController/app-shell startup state, runtime tests and shared
+  docs. The writable surfaces do not overlap. All U4 surfaces are released.
 
 ## Current checkpoints
 
 Git is canonical for the current HEAD and working tree. These are immutable
 source/validation checkpoints, rather than a second branch-state database.
+
+- **Main `9e0c8a6` integration checkpoint:**
+  [CI43131012688](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43131012688)
+  passed verify/Windows/macOS at the exact SHA. It preserves combined release
+  source `b22e955` and the source-bound evidence documentation; startup retry
+  and U5 are subsequent work, not part of that verified checkpoint.
 
 - **Prior main checkpoint `27db663b8a4d29b658401d7c03abf6b4f37d09ec`:**
   [main CI43119069301](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43119069301)

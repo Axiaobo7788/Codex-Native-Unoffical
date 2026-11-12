@@ -1572,6 +1572,14 @@ class _RuntimeConnectionScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (controller.canRetryStartup) ...[
+                  const SizedBox(height: ThemeTokens.space5),
+                  CodexButton(
+                    key: const ValueKey('runtime-startup-retry'),
+                    label: 'Retry startup',
+                    onPressed: () => unawaited(controller.retryStartup()),
+                  ),
+                ],
                 const SizedBox(height: ThemeTokens.space5),
                 _RuntimeStatusPill(controller: controller, showDetails: true),
               ],

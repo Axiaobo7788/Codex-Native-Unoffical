@@ -2739,3 +2739,30 @@ KiB shorthand describes ASCII fixture sizes or numeric multiples of 1,024; it
 is not a generic encoded-byte/heap claim. No budget value or behavior changes.
 Wire and encoded-file byte limits remain separate. See the architecture memory
 model for the current measurement terminology.
+
+
+## ADR-061 — Keep startup retry separate from terminal gateway shutdown
+
+- **Date:** 2026-11-12
+- **Context:** The local cached start Future prevents an explicit retry after
+  first discovery/initialization failure. Public shutdown closes application
+  gateway streams and therefore cannot be reused as an internal reconnect step.
+  A reproduced late locator result also overwrites Stopped after shutdown.
+- **Decision:** Keep one admitted startup attempt, publish its Future before
+  notifying listeners, and fence locator, launch, initialization and relay
+  callbacks by a bounded current-epoch token. A failed attempt retires its
+  subscriptions/transport while preserving application-owned gateway streams.
+  Terminal shutdown invalidates the epoch and still closes those streams.
+- **Current admission:** Expose explicit Retry startup only before the first
+  successful local connection and after the previous raw attempt/cleanup has
+  settled. Repeated starts/retries join the admitted operation. After a connected
+  workspace fails, this first slice does not expose retry: thread/draft,
+  approvals, request IDs and queued-work reconciliation must be implemented
+  before hot recovery becomes safe. This is staged implementation, not a
+  decision to exclude that supported workflow.
+- **Evidence boundary:** Two old-source regressions are red; four corrected
+  startup cases and strict analysis pass. Existing runtime/Remote cases also
+  pass at this production source. Unit/widget fixtures are not real-stock
+  process evidence. Shared/packaged-stock validation and targeted peer audit
+  are pending at this source checkpoint. Mixed real-I/O/FakeAsync test-driver
+  timeouts are retained rather than hidden by the later fixture correction.

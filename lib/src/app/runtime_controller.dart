@@ -153,6 +153,9 @@ class RuntimeController extends ChangeNotifier
   final StreamController<ThreadAttachmentEvent> _threadAttachmentEvents =
       StreamController<ThreadAttachmentEvent>.broadcast();
   Future<void>? _startOperation;
+  var _desktopStartInFlight = false;
+  var _desktopEpoch = 0;
+  var _hasConnectedDesktop = false;
   var _disposed = false;
   var _stopping = false;
 
@@ -289,8 +292,60 @@ class RuntimeController extends ChangeNotifier
   Stream<RuntimeDiagnosticsEvent> get runtimeDiagnosticsEvents =>
       _runtimeDiagnosticsEvents.stream;
 
-  Future<void> start() =>
-      _usesRemote ? _startRemote() : (_startOperation ??= _startDesktop());
+  /// Startup retry is deliberately narrower than recovery of a connected
+  /// workspace, which also needs draft and pending-operation reconciliation.
+  bool get canRetryStartup =>
+      !_usesRemote &&
+      !_disposed &&
+      !_stopping &&
+      !_hasConnectedDesktop &&
+      !_desktopStartInFlight &&
+      switch (_snapshot.state) {
+        RuntimeConnectionState.notFound ||
+        RuntimeConnectionState.hostNotFound ||
+        RuntimeConnectionState.error ||
+        RuntimeConnectionState.processExited => true,
+        _ => false,
+      };
+
+  Future<void> start() {
+    if (_usesRemote) {
+      return _startRemote();
+    }
+    if (_stopping || _disposed) {
+      return Future<void>.value();
+    }
+    final current = _startOperation;
+    if (current != null) {
+      return current;
+    }
+    // Publish admission before notifying locating listeners: a reentrant
+    // start must join the same attempt, not launch another Host.
+    final operation = Completer<void>();
+    _startOperation = operation.future;
+    _desktopStartInFlight = true;
+    unawaited(
+      _startDesktop().then<void>(
+        (_) => operation.complete(),
+        onError: (Object error, StackTrace stack) =>
+            operation.completeError(error, stack),
+      ),
+    );
+    return operation.future;
+  }
+
+  Future<void> retryStartup() {
+    if (!canRetryStartup) {
+      return _desktopStartInFlight
+          ? (_startOperation ?? Future<void>.value())
+          : Future<void>.value();
+    }
+    _startOperation = null;
+    return start();
+  }
+
+  bool _isCurrentDesktopAttempt(int epoch) =>
+      !_stopping && !_disposed && epoch == _desktopEpoch;
 
   Future<void> handleAppHidden() async {
     if (!_usesRemote || _stopping || _disposed) {
@@ -919,89 +974,140 @@ class RuntimeController extends ChangeNotifier
   }
 
   Future<void> _startDesktop() async {
-    _setSnapshot(const RuntimeSnapshot(state: RuntimeConnectionState.locating));
-    final executable = await locator.locate();
-    if (executable == null) {
-      _setSnapshot(
-        const RuntimeSnapshot(
-          state: RuntimeConnectionState.notFound,
-          message: 'Install Codex in PATH or set CODEX_EXECUTABLE to its path.',
-        ),
-      );
-      return;
-    }
-
-    final hostExecutable = await hostLocator.locate();
-    if (hostExecutable == null) {
-      _setSnapshot(
-        const RuntimeSnapshot(
-          state: RuntimeConnectionState.hostNotFound,
-          message:
-              'Build or install codex-native-host, or set CODEX_NATIVE_HOST '
-              'to its path. Direct app-server fallback is disabled so large '
-              'output cannot bypass the bounded transport.',
-        ),
-      );
-      return;
-    }
-
-    _setSnapshot(
-      RuntimeSnapshot(
-        state: RuntimeConnectionState.starting,
-        executablePath: executable,
-      ),
-    );
-
+    final epoch = ++_desktopEpoch;
+    String? executable;
+    var connected = false;
     try {
+      _setSnapshot(
+        const RuntimeSnapshot(state: RuntimeConnectionState.locating),
+      );
+      executable = await locator.locate();
+      if (!_isCurrentDesktopAttempt(epoch)) {
+        return;
+      }
+      if (executable == null) {
+        _setSnapshot(
+          const RuntimeSnapshot(
+            state: RuntimeConnectionState.notFound,
+            message:
+                'Install Codex in PATH or set CODEX_EXECUTABLE to its path.',
+          ),
+        );
+        return;
+      }
+
+      final hostExecutable = await hostLocator.locate();
+      if (!_isCurrentDesktopAttempt(epoch)) {
+        return;
+      }
+      if (hostExecutable == null) {
+        _setSnapshot(
+          const RuntimeSnapshot(
+            state: RuntimeConnectionState.hostNotFound,
+            message:
+                'Build or install codex-native-host, or set CODEX_NATIVE_HOST '
+                'to its path. Direct app-server fallback is disabled so large '
+                'output cannot bypass the bounded transport.',
+          ),
+        );
+        return;
+      }
+
+      _setSnapshot(
+        RuntimeSnapshot(
+          state: RuntimeConnectionState.starting,
+          executablePath: executable,
+        ),
+      );
       final transport = await _transportStarter(hostExecutable, executable);
-      if (_stopping || _disposed) {
+      if (!_isCurrentDesktopAttempt(epoch)) {
         await transport.close();
         return;
       }
       _transport = transport;
-      _exitSubscription = transport.exits.listen(_handleExit);
-      _protocolErrorSubscription = transport.protocolErrors.listen(
-        _handleProtocolError,
-      );
+      bool current() =>
+          _isCurrentDesktopAttempt(epoch) && identical(transport, _transport);
+      _exitSubscription = transport.exits.listen((exit) {
+        if (current()) _handleExit(exit);
+      });
+      _protocolErrorSubscription = transport.protocolErrors.listen((error) {
+        if (current()) _handleProtocolError(error);
+      });
       _turnEventSubscription = transport.turnEvents.listen(
-        _turnEvents.add,
-        onError: _handleTurnStreamError,
+        (event) {
+          if (current()) _turnEvents.add(event);
+        },
+        onError: (Object error, StackTrace stack) {
+          if (current()) _handleTurnStreamError(error, stack);
+        },
       );
       _threadEventSubscription = transport.threadEvents.listen(
-        _threadEvents.add,
-        onError: _threadEvents.addError,
+        (event) {
+          if (current()) _threadEvents.add(event);
+        },
+        onError: (Object error, StackTrace stack) {
+          if (current()) _threadEvents.addError(error, stack);
+        },
       );
       _approvalEventSubscription = transport.approvalEvents.listen(
-        _approvalEvents.add,
-        onError: _approvalEvents.addError,
+        (event) {
+          if (current()) _approvalEvents.add(event);
+        },
+        onError: (Object error, StackTrace stack) {
+          if (current()) _approvalEvents.addError(error, stack);
+        },
       );
       _userInputEventSubscription = transport.userInputEvents.listen(
-        _userInputEvents.add,
-        onError: _userInputEvents.addError,
+        (event) {
+          if (current()) _userInputEvents.add(event);
+        },
+        onError: (Object error, StackTrace stack) {
+          if (current()) _userInputEvents.addError(error, stack);
+        },
       );
       _mcpElicitationEventSubscription = transport.mcpElicitationEvents.listen(
-        _mcpElicitationEvents.add,
-        onError: _mcpElicitationEvents.addError,
+        (event) {
+          if (current()) _mcpElicitationEvents.add(event);
+        },
+        onError: (Object error, StackTrace stack) {
+          if (current()) _mcpElicitationEvents.addError(error, stack);
+        },
       );
       _mcpOauthEventSubscription = transport.mcpOauthEvents.listen(
-        _mcpOauthEvents.add,
-        onError: _mcpOauthEvents.addError,
-        onDone: _invalidateMcpOauth,
+        (event) {
+          if (current()) _mcpOauthEvents.add(event);
+        },
+        onError: (Object error, StackTrace stack) {
+          if (current()) _mcpOauthEvents.addError(error, stack);
+        },
+        onDone: () {
+          if (current()) _invalidateMcpOauth();
+        },
       );
       _runtimeDiagnosticsEventSubscription = transport.runtimeDiagnosticsEvents
           .listen(
-            _runtimeDiagnosticsEvents.add,
-            onError: _runtimeDiagnosticsEvents.addError,
+            (event) {
+              if (current()) _runtimeDiagnosticsEvents.add(event);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (current()) _runtimeDiagnosticsEvents.addError(error, stack);
+            },
           );
       _threadAttachmentEventSubscription = transport.threadAttachmentEvents
           .listen(
-            _threadAttachmentEvents.add,
-            onError: _threadAttachmentEvents.addError,
+            (event) {
+              if (current()) _threadAttachmentEvents.add(event);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (current()) _threadAttachmentEvents.addError(error, stack);
+            },
           );
       final result = await transport.initialize(const InitializeRequest());
-      if (_stopping || _disposed) {
+      if (!current()) {
         return;
       }
+      connected = true;
+      _hasConnectedDesktop = true;
       _setSnapshot(
         RuntimeSnapshot(
           state: RuntimeConnectionState.connected,
@@ -1011,18 +1117,64 @@ class RuntimeController extends ChangeNotifier
         ),
       );
     } catch (error) {
-      final transport = _transport;
-      _setSnapshot(
-        RuntimeSnapshot(
-          state: RuntimeConnectionState.error,
-          executablePath: executable,
-          processId: transport?.processId,
-          message: _withStderr(error.toString(), transport?.stderrTail),
-        ),
-      );
-      if (transport != null) {
-        await transport.close();
+      if (_isCurrentDesktopAttempt(epoch)) {
+        final transport = _transport;
+        _setSnapshot(
+          RuntimeSnapshot(
+            state: RuntimeConnectionState.error,
+            executablePath: executable,
+            processId: transport?.processId,
+            message: _withStderr(error.toString(), transport?.stderrTail),
+          ),
+        );
       }
+    } finally {
+      try {
+        if (!connected) {
+          await _retireDesktopTransport();
+        }
+      } finally {
+        _desktopStartInFlight = false;
+        if (!_disposed && !_stopping) notifyListeners();
+      }
+    }
+  }
+
+  /// Retire a failed connection while keeping application-owned gateway streams
+  /// alive for a fresh startup. Public shutdown remains terminal.
+  Future<void> _retireDesktopTransport() async {
+    _desktopEpoch += 1;
+    _invalidateMcpOauth();
+    final transport = _transport;
+    _transport = null;
+    final subscriptions = [
+      _exitSubscription,
+      _protocolErrorSubscription,
+      _turnEventSubscription,
+      _threadEventSubscription,
+      _approvalEventSubscription,
+      _userInputEventSubscription,
+      _mcpElicitationEventSubscription,
+      _mcpOauthEventSubscription,
+      _runtimeDiagnosticsEventSubscription,
+      _threadAttachmentEventSubscription,
+    ];
+    _exitSubscription = null;
+    _protocolErrorSubscription = null;
+    _turnEventSubscription = null;
+    _threadEventSubscription = null;
+    _approvalEventSubscription = null;
+    _userInputEventSubscription = null;
+    _mcpElicitationEventSubscription = null;
+    _mcpOauthEventSubscription = null;
+    _runtimeDiagnosticsEventSubscription = null;
+    _threadAttachmentEventSubscription = null;
+    try {
+      for (final subscription in subscriptions) {
+        await subscription?.cancel();
+      }
+    } finally {
+      await transport?.close();
     }
   }
 
@@ -1115,6 +1267,7 @@ class RuntimeController extends ChangeNotifier
     if (_stopping || _disposed) {
       return;
     }
+    _desktopEpoch += 1;
     _invalidateMcpOauth();
     _setSnapshot(
       RuntimeSnapshot(
@@ -1134,6 +1287,7 @@ class RuntimeController extends ChangeNotifier
     if (_stopping || _disposed) {
       return;
     }
+    _desktopEpoch += 1;
     _invalidateMcpOauth();
     _setSnapshot(
       RuntimeSnapshot(
@@ -1165,22 +1319,11 @@ class RuntimeController extends ChangeNotifier
       return;
     }
     _stopping = true;
-    _invalidateMcpOauth();
-    await _exitSubscription?.cancel();
-    await _protocolErrorSubscription?.cancel();
-    await _turnEventSubscription?.cancel();
-    await _threadEventSubscription?.cancel();
-    await _approvalEventSubscription?.cancel();
-    await _userInputEventSubscription?.cancel();
-    await _mcpElicitationEventSubscription?.cancel();
-    await _mcpOauthEventSubscription?.cancel();
-    await _runtimeDiagnosticsEventSubscription?.cancel();
-    await _threadAttachmentEventSubscription?.cancel();
+    await _retireDesktopTransport();
     await _remoteOnboarding?.stop();
     await _remoteLifecycle?.stop();
     await _remoteStateSubscription?.cancel();
     await _remoteOnboardingSubscription?.cancel();
-    await _transport?.close();
     await _turnEvents.close();
     await _threadEvents.close();
     await _approvalEvents.close();
