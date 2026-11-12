@@ -37,8 +37,44 @@ abstract final class OfficialCodexTheme {
   /// Floating composer corner radius (24px / 1.5rem).
   static const double composerRadius = 24.0;
 
+  /// Electron multiline / stacked composer corner radius
+  /// (`e77f816560c6.css` `:where(:root,[data-theme]) { --composer-radius: calc(var(--spacing) * 5.5) }` = `22px`).
+  static const double composerMultilineRadius = 22.0;
+
   /// Floating composer pill corner radius (28px).
   static const double composerRadiusPill = 28.0;
+
+  /// Responsive single-line composer stacking breakpoint (`40rem` / `640px` in
+  /// `182735.osar.AdaptiveFooter` and `f0eddefa0de7.css`).
+  static const double composerSingleLineBreakpoint = 640.0;
+
+  /// Electron composer footer responsive label collapse width (`475px` in
+  /// `f0eddefa0de7.css` `@container composer-footer (width<=475px)`).
+  static const double composerFooterLabelCollapseWidth = 475.0;
+
+  /// Desktop composer editor line-box height (`--line-height-composer: calc(var(--spacing) * 5)` = `20px`).
+  static const double composerLineHeight = baseGrid * 5;
+
+  /// Desktop multiline composer input horizontal padding (`--padding-composer-input: 0 calc(var(--spacing) * 3)` = `12px`).
+  static const double composerMultilineInputHorizontalPadding = baseGrid * 3;
+
+  /// Vertical gap between multiline composer input and footer controls (`--spacing-composer-input-footer: calc(var(--spacing) * 2)` = `8px`).
+  static const double composerInputFooterGap = baseGrid * 2;
+
+  /// Horizontal gap between composer footer controls (`--spacing-composer-single-line-controls: calc(var(--spacing) * 1.25)` = `5px`).
+  static const double composerSingleLineControlGap = 5.0;
+
+  /// Leading gap before composer primary action (`16389.Ips7.F` `ms-2` = `8px`).
+  static const double composerPrimaryActionLeadingGap = baseGrid * 2;
+
+  /// Maximum width of the composer permissions trigger label (`341692.LUWz` `max-w-40` = `160px`).
+  static const double composerPermissionsLabelMaxWidth = baseGrid * 40;
+
+  /// Desktop composer placeholder opacity (`--opacity-composer-placeholder: .5`).
+  static const double composerPlaceholderOpacity = 0.5;
+
+  /// Bounded single-line composer overflow measurement character cap (`O(1)` layout guard).
+  static const int composerSingleLineMeasureCharCap = 512;
   static const double changesSummaryRadius = 20.0;
 
   /// User message corner radius (`.bubble-vBnidZ` `--radius-2xl: calc(var(--spacing) * 5.5)` = `22px`).
@@ -289,6 +325,10 @@ abstract final class OfficialCodexTheme {
   static const Color darkWorkspaceBackground = Color(0xFF212121); // Tier 1
   static const Color darkElevatedSurface = Color(0xFF2F2F2F); // Tier 2
   static const Color darkModalSurface = Color(0xFF2F2F2F); // Tier 3
+  // `--color-background-composer-surface: var(--app-color-background-elevated-primary-opaque, var(--color-surface-elevated))`
+  static const Color darkComposerSurface = darkElevatedSurface;
+  // `--elevation-composer-dark: inset 0 0 1px 0 #fff3`
+  static const Color darkComposerElevationBorder = Color(0x33FFFFFF);
   // `--color-background-user-message: color-mix(in oklab, var(--color-text) 5%, transparent)`
   static const Color darkUserBubbleBackground = Color(0x0DDFDFDF);
   static const Color darkUserBubbleTranslucent = Color(0x0DDFDFDF);
@@ -328,6 +368,28 @@ abstract final class OfficialCodexTheme {
   static const Color lightWorkspaceBackground = Color(0xFFFFFFFF); // Tier 1
   static const Color lightElevatedSurface = Color(0xFFF4F4F4); // Tier 2
   static const Color lightModalSurface = Color(0xFFFFFFFF); // Tier 3
+  // `--color-surface-elevated-secondary` on Desktop composer surface (`#FFFFFF`).
+  static const Color lightComposerSurface = lightWorkspaceBackground;
+  // `--elevation-composer: 0 0 0 1px #0000000a, 0 2px 8px 0 #0000000a, 0 4px 80px 8px #00000006`
+  static const Color lightComposerElevationBorder = Color(0x0A000000);
+  static const List<BoxShadow> lightComposerShadows = [
+    BoxShadow(color: Color(0x0A000000), offset: Offset(0, 2), blurRadius: 8),
+    BoxShadow(
+      color: Color(0x06000000),
+      offset: Offset(0, 4),
+      blurRadius: 80,
+      spreadRadius: 8,
+    ),
+  ];
+  static const List<BoxShadow> lightComposerCompactShadows = [
+    BoxShadow(color: Color(0x0A000000), offset: Offset(0, 2), blurRadius: 8),
+    BoxShadow(
+      color: Color(0x06000000),
+      offset: Offset(0, 4),
+      blurRadius: 40,
+      spreadRadius: 8,
+    ),
+  ];
   // `--color-background-user-message: color-mix(in oklab, var(--color-text) 5%, transparent)`
   static const Color lightUserBubbleBackground = Color(0x0D1A1C1F);
   static const Color lightUserBubbleTranslucent = Color(0x0D1A1C1F);
@@ -433,6 +495,10 @@ final class OfficialCodexThemeData {
   final Color success;
 
   bool get isDark => brightness == Brightness.dark;
+
+  Color get composerSurface => isDark
+      ? OfficialCodexTheme.darkComposerSurface
+      : OfficialCodexTheme.lightComposerSurface;
 
   static const dark = OfficialCodexThemeData(
     brightness: Brightness.dark,

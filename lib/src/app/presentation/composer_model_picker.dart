@@ -63,28 +63,10 @@ class _ComposerModelSummaryButtonState
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        final model = controller.effectiveModel;
-        final String summary;
-        if (widget.useDesktopPicker && controller.selectedModelId == null) {
-          final effort = _formatModelEffortLabel(
-            controller.selectedReasoningEffort,
-          );
-          summary = effort == null
-              ? 'Codex settings'
-              : 'Codex settings $effort';
-        } else if (model == null) {
-          summary = controller.loading ? 'Loading models…' : 'Codex default';
-        } else {
-          final rawEffort =
-              controller.selectedReasoningEffort ??
-              model.defaultReasoningEffort;
-          final effortLabel = _formatModelEffortLabel(rawEffort);
-          summary = effortLabel == null
-              ? model.displayName
-              : widget.useDesktopPicker
-              ? '${model.displayName} $effortLabel'
-              : '${model.displayName} · $effortLabel';
-        }
+        final summary = _composerModelSummaryLabel(
+          controller,
+          useDesktopPicker: widget.useDesktopPicker,
+        );
         final tooltip = 'Model and reasoning ($summary)';
         final onPressed = controller.loading ? null : _openPicker;
         final button = widget.iconOnly
@@ -152,6 +134,29 @@ class _ComposerModelSummaryButtonState
       },
     );
   }
+}
+
+String _composerModelSummaryLabel(
+  ExecutionSettingsController controller, {
+  required bool useDesktopPicker,
+}) {
+  final model = controller.effectiveModel;
+  if (useDesktopPicker && controller.selectedModelId == null) {
+    final effort = _formatModelEffortLabel(controller.selectedReasoningEffort);
+    return effort == null ? 'Codex settings' : 'Codex settings $effort';
+  }
+  if (model == null) {
+    return controller.loading ? 'Loading models…' : 'Codex default';
+  }
+  final rawEffort =
+      controller.selectedReasoningEffort ?? model.defaultReasoningEffort;
+  final effortLabel = _formatModelEffortLabel(rawEffort);
+  if (effortLabel == null) {
+    return model.displayName;
+  }
+  return useDesktopPicker
+      ? '${model.displayName} $effortLabel'
+      : '${model.displayName} · $effortLabel';
 }
 
 String? _formatModelEffortLabel(String? effort) {
