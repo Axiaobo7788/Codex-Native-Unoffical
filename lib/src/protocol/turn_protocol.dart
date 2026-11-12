@@ -1,6 +1,7 @@
 import '../domain/execution_settings.dart';
 import '../domain/output_models.dart';
 import '../domain/turn_models.dart';
+import 'file_change_summary.dart';
 import 'jsonl_decoder.dart';
 import 'output_protocol.dart';
 import 'protocol_models.dart';
@@ -671,7 +672,7 @@ final class TurnProtocolAdapter {
   ) => switch (type) {
     'commandExecution' =>
       'Command: ${_truncate(_requiredString(item, 'command'), 240)}',
-    'fileChange' => _fileChangeSummary(item['changes']),
+    'fileChange' => fileChangeSummary(item['changes']),
     'mcpToolCall' =>
       'MCP: ${_truncate(_requiredString(item, 'server').trim(), _maxToolIdentifierLength)}/${_truncate(_requiredString(item, 'tool').trim(), _maxToolIdentifierLength)}',
     'dynamicToolCall' =>
@@ -695,41 +696,6 @@ final class TurnProtocolAdapter {
     'contextCompaction' => 'Context compacted',
     _ => _humanize(type),
   };
-
-  static String _fileChangeSummary(Object? rawChanges) {
-    final count = rawChanges is List<Object?> ? rawChanges.length : 0;
-    if (rawChanges is! List<Object?>) {
-      return 'File changes: $count update(s)';
-    }
-    var additions = 0;
-    var deletions = 0;
-    for (final entry in rawChanges.whereType<Map<String, Object?>>()) {
-      final entryAdditions = entry['additions'];
-      final entryDeletions = entry['deletions'];
-      if (entryAdditions is int && entryAdditions >= 0) {
-        additions += entryAdditions;
-      }
-      if (entryDeletions is int && entryDeletions >= 0) {
-        deletions += entryDeletions;
-      }
-      if (entryAdditions is! int && entryDeletions is! int) {
-        final diff = entry['diff'];
-        if (diff is String && diff.isNotEmpty) {
-          for (final line in diff.split('\n')) {
-            if (line.startsWith('+') && !line.startsWith('+++')) {
-              additions += 1;
-            } else if (line.startsWith('-') && !line.startsWith('---')) {
-              deletions += 1;
-            }
-          }
-        }
-      }
-    }
-    if (additions == 0 && deletions == 0) {
-      return 'File changes: $count update(s)';
-    }
-    return 'File changes: $count update(s) (+$additions -$deletions)';
-  }
 
   static String _planSummary(JsonObject item) {
     final text = item['text'];
