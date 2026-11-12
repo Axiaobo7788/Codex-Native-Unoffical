@@ -16,6 +16,13 @@ typedef _CommandOutputPresentation = ({
   VoidCallback? onTogglePreview,
   String? previewTooltip,
 });
+typedef _InlinePatchPresentation = ({
+  Widget? detail,
+  bool hasInlinePreview,
+  bool previewExpanded,
+  VoidCallback? onTogglePreview,
+  String? previewTooltip,
+});
 
 enum _ActivityGroupability { standalone, groupable, omitted }
 
@@ -41,11 +48,49 @@ typedef _ResolvedInlineActivity = ({
   _ActivityGroupSegmentKind segmentKind,
   String? mcpSourceDisplay,
   int editedFileCount,
+  int? diffAdditions,
+  int? diffDeletions,
   String? dynamicToolLeading,
   String? dynamicToolFollowing,
   String? activeHeaderLabel,
   bool completed,
 });
+
+_ResolvedInlineActivity _resolvedInlineActivity({
+  required String caption,
+  int? verbLength,
+  required IconData icon,
+  bool isError = false,
+  bool isWarning = false,
+  String? statusBadge,
+  _ActivityGroupability groupability = _ActivityGroupability.standalone,
+  _ActivityGroupSegmentKind segmentKind = _ActivityGroupSegmentKind.none,
+  String? mcpSourceDisplay,
+  int editedFileCount = 0,
+  int? diffAdditions,
+  int? diffDeletions,
+  String? dynamicToolLeading,
+  String? dynamicToolFollowing,
+  String? activeHeaderLabel,
+  required bool completed,
+}) => (
+  caption: caption,
+  verbLength: verbLength,
+  icon: icon,
+  isError: isError,
+  isWarning: isWarning,
+  statusBadge: statusBadge,
+  groupability: groupability,
+  segmentKind: segmentKind,
+  mcpSourceDisplay: mcpSourceDisplay,
+  editedFileCount: editedFileCount,
+  diffAdditions: diffAdditions,
+  diffDeletions: diffDeletions,
+  dynamicToolLeading: dynamicToolLeading,
+  dynamicToolFollowing: dynamicToolFollowing,
+  activeHeaderLabel: activeHeaderLabel,
+  completed: completed,
+);
 
 typedef _ActivityGroupSummary = ({String label, IconData icon});
 
@@ -57,10 +102,59 @@ typedef _LiveActivityProjection = ({
 });
 
 final RegExp _fileChangesCountPattern = RegExp(
-  r'^File changes:\s*(\d+)\s+update\(s\)',
+  r'^File changes:\s*(\d+)\s+update\(s\)(?:\s*\(\+(\d+)\s+-(\d+)\))?',
+);
+final RegExp _webSearchSiteTokenPattern = RegExp(
+  r'\bsite:([^\s]+)',
+  caseSensitive: false,
+);
+final RegExp _webSearchOrTokenPattern = RegExp(r'\bOR\b');
+final RegExp _modelReroutedPattern = RegExp(
+  r'^Model rerouted:\s*(.+?)\s*→\s*([^\s(]+)(?:\s*\(([^)]+)\))?',
 );
 final RegExp _identifierSplitPattern = RegExp(r'[-_\s./]+');
 final RegExp _camelBoundaryPattern = RegExp(r'([a-z0-9])([A-Z])');
+
+String _formatWebSearchQueryDetail(String rawQuery) {
+  final trimmed = rawQuery.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  final domains = <String>[];
+  final stripped = trimmed.replaceAllMapped(_webSearchSiteTokenPattern, (
+    match,
+  ) {
+    final rawDomain = (match.group(1) ?? '').trim();
+    if (rawDomain.isEmpty) {
+      return match.group(0) ?? '';
+    }
+    final parsed = Uri.tryParse('https://$rawDomain');
+    final host =
+        parsed?.host.replaceFirst(
+          RegExp(r'^www\.', caseSensitive: false),
+          '',
+        ) ??
+        '';
+    if (host.isEmpty || !host.contains('.')) {
+      return match.group(0) ?? '';
+    }
+    if (!domains.contains(host)) {
+      domains.add(host);
+    }
+    return ' ';
+  });
+  if (domains.isEmpty) {
+    return trimmed;
+  }
+  final remaining = stripped
+      .replaceAll(_webSearchOrTokenPattern, ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (remaining.isEmpty) {
+    return trimmed;
+  }
+  return '$remaining | ${domains.join(' · ')}';
+}
 
 const Map<String, String> _knownMcpBrandCasing = <String, String>{
   'api': 'API',
@@ -251,20 +345,10 @@ _ResolvedInlineActivity? _resolveLiveInlineActivity(
   }
   if (entry.text == 'Reasoning') {
     if (entry.completed && !searchOpen) {
-      return (
+      return _resolvedInlineActivity(
         caption: 'Thought',
-        verbLength: null,
         icon: Icons.psychology_outlined,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
         groupability: _ActivityGroupability.omitted,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: true,
       );
     }
@@ -305,20 +389,10 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
   if (isCommand || rawText.startsWith('Command: ')) {
     final cmd = unwrapCodexShellCommand(rawText);
     if (isDeclined) {
-      return (
+      return _resolvedInlineActivity(
         caption: cmd.isNotEmpty ? 'Command declined: $cmd' : 'Command declined',
-        verbLength: null,
         icon: Icons.shield_outlined,
-        isError: false,
         isWarning: true,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
@@ -441,21 +515,15 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
           'Running command',
         ),
       };
-      return (
+      return _resolvedInlineActivity(
         caption: caption,
         verbLength: verbLength,
         icon: icon,
-        isError: false,
-        isWarning: false,
         statusBadge: nonNominal,
         groupability: nonNominal == null
             ? _ActivityGroupability.groupable
             : _ActivityGroupability.standalone,
         segmentKind: _ActivityGroupSegmentKind.exploration,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
         activeHeaderLabel: activeHdr,
         completed: completed,
       );
@@ -488,95 +556,55 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
           'Reading files',
         ),
       };
-      return (
+      return _resolvedInlineActivity(
         caption: caption,
-        verbLength: null,
         icon: icon,
-        isError: false,
-        isWarning: false,
         statusBadge: nonNominal,
         groupability: nonNominal == null
             ? _ActivityGroupability.groupable
             : _ActivityGroupability.standalone,
         segmentKind: _ActivityGroupSegmentKind.exploration,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
         activeHeaderLabel: activeHdr,
         completed: completed,
       );
     }
     if (isInterrupted) {
       const verb = 'Stopped';
-      return (
+      return _resolvedInlineActivity(
         caption: cmd.isNotEmpty ? '$verb $cmd' : 'Stopped command',
         verbLength: cmd.isNotEmpty ? verb.length : null,
         icon: Icons.terminal_rounded,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     if (!completed) {
       const verb = 'Running';
-      return (
+      return _resolvedInlineActivity(
         caption: cmd.isNotEmpty ? '$verb $cmd' : 'Running command',
         verbLength: cmd.isNotEmpty ? verb.length : null,
         icon: Icons.terminal_rounded,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
         groupability: _ActivityGroupability.groupable,
         segmentKind: _ActivityGroupSegmentKind.runCommand,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
         activeHeaderLabel: 'Running command',
         completed: false,
       );
     }
     if (nonNominal != null) {
-      return (
+      return _resolvedInlineActivity(
         caption: cmd.isNotEmpty ? 'Ran $cmd' : 'Ran command',
-        verbLength: null,
         icon: Icons.terminal_rounded,
         isError: true,
-        isWarning: false,
         statusBadge: nonNominal,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: true,
       );
     }
     const verb = 'Ran';
-    return (
+    return _resolvedInlineActivity(
       caption: cmd.isNotEmpty ? '$verb $cmd' : 'Ran command',
       verbLength: cmd.isNotEmpty ? verb.length : null,
       icon: Icons.terminal_rounded,
-      isError: false,
-      isWarning: false,
-      statusBadge: null,
       groupability: _ActivityGroupability.groupable,
       segmentKind: _ActivityGroupSegmentKind.runCommand,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
       activeHeaderLabel: 'Running command',
       completed: true,
     );
@@ -585,98 +613,60 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
   if (rawText.startsWith('File changes:')) {
     final match = _fileChangesCountPattern.firstMatch(rawText);
     final count = int.tryParse(match?.group(1) ?? '') ?? 0;
+    final additions = int.tryParse(match?.group(2) ?? '');
+    final deletions = int.tryParse(match?.group(3) ?? '');
     if (isDeclined) {
-      return (
+      return _resolvedInlineActivity(
         caption: 'File changes declined',
-        verbLength: null,
         icon: Icons.shield_outlined,
-        isError: false,
         isWarning: true,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     if (isInterrupted) {
-      return (
+      return _resolvedInlineActivity(
         caption: count == 1
             ? 'Stopped editing a file'
             : 'Stopped editing files',
-        verbLength: null,
         icon: Icons.difference_outlined,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     if (nonNominal != null) {
-      return (
+      return _resolvedInlineActivity(
         caption: count == 1 ? 'Failed to edit a file' : 'Failed to edit files',
-        verbLength: null,
         icon: Icons.difference_outlined,
         isError: true,
-        isWarning: false,
         statusBadge: isFailed ? null : nonNominal,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     final normalizedCount = count == 1 ? 1 : (count > 1 ? count : 2);
     if (!completed) {
-      return (
+      return _resolvedInlineActivity(
         caption: 'Editing files',
-        verbLength: null,
         icon: Icons.difference_outlined,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
         groupability: _ActivityGroupability.groupable,
         segmentKind: _ActivityGroupSegmentKind.fileEdit,
-        mcpSourceDisplay: null,
         editedFileCount: normalizedCount,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
+        diffAdditions: additions,
+        diffDeletions: deletions,
         activeHeaderLabel: 'Editing files',
         completed: false,
       );
     }
-    return (
+    return _resolvedInlineActivity(
       caption: count == 1
           ? 'Edited a file'
           : count > 1
           ? 'Edited $count files'
           : 'Edited files',
-      verbLength: null,
       icon: Icons.difference_outlined,
-      isError: false,
-      isWarning: false,
-      statusBadge: null,
       groupability: _ActivityGroupability.groupable,
       segmentKind: _ActivityGroupSegmentKind.fileEdit,
-      mcpSourceDisplay: null,
       editedFileCount: normalizedCount,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
+      diffAdditions: additions,
+      diffDeletions: deletions,
       activeHeaderLabel: 'Editing files',
       completed: true,
     );
@@ -686,80 +676,46 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
     final query = rawText.startsWith('Web search: ')
         ? rawText.substring('Web search: '.length).trim()
         : '';
+    final detail = _formatWebSearchQueryDetail(query);
     if (isInterrupted) {
-      const prefix = 'Stopped searching the web for';
-      return (
-        caption: query.isNotEmpty
-            ? '$prefix $query'
-            : 'Stopped searching the web',
-        verbLength: query.isNotEmpty ? prefix.length : null,
+      const label = 'Stopped searching the web';
+      return _resolvedInlineActivity(
+        caption: detail.isNotEmpty ? '$label for $detail' : label,
+        verbLength: detail.isNotEmpty ? label.length : null,
         icon: Icons.language_rounded,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     if (nonNominal != null) {
-      return (
-        caption: query.isNotEmpty
-            ? 'Failed to search the web for $query'
+      return _resolvedInlineActivity(
+        caption: detail.isNotEmpty
+            ? 'Failed to search the web for $detail'
             : 'Failed to search the web',
-        verbLength: null,
         icon: Icons.language_rounded,
         isError: true,
-        isWarning: false,
         statusBadge: isFailed ? null : nonNominal,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     if (!completed) {
-      const prefix = 'Searching the web for';
-      return (
-        caption: query.isNotEmpty ? '$prefix $query' : 'Searching the web',
-        verbLength: query.isNotEmpty ? prefix.length : null,
+      const label = 'Searching the web';
+      return _resolvedInlineActivity(
+        caption: detail.isNotEmpty ? '$label for $detail' : label,
+        verbLength: detail.isNotEmpty ? label.length : null,
         icon: Icons.language_rounded,
-        isError: false,
-        isWarning: false,
-        statusBadge: null,
         groupability: _ActivityGroupability.groupable,
         segmentKind: _ActivityGroupSegmentKind.webSearch,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
         activeHeaderLabel: 'Searching the web',
         completed: false,
       );
     }
-    const prefix = 'Searched the web for';
-    return (
-      caption: query.isNotEmpty ? '$prefix $query' : 'Searched the web',
-      verbLength: query.isNotEmpty ? prefix.length : null,
+    const label = 'Searched the web';
+    return _resolvedInlineActivity(
+      caption: detail.isNotEmpty ? '$label for $detail' : label,
+      verbLength: detail.isNotEmpty ? label.length : null,
       icon: Icons.language_rounded,
-      isError: false,
-      isWarning: false,
-      statusBadge: null,
       groupability: _ActivityGroupability.groupable,
       segmentKind: _ActivityGroupSegmentKind.webSearch,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
       activeHeaderLabel: 'Searching the web',
       completed: true,
     );
@@ -807,58 +763,35 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
       activeHdr = 'Using $display integration';
     }
     if (isDeclined) {
-      return (
+      return _resolvedInlineActivity(
         caption: caption,
-        verbLength: null,
         icon: Icons.shield_outlined,
-        isError: false,
         isWarning: true,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
     if (nonNominal != null) {
-      return (
+      return _resolvedInlineActivity(
         caption: caption,
         verbLength: isInterrupted ? verbLength : null,
         icon: Icons.extension_outlined,
         isError: !isInterrupted,
-        isWarning: false,
         statusBadge: isInterrupted
             ? null
             : (unnamed && isFailed ? null : nonNominal),
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
-    return (
+    return _resolvedInlineActivity(
       caption: caption,
       verbLength: verbLength,
       icon: Icons.extension_outlined,
-      isError: false,
-      isWarning: false,
       statusBadge: progress.isNotEmpty ? progress : null,
       groupability: canReadMcpText
           ? _ActivityGroupability.standalone
           : _ActivityGroupability.groupable,
       segmentKind: segKind,
       mcpSourceDisplay: mcpSource,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
       activeHeaderLabel: activeHdr,
       completed: completed,
     );
@@ -896,9 +829,8 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
       activeHdr = caption;
     }
     if (nonNominal != null) {
-      return (
+      return _resolvedInlineActivity(
         caption: caption,
-        verbLength: null,
         icon: isDeclined ? Icons.shield_outlined : Icons.handyman_outlined,
         isError: !isInterrupted && !isDeclined,
         isWarning: isDeclined,
@@ -906,27 +838,14 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
             isInterrupted || isDeclined || toolKey == 'read_task_terminal'
             ? null
             : nonNominal,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
-    return (
+    return _resolvedInlineActivity(
       caption: caption,
-      verbLength: null,
       icon: Icons.handyman_outlined,
-      isError: false,
-      isWarning: false,
-      statusBadge: null,
       groupability: _ActivityGroupability.groupable,
       segmentKind: _ActivityGroupSegmentKind.dynamicTool,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
       dynamicToolLeading: leading,
       dynamicToolFollowing: following,
       activeHeaderLabel: activeHdr,
@@ -935,30 +854,20 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
   }
 
   if (rawText == 'Viewed image' || rawText == 'Image view') {
-    return (
+    return _resolvedInlineActivity(
       caption: !completed
           ? 'Viewing an image'
           : isFailed
           ? 'Failed to view image'
           : 'Viewed an image',
-      verbLength: null,
       icon: Icons.image_outlined,
       isError: isFailed,
-      isWarning: false,
-      statusBadge: null,
-      groupability: _ActivityGroupability.standalone,
-      segmentKind: _ActivityGroupSegmentKind.none,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
-      activeHeaderLabel: null,
       completed: completed,
     );
   }
 
   if (rawText == 'Generated image' || rawText == 'Image generation') {
-    return (
+    return _resolvedInlineActivity(
       caption: !completed
           ? 'Generating an image'
           : isInterrupted
@@ -966,24 +875,14 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
           : isFailed
           ? 'Failed to generate an image'
           : 'Generated an image',
-      verbLength: null,
       icon: Icons.image_outlined,
       isError: isFailed,
-      isWarning: false,
-      statusBadge: null,
-      groupability: _ActivityGroupability.standalone,
-      segmentKind: _ActivityGroupSegmentKind.none,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
-      activeHeaderLabel: null,
       completed: completed,
     );
   }
 
   if (rawText == 'Context compacted') {
-    return (
+    return _resolvedInlineActivity(
       caption: !completed
           ? 'Compacting context'
           : isInterrupted
@@ -991,18 +890,8 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
           : isFailed
           ? 'Context compaction failed'
           : 'Context compacted',
-      verbLength: null,
       icon: Icons.compress_rounded,
       isError: isFailed,
-      isWarning: false,
-      statusBadge: null,
-      groupability: _ActivityGroupability.standalone,
-      segmentKind: _ActivityGroupSegmentKind.none,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
-      activeHeaderLabel: null,
       completed: completed,
     );
   }
@@ -1010,24 +899,14 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
   if (rawText == 'Sub-agent activity' ||
       rawText.startsWith('Collaboration: ')) {
     if (rawText == 'Sub-agent activity') {
-      return (
+      return _resolvedInlineActivity(
         caption: !completed
             ? 'Running agent'
             : isFailed
             ? 'Agent failed'
             : 'Agent completed',
-        verbLength: null,
         icon: Icons.hub_outlined,
         isError: isFailed,
-        isWarning: false,
-        statusBadge: null,
-        groupability: _ActivityGroupability.standalone,
-        segmentKind: _ActivityGroupSegmentKind.none,
-        mcpSourceDisplay: null,
-        editedFileCount: 0,
-        dynamicToolLeading: null,
-        dynamicToolFollowing: null,
-        activeHeaderLabel: null,
         completed: completed,
       );
     }
@@ -1036,55 +915,60 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
         .replaceAllMapped(_camelBoundaryPattern, (m) => '${m[1]}_${m[2]}')
         .toLowerCase();
     int? verbLen;
+    String actionWithTarget(String action, String target) {
+      verbLen = action.length;
+      return '$action $target';
+    }
+
     final caption = switch (key) {
       'spawn_agent' || 'spawn_worker' || 'create_agent' =>
         !completed
-            ? 'Creating agent'
+            ? actionWithTarget('Creating', 'agent')
             : isFailed
             ? 'Failed to create agent'
             : isInterrupted
-            ? 'Stopped creating agent'
-            : 'Created agent',
+            ? actionWithTarget('Stopped creating', 'agent')
+            : actionWithTarget('Created', 'agent'),
       'send_input' || 'message_agent' || 'send_message' =>
         !completed
-            ? 'Messaging agent'
+            ? actionWithTarget('Messaging', 'agent')
             : isFailed
             ? 'Failed to message agent'
             : isInterrupted
-            ? 'Stopped messaging agent'
-            : 'Messaged agent',
+            ? actionWithTarget('Stopped messaging', 'agent')
+            : actionWithTarget('Messaged', 'agent'),
       'resume_agent' =>
         !completed
-            ? 'Resuming agent'
+            ? actionWithTarget('Resuming', 'agent')
             : isFailed
             ? 'Failed to resume agent'
-            : 'Resumed agent',
+            : actionWithTarget('Resumed', 'agent'),
       'close_agent' =>
         !completed
-            ? 'Closing agent'
+            ? actionWithTarget('Closing', 'agent')
             : isFailed
             ? 'Failed to close agent'
-            : 'Closed agent',
+            : actionWithTarget('Closed', 'agent'),
       'wait' || 'wait_agent' =>
         !completed
-            ? 'Waiting for agent'
+            ? actionWithTarget('Waiting for', 'agent')
             : isFailed
             ? 'Failed waiting for agent'
             : isInterrupted
-            ? 'Stopped waiting for agent'
-            : 'Waited for agent',
+            ? actionWithTarget('Stopped waiting for', 'agent')
+            : actionWithTarget('Waited for', 'agent'),
       'interrupt' || 'interrupt_agent' =>
         !completed
-            ? 'Interrupting agent'
+            ? actionWithTarget('Interrupting', 'agent')
             : isFailed
             ? 'Failed to interrupt agent'
-            : 'Interrupted agent',
+            : actionWithTarget('Interrupted', 'agent'),
       'list' || 'list_agents' =>
         !completed
-            ? 'Listing agents'
+            ? actionWithTarget('Listing', 'agents')
             : isFailed
             ? 'Failed to list agents'
-            : 'Listed agents',
+            : actionWithTarget('Listed', 'agents'),
       _ => () {
         final sentence = _humanizeIdentifierSentence(rawTool);
         if (sentence.isEmpty) {
@@ -1096,45 +980,50 @@ _ResolvedInlineActivity _resolveInlineActivityCore({
         return 'Agent · $sentence';
       }(),
     };
-    return (
+    return _resolvedInlineActivity(
       caption: caption,
       verbLength: verbLen,
       icon: Icons.hub_outlined,
       isError: nonNominal != null && !isInterrupted && !isDeclined,
       isWarning: isDeclined,
-      statusBadge: null,
-      groupability: _ActivityGroupability.standalone,
-      segmentKind: _ActivityGroupSegmentKind.none,
-      mcpSourceDisplay: null,
-      editedFileCount: 0,
-      dynamicToolLeading: null,
-      dynamicToolFollowing: null,
-      activeHeaderLabel: null,
       completed: completed,
     );
   }
 
+  if (rawText.startsWith('Model rerouted:')) {
+    final match = _modelReroutedPattern.firstMatch(rawText);
+    final toModel = match?.group(2)?.trim() ?? '';
+    final reason = match?.group(3)?.trim() ?? '';
+    if (toModel.isNotEmpty) {
+      const prefix = 'Your request was routed to';
+      final isCyberWarning = reason == 'highRiskCyberActivity';
+      return _resolvedInlineActivity(
+        caption: '$prefix $toModel.',
+        verbLength: isCyberWarning ? null : prefix.length,
+        icon: isCyberWarning ? Icons.shield_outlined : Icons.alt_route_rounded,
+        isWarning: isCyberWarning || isDeclined,
+        completed: completed,
+      );
+    }
+  }
+
+  final isHook = rawText.startsWith('Hook:');
   final fallbackIcon = rawText.startsWith('Plan')
       ? Icons.checklist_rounded
-      : rawText.startsWith('Hook:')
+      : isHook
       ? Icons.bolt_outlined
       : !completed
       ? Icons.terminal_rounded
-      : Icons.check_circle_outline_rounded;
-  return (
+      : Icons.info_outline_rounded;
+  return _resolvedInlineActivity(
     caption: rawText,
-    verbLength: null,
+    verbLength: isHook && !isFailed && rawText.length > 'Hook:'.length
+        ? 'Hook:'.length
+        : null,
     icon: fallbackIcon,
     isError: nonNominal != null && !isDeclined && !isInterrupted,
     isWarning: isDeclined,
     statusBadge: nonNominal,
-    groupability: _ActivityGroupability.standalone,
-    segmentKind: _ActivityGroupSegmentKind.none,
-    mcpSourceDisplay: null,
-    editedFileCount: 0,
-    dynamicToolLeading: null,
-    dynamicToolFollowing: null,
-    activeHeaderLabel: null,
     completed: completed,
   );
 }
@@ -1354,6 +1243,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   static const _maxRetainedThreadDags = 32;
   static const _maxMeasuredItemHeights = 512;
   static const _maxTrackedReasoningTimings = 64;
+  static const _maxExpandedInlinePatches = 16;
   static const _maxRestorePages = 10;
   static const _maxRestoreAlignmentPasses = 32;
   static const _followThresholdPixels = 160.0;
@@ -1418,6 +1308,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   _commandOutputPreview;
   var _commandPreviewReading = false;
   final Set<String> _expandedLiveActivityGroupIds = <String>{};
+  final LinkedHashSet<String> _expandedInlinePatchKeys = LinkedHashSet();
   final LinkedHashMap<String, DateTime> _liveReasoningStartedAtById =
       LinkedHashMap();
   final LinkedHashMap<String, Duration> _completedReasoningElapsedById =
@@ -1942,6 +1833,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _goalEditorDraft = null;
       _reopenGoalFromHeader = false;
       _clearCommandOutputPreview();
+      _expandedInlinePatchKeys.clear();
       _timelineDetailsPopoverController.hide();
     }
     if (!oldWidget.isOffstage && widget.isOffstage) {
@@ -1979,6 +1871,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
   void dispose() {
     _clearComposerStop();
     _clearCommandOutputPreview();
+    _expandedInlinePatchKeys.clear();
     _interruptingQuestion.dispose();
     unawaited(_attachmentEventSubscription?.cancel());
     widget.threadController?.removeListener(_handleThreadListChanged);
@@ -5275,6 +5168,19 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                                 saved: true,
                                 rawCommand: item.text,
                                 status: item.status,
+                                exitCode: item.exitCode,
+                              )
+                            : null,
+                        inlinePatch:
+                            commandGroup == null && overrideText == null
+                            ? _inlinePatchFor(
+                                itemKey: 'saved:${item.turnId}:${item.id}',
+                                turnId: item.turnId,
+                                resolvedActivity: _resolveHistoryInlineActivity(
+                                  item,
+                                  inlineActivity: widget.hasDesktopShell,
+                                  detailMode: _detailMode,
+                                ),
                               )
                             : null,
                         overrideEntryText: overrideText,
@@ -5448,6 +5354,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                     rawCommand: entry.text,
                     status: entry.status,
                     completed: entry.completed,
+                    exitCode: entry.exitCode,
                   );
                   final useInlinePreviewDisclosure =
                       widget.hasDesktopShell &&
@@ -5455,20 +5362,9 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   final tailSummary =
                       liveProjection.tailInlineSummaries[entry.id];
                   final resolvedLiveActivity = tailSummary != null
-                      ? (
+                      ? _resolvedInlineActivity(
                           caption: tailSummary.label,
-                          verbLength: null,
                           icon: tailSummary.icon,
-                          isError: false,
-                          isWarning: false,
-                          statusBadge: null,
-                          groupability: _ActivityGroupability.standalone,
-                          segmentKind: _ActivityGroupSegmentKind.none,
-                          mcpSourceDisplay: null,
-                          editedFileCount: 0,
-                          dynamicToolLeading: null,
-                          dynamicToolFollowing: null,
-                          activeHeaderLabel: null,
                           completed: entry.completed,
                         )
                       : _resolveLiveInlineActivity(
@@ -5477,6 +5373,17 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                           detailMode: _detailMode,
                           searchOpen: _searchOpen,
                         );
+                  final inlinePatch = useInlinePreviewDisclosure
+                      ? null
+                      : _inlinePatchFor(
+                          itemKey: 'live:$liveTurnId:${entry.id}',
+                          turnId: liveTurnId,
+                          resolvedActivity: resolvedLiveActivity,
+                        );
+                  final useInlinePatchDisclosure =
+                      widget.hasDesktopShell &&
+                      !useInlinePreviewDisclosure &&
+                      (inlinePatch?.hasInlinePreview ?? false);
                   return _MeasuredTimelineItem(
                     key: ValueKey('measured-$itemKey'),
                     itemKey: itemKey,
@@ -5493,17 +5400,26 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                       trailingAction: useInlinePreviewDisclosure
                           ? null
                           : commandOutput?.action,
-                      activityDetail: commandOutput?.detail,
-                      hasActivityDisclosure: useInlinePreviewDisclosure,
-                      activityExpanded:
-                          useInlinePreviewDisclosure &&
-                          (commandOutput?.previewExpanded ?? false),
+                      activityDetail: useInlinePatchDisclosure
+                          ? inlinePatch?.detail
+                          : commandOutput?.detail,
+                      hasActivityDisclosure:
+                          useInlinePreviewDisclosure ||
+                          useInlinePatchDisclosure,
+                      activityExpanded: useInlinePreviewDisclosure
+                          ? (commandOutput?.previewExpanded ?? false)
+                          : (useInlinePatchDisclosure &&
+                                (inlinePatch?.previewExpanded ?? false)),
                       onToggleActivity: useInlinePreviewDisclosure
                           ? commandOutput?.onTogglePreview
-                          : null,
+                          : (useInlinePatchDisclosure
+                                ? inlinePatch?.onTogglePreview
+                                : null),
                       activityDisclosureTooltip: useInlinePreviewDisclosure
                           ? commandOutput?.previewTooltip
-                          : null,
+                          : (useInlinePatchDisclosure
+                                ? inlinePatch?.previewTooltip
+                                : null),
                       turnId: liveTurnId.isEmpty ? null : liveTurnId,
                       attachments: effectiveAttachments,
                       siblingBranchInfo:
@@ -6879,10 +6795,126 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _detailMode = mode;
       if (mode == PresentationDetailMode.prose) {
         _clearCommandOutputPreview();
+        _expandedInlinePatchKeys.clear();
       } else {
+        if (mode != PresentationDetailMode.commands) {
+          _expandedInlinePatchKeys.clear();
+        }
         _reconcileLiveOutputPreview();
       }
     });
+  }
+
+  bool _isUnambiguousSingleItemTurnPatch({
+    required String itemKey,
+    required String turnId,
+    required _ResolvedInlineActivity resolvedActivity,
+    required DiffSnapshot snapshot,
+  }) {
+    if (!snapshot.truncated) {
+      if (snapshot.files.length != resolvedActivity.editedFileCount) {
+        return false;
+      }
+      final expectedAdd = resolvedActivity.diffAdditions;
+      final expectedDel = resolvedActivity.diffDeletions;
+      if (expectedAdd != null &&
+          expectedDel != null &&
+          (snapshot.additions != expectedAdd ||
+              snapshot.deletions != expectedDel)) {
+        return false;
+      }
+    } else if (snapshot.files.length > resolvedActivity.editedFileCount) {
+      return false;
+    }
+
+    if (itemKey.startsWith('live:')) {
+      var liveFileChanges = 0;
+      for (final entry in widget.controller.entries) {
+        if (entry.turnId == turnId &&
+            entry.kind == ConversationEntryKind.activity &&
+            entry.text.startsWith('File changes:')) {
+          liveFileChanges += 1;
+          if (liveFileChanges > 1) {
+            return false;
+          }
+        }
+      }
+      return liveFileChanges == 1;
+    }
+
+    if (widget.historyController.selectedTurnId == turnId &&
+        widget.historyController.canLoadMoreItems) {
+      return false;
+    }
+    var savedFileChanges = 0;
+    for (final item in widget.historyController.timelineItems) {
+      if (item.turnId == turnId &&
+          item.kind == HistoryItemKind.activity &&
+          item.text.startsWith('File changes:')) {
+        savedFileChanges += 1;
+        if (savedFileChanges > 1) {
+          return false;
+        }
+      }
+    }
+    return savedFileChanges == 1;
+  }
+
+  _InlinePatchPresentation? _inlinePatchFor({
+    required String itemKey,
+    required String turnId,
+    required _ResolvedInlineActivity? resolvedActivity,
+  }) {
+    if (!widget.hasDesktopShell ||
+        _detailMode != PresentationDetailMode.commands ||
+        _searchOpen ||
+        turnId.isEmpty ||
+        resolvedActivity == null ||
+        resolvedActivity.segmentKind != _ActivityGroupSegmentKind.fileEdit ||
+        !resolvedActivity.completed ||
+        resolvedActivity.isError ||
+        resolvedActivity.isWarning) {
+      return null;
+    }
+    final snapshot = widget.diffController.snapshot;
+    if (snapshot == null ||
+        snapshot.turnId != turnId ||
+        snapshot.files.isEmpty ||
+        !_isUnambiguousSingleItemTurnPatch(
+          itemKey: itemKey,
+          turnId: turnId,
+          resolvedActivity: resolvedActivity,
+          snapshot: snapshot,
+        )) {
+      return null;
+    }
+    final expanded = _expandedInlinePatchKeys.contains(itemKey);
+    final tooltip = expanded ? 'Hide file diff' : 'Show file diff';
+    return (
+      detail: expanded
+          ? CodexInlinePatchPreviewCard(
+              key: ValueKey('inline-patch-preview-$itemKey'),
+              files: snapshot.files,
+              truncated: snapshot.truncated,
+            )
+          : null,
+      hasInlinePreview: true,
+      previewExpanded: expanded,
+      onTogglePreview: () {
+        setState(() {
+          if (_expandedInlinePatchKeys.contains(itemKey)) {
+            _expandedInlinePatchKeys.remove(itemKey);
+          } else {
+            _expandedInlinePatchKeys.add(itemKey);
+            while (_expandedInlinePatchKeys.length >
+                _maxExpandedInlinePatches) {
+              _expandedInlinePatchKeys.remove(_expandedInlinePatchKeys.first);
+            }
+          }
+        });
+      },
+      previewTooltip: tooltip,
+    );
   }
 
   _CommandOutputPresentation? _commandOutputFor(
@@ -7158,8 +7190,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
         _searchOpen ||
         turnId == null ||
         history.loadingItems ||
-        history.selectedTurnDetailsLoadFailed ||
-        history.turnForId(turnId)?.status != TurnRuntimeStatus.completed) {
+        history.selectedTurnDetailsLoadFailed) {
       return const {};
     }
 
@@ -7216,15 +7247,33 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           items.any((item) => item.id == key.itemId);
     }
 
+    bool containsPatchPreview() => items.any(
+      (item) =>
+          _expandedInlinePatchKeys.contains('saved:${item.turnId}:${item.id}'),
+    );
+
     return _SavedCommandGroup(
       key: ValueKey('saved-command-group-${items.first.id}'),
       label: summary.label,
       iconData: summary.icon,
       itemCount: items.length,
-      initiallyExpanded: containsPreview(),
+      initiallyExpanded: containsPreview() || containsPatchPreview(),
       onCollapse: () {
-        if (containsPreview()) {
-          setState(_clearCommandOutputPreview);
+        final hasOutput = containsPreview();
+        final hasPatch = containsPatchPreview();
+        if (hasOutput || hasPatch) {
+          setState(() {
+            if (hasOutput) {
+              _clearCommandOutputPreview();
+            }
+            if (hasPatch) {
+              for (final item in items) {
+                _expandedInlinePatchKeys.remove(
+                  'saved:${item.turnId}:${item.id}',
+                );
+              }
+            }
+          });
         }
       },
       itemBuilder: (context, index) {
@@ -7247,8 +7296,18 @@ class _ConversationPanelState extends State<_ConversationPanel> {
                   saved: true,
                   rawCommand: item.text,
                   status: item.status,
+                  exitCode: item.exitCode,
                 )
               : null,
+          inlinePatch: _inlinePatchFor(
+            itemKey: 'saved:${item.turnId}:${item.id}',
+            turnId: item.turnId,
+            resolvedActivity: _resolveHistoryInlineActivity(
+              item,
+              inlineActivity: true,
+              detailMode: _detailMode,
+            ),
+          ),
         );
       },
     );
@@ -7291,6 +7350,11 @@ class _ConversationPanelState extends State<_ConversationPanel> {
             if (containsPreview()) {
               _clearCommandOutputPreview();
             }
+            for (final entry in entries) {
+              _expandedInlinePatchKeys.remove(
+                'live:${entry.turnId ?? ''}:${entry.id}',
+              );
+            }
           }
         });
       },
@@ -7311,10 +7375,22 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           rawCommand: entry.text,
           status: entry.status,
           completed: entry.completed,
+          exitCode: entry.exitCode,
         );
         final useInlinePreviewDisclosure =
             widget.hasDesktopShell &&
             (commandOutput?.hasInlinePreview ?? false);
+        final inlinePatch = useInlinePreviewDisclosure
+            ? null
+            : _inlinePatchFor(
+                itemKey: 'live:$liveTurnId:${entry.id}',
+                turnId: liveTurnId,
+                resolvedActivity: resolved,
+              );
+        final useInlinePatchDisclosure =
+            widget.hasDesktopShell &&
+            !useInlinePreviewDisclosure &&
+            (inlinePatch?.hasInlinePreview ?? false);
         return _ConversationEntryView(
           key: ValueKey(entry.id),
           entry: entry,
@@ -7328,17 +7404,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
           trailingAction: useInlinePreviewDisclosure
               ? null
               : commandOutput?.action,
-          activityDetail: commandOutput?.detail,
-          hasActivityDisclosure: useInlinePreviewDisclosure,
-          activityExpanded:
-              useInlinePreviewDisclosure &&
-              (commandOutput?.previewExpanded ?? false),
+          activityDetail: useInlinePatchDisclosure
+              ? inlinePatch?.detail
+              : commandOutput?.detail,
+          hasActivityDisclosure:
+              useInlinePreviewDisclosure || useInlinePatchDisclosure,
+          activityExpanded: useInlinePreviewDisclosure
+              ? (commandOutput?.previewExpanded ?? false)
+              : (useInlinePatchDisclosure &&
+                    (inlinePatch?.previewExpanded ?? false)),
           onToggleActivity: useInlinePreviewDisclosure
               ? commandOutput?.onTogglePreview
-              : null,
+              : (useInlinePatchDisclosure
+                    ? inlinePatch?.onTogglePreview
+                    : null),
           activityDisclosureTooltip: useInlinePreviewDisclosure
               ? commandOutput?.previewTooltip
-              : null,
+              : (useInlinePatchDisclosure ? inlinePatch?.previewTooltip : null),
           turnId: liveTurnId.isEmpty ? null : liveTurnId,
         );
       },
@@ -7351,6 +7433,23 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _expandedLiveActivityGroupIds.removeWhere(
         (id) => !currentIds.contains(id),
       );
+    }
+    if (_expandedInlinePatchKeys.isNotEmpty) {
+      final currentLiveKeys = <String>{
+        for (final entry in widget.controller.entries)
+          'live:${entry.turnId ?? ''}:${entry.id}',
+      };
+      final selectedTurnId = widget.historyController.selectedTurnId;
+      _expandedInlinePatchKeys.removeWhere((key) {
+        if (key.startsWith('live:')) {
+          return !currentLiveKeys.contains(key);
+        }
+        if (key.startsWith('saved:')) {
+          return selectedTurnId == null ||
+              !key.startsWith('saved:$selectedTurnId:');
+        }
+        return true;
+      });
     }
     final key = _commandOutputPreview?.key;
     if (key != null && !key.saved && !_keepsLiveOutputPreview(key)) {
@@ -7476,6 +7575,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
     _activeThreadId = nextThreadId;
     _interruptingQuestion.value = null;
     _expandedLiveActivityGroupIds.clear();
+    _expandedInlinePatchKeys.clear();
     _clearReasoningTimings();
     _clearCommandOutputPreview();
     _showChanges = false;
@@ -7649,6 +7749,7 @@ class _ConversationPanelState extends State<_ConversationPanel> {
       _clearCommandOutputPreview();
       _clearReasoningTimings();
       _expandedLiveActivityGroupIds.clear();
+      _expandedInlinePatchKeys.clear();
       _activeThreadLinkedPrs = null;
       _queuedLinkedPrThreadId = null;
       _linkedPrScanInFlight = false;
@@ -9790,10 +9891,27 @@ class _ActivityContent extends StatelessWidget {
       final verbLength = collapseExpandedCommandCaption
           ? null
           : resolved.verbLength;
+      final hasDiffStats =
+          !resolved.isError &&
+          !resolved.isWarning &&
+          ((resolved.diffAdditions ?? 0) > 0 ||
+              (resolved.diffDeletions ?? 0) > 0);
       return CodexActivityRow(
         summary: summary,
         verbLength: verbLength,
         icon: Icon(resolved.icon, size: 14),
+        accessory: hasDiffStats
+            ? CodexInlineDiffStatsAccessory(
+                additions: resolved.diffAdditions ?? 0,
+                deletions: resolved.diffDeletions ?? 0,
+              )
+            : null,
+        accessorySemanticLabel: hasDiffStats
+            ? CodexInlineDiffStatsAccessory.semanticLabelFor(
+                resolved.diffAdditions ?? 0,
+                resolved.diffDeletions ?? 0,
+              )
+            : null,
         statusText: resolved.statusBadge,
         isRunning: !entry.completed,
         isError: resolved.isError,

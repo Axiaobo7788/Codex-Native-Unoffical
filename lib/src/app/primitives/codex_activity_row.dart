@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../domain/diff_models.dart';
 import '../theme/official_codex_theme.dart';
 import 'codex_button.dart';
 import 'codex_tooltip.dart';
@@ -20,6 +21,8 @@ class CodexActivityRow extends StatelessWidget {
     required this.summary,
     this.verbLength,
     this.icon,
+    this.accessory,
+    this.accessorySemanticLabel,
     this.statusText,
     this.isRunning = false,
     this.isError = false,
@@ -38,6 +41,8 @@ class CodexActivityRow extends StatelessWidget {
   final String summary;
   final int? verbLength;
   final Widget? icon;
+  final Widget? accessory;
+  final String? accessorySemanticLabel;
   final String? statusText;
   final bool isRunning;
   final bool isError;
@@ -67,6 +72,8 @@ class CodexActivityRow extends StatelessWidget {
             ? theme.warning
             : theme.activitySummaryText,
         hoverPromotesToPrimary: !isError,
+        accessory: accessory,
+        accessorySemanticLabel: accessorySemanticLabel,
         statusText: statusText,
         hasDisclosure: hasDisclosure,
         isExpanded: isExpanded,
@@ -221,6 +228,8 @@ class CodexInlineActivityHeader extends StatefulWidget {
     this.restingTextColor,
     this.restingIconColor,
     this.hoverPromotesToPrimary = true,
+    this.accessory,
+    this.accessorySemanticLabel,
     this.statusText,
     this.hasDisclosure = false,
     this.isExpanded = false,
@@ -235,6 +244,8 @@ class CodexInlineActivityHeader extends StatefulWidget {
   final Color? restingTextColor;
   final Color? restingIconColor;
   final bool hoverPromotesToPrimary;
+  final Widget? accessory;
+  final String? accessorySemanticLabel;
   final String? statusText;
   final bool hasDisclosure;
   final bool isExpanded;
@@ -323,6 +334,10 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
                 effectiveTextColor: effectiveTextColor,
               ),
         ),
+        if (widget.accessory != null) ...[
+          const SizedBox(width: OfficialCodexTheme.activityInlineChevronGap),
+          widget.accessory!,
+        ],
         if (hasStatus) ...[
           const SizedBox(width: 8.0),
           Flexible(
@@ -362,9 +377,13 @@ class _CodexInlineActivityHeaderState extends State<CodexInlineActivityHeader> {
     }
 
     final isEnabled = widget.isInteractiveEnabled;
-    final semanticLabel = hasStatus
-        ? '${widget.label}, ${widget.statusText!}'
-        : widget.label;
+    final semanticParts = <String>[
+      widget.label,
+      if (widget.accessorySemanticLabel case final acc? when acc.isNotEmpty)
+        acc,
+      if (hasStatus) widget.statusText!,
+    ];
+    final semanticLabel = semanticParts.join(', ');
     Widget trigger = Semantics(
       container: true,
       button: true,
@@ -1467,6 +1486,367 @@ class _CodexShellExecutionCardState extends State<CodexShellExecutionCard> {
       Text('Success', style: footerStyle),
     ],
   );
+}
+
+/// Inline `+A -D` diff stats accessory (`225284.O3Io.ap` + `x8co`
+/// `variant: "agent-activity"`, placed in the `152406.jKy0.A` accessory slot).
+class CodexInlineDiffStatsAccessory extends StatelessWidget {
+  const CodexInlineDiffStatsAccessory({
+    super.key,
+    required this.additions,
+    required this.deletions,
+  });
+
+  final int additions;
+  final int deletions;
+
+  static String? semanticLabelFor(int additions, int deletions) {
+    final parts = <String>[
+      if (additions > 0) '+$additions',
+      if (deletions > 0) '-$deletions',
+    ];
+    return parts.isEmpty ? null : parts.join(' ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (additions <= 0 && deletions <= 0) {
+      return const SizedBox.shrink();
+    }
+    final theme = OfficialCodexTheme.of(context);
+    const baseStyle = TextStyle(
+      fontSize: OfficialCodexTheme.chatCodeFontSize,
+      height: OfficialCodexTheme.activityChatLineHeight,
+      fontWeight: FontWeight.w400,
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (additions > 0)
+          Text(
+            '+$additions',
+            maxLines: 1,
+            style: baseStyle.copyWith(color: theme.diffAddedText),
+          ),
+        if (additions > 0 && deletions > 0) const SizedBox(width: 4.0),
+        if (deletions > 0)
+          Text(
+            '-$deletions',
+            maxLines: 1,
+            style: baseStyle.copyWith(color: theme.diffRemovedText),
+          ),
+      ],
+    );
+  }
+}
+
+/// Bounded inline patch preview card (`225284.O3Io.af` / `ag`, `max-h-60` =
+/// `240px`) disclosed beneath an inline `Edited a file` / `Edited N files`
+/// activity row when the active `DiffSnapshot` matches the row's `turnId`.
+class CodexInlinePatchPreviewCard extends StatelessWidget {
+  const CodexInlinePatchPreviewCard({
+    super.key,
+    required this.files,
+    this.truncated = false,
+  });
+
+  static const double maxViewportHeight = 240.0;
+  static const int maxRenderedLinesPerFile = 80;
+
+  final List<DiffFile> files;
+  final bool truncated;
+
+  @override
+  Widget build(BuildContext context) {
+    if (files.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final theme = OfficialCodexTheme.of(context);
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(
+        start:
+            OfficialCodexTheme.activityInlineIconSize +
+            OfficialCodexTheme.activityInlineIconGap,
+        top: 6.0,
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: maxViewportHeight),
+        child: files.length == 1 && !truncated
+            ? _SingleFilePatchCard(file: files.single, expandBodyScroll: true)
+            : ListView.separated(
+                key: const ValueKey('inline-patch-files-scroll'),
+                primary: false,
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: files.length + (truncated ? 1 : 0),
+                separatorBuilder: (_, _) => const SizedBox(height: 6.0),
+                itemBuilder: (context, index) {
+                  if (index >= files.length) {
+                    return Text(
+                      'Showing bounded diff preview',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: OfficialCodexTheme.chatCodeFontSize,
+                        height: OfficialCodexTheme.activityChatLineHeight,
+                        color: theme.textMuted,
+                      ),
+                    );
+                  }
+                  return _SingleFilePatchCard(
+                    file: files[index],
+                    expandBodyScroll: false,
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _SingleFilePatchCard extends StatefulWidget {
+  const _SingleFilePatchCard({
+    required this.file,
+    required this.expandBodyScroll,
+  });
+
+  final DiffFile file;
+  final bool expandBodyScroll;
+
+  @override
+  State<_SingleFilePatchCard> createState() => _SingleFilePatchCardState();
+}
+
+class _SingleFilePatchCardState extends State<_SingleFilePatchCard> {
+  bool _hovered = false;
+  bool _copyFocused = false;
+  bool _copied = false;
+  Timer? _copiedResetTimer;
+
+  @override
+  void dispose() {
+    _copiedResetTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleCopyDiff() async {
+    final payload = widget.file.lines.isEmpty
+        ? widget.file.path
+        : widget.file.lines.join('\n');
+    try {
+      await Clipboard.setData(ClipboardData(text: payload));
+    } on Object {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    _copiedResetTimer?.cancel();
+    setState(() => _copied = true);
+    _copiedResetTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OfficialCodexTheme.of(context);
+    final file = widget.file;
+    final visibleLines =
+        file.lines.length > CodexInlinePatchPreviewCard.maxRenderedLinesPerFile
+        ? file.lines.sublist(
+            0,
+            CodexInlinePatchPreviewCard.maxRenderedLinesPerFile,
+          )
+        : file.lines;
+    final isTruncated =
+        file.truncated ||
+        file.lines.length > CodexInlinePatchPreviewCard.maxRenderedLinesPerFile;
+    const codeStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: OfficialCodexTheme.chatCodeFontSize,
+      height: 1.45,
+    );
+
+    Widget buildLine(String line) {
+      final isAdd = line.startsWith('+') && !line.startsWith('+++');
+      final isDel = line.startsWith('-') && !line.startsWith('---');
+      final isHunk = line.startsWith('@@');
+      final bg = isAdd
+          ? theme.diffAddedFill
+          : isDel
+          ? theme.diffRemovedFill
+          : Colors.transparent;
+      final fg = isAdd
+          ? theme.diffAddedText
+          : isDel
+          ? theme.diffRemovedText
+          : isHunk
+          ? theme.textMuted
+          : theme.textSecondary;
+      return ColoredBox(
+        color: bg,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 1.0),
+          child: Text(
+            line.isEmpty ? ' ' : line,
+            softWrap: false,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: codeStyle.copyWith(color: fg),
+          ),
+        ),
+      );
+    }
+
+    final Widget body;
+    if (visibleLines.isEmpty) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+        child: Text(
+          'No line preview available',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: codeStyle.copyWith(color: theme.textMuted),
+        ),
+      );
+    } else if (widget.expandBodyScroll) {
+      body = Flexible(
+        child: ListView.builder(
+          key: ValueKey('inline-patch-lines-${file.path}'),
+          primary: false,
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          itemCount: visibleLines.length + (isTruncated ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= visibleLines.length) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10.0,
+                  vertical: 2.0,
+                ),
+                child: Text(
+                  'Showing bounded diff preview',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: codeStyle.copyWith(color: theme.textMuted),
+                ),
+              );
+            }
+            return buildLine(visibleLines[index]);
+          },
+        ),
+      );
+    } else {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final line in visibleLines) buildLine(line),
+            if (isTruncated)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10.0,
+                  vertical: 2.0,
+                ),
+                child: Text(
+                  'Showing bounded diff preview',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: codeStyle.copyWith(color: theme.textMuted),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.elevatedSurface,
+          borderRadius: BorderRadius.circular(8.0),
+          border: Border.all(
+            color: theme.hairlineBorder,
+            width: OfficialCodexTheme.hairlineBorderWidth,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10.0,
+                vertical: 4.0,
+              ),
+              decoration: BoxDecoration(
+                color: theme.hoverTint,
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.hairlineBorder,
+                    width: OfficialCodexTheme.hairlineBorderWidth,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: CodexTooltip(
+                            message: file.path,
+                            child: Text(
+                              file.path,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: codeStyle.copyWith(
+                                color: theme.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (file.additions > 0 || file.deletions > 0) ...[
+                          const SizedBox(width: 6.0),
+                          CodexInlineDiffStatsAccessory(
+                            additions: file.additions,
+                            deletions: file.deletions,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6.0),
+                  _ShellHoverCopyIconButton(
+                    key: ValueKey('inline-patch-copy-${file.path}'),
+                    tooltip: _copied ? 'Copied' : 'Copy diff',
+                    visible: _hovered || _copyFocused || _copied,
+                    copied: _copied,
+                    onFocusChanged: (focused) {
+                      if (_copyFocused != focused) {
+                        setState(() => _copyFocused = focused);
+                      }
+                    },
+                    onPressed: () => unawaited(_handleCopyDiff()),
+                  ),
+                ],
+              ),
+            ),
+            body,
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ShellHoverCopyIconButton extends StatefulWidget {
