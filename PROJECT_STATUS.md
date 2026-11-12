@@ -106,8 +106,8 @@ permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Main/origin remain `ba6f27c` (clean at the latest fetch); the isolated combined
-  branch now preserves approvals `c2b5a64`/`474ec93`, Gemini U8 `6f196cee`,
+- Main/origin now include integrated `0e2a5b8`; exact hostedCI43203383623
+  passes verify/macOS/Windows. The combined provenance preserves approvals `c2b5a64`/`474ec93`, Gemini U8 `6f196cee`,
   clipboard `571a656`, conservative aggregate removal `4a8f83a`, and Track F
   statistics `ac47002` through ordinary merges. Last production merge:
   `1f20a78a16496cbaa7fcee24b2a49a3853b9ff61`. Git is canonical for actual HEAD.
@@ -161,8 +161,8 @@ permission to lower the engineering or visual quality bar.
   retirement pass. Frozen binary hashes remain identical after use. The first
   synthetic Home Return did not submit; explicit Send followed. That input
   observation stays recorded rather than being called keyboard-parity proof.
-- Final main integration and its exact hosted CI remain pending. These local/
-  controlled-model results do not establish Human acceptance, managed-network
+- Main0e2a5b8 exact [CI43203383623](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43203383623)
+  passes all three jobs. These local/controlled-model results do not establish Human acceptance, managed-network
   emission or live provider-account use. Rust source is unchanged in this
   checkpoint; no new local Clippy/full-Rust run is inferred.
 - Previous shared recovery source55dcf16 passed 689 default cases/five skips,
@@ -174,6 +174,24 @@ permission to lower the engineering or visual quality bar.
 - Source7d settings/provider/Shell results remain in the [earlier checkpoint](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
   Earlier real runtime, fixture, APT and Unicode-path LSP negatives remain
   preserved. ASCII-path gates do not establish that the Unicode-path bug is fixed.
+
+## Active next file-diff sub-slice
+
+Root owns Host/protocol/domain/controller surfaces in
+`agent/codex-file-change-item`; Gemini owns U9 official per-file evidence and
+presentation in its isolated worktree. Root retains the exclusive heavy lease.
+The Host now spools exact FileUpdateChange bodies and emits opaque descriptors
+plus key-order-independent metrics; direct/raw and read-only Remote summaries
+remain compatible.108 Rust/Clippy and46 protocol/analysis0/pure69 gates pass.
+An old/new Host-process fixture preserves the old8MiB fatal rejection and new
+9MiB ->407-byte sanitized event +96-byte range read. Separate public/installed
+real-stock small-file statistics/session probes pass with the new Host.
+[Evidence](docs/reverse/FILE_DIFF_HOST_SPOOL_EVIDENCE.md).
+
+This is an isolated implemented Host sub-slice, not main or UI completion.
+Typed per-file metadata, lifecycle retirement, explicit bounded preview and U9
+binding remain ACTIVE; peer review and combined future gates are pending.
+Golden A7 and the larger Desktop F+U phase remain PARTIAL/SELF_ITERATION.
 
 ## Current architecture truth
 

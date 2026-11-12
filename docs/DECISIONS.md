@@ -2910,3 +2910,32 @@ prefixes and escape explicitly advertised argument text for inspection while
 preserving the actual response payload. The70-case correction gate and eight
 real stock command/file approval cases are recorded in the evidence packet;
 combined UI/source and peer reinspection remain separate integration gates.
+
+
+## ADR-065 — Spool per-item file diffs before the Flutter boundary
+
+**Status:** Accepted (Host boundary; metadata/UI integration remains active)
+
+**Date:** 2026-11-12
+
+FileUpdateChange.diff can exceed the Host's8MiB sanitized-message cap and, below
+that cap, would still be decoded into a full Dart string before a preview limit.
+Use the existing spool/read-range capability for exact typed item/changes and
+patchUpdated paths. Preserve the stock harness and all opaque tool/approval data.
+
+Keep diff a string (`""`) and add `_codexNativeFileDiff` with the existing opaque
+output descriptor plus parallel raw-content/unified-hunk line metrics. Measure
+with an11-byte prefix during streaming decode so JSON key order, escapes and
+chunk boundaries do not affect counts. Select metrics by kind in Dart; do not
+retain eager preview bodies in history/live entries. Do not raise the forward
+cap, add a second storage service, or expand Remote capabilities.
+
+The store retains its existing byte/object quotas, hash dedup, candidate rollback
+and session lifetime. Before UI binding, retire any retained file references on
+runtime invalidation, fence pending readers, and provide explicit unavailable/
+truncated states. New views must request bounded per-file content only on user
+expansion and may not substitute aggregate turn diffs. Direct-stock compatibility
+keeps bounded raw parsing; whole-item fallback limitations remain explicit.
+
+[Source, old/new failure comparison and separate actual stock probes](reverse/FILE_DIFF_HOST_SPOOL_EVIDENCE.md)
+record what is implemented and the remaining typed/lifecycle/presentation work.

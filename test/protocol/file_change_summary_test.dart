@@ -60,6 +60,33 @@ void main() {
       ],
       'File changes: 1 update(s)',
     ),
+    for (final kind in ['add', 'delete', 'update'])
+      'Host-spooled $kind uses full streaming statistics without raw content': (
+        [
+          {
+            'path': '/project/spooled.txt',
+            'kind': {'type': kind},
+            'diff': '',
+            '_codexNativeFileDiff': {
+              'ref': 'opaque-session-file-diff',
+              'bytes': 9000000,
+              'storedBytes': 64,
+              'truncated': true,
+              'available': true,
+              'lineStats': {
+                'contentLines': 3000000,
+                'additions': 17,
+                'deletions': 9,
+              },
+            },
+          },
+        ],
+        switch (kind) {
+          'add' => 'File changes: 1 update(s) (+3000000 -0)',
+          'delete' => 'File changes: 1 update(s) (+0 -3000000)',
+          _ => 'File changes: 1 update(s) (+17 -9)',
+        },
+      ),
   };
 
   for (final entry in cases.entries) {

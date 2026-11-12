@@ -1,5 +1,6 @@
 mod config;
 mod events;
+mod file_diff_metrics;
 mod json_string;
 mod remote_bridge;
 mod remote_pairing_invitation;

@@ -29,6 +29,32 @@ String fileChangeSummary(Object? rawChanges) {
         ? rawKind['type']
         : null;
     if (kind != 'add' && kind != 'delete' && kind != 'update') return caption;
+    final nativeDiff = entry['_codexNativeFileDiff'];
+    if (nativeDiff is Map<String, Object?>) {
+      final stats = nativeDiff['lineStats'];
+      if (stats is! Map<String, Object?>) return caption;
+      final contentLines = _nonnegativeInt(stats['contentLines']);
+      final patchAdd = _nonnegativeInt(stats['additions']);
+      final patchDelete = _nonnegativeInt(stats['deletions']);
+      if (contentLines == null || patchAdd == null || patchDelete == null) {
+        return caption;
+      }
+      additions +=
+          explicitAdd ??
+          (kind == 'add'
+              ? contentLines
+              : kind == 'delete'
+              ? 0
+              : patchAdd);
+      deletions +=
+          explicitDelete ??
+          (kind == 'delete'
+              ? contentLines
+              : kind == 'add'
+              ? 0
+              : patchDelete);
+      continue;
+    }
     final diff = entry['diff'];
     if (diff is! String ||
         diff.length > 256 * 1024 ||

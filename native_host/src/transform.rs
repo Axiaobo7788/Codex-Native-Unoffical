@@ -1,6 +1,7 @@
 use crate::events::{
     AppServerRemoteNotification, AppServerRemoteObservation, AppServerRemoteResponse,
 };
+use crate::file_diff_metrics::FileDiffMetrics;
 use crate::json_string::JsonStringDecoder;
 use crate::spool::{CandidateFile, OutputSpool, SpoolStore};
 use json_skimmer::{Event, Mode, Parser, StringKind};
@@ -123,6 +124,8 @@ enum PathStep {
     Items,
     Item,
     Output,
+    Changes,
+    Diff,
 }
 
 impl PathStep {
@@ -138,6 +141,8 @@ impl PathStep {
             b"items" => Self::Items,
             b"item" => Self::Item,
             TARGET_KEY => Self::Output,
+            b"changes" => Self::Changes,
+            b"diff" => Self::Diff,
             _ => Self::Opaque,
         }
     }
@@ -151,7 +156,7 @@ struct Container {
 // A direct ThreadItem field at these stock v2 paths is command output.
 // The schema reserves it to commandExecution, regardless of key order.
 // An identically named field in an opaque result or argument stays untouched.
-const COMMAND_ITEM_PATHS: &[&[PathStep]] = {
+const THREAD_ITEM_PATHS: &[&[PathStep]] = {
     use PathStep::*;
     &[
         &[Params, Item],
@@ -285,12 +290,18 @@ impl<'a> Processor<'a> {
                                 Some(BoundedStringCollector::new(MAX_REMOTE_METHOD_BYTES));
                         }
                         let key = std::mem::replace(&mut self.pending_path_key, PathStep::Opaque);
-                        if key == PathStep::Output && self.is_command_item_path() {
-                            self.candidate_mut()?.write_all(b"null")?;
+                        let file_diff = key == PathStep::Diff && self.is_file_change_path();
+                        if (key == PathStep::Output && self.is_thread_item_path()) || file_diff {
+                            self.candidate_mut()?.write_all(if file_diff {
+                                b"\"\""
+                            } else {
+                                b"null"
+                            })?;
                             self.cursor = offset + 1;
                             self.active_output = Some(ActiveOutput {
                                 decoder: JsonStringDecoder::default(),
                                 spool: self.store.start_output(),
+                                file_diff_metrics: file_diff.then(FileDiffMetrics::default),
                             });
                         }
                     }
@@ -315,9 +326,12 @@ impl<'a> Processor<'a> {
                     }
                     self.copy_until(offset, input, base)?;
                     let active = self.active_output.as_mut().expect("checked above");
-                    active
-                        .decoder
-                        .feed(bytes, |decoded| active.spool.write_decoded(decoded))?;
+                    active.decoder.feed(bytes, |decoded| {
+                        if let Some(metrics) = active.file_diff_metrics.as_mut() {
+                            metrics.feed(decoded);
+                        }
+                        active.spool.write_decoded(decoded)
+                    })?;
                     self.cursor = offset + bytes.len() as u64;
                 }
                 StringKind::Value => {
@@ -359,9 +373,16 @@ impl<'a> Processor<'a> {
                     if descriptor.newly_stored {
                         self.created_outputs.push(descriptor.clone());
                     }
-                    self.candidate_mut()?
-                        .write_all(b",\"_codexNativeOutput\":")?;
-                    serde_json::to_writer(self.candidate_mut()?, &descriptor.to_wire_value())?;
+                    let mut wire = descriptor.to_wire_value();
+                    if let Some(metrics) = active.file_diff_metrics {
+                        wire["lineStats"] = metrics.finish();
+                        self.candidate_mut()?
+                            .write_all(b",\"_codexNativeFileDiff\":")?;
+                    } else {
+                        self.candidate_mut()?
+                            .write_all(b",\"_codexNativeOutput\":")?;
+                    }
+                    serde_json::to_writer(self.candidate_mut()?, &wire)?;
                 }
                 StringKind::Value => {
                     self.finish_active_id();
@@ -459,11 +480,34 @@ impl<'a> Processor<'a> {
         Ok(())
     }
 
-    fn is_command_item_path(&self) -> bool {
-        COMMAND_ITEM_PATHS.iter().any(|path| {
+    fn is_thread_item_path(&self) -> bool {
+        THREAD_ITEM_PATHS.iter().any(|path| {
             self.containers
                 .iter()
                 .skip(1)
+                .map(|container| container.step)
+                .eq(path.iter().copied())
+        })
+    }
+
+    // Only FileUpdateChange.diff at schema-reserved ThreadItem/changes paths,
+    // plus the stable patchUpdated params.changes path, is a file diff. Nested
+    // MCP results/arguments and approval fileChanges maps stay opaque.
+    fn is_file_change_path(&self) -> bool {
+        let depth = self.containers.len();
+        if depth < 4
+            || self.containers[depth - 2].step != PathStep::Changes
+            || self.containers[depth - 1].step != PathStep::Element
+        {
+            return false;
+        }
+        let prefix = &self.containers[1..depth - 2];
+        if prefix.len() == 1 && prefix[0].step == PathStep::Params {
+            return true;
+        }
+        THREAD_ITEM_PATHS.iter().any(|path| {
+            prefix
+                .iter()
                 .map(|container| container.step)
                 .eq(path.iter().copied())
         })
@@ -548,6 +592,7 @@ fn is_remote_notification(method: &str) -> bool {
 struct ActiveOutput<'a> {
     decoder: JsonStringDecoder,
     spool: OutputSpool<'a>,
+    file_diff_metrics: Option<FileDiffMetrics>,
 }
 
 #[derive(Default)]
@@ -685,6 +730,149 @@ mod tests {
     fn transformed_item(output: &[u8]) -> Value {
         let line = std::str::from_utf8(output).unwrap().trim();
         serde_json::from_str::<Value>(line).unwrap()["result"]["data"][0]["item"].clone()
+    }
+
+    #[test]
+    fn spools_file_diffs_at_typed_item_paths_without_changing_kind_or_path() {
+        use serde_json::json;
+        let fixture = Fixture::new(1024, 4096);
+        let content = "- bullet\r\n+literal\r\n\r\n";
+        let item = || {
+            json!({"type":"fileChange", "id":"i", "status":"completed", "changes":[{
+                "diff":content, "kind":{"type":"add"}, "path":"/project/notes.md"
+            }]})
+        };
+        for (value, path) in [
+            (json!({"params":{"item":item()}}), "/params/item"),
+            (
+                json!({"params":{"turn":{"items":[item()]}}}),
+                "/params/turn/items/0",
+            ),
+            (
+                json!({"params":{"thread":{"turns":[{"items":[item()]}]}}}),
+                "/params/thread/turns/0/items/0",
+            ),
+            (
+                json!({"result":{"data":[{"item":item()}]}}),
+                "/result/data/0/item",
+            ),
+            (
+                json!({"result":{"data":[{"items":[item()]}]}}),
+                "/result/data/0/items/0",
+            ),
+            (
+                json!({"result":{"data":[{"turns":[{"items":[item()]}]}]}}),
+                "/result/data/0/turns/0/items/0",
+            ),
+            (
+                json!({"result":{"data":[{"thread":{"turns":[{"items":[item()]}]}}]}}),
+                "/result/data/0/thread/turns/0/items/0",
+            ),
+            (
+                json!({"result":{"turn":{"items":[item()]}}}),
+                "/result/turn/items/0",
+            ),
+            (
+                json!({"result":{"thread":{"turns":[{"items":[item()]}]}}}),
+                "/result/thread/turns/0/items/0",
+            ),
+            (
+                json!({"result":{"initialTurnsPage":{"data":[{"items":[item()]}]}}}),
+                "/result/initialTurnsPage/data/0/items/0",
+            ),
+        ] {
+            let input = serde_json::to_vec(&value).unwrap();
+            for size in [1, 17, input.len()] {
+                let output = fixture.transform(&input, size).unwrap();
+                let parsed: Value = serde_json::from_slice(&output).unwrap();
+                let change = parsed.pointer(&format!("{path}/changes/0")).unwrap();
+                assert_eq!(change["diff"], "");
+                assert_eq!(change["kind"]["type"], "add");
+                assert_eq!(change["path"], "/project/notes.md");
+                let descriptor = &change["_codexNativeFileDiff"];
+                assert_eq!(
+                    descriptor["lineStats"],
+                    json!({"contentLines":3,"additions":1,"deletions":1})
+                );
+                let stored = fixture
+                    .store
+                    .read_range(descriptor["ref"].as_str().unwrap(), 0, 1024)
+                    .unwrap();
+                assert_eq!(stored.bytes, content.as_bytes());
+            }
+        }
+        // All paths/fragments point to the same content-addressed object.
+        assert_eq!(fixture.store.stored_output_count(), 1);
+    }
+
+    #[test]
+    fn patch_updated_escaped_hunks_work_with_method_and_kind_after_diff() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"params":{"changes":[{"diff":"--- a/f\n+++ b/f\n@@ -1 +1 @@\n\u002d\u002dold\n\u002b\u002bnew\n","kind":{"type":"update","move_path":null},"path":"f"}],"threadId":"t","turnId":"u","itemId":"i"},"method":"item/fileChange/patchUpdated"}
+"#;
+        for size in 1..=input.len() {
+            let output = fixture.transform(input, size).unwrap();
+            let parsed: Value = serde_json::from_slice(&output).unwrap();
+            let change = &parsed["params"]["changes"][0];
+            assert_eq!(change["diff"], "");
+            assert_eq!(
+                change["_codexNativeFileDiff"]["lineStats"],
+                serde_json::json!({"contentLines":5,"additions":1,"deletions":1})
+            );
+        }
+    }
+
+    #[test]
+    fn file_spooling_preserves_aggregate_approval_and_opaque_tool_payloads() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"method":"turn/diff/updated","params":{"diff":"aggregate remains unchanged"}}
+{"method":"applyPatchApproval","params":{"fileChanges":{"f":{"type":"update","unified_diff":"approval body"}}}}
+{"method":"item/completed","params":{"item":{"type":"mcpToolCall","arguments":{"changes":[{"diff":"argument"}]},"result":{"structuredContent":{"changes":[{"diff":"result"}]}}}}}
+"#;
+        for size in [1, 19, input.len()] {
+            assert_eq!(fixture.transform(input, size).unwrap(), input);
+        }
+        assert_eq!(fixture.store.stored_output_count(), 0);
+    }
+
+    #[test]
+    fn large_file_body_is_spooled_before_forward_limit_and_remote_capture() {
+        let fixture = Fixture::new(64, 1024);
+        let lines = 3 * 1024 * 1024;
+        let input = serde_json::to_vec(&serde_json::json!({
+            "id":"codex-remote:session:1",
+            "result":{"data":[{"item":{"type":"fileChange","changes":[{
+                "diff":"-a\n".repeat(lines),"kind":{"type":"add"},"path":"large.md"
+            }]}}]}
+        }))
+        .unwrap();
+        assert!(input.len() > 8 * 1024 * 1024);
+        let (output, remote) = fixture.transform_with_remote(&input, 16 * 1024).unwrap();
+        assert!(output.is_empty());
+        let AppServerRemoteObservation::Response(response) = &remote[0] else {
+            panic!("response expected")
+        };
+        let payload = response.payload.as_ref().unwrap();
+        assert!(payload.len() < 1024);
+        let parsed: Value = serde_json::from_slice(payload).unwrap();
+        let change = &parsed["result"]["data"][0]["item"]["changes"][0];
+        assert_eq!(change["diff"], "");
+        let descriptor = &change["_codexNativeFileDiff"];
+        assert_eq!(descriptor["bytes"], (lines * 3) as u64);
+        assert_eq!(descriptor["storedBytes"], 64);
+        assert_eq!(descriptor["truncated"], true);
+        assert_eq!(descriptor["lineStats"]["contentLines"], lines as u64);
+        assert_eq!(fixture.store.stored_bytes(), 64);
+    }
+
+    #[test]
+    fn malformed_file_candidate_rolls_back_its_new_output() {
+        let fixture = Fixture::new(1024, 4096);
+        let input = br#"{"result":{"data":[{"item":{"type":"fileChange","changes":[{"diff":"temporary","kind":{"type":"add"},"invalid":]}}]}}
+"#;
+        assert!(fixture.transform(input, 1).is_err());
+        assert_eq!(fixture.store.stored_output_count(), 0);
+        assert_eq!(fixture.store.stored_bytes(), 0);
     }
 
     #[test]
