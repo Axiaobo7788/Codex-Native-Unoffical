@@ -1,6 +1,7 @@
 import '../domain/history_models.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
+import 'file_change_summary.dart';
 import 'jsonl_decoder.dart';
 import 'output_protocol.dart';
 import 'protocol_models.dart';
@@ -434,7 +435,7 @@ final class HistoryProtocolAdapter {
         id: id,
         turnId: turnId,
         kind: HistoryItemKind.activity,
-        text: _fileChangeSummary(value['changes']),
+        text: fileChangeSummary(value['changes']),
         status: _optionalString(value, 'status'),
       ),
       'mcpToolCall' => HistoryItem(
@@ -509,46 +510,6 @@ final class HistoryProtocolAdapter {
     };
   }
 
-  static String _fileChangeSummary(Object? rawChanges) {
-    final count = _listLength(rawChanges);
-    final stats = _diffLineStats(rawChanges);
-    if (stats.additions == 0 && stats.deletions == 0) {
-      return 'File changes: $count update(s)';
-    }
-    return 'File changes: $count update(s) (+${stats.additions} -${stats.deletions})';
-  }
-
-  static ({int additions, int deletions}) _diffLineStats(Object? rawChanges) {
-    if (rawChanges is! List<Object?>) {
-      return (additions: 0, deletions: 0);
-    }
-    var additions = 0;
-    var deletions = 0;
-    for (final entry in rawChanges.whereType<Map<String, Object?>>()) {
-      final entryAdditions = entry['additions'];
-      final entryDeletions = entry['deletions'];
-      if (entryAdditions is int && entryAdditions >= 0) {
-        additions += entryAdditions;
-      }
-      if (entryDeletions is int && entryDeletions >= 0) {
-        deletions += entryDeletions;
-      }
-      if (entryAdditions is! int && entryDeletions is! int) {
-        final diff = entry['diff'];
-        if (diff is String && diff.isNotEmpty) {
-          for (final line in diff.split('\n')) {
-            if (line.startsWith('+') && !line.startsWith('+++')) {
-              additions += 1;
-            } else if (line.startsWith('-') && !line.startsWith('---')) {
-              deletions += 1;
-            }
-          }
-        }
-      }
-    }
-    return (additions: additions, deletions: deletions);
-  }
-
   static String _planSummary(JsonObject value) {
     final text = (_optionalString(value, 'text') ?? '').trim();
     if (text.isNotEmpty) {
@@ -594,9 +555,6 @@ final class HistoryProtocolAdapter {
     }
     return '${value.substring(0, end)}…';
   }
-
-  static int _listLength(Object? value) =>
-      value is List<Object?> ? value.length : 0;
 
   static String _requiredString(JsonObject object, String key) {
     final value = object[key];
