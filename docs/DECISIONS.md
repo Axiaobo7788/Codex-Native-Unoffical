@@ -2856,3 +2856,40 @@ model for the current measurement terminology.
   physical Windows/macOS behavior or an official automatic-recovery contract.
   Preserve the first packaged session-only-ID failure and later correction
   evidence separately. See [recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md).
+
+## ADR-064 — Keep approval choices scoped to the stock request
+
+**Status:** Accepted
+
+**Date:** 2026-11-12
+
+The stable command/file response vocabulary is wider than the client previously
+exposed. The experimental `availableDecisions` request field is a separate
+support boundary: an ordinary command must not acquire reusable consent merely
+because a response schema defines it. Public fallback rules and current25894
+component evidence distinguish proposed command rules, network scope, file-session
+approval, ordinary refusal and turn cancellation.
+
+- Keep the existing gateway signature and one-time/reject constants. Carry
+  immutable typed offered choices through the existing bounded dispatcher and
+  controller; widgets do not receive RPC maps.
+- A structured rule can be resolved only with the exact object offered for the
+  currently pending request. Preserve the stock prefix/host/action; never replace
+  it with the model's suggested prefix or a broader client-authored rule. Bound
+  choice count and payload sizes within the existing32-pending-request cap.
+- Respect explicit choices for positive consent. Compatibility fallback derives
+  only stock-backed context/proposals; human checkpoints receive no reusable
+  grant. Legacy and unsupported permission paths gain no additional approval.
+- Preserve stable decline independently of grant choices, matching the official
+  deny callback. Cancellation remains a distinct explicit action that stops the
+  turn. Rule persistence and future authorization belong to stock, not a second
+  client-side approval cache.
+- Guard UI choice callbacks by exact pending-request identity as well as the
+  existing runtime-generation fences. Keep bounded scrolling details and the
+  existing single-row action composition.
+
+Public/installed stock probes verify exact-rule persistence, the identical next
+command executing after only one approval, and independent cancellation returning
+interrupted without executing the command. Specific file-session/network emission,
+packaged visual capture, peer audit and shared integration gates remain separately
+tracked in [approval evidence](reverse/APPROVAL_CHOICES_EVIDENCE.md).

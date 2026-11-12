@@ -13,6 +13,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../domain/approval_models.dart';
 import '../domain/chat_conversation_dag.dart';
 import '../domain/diff_models.dart';
 import '../domain/ecosystem_gateway.dart';

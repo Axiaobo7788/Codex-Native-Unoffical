@@ -110,8 +110,9 @@ permission to lower the engineering or visual quality bar.
   a normal merge preserving Codex recovery5e08cfe/3d68ebe, Gemini U7
   44a8809, calibrated peer audits3c18450/5746b8e, Codex visible replacement
   failure/retry507cbc7 and Gemini bounded Back/Forward reconciliation4122c37.
-  All owner branches are pushed. Main integration and exact final-HEAD hosted
-  CI are the current checkpoint steps; Git remains canonical for actual HEAD.
+  All owner branches and main are pushed: normal fast-forward mainba6f27c
+  preserves both owners. Its exact hosted CI passes; Git remains canonical
+  for actual HEAD and worktree state.
 - The scoped local recovery flow now has combined machine and packaged stock
   verification. One editor/draft/attachment state stays mounted; stale async
   operations, requests and Host references retire; reconnect performs reads
@@ -120,10 +121,22 @@ permission to lower the engineering or visual quality bar.
   at700px, retry retains the draft, and Back/Forward follows the replacement.
 - Codex has read the actual navigation diff and tests with no blocking finding.
   Gemini's39 targeted cases/pure68/format/strict analysis pass. Both peers have
-  released these write surfaces. No owned real-use/compiler workers remain.
-- Proposed next independent pair: Codex audits advertised session approval
-  choices; Gemini continues evidenced A7 saved/live activity and non-Shell rows.
-  Confirm the exact next writable surfaces through official agy before writing.
+  released these recovery write surfaces. Their real-use workers all exited.
+- Active next pair, agreed through official agy: Codex owns typed approval
+  decisions/protocol/controller, only `_ApprovalBanner` and its one library import,
+  and dedicated tests in `agent/codex-approval-choices`. Gemini owns U8 A7
+  saved/live activity, non-Shell rows, the rest of the output/activity presentation,
+  conversation presentation and its dedicated test in
+  `agent/gemini-golden-ui-u8-a7-hierarchy`. The overlapping file is split at the
+  explicit class boundary; neither writes the other's region.
+- Approval choice code has64 distinct targeted passes across two final runs,
+  strict analysis0/pure68, and four actual bundled-Host public/installed command
+  rule/cancel cases. Stock persists the exact offered rule; the identical next
+  command needs no second approval. Cancellation prevents execution and returns
+  interrupted. Earlier layout/compiler/driver negatives remain preserved.
+  Peer audit, a single clean shared gate and packaged approval capture remain
+  pending. See the [work packet](docs/reverse/APPROVAL_CHOICES_EVIDENCE.md).
+  Gemini again has the exclusive heavy lease after Codex's bounded stock window.
   Golden A remains PARTIAL; U7 does not close attachment/hover or other states.
 - Live communication stays official agy TUI-only. Peers are equal. Flutter uses
   one worker and Cargo/CMake two jobs; heavy work never overlaps across peers.
@@ -152,8 +165,10 @@ permission to lower the engineering or visual quality bar.
   controlled model tests, not Human or live-account acceptance.
 - **Hosted exact source:** prior branch
   [CI43171510846](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43171510846)
-  at24201ac passes verify/macOS/Windows. The55dcf16 combined source and final
-  main integration need their own exact-HEAD hosted result before that claim.
+  at24201ac passes verify/macOS/Windows. Final mainba6f27c (docs over the same
+ 55dcf16 code) also passes all three jobs in
+  [CI43178375434](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43178375434).
+  These gates do not verify the uncommitted next approval slice.
 - Earlier settings/provider/Shell evidence remains linked from the functional
   audit and [source7d checkpoint](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
   Earlier product REDs, APT timeout, fixture duplicate IDs, coordinate/clipboard

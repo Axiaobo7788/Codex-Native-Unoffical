@@ -295,6 +295,12 @@ class _ApprovalBanner extends StatelessWidget {
         }
 
         final deciding = controller.isDeciding(request.requestId);
+        final choices = request.availableDecisions;
+        final actions = [
+          ...choices,
+          if (!choices.contains(ApprovalDecision.reject))
+            ApprovalDecision.reject,
+        ];
         return Center(
           heightFactor: 1,
           child: Container(
@@ -356,6 +362,14 @@ class _ApprovalBanner extends StatelessWidget {
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
+                          for (final choice in choices)
+                            if (_scope(choice) case final scope?) ...[
+                              const SizedBox(height: ThemeTokens.space2),
+                              SelectableText(
+                                scope,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
                         ],
                       ),
                     ),
@@ -365,30 +379,20 @@ class _ApprovalBanner extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Flexible(
-                      flex: 2,
-                      child: CodexButton(
-                        variant: CodexButtonVariant.ghost,
-                        size: CodexButtonSize.sm,
-                        onPressed: deciding
-                            ? null
-                            : () => controller.reject(request.requestId),
-                        label: 'Reject',
-                        tooltip: 'Reject',
-                      ),
-                    ),
-                    if (request.approveSupported) ...[
-                      const SizedBox(width: ThemeTokens.space2),
+                    for (final (index, choice) in actions.indexed) ...[
+                      if (index > 0) const SizedBox(width: ThemeTokens.space2),
                       Flexible(
-                        flex: 3,
+                        flex: choice == ApprovalDecision.approveOnce ? 3 : 2,
                         child: CodexButton(
-                          variant: CodexButtonVariant.primary,
+                          variant: choice == ApprovalDecision.approveOnce
+                              ? CodexButtonVariant.primary
+                              : CodexButtonVariant.ghost,
                           size: CodexButtonSize.sm,
                           onPressed: deciding
                               ? null
-                              : () => controller.approve(request.requestId),
-                          label: 'Approve once',
-                          tooltip: 'Approve once',
+                              : () => controller.choose(request, choice),
+                          label: _label(choice),
+                          tooltip: _scope(choice) ?? _label(choice),
                         ),
                       ),
                     ],
@@ -409,6 +413,34 @@ class _ApprovalBanner extends StatelessWidget {
       },
     );
   }
+
+  static String _label(ApprovalDecision decision) => switch (decision.kind) {
+    ApprovalDecisionKind.approveOnce => 'Approve once',
+    ApprovalDecisionKind.approveForSession => 'Approve for session',
+    ApprovalDecisionKind.approveWithExecpolicyAmendment =>
+      'Allow similar commands',
+    ApprovalDecisionKind.applyNetworkPolicyAmendment =>
+      decision.networkAction == ApprovalNetworkAction.allow
+          ? 'Always allow ${decision.networkHost}'
+          : 'Always deny ${decision.networkHost}',
+    ApprovalDecisionKind.reject => 'Reject',
+    ApprovalDecisionKind.cancelTurn => 'Stop turn',
+  };
+
+  static String? _scope(ApprovalDecision decision) => switch (decision.kind) {
+    ApprovalDecisionKind.approveForSession =>
+      'Approve using the stock runtime session-scoped approval cache. '
+          'This is broader than a one-time approval.',
+    ApprovalDecisionKind.approveWithExecpolicyAmendment =>
+      'Approve and apply the proposed command rule. Prefix arguments in order:\n'
+          '${decision.execpolicyAmendment.indexed.map((entry) => '${entry.$1 + 1}: ${entry.$2}').join('\n')}',
+    ApprovalDecisionKind.applyNetworkPolicyAmendment =>
+      'Save a persistent ${decision.networkAction!.name} network rule for host: '
+          '${decision.networkHost}',
+    ApprovalDecisionKind.cancelTurn =>
+      'Deny this request and stop the current turn.',
+    ApprovalDecisionKind.approveOnce || ApprovalDecisionKind.reject => null,
+  };
 }
 
 class _HistoryEntryView extends StatelessWidget {

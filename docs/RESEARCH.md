@@ -5133,3 +5133,22 @@ replacement. Sixteen captures and exact source/binary/process identities are in
 [the recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md). Earlier source
 failures and driver mistakes remain preserved. No official automatic recovery,
 provider-account acceptance or Human visual acceptance is inferred.
+
+### Stock approval choice scope and actual rule persistence
+
+Stable0.167.2/current installed schemas separate stable command/file response
+variants from experimental availableDecisions. Public protocol fallback does not
+imply generic command session consent; current25894 module474578 independently
+exposes scoped network, file-session and proposed-prefix actions, retaining an
+unconditional stable decline callback. Native's typed extension preserves those
+boundaries and adds explicit turn cancellation without conflating it with decline.
+
+The first real probe revealed that stock's offered prefix was the full shell
+invocation, rather than the controlled model's suggested printf prefix. Changing
+an output path was outside that exact rule, so another approval was correct.
+A separate exact-command fixture verifies on both public0.167.2 and installed
+alpha: stock saves exactly the offered rule, the identical next command executes
+with no second approval, and cancel returns interrupted with no executed command.
+Private owned profiles/loopback models and all runtime processes are cleaned up.
+[Source, limits, negatives and remaining checks](reverse/APPROVAL_CHOICES_EVIDENCE.md)
+remain separate from Human acceptance and the parallel Golden A7 reconstruction.

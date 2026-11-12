@@ -33,6 +33,16 @@ class ApprovalController extends ChangeNotifier {
   Future<void> reject(Object requestId) =>
       _decide(requestId, ApprovalDecision.reject);
 
+  /// A UI callback must still belong to this exact pending request, including
+  /// across runtime retirement and numeric request-ID reuse.
+  Future<void> choose(
+    ApprovalRequest request,
+    ApprovalDecision decision,
+  ) async {
+    if (!_pending.any((pending) => identical(pending, request))) return;
+    await _decide(request.requestId, decision);
+  }
+
   /// Server request IDs belong to the retired connection, not the next Host.
   void invalidateRuntime() {
     _runtimeGeneration += 1;
@@ -51,7 +61,7 @@ class ApprovalController extends ChangeNotifier {
     }
     final request = _pending[index];
     final generation = _runtimeGeneration;
-    if (decision == ApprovalDecision.approveOnce && !request.approveSupported) {
+    if (!request.supports(decision) && decision != ApprovalDecision.reject) {
       _errorMessage = 'This request cannot be safely approved by this client.';
       _notify();
       return;

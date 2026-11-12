@@ -24,10 +24,10 @@ enum _ApprovalResponseStyle {
 }
 
 final class _PendingApproval {
-  const _PendingApproval(this.style, this.approveSupported);
+  const _PendingApproval(this.style, this.request);
 
   final _ApprovalResponseStyle style;
-  final bool approveSupported;
+  final ApprovalRequest request;
 }
 
 /// Owns the single dispatch point for every app-server initiated request.
@@ -116,7 +116,7 @@ final class ServerRequestProtocolAdapter {
     if (pending == null) {
       throw StateError('Approval request is no longer pending.');
     }
-    if (decision == ApprovalDecision.approveOnce && !pending.approveSupported) {
+    if (!pending.request.supports(decision)) {
       throw UnsupportedError(
         'This server request cannot be safely approved by this client.',
       );
@@ -127,9 +127,7 @@ final class ServerRequestProtocolAdapter {
         case _ApprovalResponseStyle.commandV2:
         case _ApprovalResponseStyle.fileV2:
           await respond(requestId, {
-            'decision': decision == ApprovalDecision.approveOnce
-                ? 'accept'
-                : 'decline',
+            'decision': _encodeApprovalDecision(decision),
           });
         case _ApprovalResponseStyle.execLegacy:
         case _ApprovalResponseStyle.patchLegacy:
@@ -275,12 +273,25 @@ final class ServerRequestProtocolAdapter {
     if (!_reservePendingSlot(request.id)) {
       return;
     }
-    final parsed = _parseApprovalRequest(request);
-    _pendingApprovals[request.id] = _PendingApproval(
-      parsed.$2,
-      parsed.$1.approveSupported,
-    );
-    _emitApproval(ApprovalRequestedEvent(request: parsed.$1));
+    try {
+      final parsed = _parseApprovalRequest(request);
+      if (parsed.$1.availableDecisions.isEmpty) {
+        _respondDetached(
+          request.id,
+          _unsupportedErrorCode,
+          'No supported approval choice was offered by the server.',
+        );
+        return;
+      }
+      _pendingApprovals[request.id] = _PendingApproval(parsed.$2, parsed.$1);
+      _emitApproval(ApprovalRequestedEvent(request: parsed.$1));
+    } on FormatException catch (error) {
+      _respondDetached(
+        request.id,
+        _invalidParamsErrorCode,
+        'Invalid approval params: ${error.message}',
+      );
+    }
   }
 
   void _handleUserInputRequest(CodexServerRequest request) {
@@ -369,7 +380,8 @@ final class ServerRequestProtocolAdapter {
           summary: _commandSummary(params['kind'], params['command']),
           detail: _optionalString(params, 'cwd'),
           reason: _optionalString(params, 'reason'),
-          approveSupported: _supportsDecision(params, 'accept'),
+          approveSupported: false,
+          decisions: _commandApprovalDecisions(params),
         ),
         _ApprovalResponseStyle.commandV2,
       ),
@@ -384,6 +396,12 @@ final class ServerRequestProtocolAdapter {
           detail: _optionalString(params, 'grantRoot'),
           reason: _optionalString(params, 'reason'),
           approveSupported: true,
+          decisions: const [
+            ApprovalDecision.approveOnce,
+            ApprovalDecision.approveForSession,
+            ApprovalDecision.reject,
+            ApprovalDecision.cancelTurn,
+          ],
         ),
         _ApprovalResponseStyle.fileV2,
       ),
@@ -1121,10 +1139,168 @@ final class ServerRequestProtocolAdapter {
     return 'Run a command';
   }
 
-  static bool _supportsDecision(JsonObject params, String decision) {
-    final available = params['availableDecisions'];
-    return available == null ||
-        (available is List<Object?> && available.contains(decision));
+  static Object _encodeApprovalDecision(ApprovalDecision decision) =>
+      switch (decision.kind) {
+        ApprovalDecisionKind.approveOnce => 'accept',
+        ApprovalDecisionKind.approveForSession => 'acceptForSession',
+        ApprovalDecisionKind.reject => 'decline',
+        ApprovalDecisionKind.cancelTurn => 'cancel',
+        ApprovalDecisionKind.approveWithExecpolicyAmendment => {
+          'acceptWithExecpolicyAmendment': {
+            'execpolicy_amendment': decision.execpolicyAmendment,
+          },
+        },
+        ApprovalDecisionKind.applyNetworkPolicyAmendment => {
+          'applyNetworkPolicyAmendment': {
+            'network_policy_amendment': {
+              'host': decision.networkHost!,
+              'action': decision.networkAction!.name,
+            },
+          },
+        },
+      };
+
+  static List<ApprovalDecision> _commandApprovalDecisions(JsonObject params) {
+    final advertised = params['availableDecisions'];
+    final humanCheckpoint = params['kind'] == 'humanCommand';
+    final choices = <ApprovalDecision>[];
+    if (advertised != null) {
+      if (advertised is! List<Object?> || advertised.length > 16) {
+        throw const FormatException(
+          'availableDecisions must have at most16 choices.',
+        );
+      }
+      for (final value in advertised) {
+        final choice = _parseApprovalDecision(value);
+        if (choice == null ||
+            (humanCheckpoint &&
+                choice != ApprovalDecision.approveOnce &&
+                choice != ApprovalDecision.reject &&
+                choice != ApprovalDecision.cancelTurn)) {
+          continue;
+        }
+        if (!choices.contains(choice)) choices.add(choice);
+      }
+    } else {
+      // Stable responses predate the experimental availableDecisions field.
+      // Preserve the existing decline path, and derive only choices backed by
+      // stock context/proposals. Ordinary commands do not imply session grants.
+      choices.add(ApprovalDecision.approveOnce);
+      if (!humanCheckpoint) {
+        if (params['networkApprovalContext'] != null) {
+          final context = params['networkApprovalContext'];
+          if (context is! JsonObject ||
+              !const [
+                'http',
+                'https',
+                'socks5Tcp',
+                'socks5Udp',
+              ].contains(context['protocol'])) {
+            throw const FormatException('Invalid network approval context.');
+          }
+          _requiredBoundedString(context, 'host', 512);
+          choices.add(ApprovalDecision.approveForSession);
+          final proposals = params['proposedNetworkPolicyAmendments'];
+          if (proposals != null) {
+            if (proposals is! List<Object?> || proposals.length > 16) {
+              throw const FormatException(
+                'Invalid network approval proposals.',
+              );
+            }
+            for (final proposal in proposals) {
+              final choice = _parseNetworkApprovalDecision(proposal);
+              if (choice.networkAction == ApprovalNetworkAction.allow) {
+                choices.add(choice);
+                break;
+              }
+            }
+          }
+        } else if (params['additionalPermissions'] == null &&
+            params['proposedExecpolicyAmendment'] != null) {
+          choices.add(
+            _parseExecpolicyApprovalDecision(
+              params['proposedExecpolicyAmendment'],
+            ),
+          );
+        }
+      }
+      choices.addAll([ApprovalDecision.reject, ApprovalDecision.cancelTurn]);
+    }
+    var retainedCharacters = 0;
+    for (final choice in choices) {
+      retainedCharacters += choice.execpolicyAmendment.fold<int>(
+        0,
+        (n, s) => n + s.length,
+      );
+      retainedCharacters += choice.networkHost?.length ?? 0;
+    }
+    if (retainedCharacters > 16384) {
+      throw const FormatException(
+        'Approval choice payload exceeds16384 characters.',
+      );
+    }
+    return List.unmodifiable(choices);
+  }
+
+  static ApprovalDecision? _parseApprovalDecision(Object? value) {
+    if (value is String) {
+      return switch (value) {
+        'accept' => ApprovalDecision.approveOnce,
+        'acceptForSession' => ApprovalDecision.approveForSession,
+        'decline' => ApprovalDecision.reject,
+        'cancel' => ApprovalDecision.cancelTurn,
+        _ => null,
+      };
+    }
+    if (value is! JsonObject) return null;
+    if (value['acceptWithExecpolicyAmendment'] case final JsonObject rule) {
+      if (value.length != 1) {
+        throw const FormatException('Ambiguous approval choice.');
+      }
+      return _parseExecpolicyApprovalDecision(rule['execpolicy_amendment']);
+    }
+    if (value['applyNetworkPolicyAmendment'] case final JsonObject rule) {
+      if (value.length != 1) {
+        throw const FormatException('Ambiguous approval choice.');
+      }
+      return _parseNetworkApprovalDecision(rule['network_policy_amendment']);
+    }
+    return null;
+  }
+
+  static ApprovalDecision _parseExecpolicyApprovalDecision(Object? value) {
+    if (value is! List<Object?> || value.isEmpty || value.length > 32) {
+      throw const FormatException('Exec policy must contain1 to32 tokens.');
+    }
+    final tokens = <String>[];
+    var length = 0;
+    for (final token in value) {
+      if (token is! String || token.isEmpty || token.length > 1024) {
+        throw const FormatException('Invalid exec policy token.');
+      }
+      length += token.length;
+      if (length > 4096) {
+        throw const FormatException('Exec policy exceeds4096 characters.');
+      }
+      tokens.add(token);
+    }
+    return ApprovalDecision.withExecpolicyAmendment(tokens);
+  }
+
+  static ApprovalDecision _parseNetworkApprovalDecision(Object? value) {
+    if (value is! JsonObject) {
+      throw const FormatException('Network policy must be an object.');
+    }
+    final host = _requiredBoundedString(value, 'host', 512);
+    final action = switch (value['action']) {
+      'allow' => ApprovalNetworkAction.allow,
+      'deny' => ApprovalNetworkAction.deny,
+      _ => throw const FormatException('Invalid network policy action.'),
+    };
+    return ApprovalDecision.withNetworkPolicyAmendment(
+      host: host,
+      action: action,
+    );
   }
 
   static String? _optionalString(JsonObject object, String key) {
