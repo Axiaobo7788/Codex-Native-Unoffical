@@ -153,7 +153,7 @@ class FileChangeEntry {
 ### Tier 2 — Separate Optional Rust Host Spooling Note (Android Remote Only)
 
 - Inspection of `native_host/src/transform.rs:12, 18–19, 154–170` confirms `codex-native-host` currently spools **only** `TARGET_KEY = b"aggregatedOutput"` on `commandExecution`, while capping Remote WebSocket frames at `MAX_REMOTE_NOTIFICATION_BYTES = 256 KiB` and `MAX_REMOTE_RESPONSE_BYTES = 1024 * 1024 - 4096` (~`1 MiB`).
-- **Desktop local transport (stdio) has no frame-size cap and needs zero Rust Host changes for Tier 1.**
+- **Superseded by Section 7:** Dart JSONL has no frame cap, but the production Host CandidateFile has an8MiB sanitized-forward cap. Pure-Dart eager previews alone do not close the large-file path; the next slice requires bounded Host spooling.
 - Because `PROJECT_STATUS.md` defers new Android / Direct Host Remote expansion unless required to maintain existing correctness, Tier 1 should land cleanly in pure Dart first; `Root` can record Remote `>256 KiB` `patchUpdated` / `>1 MiB` `thread/items/list` `fileChange.changes[*].diff` spooling as a separate tracked Remote note if desired.
 
 ---
@@ -194,7 +194,7 @@ class FileChangeEntry {
 - **`ac47002` Disposition — `0 P0 / 0 P1 / 0 P2`:**
   - Inspected all 5 changed files: `lib/src/protocol/file_change_summary.dart` (`1–72`), `lib/src/protocol/history_protocol.dart` (`157, 170, 334, 349, 438`), `lib/src/protocol/turn_protocol.dart` (`244–245, 675`), `test/protocol/file_change_summary_test.dart` (`1–107`), and `docs/reverse/FILE_CHANGE_STATISTICS_EVIDENCE.md`.
   - Verified all four live and saved `fileChange` parse paths (`item/started`, `item/completed`, `thread/items/list`, and `thread/read`) route through `fileChangeSummary(changes)`.
-  - Verified `indexOf('\n', offset)` (`file_change_summary.dart:124–145`) avoids `split('\n')` allocations, excludes trailing-`\n` phantom lines on `add`/`delete`, preserves interior blank lines (`\r\n\r\n` / `\n\n`), tracks `insideHunk` (`@@` sets `true`, `diff --git ` sets `false`) so `+++`/`---` content inside hunks is counted while file headers outside hunks are skipped, and conservatively returns count-only `'File changes: $count update(s)'` on unknown `kind['type']`, `> 100` files, `> 256 Ki` UTF-16 code units per file, or `> 2 Mi` code units per item.
+  - Verified `indexOf('\n', offset)` (the bounded loop in the72-line `ac47002` helper) avoids `split('\n')` allocations, excludes trailing-`\n` phantom lines on `add`/`delete`, preserves interior blank lines (`\r\n\r\n` / `\n\n`), tracks `insideHunk` (`@@` sets `true`, `diff --git ` sets `false`) so `+++`/`---` content inside hunks is counted while file headers outside hunks are skipped, and conservatively returns count-only `'File changes: $count update(s)'` on unknown `kind['type']`, `> 100` files, `> 256 Ki` UTF-16 code units per file, or `> 2 Mi` code units per item.
 
 ### 7.1 Why Production Host Spooling Supersedes Section 4's Eager `24 KiB`/Item Proposal
 

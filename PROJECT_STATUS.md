@@ -125,8 +125,8 @@ permission to lower the engineering or visual quality bar.
   pure-Dart helper. Actual public/installed stock emits the same `+3 -0` live and
   saved result for created sign-prefixed Markdown. This is not per-item preview
   implementation or A7 closure.
-- Root holds the exclusive heavy lease for the combined gates/build and packaged
-  approval-menu walk. Gemini stays source/docs-only for independent review and
+- Root holds the exclusive heavy lease after the combined gates/build and packaged
+  walk, now for the next file-diff seam. Gemini stays source/docs-only for independent review and
   current official evidence. Flutter1/Cargo-CMake2 remain serialized. Live peer
   communication remains the official agy TUI only.
 
@@ -145,14 +145,26 @@ permission to lower the engineering or visual quality bar.
   identical command and independent interrupted outcomes are checked. All owned
   workers exit. Managed-network natural emission remains unverified.
   [Evidence and preserved negatives](docs/reverse/APPROVAL_CHOICES_EVIDENCE.md).
-- Combined source `1f20a78`: format/strict analysis/pure69 pass. The first full
-  Flutter gate records723 passes/five skips/one U8 **test assertion** failure:
-  an offscreen lazy-list footer is expected before scrolling. An integration
-  test correction now actually scrolls, verifies the80-line cap/footer and
-  returns to the copy flow; all5 U8 cases pass. Fresh full/shared stock, memory,
-  build and packaged-menu gates remain pending.
-  Private `approval-u8-shared-r1.log` preserves the negative. No green combined
-  checkpoint is claimed yet.
+- **Combined source5dd4758:** format217/zero changes, strict analysis0, pure69,
+  **724 default Flutter passes/five explicit skips**, five enabled direct-stock
+  cases on each binary, memory100/1,000 plus ten3MiB outputs, Cargo format and
+  two-job Linux/83-library closure pass. All255 tracked build/validation hashes
+  remain unchanged. The earlier723-pass/one-failure run and actual-scroll test
+  correction remain preserved; no production virtualization was disabled.
+- Frozen packet: `/var/tmp/native-desktop-approval-u8-r2/bundle/`, AOT
+  `55b7a35d59c316cbd4bf7779235175a04eb445648469ac155e9690f6cb7871c8`,
+  Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
+  Ten new packaged captures verify the real approval response menu at1191x865
+  and840x420. Open/Escape/resize grants nothing; explicit exact-rule selection
+  executes, and an identical second command completes without another choice.
+  Persisted rule equality, two marker lines/four model calls and owned-process
+  retirement pass. Frozen binary hashes remain identical after use. The first
+  synthetic Home Return did not submit; explicit Send followed. That input
+  observation stays recorded rather than being called keyboard-parity proof.
+- Final main integration and its exact hosted CI remain pending. These local/
+  controlled-model results do not establish Human acceptance, managed-network
+  emission or live provider-account use. Rust source is unchanged in this
+  checkpoint; no new local Clippy/full-Rust run is inferred.
 - Previous shared recovery source55dcf16 passed 689 default cases/five skips,
   5 enabled stock cases per binary, memory100/1,000 plus ten3MiB outputs and
   two-job Linux/83-library closure. Its frozen packet and actual recovery/error/

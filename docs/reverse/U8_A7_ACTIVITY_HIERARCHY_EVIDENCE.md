@@ -100,3 +100,12 @@ and footer, then returns to the clipboard flow. All5 U8 cases pass on that
 correction (`approval-u8-scroll-test-r2.log`). Production rendering is unchanged;
 virtualization stays enabled. The negative remains in `approval-u8-shared-r1.log`;
 fresh shared gates and packaged approval capture are separately pending.
+
+
+Source5dd4758 completes the combined follow-up:724 default passes/five skips,
+5 actual stock cases per binary, memory gate, strict0/pure69/format217 and two-job
+Linux/83-library closure, with255 unchanged input hashes. Its frozen AOT is
+55b7a35d59c316cbd4bf7779235175a04eb445648469ac155e9690f6cb7871c8.
+Root's new packaged approval-menu walk proves the integrated app at wide/short
+sizes but is not a new matched official A7 comparison. Per-item file disclosure,
+streaming output and signed-in same-state visual closure remain PARTIAL.

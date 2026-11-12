@@ -5174,3 +5174,16 @@ in live and saved projections. This does not close per-item patch access. U8
 aggregate file/count equality cannot prove per-item content identity; the owner
 conservative correction withholds disclosure until the typed lazy seam.
 [Source-bound limits and real-stock evidence](reverse/FILE_CHANGE_STATISTICS_EVIDENCE.md).
+
+
+Combined source5dd4758 preserves both owners and the conservative per-item
+boundary.724 default Flutter cases, actual stock5+5, memory/Linux/source255 gates
+pass. A ten-capture packaged response-menu walk verifies wide/short placement,
+no consent on opening/Escape/resize, exact persisted rule and repeated execution;
+all owned workers retire. The initial Home synthetic Return observation and
+lazy-footer test negative stay recorded in the [approval evidence](reverse/APPROVAL_CHOICES_EVIDENCE.md).
+Next source-proven Desktop gap: Host CandidateFile has an8MiB sanitized-forward
+cap, while Dart JSONL itself is uncapped. Raw per-item file diffs can hit that
+boundary before a Dart preview limit. Host-backed streaming metrics/opaque
+per-file reads are the next systems slice; this is not yet implemented or a
+Remote expansion. [Peer constraints](reverse/FILE_UPDATE_CHANGE_SEAM_PROPOSAL.md).

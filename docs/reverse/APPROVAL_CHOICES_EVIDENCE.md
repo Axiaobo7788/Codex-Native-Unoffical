@@ -187,3 +187,39 @@ hosted CI remain machine-actionable. Gemini's U8 A7 subset does not close the
 remaining per-item file-diff or live-output functional seams. Root has the
 exclusive heavy lease for correction/integration; peers continue independently
 on source/evidence. No Desktop completion or Human acceptance is claimed.
+
+
+## Combined source5dd4758 and packaged response menu
+
+After normal owner merges and a corrected virtualized-footer test, full shared
+format217/analysis0/pure69,724 Flutter cases/five skips,5 actual stock cases per
+binary, memory100/1,000 plus ten3MiB outputs and Cargo format/Linux/83-library
+closure pass. The first full run's723 passes/one offscreen-footer assertion
+failure remains in `approval-u8-shared-r1.log`; production virtualization stays
+unchanged. All255 source-input hashes match (`approval-u8-shared-r2.log`).
+
+Frozen `/var/tmp/native-desktop-approval-u8-r2/bundle/` AOT SHA-256 is
+`55b7a35d59c316cbd4bf7779235175a04eb445648469ac155e9690f6cb7871c8`.
+A new real packaged-app/bundled-Host/public-stock walk records10 captures and
+`/var/tmp/native-approval-menu-packaged-r1/verification.json`:
+
+- At1191x865 and840x420, the response menu stays inside the viewport with legible
+  rule and Stop-turn actions. Ordinary Reject/Approve-once remain direct.
+- Opening, Escape and resize leave one model call, no marker and no granted rule.
+  Explicitly selecting the offered rule executes the first command. A second
+  explicit Send runs the identical command without another approval choice.
+- A read-only AST/literal check proves the persisted allow rule exactly matches
+  the full offered shell invocation. Two marker lines/four model calls prove
+  the two completed turns. No broader client rule/cache is introduced.
+- App/Host/stock/model processes exit; the private Xvfb/dbus helper awaits its
+  teardown. No Flutter assertion/overflow appears. Frozen binary hashes match
+  after the walk.
+- Preserve the first synthetic Home Return not submitting; a subsequent explicit
+  Send starts the real request. This walkthrough does not close Home keyboard
+  fidelity, managed-network natural emission, Human visual acceptance or real
+  provider-account behavior.
+
+Gemini's actual474ec93 source reinspection closes the original0P0/1P1/2P2 audit;
+its source-only ac47002 statistics review also reports0P0/P1/P2. Main/exact hosted
+CI is tracked in PROJECT_STATUS, independently of these local results. Per-item
+file diff loading and live command-output delivery remain active Desktop work.
