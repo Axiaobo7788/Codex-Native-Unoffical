@@ -28,6 +28,7 @@ class HistoryItem {
     this.canReadMcpText = false,
     this.reasoningParts = const [],
     this.attachments = const [],
+    this.fileChanges,
   });
 
   final String id;
@@ -43,6 +44,7 @@ class HistoryItem {
   final bool canReadMcpText;
   final List<String> reasoningParts;
   final List<UserAttachment> attachments;
+  final FileChangeSet? fileChanges;
 }
 
 class SavedMcpTextResult {

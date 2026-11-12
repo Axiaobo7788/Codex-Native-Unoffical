@@ -24,6 +24,7 @@ class ConversationEntry {
     this.exitCode,
     this.commandActions = const {},
     this.commandOutput,
+    this.fileChanges,
     this.reasoningParts = const [],
     this.attachments = const [],
     this.retiredRuntimeVersion = 0,
@@ -39,6 +40,7 @@ class ConversationEntry {
   final int? exitCode;
   final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
+  final FileChangeSet? fileChanges;
   final List<String> reasoningParts;
   final List<UserAttachment> attachments;
   final int retiredRuntimeVersion;
@@ -51,6 +53,7 @@ class ConversationEntry {
     String? status,
     int? exitCode,
     OutputDescriptor? commandOutput,
+    FileChangeSet? fileChanges,
     List<UserAttachment>? attachments,
     List<String>? reasoningParts,
     int retiredRuntimeVersion = 0,
@@ -65,6 +68,7 @@ class ConversationEntry {
     exitCode: exitCode ?? this.exitCode,
     commandActions: commandActions,
     commandOutput: commandOutput ?? this.commandOutput,
+    fileChanges: fileChanges ?? this.fileChanges,
     reasoningParts: reasoningParts ?? this.reasoningParts,
     attachments: attachments ?? this.attachments,
     retiredRuntimeVersion: retiredRuntimeVersion,
@@ -271,6 +275,7 @@ class ConversationController extends ChangeNotifier {
         completed: true,
         status: entry.completed ? entry.status : 'unconfirmed',
         commandOutput: entry.commandOutput?.withoutSessionReference(),
+        fileChanges: entry.fileChanges?.withoutSessionReferences(),
         retiredRuntimeVersion: _runtimeInvalidationVersion,
       );
     }
@@ -715,7 +720,23 @@ class ConversationController extends ChangeNotifier {
         if (bufferedReasoning != null) {
           _flushReasoningDelta(event.itemId, bufferedReasoning);
         }
+        final previous = _entries
+            .where(
+              (entry) =>
+                  entry.id == event.itemId && entry.turnId == event.turnId,
+            )
+            .firstOrNull;
+        var fileChanges = event.fileChanges;
         var summary = event.summary;
+        if (!event.completed &&
+            fileChanges?.totalFiles == 0 &&
+            previous?.fileChanges != null) {
+          // A patch can arrive before the initial empty started snapshot.
+          fileChanges = previous!.fileChanges;
+          summary = previous.text;
+        }
+        final keepTerminal =
+            event is FileChangePatchUpdatedEvent && previous?.completed == true;
         if (summary == 'Reasoning') {
           if (event is ReasoningItemEvent && event.summaryParts.isNotEmpty) {
             _reasoningState(event.itemId).replace(event.summaryParts);
@@ -740,12 +761,13 @@ class ConversationController extends ChangeNotifier {
                 summary == 'Reasoning' || summary.startsWith('Reasoning: ')
                 ? _reasoningSummaries[event.itemId]?.parts ?? const []
                 : const [],
-            completed: event.completed,
+            completed: keepTerminal || event.completed,
             turnId: event.turnId,
-            status: event.status,
+            status: keepTerminal ? previous?.status : event.status,
             exitCode: event.exitCode,
             commandActions: event.commandActions,
             commandOutput: event.commandOutput,
+            fileChanges: fileChanges,
           ),
         );
         if (_deltaBuffers.isEmpty && _reasoningDeltaBuffers.isEmpty) {

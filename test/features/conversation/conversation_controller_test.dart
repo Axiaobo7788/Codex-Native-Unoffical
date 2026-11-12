@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codex_native_unofficial/src/domain/model_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/model_models.dart';
+import 'package:codex_native_unofficial/src/domain/output_models.dart';
 import 'package:codex_native_unofficial/src/domain/thread_models.dart';
 import 'package:codex_native_unofficial/src/domain/turn_gateway.dart';
 import 'package:codex_native_unofficial/src/domain/turn_models.dart';
@@ -29,6 +30,91 @@ void main() {
   tearDown(() async {
     controller.dispose();
     await gateway.dispose();
+  });
+
+  const fileChanges = FileChangeSet(
+    files: [
+      FileChangeEntry(
+        index: 0,
+        path: '/workspace/a',
+        kind: FileChangeKind.add,
+        additions: 3,
+        deletions: 0,
+        diff: OutputDescriptor(
+          reference: 'old-file-ref',
+          bytes: 7,
+          storedBytes: 7,
+          truncated: false,
+          available: true,
+        ),
+      ),
+    ],
+    totalFiles: 1,
+    truncated: false,
+  );
+  test('file-change retirement keeps metadata and thread switch evicts it', () {
+    gateway.events.add(
+      const ActivityEvent(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId: 'file',
+        summary: 'File changes: 1 update(s) (+3 -0)',
+        status: 'completed',
+        completed: true,
+        fileChanges: fileChanges,
+      ),
+    );
+    expect(
+      controller.entries.single.fileChanges?.files.single.diff?.reference,
+      'old-file-ref',
+    );
+    controller.invalidateRuntime();
+    final file = controller.entries.single.fileChanges!.files.single;
+    expect(file.path, '/workspace/a');
+    expect(file.additions, 3);
+    expect(file.diff?.reference, isNull);
+    expect(file.diff?.available, isFalse);
+    controller.bindThread(_thread(id: 'other'));
+    expect(controller.entries, isEmpty);
+  });
+  test('patch before started survives empty initial snapshot and late patch preserves terminal status', () {
+    const patch = FileChangePatchUpdatedEvent(
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'file',
+      summary: 'File changes: 1 update(s) (+3 -0)',
+      fileChanges: fileChanges,
+    );
+    gateway.events.add(patch);
+    gateway.events.add(
+      const ActivityEvent(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId: 'file',
+        summary: 'File changes: 0 update(s)',
+        status: 'inProgress',
+        completed: false,
+        fileChanges: FileChangeSet(files: [], totalFiles: 0, truncated: false),
+      ),
+    );
+    expect(controller.entries, hasLength(1));
+    expect(controller.entries.single.fileChanges?.totalFiles, 1);
+    expect(controller.entries.single.text, patch.summary);
+    gateway.events.add(
+      const ActivityEvent(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId: 'file',
+        summary: 'File changes: 1 update(s) (+3 -0)',
+        status: 'completed',
+        completed: true,
+        fileChanges: fileChanges,
+      ),
+    );
+    gateway.events.add(patch);
+    expect(controller.entries, hasLength(1));
+    expect(controller.entries.single.completed, isTrue);
+    expect(controller.entries.single.status, 'completed');
   });
 
   test(

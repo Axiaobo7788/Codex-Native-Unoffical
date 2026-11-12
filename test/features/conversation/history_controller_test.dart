@@ -9,6 +9,203 @@ import 'package:codex_native_unofficial/src/features/conversation/history_contro
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  const previewFile = FileChangeEntry(
+    index: 0,
+    path: '/workspace/file',
+    kind: FileChangeKind.add,
+    diff: OutputDescriptor(
+      reference: 'file-ref',
+      bytes: 10,
+      storedBytes: 10,
+      truncated: false,
+      available: true,
+    ),
+  );
+
+  test(
+    'file preview coalesces explicit reads and releases collapsed content',
+    () async {
+      final gateway = _FilePreviewHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('same'));
+      final first = controller.readFileChangePreview(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      );
+      final second = controller.readFileChangePreview(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      );
+      expect(gateway.previewRequests, 1);
+      gateway.previews.single.complete(
+        const FileChangePreview(
+          file: previewFile,
+          lines: ['body'],
+          truncated: false,
+        ),
+      );
+      expect((await first)?.lines, ['body']);
+      expect(identical(await first, await second), isTrue);
+      expect(
+        controller
+            .fileChangePreviewFor(turnId: 'u', itemId: 'i', file: previewFile)
+            ?.lines,
+        ['body'],
+      );
+      controller.releaseFileChangePreview(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      );
+      expect(
+        controller.fileChangePreviewFor(
+          turnId: 'u',
+          itemId: 'i',
+          file: previewFile,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test('retired preview failure cannot settle or clear a new read with the same key', () async {
+    final gateway = _FilePreviewHistoryGateway();
+    final controller = HistoryController(gateway: gateway);
+    addTearDown(controller.dispose);
+    await controller.bindThread(_thread('same'));
+    final old = controller.readFileChangePreview(
+      turnId: 'u',
+      itemId: 'i',
+      file: previewFile,
+    );
+    controller.invalidateRuntime();
+    expect(await old, isNull);
+    final fresh = controller.readFileChangePreview(
+      turnId: 'u',
+      itemId: 'i',
+      file: previewFile,
+    );
+    gateway.previews.first.completeError(StateError('retired file failure'));
+    await pumpEventQueue();
+    expect(
+      controller.isReadingFileChangePreview(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      ),
+      isTrue,
+    );
+    expect(
+      controller.fileChangePreviewFor(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      ),
+      isNull,
+    );
+    gateway.previews.last.complete(
+      const FileChangePreview(
+        file: previewFile,
+        lines: ['fresh'],
+        truncated: false,
+      ),
+    );
+    expect((await fresh)?.lines, ['fresh']);
+    await controller.bindThread(_thread('other'));
+    expect(
+      controller.fileChangePreviewFor(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      ),
+      isNull,
+    );
+  });
+
+  test(
+    'released requests still consume physical slots until they finish',
+    () async {
+      final gateway = _FilePreviewHistoryGateway();
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('same'));
+      final pending = [
+        for (var index = 0; index < HistoryController.maxFilePreviews; index++)
+          controller.readFileChangePreview(
+            turnId: 'u',
+            itemId: 'i$index',
+            file: previewFile,
+          ),
+      ];
+      expect(gateway.previewRequests, HistoryController.maxFilePreviews);
+      controller.clearFileChangePreviews();
+      expect(await Future.wait(pending), everyElement(isNull));
+      final blocked = await controller.readFileChangePreview(
+        turnId: 'u',
+        itemId: 'fifth',
+        file: previewFile,
+      );
+      expect(blocked?.status, FileChangePreviewStatus.unavailable);
+      expect(gateway.previewRequests, HistoryController.maxFilePreviews);
+      for (final read in gateway.previews) {
+        read.complete(
+          const FileChangePreview(
+            file: previewFile,
+            lines: ['ignored'],
+            truncated: false,
+          ),
+        );
+      }
+      await pumpEventQueue();
+      final next = controller.readFileChangePreview(
+        turnId: 'u',
+        itemId: 'fifth',
+        file: previewFile,
+      );
+      expect(gateway.previewRequests, HistoryController.maxFilePreviews + 1);
+      gateway.previews.last.complete(
+        const FileChangePreview(
+          file: previewFile,
+          lines: ['new'],
+          truncated: false,
+        ),
+      );
+      expect((await next)?.lines, ['new']);
+    },
+  );
+
+  test(
+    'unsupported Remote body is unavailable while empty data needs zero RPCs',
+    () async {
+      final gateway = _FilePreviewHistoryGateway()..previewSupported = false;
+      final controller = HistoryController(gateway: gateway);
+      addTearDown(controller.dispose);
+      await controller.bindThread(_thread('same'));
+      final unavailable = await controller.readFileChangePreview(
+        turnId: 'u',
+        itemId: 'i',
+        file: previewFile,
+      );
+      expect(unavailable?.status, FileChangePreviewStatus.unavailable);
+      final empty = await controller.readFileChangePreview(
+        turnId: 'u',
+        itemId: 'i',
+        file: const FileChangeEntry(
+          index: 0,
+          path: '/workspace/empty',
+          kind: FileChangeKind.delete,
+          empty: true,
+        ),
+      );
+      expect(empty?.status, FileChangePreviewStatus.ready);
+      expect(empty?.file.isEmpty, isTrue);
+      expect(gateway.previewRequests, 0);
+    },
+  );
+
   test(
     'old occurrence request cannot mark a replacement runtime unsupported',
     () async {
@@ -653,4 +850,25 @@ class _OutputHistoryGateway extends _HistoryGateway {
         ],
         nextCursor: null,
       );
+}
+
+class _FilePreviewHistoryGateway extends _OutputHistoryGateway
+    implements HistoryFileChangeGateway {
+  var previewSupported = true;
+  var previewRequests = 0;
+  final previews = <Completer<FileChangePreview?>>[];
+  @override
+  bool get supportsFileChangePreviews => previewSupported;
+  @override
+  Future<FileChangePreview?> readFileChangePreview({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) {
+    previewRequests++;
+    final pending = Completer<FileChangePreview?>();
+    previews.add(pending);
+    return pending.future;
+  }
 }

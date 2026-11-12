@@ -188,10 +188,23 @@ An old/new Host-process fixture preserves the old8MiB fatal rejection and new
 real-stock small-file statistics/session probes pass with the new Host.
 [Evidence](docs/reverse/FILE_DIFF_HOST_SPOOL_EVIDENCE.md).
 
-This is an isolated implemented Host sub-slice, not main or UI completion.
-Typed per-file metadata, lifecycle retirement, explicit bounded preview and U9
-binding remain ACTIVE; peer review and combined future gates are pending.
-Golden A7 and the larger Desktop F+U phase remain PARTIAL/SELF_ITERATION.
+The next typed metadata/read seam now passes100 targeted cases, strict0 and
+pure70. Live/details retain bounded metadata/descriptors; turn summaries carry
+no file references. Patch ordering and runtime retirement preserve terminal and
+session truth. Explicit previews use the live capability or one-item cold
+refresh,64KiB reads/80 lines/24Ki code-unit retention and4 physical/cache slots.
+Public and installed real stock verify original-item content after a second
+workspace edit and fresh references after Host restart, with no model replay;
+all owned processes exit. [Read-seam evidence](docs/reverse/FILE_CHANGE_PREVIEW_SEAM_EVIDENCE.md).
+
+U9 primitives are independently gated at22abb4f (59 targeted cases, strict0,
+format218/pure69) after preserved format/API/21px layout negatives. Timeline
+binding, source-coherent shared gates, packaged same-state comparison and
+file-window paging remain ACTIVE. Root has the exclusive heavy lease; Gemini
+continues source/evidence/binding preparation. No main/UI completion is claimed.
+An adjacent large aggregate turn/diff forwarding path still needs runtime
+reconciliation; current stock source has no equivalent diff-size cap. Golden A7
+and the larger Desktop F+U phase remain PARTIAL/SELF_ITERATION.
 
 ## Current architecture truth
 

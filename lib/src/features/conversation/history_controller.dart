@@ -2,9 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../domain/file_change_models.dart';
 import '../../domain/history_gateway.dart';
 import '../../domain/history_models.dart';
 import '../../domain/thread_models.dart';
+
+typedef _FilePreviewKey = ({
+  String turnId,
+  String itemId,
+  int index,
+  String path,
+  String? movePath,
+  FileChangeKind kind,
+  Object revision,
+});
 
 class HistoryController extends ChangeNotifier {
   HistoryController({
@@ -25,6 +36,11 @@ class HistoryController extends ChangeNotifier {
   final int maxRetainedItems;
   final List<HistoryTurn> _turns = [];
   final List<HistoryItem> _selectedTurnItems = [];
+  static const maxFilePreviews = 4;
+  final _filePreviews = <_FilePreviewKey, FileChangePreview>{};
+  final _filePreviewReads = <_FilePreviewKey, Completer<FileChangePreview?>>{};
+  var _filePreviewSlots = 0;
+
   ThreadSummary? _thread;
   var _knownUnmaterialized = false;
   String? _turnCursor;
@@ -312,6 +328,164 @@ class HistoryController extends ChangeNotifier {
     return List.unmodifiable(items);
   }
 
+  HistoryFileChangeGateway? get _fileGateway => switch (gateway) {
+    final HistoryFileChangeGateway local => local,
+    _ => null,
+  };
+
+  bool get supportsFileChangePreviews =>
+      !_disposed && (_fileGateway?.supportsFileChangePreviews ?? false);
+
+  _FilePreviewKey _fileKey(
+    String turnId,
+    String itemId,
+    FileChangeEntry file,
+  ) => (
+    turnId: turnId,
+    itemId: itemId,
+    index: file.index,
+    path: file.path,
+    movePath: file.movePath,
+    kind: file.kind,
+    revision: file.diff?.reference ?? file,
+  );
+
+  FileChangePreview? fileChangePreviewFor({
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) => _filePreviews[_fileKey(turnId, itemId, file)];
+
+  bool isReadingFileChangePreview({
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) => _filePreviewReads.containsKey(_fileKey(turnId, itemId, file));
+
+  Future<FileChangePreview?> readFileChangePreview({
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) async {
+    final threadId = _thread?.id;
+    if (_disposed || threadId == null) return null;
+    if (file.kind == FileChangeKind.unknown || file.pathTruncated) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: false,
+        status: FileChangePreviewStatus.unsupported,
+      );
+    }
+    if (file.isEmpty) {
+      return FileChangePreview(file: file, lines: const [], truncated: false);
+    }
+    final local = _fileGateway;
+    if (local == null || !supportsFileChangePreviews) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: false,
+        status: FileChangePreviewStatus.unavailable,
+      );
+    }
+    final key = _fileKey(turnId, itemId, file);
+    final cached = _filePreviews.remove(key);
+    if (cached != null) {
+      _filePreviews[key] = cached;
+      return cached;
+    }
+    final pending = _filePreviewReads[key];
+    if (pending != null) return pending.future;
+    // Count physical requests, including released readers awaiting retirement.
+    if (_filePreviewSlots >= maxFilePreviews) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: false,
+        status: FileChangePreviewStatus.unavailable,
+      );
+    }
+    final completion = Completer<FileChangePreview?>();
+    completion.future.ignore();
+    _filePreviewReads[key] = completion;
+    _filePreviewSlots++;
+    final generation = _generation;
+    _notify();
+    unawaited(() async {
+      try {
+        final result = await local.readFileChangePreview(
+          threadId: threadId,
+          turnId: turnId,
+          itemId: itemId,
+          file: file,
+        );
+        if (!completion.isCompleted) {
+          if (_isCurrent(threadId, generation) &&
+              identical(_filePreviewReads[key], completion)) {
+            if (result != null) _rememberFilePreview(key, result);
+            completion.complete(result);
+          } else {
+            completion.complete(null);
+          }
+        }
+      } on Object catch (error) {
+        if (!completion.isCompleted) {
+          if (_isCurrent(threadId, generation) &&
+              identical(_filePreviewReads[key], completion)) {
+            final result = FileChangePreview(
+              file: file,
+              lines: const [],
+              truncated: false,
+              status: error is UnsupportedError
+                  ? FileChangePreviewStatus.unsupported
+                  : FileChangePreviewStatus.unavailable,
+            );
+            _rememberFilePreview(key, result);
+            completion.complete(result);
+          } else {
+            completion.complete(null);
+          }
+        }
+      } finally {
+        if (identical(_filePreviewReads[key], completion)) {
+          _filePreviewReads.remove(key);
+        }
+        _filePreviewSlots--;
+        if (_isCurrent(threadId, generation)) _notify();
+      }
+    }());
+    return completion.future;
+  }
+
+  void _rememberFilePreview(_FilePreviewKey key, FileChangePreview preview) {
+    _filePreviews.remove(key);
+    _filePreviews[key] = preview;
+    while (_filePreviews.length > maxFilePreviews) {
+      _filePreviews.remove(_filePreviews.keys.first);
+    }
+  }
+
+  void releaseFileChangePreview({
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) {
+    final key = _fileKey(turnId, itemId, file);
+    _filePreviews.remove(key);
+    final pending = _filePreviewReads.remove(key);
+    if (pending != null && !pending.isCompleted) pending.complete(null);
+  }
+
+  void clearFileChangePreviews() {
+    _filePreviews.clear();
+    final pending = _filePreviewReads.values.toList(growable: false);
+    _filePreviewReads.clear();
+    for (final completion in pending) {
+      if (!completion.isCompleted) completion.complete(null);
+    }
+  }
+
   Future<void> bindThread(
     ThreadSummary? thread, {
     bool knownUnmaterialized = false,
@@ -326,6 +500,7 @@ class HistoryController extends ChangeNotifier {
     }
     _generation += 1;
     _thread = thread;
+    clearFileChangePreviews();
     _knownUnmaterialized = deferHistory;
     _turns.clear();
     _clearSelectedItems();
@@ -346,6 +521,7 @@ class HistoryController extends ChangeNotifier {
   /// Keep the bounded last-known turn window while retiring old loads and
   /// Host references. Recovery explicitly calls [bindThread] with `force: true`.
   void invalidateRuntime() {
+    clearFileChangePreviews();
     _runtimeRevision += 1;
     _generation += 1;
     _turnWindowRevision += 1;
@@ -376,6 +552,7 @@ class HistoryController extends ChangeNotifier {
               status: item.status,
               exitCode: item.exitCode,
               output: item.output?.withoutSessionReference(),
+              fileChanges: item.fileChanges?.withoutSessionReferences(),
               outputDeferred: item.outputDeferred,
               isCommand: item.isCommand,
               commandAction: item.commandAction,
@@ -693,6 +870,7 @@ class HistoryController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    clearFileChangePreviews();
     _generation += 1;
     _resetOccurrenceSearch();
     super.dispose();

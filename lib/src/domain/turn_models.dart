@@ -1,9 +1,11 @@
+import 'file_change_models.dart';
 import 'execution_settings.dart';
 import 'diff_models.dart';
 import 'output_models.dart';
 import 'user_message_presentation.dart';
 
 export 'user_message_presentation.dart';
+export 'file_change_models.dart';
 
 enum TurnRuntimeStatus { inProgress, completed, interrupted, failed, unknown }
 
@@ -194,6 +196,7 @@ class ActivityEvent extends TurnEvent {
     this.exitCode,
     this.commandActions = const {},
     this.commandOutput,
+    this.fileChanges,
   });
 
   final String itemId;
@@ -203,6 +206,17 @@ class ActivityEvent extends TurnEvent {
   final int? exitCode;
   final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
+  final FileChangeSet? fileChanges;
+}
+
+class FileChangePatchUpdatedEvent extends ActivityEvent {
+  const FileChangePatchUpdatedEvent({
+    required super.threadId,
+    required super.turnId,
+    required super.itemId,
+    required super.summary,
+    required FileChangeSet fileChanges,
+  }) : super(status: 'inProgress', completed: false, fileChanges: fileChanges);
 }
 
 /// A bounded public reasoning summary snapshot, separate from activity captions.

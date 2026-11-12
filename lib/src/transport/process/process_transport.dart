@@ -49,6 +49,7 @@ class ProcessTransport
         CodexTransport,
         HistoryOccurrenceGateway,
         HistoryMcpTextGateway,
+        HistoryFileChangeGateway,
         ThreadGoalGateway,
         ThreadQueuePresenceGateway,
         ThreadReadReceiptGateway,
@@ -345,6 +346,22 @@ class ProcessTransport
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
       _historyProtocol.listItems(query, deferMcpText: true);
+
+  @override
+  bool get supportsFileChangePreviews => !_closing;
+
+  @override
+  Future<FileChangePreview?> readFileChangePreview({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) => _historyProtocol.readFileChangePreview(
+    threadId: threadId,
+    turnId: turnId,
+    itemId: itemId,
+    file: file,
+  );
 
   @override
   bool get supportsSavedMcpText => !_closing;

@@ -2939,3 +2939,16 @@ keeps bounded raw parsing; whole-item fallback limitations remain explicit.
 
 [Source, old/new failure comparison and separate actual stock probes](reverse/FILE_DIFF_HOST_SPOOL_EVIDENCE.md)
 record what is implemented and the remaining typed/lifecycle/presentation work.
+
+
+### ADR-065 read-side follow-up
+
+The optional local file-preview gateway keeps metadata separate from body reads.
+Use a live offered opaque reference before attempting the whole-item fallback,
+since patchUpdated can precede persistence. Cold/retired capability refresh reads
+one item, validates its scope and never resumes or replays a turn. Both bounded
+projections retire descriptors. Four cache entries/physical reads, per-file64KiB
+input/24Ki code-unit retained output and epoch/thread/release fences protect
+lifecycle and memory. Known empty files and unsupported Remote bodies perform
+zero body RPCs. [Source-bound verification](reverse/FILE_CHANGE_PREVIEW_SEAM_EVIDENCE.md)
+distinguishes this completed read seam from pending U9 UI/file-window work.

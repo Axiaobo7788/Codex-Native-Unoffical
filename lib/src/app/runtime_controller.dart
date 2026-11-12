@@ -68,6 +68,7 @@ class RuntimeController extends ChangeNotifier
         HistoryGateway,
         HistoryOccurrenceGateway,
         HistoryMcpTextGateway,
+        HistoryFileChangeGateway,
         RemoteAdminGateway,
         EcosystemGateway,
         EcosystemCatalogGateway,
@@ -532,6 +533,44 @@ class RuntimeController extends ChangeNotifier
   @override
   Future<HistoryItemPage> listHistoryItems(HistoryItemQuery query) =>
       _connectedTransport().listHistoryItems(query);
+
+  @override
+  bool get supportsFileChangePreviews =>
+      !_usesRemote &&
+      snapshot.state == RuntimeConnectionState.connected &&
+      switch (_transport) {
+        final HistoryFileChangeGateway local =>
+          local.supportsFileChangePreviews,
+        _ => false,
+      };
+
+  @override
+  Future<FileChangePreview?> readFileChangePreview({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) async {
+    final transport = _transport;
+    final HistoryFileChangeGateway? local = switch (transport) {
+      final HistoryFileChangeGateway value => value,
+      _ => null,
+    };
+    if (local == null || !supportsFileChangePreviews) {
+      throw UnsupportedError(
+        'File previews require a connected local runtime.',
+      );
+    }
+    final result = await local.readFileChangePreview(
+      threadId: threadId,
+      turnId: turnId,
+      itemId: itemId,
+      file: file,
+    );
+    return identical(transport, _transport) && supportsFileChangePreviews
+        ? result
+        : null;
+  }
 
   @override
   bool get supportsSavedMcpText =>

@@ -1,4 +1,5 @@
 import 'history_models.dart';
+import 'file_change_models.dart';
 
 abstract interface class HistoryGateway {
   Future<HistoryTurnPage> listHistoryTurns(HistoryTurnQuery query);
@@ -25,5 +26,17 @@ abstract interface class HistoryMcpTextGateway {
     required String threadId,
     required String turnId,
     required String itemId,
+  });
+}
+
+/// Optional local, explicit per-file read. Stock may require a whole-item
+/// fallback; the result and retained UI state remain independently bounded.
+abstract interface class HistoryFileChangeGateway {
+  bool get supportsFileChangePreviews;
+  Future<FileChangePreview?> readFileChangePreview({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
   });
 }

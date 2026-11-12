@@ -248,6 +248,7 @@ final class TurnProtocolAdapter {
         includeUserMessages: includeUserMessages,
         includeHostCommandOutput: includeHostCommandOutput,
       ),
+      'item/fileChange/patchUpdated' => _parseFileChangePatchUpdated(params),
       'turn/diff/updated' => TurnDiffUpdatedEvent(
         snapshot: diffParser.parse(
           threadId: _requiredString(params, 'threadId'),
@@ -597,6 +598,9 @@ final class TurnProtocolAdapter {
       );
     }
 
+    final fileProjection = type == 'fileChange'
+        ? parseFileChanges(item['changes'])
+        : null;
     final exitCode = type == 'commandExecution'
         ? _optionalInt32(item['exitCode'])
         : null;
@@ -604,7 +608,8 @@ final class TurnProtocolAdapter {
       threadId: threadId,
       turnId: turnId,
       itemId: itemId,
-      summary: _activitySummary(type, item),
+      summary: fileProjection?.summary ?? _activitySummary(type, item),
+      fileChanges: fileProjection?.changes,
       status: _activityStatus(item, completed),
       completed: completed,
       exitCode: exitCode,
@@ -615,6 +620,19 @@ final class TurnProtocolAdapter {
           includeHostCommandOutput && completed && type == 'commandExecution'
           ? _commandOutput(item['_codexNativeOutput'], exitCode: exitCode)
           : null,
+    );
+  }
+
+  static FileChangePatchUpdatedEvent _parseFileChangePatchUpdated(
+    JsonObject params,
+  ) {
+    final projection = parseFileChanges(params['changes']);
+    return FileChangePatchUpdatedEvent(
+      threadId: _requiredString(params, 'threadId'),
+      turnId: _requiredString(params, 'turnId'),
+      itemId: _requiredString(params, 'itemId'),
+      summary: projection.summary,
+      fileChanges: projection.changes,
     );
   }
 

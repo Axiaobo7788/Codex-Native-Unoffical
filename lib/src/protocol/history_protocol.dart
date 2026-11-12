@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../domain/history_models.dart';
 import '../domain/thread_models.dart';
 import '../domain/turn_models.dart';
@@ -189,6 +191,212 @@ final class HistoryProtocolAdapter {
     return data;
   }
 
+  Future<FileChangePreview?> readFileChangePreview({
+    required String threadId,
+    required String turnId,
+    required String itemId,
+    required FileChangeEntry file,
+  }) async {
+    if (file.index < 0 || file.index >= FileChangeSet.maxFiles) {
+      throw RangeError(
+        'File preview index is outside the bounded item window.',
+      );
+    }
+    if (file.kind == FileChangeKind.unknown || file.pathTruncated) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: false,
+        status: FileChangePreviewStatus.unsupported,
+      );
+    }
+    if (file.isEmpty) {
+      return FileChangePreview(file: file, lines: const [], truncated: false);
+    }
+    // Live patchUpdated bodies may precede persistence. Use the exact offered
+    // session capability first; cold/retired references refresh only this item.
+    if (file.diff?.available == true && file.diff?.reference != null) {
+      try {
+        return await _readFileDescriptor(file);
+      } on JsonRpcException {
+        // One bounded read-side refresh can mint a reference after Host restart.
+      }
+    }
+    const method = 'thread/items/read';
+    final List<Object?> entries;
+    try {
+      entries = await _readItemEntries(threadId, turnId, [itemId]);
+    } on JsonRpcException catch (error) {
+      if (error.code == -32601 ||
+          error.code == -32600 &&
+              (error.message == '$method requires experimentalApi capability' ||
+                  error.message.startsWith(
+                    'Invalid request: unknown variant `$method`',
+                  ))) {
+        throw UnsupportedError(
+          'File previews require a compatible local runtime.',
+        );
+      }
+      rethrow;
+    }
+    if (entries.isEmpty) return null;
+    final entry = entries.first;
+    final item = entry is JsonObject ? entry['item'] : null;
+    if (entries.length != 1 ||
+        entry is! JsonObject ||
+        entry['turnId'] != turnId ||
+        item is! JsonObject ||
+        item['id'] != itemId ||
+        item['type'] != 'fileChange') {
+      throw const ProtocolViolation(
+        'File preview read returned an unexpected item.',
+      );
+    }
+    final changes = item['changes'];
+    if (changes is! List<Object?> || file.index >= changes.length) return null;
+    final raw = changes[file.index];
+    final current = parseFileChanges(changes).changes.files
+        .where((candidate) => candidate.index == file.index)
+        .firstOrNull;
+    if (raw is! JsonObject ||
+        current == null ||
+        raw['path'] != file.path ||
+        current.kind != file.kind ||
+        current.pathTruncated) {
+      throw const ProtocolViolation(
+        'File preview no longer matches the selected file.',
+      );
+    }
+    if (current.isEmpty) {
+      return FileChangePreview(
+        file: current,
+        lines: const [],
+        truncated: false,
+      );
+    }
+    if (current.diff != null) return _readFileDescriptor(current);
+    // Direct-stock compatibility is a whole-item fallback, not byte-lazy stock.
+    final text = raw['diff'];
+    if (raw['_codexNativeFileDiff'] != null || text is! String) {
+      return FileChangePreview(
+        file: current,
+        lines: const [],
+        truncated: false,
+        status: FileChangePreviewStatus.unavailable,
+      );
+    }
+    if (text.length > 256 * 1024) {
+      return FileChangePreview(
+        file: current,
+        lines: const [],
+        truncated: true,
+        status: FileChangePreviewStatus.tooLarge,
+      );
+    }
+    return _boundedFilePreview(current, text, truncated: false);
+  }
+
+  Future<FileChangePreview> _readFileDescriptor(FileChangeEntry file) async {
+    final descriptor = file.diff!;
+    final reference = descriptor.reference;
+    if (!descriptor.available ||
+        reference == null ||
+        descriptor.storedBytes == 0) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: descriptor.truncated,
+        status: FileChangePreviewStatus.unavailable,
+      );
+    }
+    final bytes = descriptor.storedBytes < FileChangePreview.maxReadBytes
+        ? descriptor.storedBytes
+        : FileChangePreview.maxReadBytes;
+    final chunk = await OutputProtocolAdapter(request: request)
+        .readRange(reference: reference, offset: 0, length: bytes);
+    if (chunk.data.isEmpty) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: true,
+        status: FileChangePreviewStatus.unavailable,
+      );
+    }
+    final complete = chunk.data.length >= descriptor.bytes;
+    final text = _decodeFilePrefix(chunk.data, complete: complete);
+    if (text.isEmpty && descriptor.bytes > 0) {
+      return FileChangePreview(
+        file: file,
+        lines: const [],
+        truncated: true,
+        status: FileChangePreviewStatus.unavailable,
+      );
+    }
+    return _boundedFilePreview(
+      file,
+      text,
+      truncated: descriptor.truncated || !complete,
+    );
+  }
+
+  static String _decodeFilePrefix(List<int> bytes, {required bool complete}) {
+    for (
+      var trim = 0;
+      trim <= (complete ? 0 : 3) && trim <= bytes.length;
+      trim++
+    ) {
+      try {
+        return utf8.decode(
+          trim == 0 ? bytes : bytes.sublist(0, bytes.length - trim),
+        );
+      } on FormatException {
+        // A range may end inside one valid UTF-8 codepoint. Earlier malformed
+        // input remains an error instead of displaying fabricated replacement text.
+      }
+    }
+    throw const ProtocolViolation('File preview contains invalid UTF-8.');
+  }
+
+  static FileChangePreview _boundedFilePreview(
+    FileChangeEntry file,
+    String text, {
+    required bool truncated,
+  }) {
+    final lines = <String>[];
+    var remaining = FileChangePreview.maxStoredCharacters;
+    for (var offset = 0; offset < text.length;) {
+      if (lines.length == FileChangePreview.maxLines || remaining <= 1) {
+        truncated = true;
+        break;
+      }
+      final newline = text.indexOf('\n', offset);
+      var end = newline < 0 ? text.length : newline;
+      if (end > offset && text.codeUnitAt(end - 1) == 13) end--;
+      var limit = end - offset;
+      if (limit > FileChangePreview.maxLineCharacters) {
+        limit = FileChangePreview.maxLineCharacters;
+        truncated = true;
+      }
+      if (limit > remaining - 1) {
+        limit = remaining - 1;
+        truncated = true;
+      }
+      if (limit > 0) {
+        final last = text.codeUnitAt(offset + limit - 1);
+        if (last >= 0xd800 && last <= 0xdbff) limit--;
+      }
+      lines.add(text.substring(offset, offset + limit));
+      remaining -= limit + 1;
+      if (newline < 0) break;
+      offset = newline + 1;
+    }
+    return FileChangePreview(
+      file: file,
+      lines: List.unmodifiable(lines),
+      truncated: truncated,
+    );
+  }
+
   Future<SavedMcpTextResult?> readSavedMcpText({
     required String threadId,
     required String turnId,
@@ -351,6 +559,7 @@ final class HistoryProtocolAdapter {
       _requiredString(value, 'turnId'),
       outputDeferred: value['outputDeferred'] == true,
       includeCommandAction: true,
+      includeFileChanges: true,
     );
   }
 
@@ -381,6 +590,7 @@ final class HistoryProtocolAdapter {
     String turnId, {
     bool outputDeferred = false,
     bool includeCommandAction = false,
+    bool includeFileChanges = false,
   }) {
     if (value is! Map<String, Object?>) {
       throw const ProtocolViolation('History item must be an object.');
@@ -431,13 +641,20 @@ final class HistoryProtocolAdapter {
               : null,
         );
       }(),
-      'fileChange' => HistoryItem(
-        id: id,
-        turnId: turnId,
-        kind: HistoryItemKind.activity,
-        text: fileChangeSummary(value['changes']),
-        status: _optionalString(value, 'status'),
-      ),
+      'fileChange' => () {
+        final projection = parseFileChanges(
+          value['changes'],
+          includeMetadata: includeFileChanges,
+        );
+        return HistoryItem(
+          id: id,
+          turnId: turnId,
+          kind: HistoryItemKind.activity,
+          text: projection.summary,
+          status: _optionalString(value, 'status'),
+          fileChanges: includeFileChanges ? projection.changes : null,
+        );
+      }(),
       'mcpToolCall' => HistoryItem(
         id: id,
         turnId: turnId,

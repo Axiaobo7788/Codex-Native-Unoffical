@@ -45,7 +45,12 @@ The Host consumes only its reserved `host/*` request namespace. Every ordinary
 Codex request, notification, server request, and response remains on the stock
 app-server protocol. The Host decodes direct command `aggregatedOutput` strings
 at known stock v2 thread item paths into private capped files. It replaces those
-strings with typed descriptors before JSON reaches Dart. Opaque MCP results and
+strings with typed descriptors before JSON reaches Dart. Exact FileUpdateChange
+item/changes and patchUpdated bodies are likewise spooled: diff remains an empty
+string and `_codexNativeFileDiff` carries the opaque descriptor plus independent
+raw-content/unified line metrics. The aggregate turn/diff path is still separate;
+per-item spooling does not establish large aggregate forwarding closure.
+Opaque MCP results and
 arguments pass through with their original field values. A streaming SHA-256
 plus logical byte length identifies exact repeats inside the current Host
 session. Clients receive one opaque random reference. Newly stored output remains
@@ -93,6 +98,11 @@ The app-server/thread store is authoritative. Flutter retains only the current w
 - Tool output: summary in timeline, bounded file-backed ranges on demand.
 - Diff: file summary first, file/hunk content on demand.
 - Inactive thread: unload UI models and caches.
+- File changes: at most24 metadata entries per detailed item; turn summaries
+  retain none. Explicit per-file previews use at most64KiB input and retain at
+  most80 lines/24Ki UTF-16 units. The active cache and physical reader count are
+  independently capped at4 and retire on thread/runtime/disposal boundaries.
+  Existing per-item file counts remain qualified where the window is capped.
 
 The target is bounded UI memory even when a Codex session has accumulated very large historical context.
 
