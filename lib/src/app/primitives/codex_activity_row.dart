@@ -1368,32 +1368,31 @@ class _CodexShellExecutionCardState extends State<CodexShellExecutionCard> {
           key: const ValueKey('shell-card-status-footer'),
           style: footerStyle,
         );
-      } else {
-        final isSuccess = widget.exitCode != null
-            ? widget.exitCode == 0
-            : (statusNorm != 'failed' && statusNorm != 'declined');
+      } else if (widget.exitCode != null) {
+        final isSuccess =
+            widget.exitCode == 0 &&
+            statusNorm != 'failed' &&
+            statusNorm != 'declined';
         if (isSuccess) {
-          statusWidget = Row(
-            key: const ValueKey('shell-card-status-footer'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.check_rounded,
-                size: OfficialCodexTheme.activityInlineIconSize,
-                color: theme.textMuted,
-              ),
-              const SizedBox(width: 4.0),
-              Text('Success', style: footerStyle),
-            ],
-          );
+          statusWidget = _buildSuccessStatus(footerStyle, theme);
         } else {
-          final codeText = widget.exitCode?.toString() ?? 'unknown';
+          final codeText = widget.exitCode == 0
+              ? 'unknown'
+              : widget.exitCode.toString();
           statusWidget = Text(
             'Exit code $codeText',
             key: const ValueKey('shell-card-status-footer'),
             style: footerStyle,
           );
         }
+      } else if (statusNorm == 'completed') {
+        statusWidget = _buildSuccessStatus(footerStyle, theme);
+      } else if (statusNorm == 'failed' || statusNorm == 'declined') {
+        statusWidget = Text(
+          'Exit code unknown',
+          key: const ValueKey('shell-card-status-footer'),
+          style: footerStyle,
+        );
       }
     }
 
@@ -1451,6 +1450,23 @@ class _CodexShellExecutionCardState extends State<CodexShellExecutionCard> {
       ),
     );
   }
+
+  Widget _buildSuccessStatus(
+    TextStyle footerStyle,
+    OfficialCodexThemeData theme,
+  ) => Row(
+    key: const ValueKey('shell-card-status-footer'),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(
+        Icons.check_rounded,
+        size: OfficialCodexTheme.activityInlineIconSize,
+        color: theme.textMuted,
+      ),
+      const SizedBox(width: 4.0),
+      Text('Success', style: footerStyle),
+    ],
+  );
 }
 
 class _ShellHoverCopyIconButton extends StatefulWidget {

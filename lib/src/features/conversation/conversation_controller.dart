@@ -21,6 +21,7 @@ class ConversationEntry {
     this.turnId,
     this.stockItemId,
     this.status,
+    this.exitCode,
     this.commandActions = const {},
     this.commandOutput,
     this.reasoningParts = const [],
@@ -34,6 +35,7 @@ class ConversationEntry {
   final String? turnId;
   final String? stockItemId;
   final String? status;
+  final int? exitCode;
   final Set<CommandActionKind> commandActions;
   final OutputDescriptor? commandOutput;
   final List<String> reasoningParts;
@@ -45,6 +47,7 @@ class ConversationEntry {
     String? turnId,
     String? stockItemId,
     String? status,
+    int? exitCode,
     List<UserAttachment>? attachments,
     List<String>? reasoningParts,
   }) => ConversationEntry(
@@ -55,6 +58,7 @@ class ConversationEntry {
     turnId: turnId ?? this.turnId,
     stockItemId: stockItemId ?? this.stockItemId,
     status: status ?? this.status,
+    exitCode: exitCode ?? this.exitCode,
     commandActions: commandActions,
     commandOutput: commandOutput,
     reasoningParts: reasoningParts ?? this.reasoningParts,
@@ -675,6 +679,7 @@ class ConversationController extends ChangeNotifier {
             completed: event.completed,
             turnId: event.turnId,
             status: event.status,
+            exitCode: event.exitCode,
             commandActions: event.commandActions,
             commandOutput: event.commandOutput,
           ),

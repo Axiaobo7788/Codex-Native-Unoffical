@@ -204,6 +204,75 @@ void main() {
         ),
       );
       expect(find.text('Stopped'), findsOneWidget);
+
+      // Non-zero exitCode overrides "completed" status to show numeric exit code.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OfficialCodexThemeProvider(
+            data: OfficialCodexThemeData.dark,
+            child: const Scaffold(
+              body: SizedBox(
+                width: 600,
+                child: CodexShellExecutionCard(
+                  rawCommand: 'Command: exit 2',
+                  output: 'failed check',
+                  status: 'completed',
+                  exitCode: 2,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Exit code 2'), findsOneWidget);
+      expect(find.text('Success'), findsNothing);
+
+      // Declined status without exitCode renders "Exit code unknown".
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OfficialCodexThemeProvider(
+            data: OfficialCodexThemeData.dark,
+            child: const Scaffold(
+              body: SizedBox(
+                width: 600,
+                child: CodexShellExecutionCard(
+                  rawCommand: 'Command: rm -rf build',
+                  output: '',
+                  status: 'declined',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Exit code unknown'), findsOneWidget);
+      expect(find.text('Success'), findsNothing);
+
+      // Unknown or missing status without exitCode must never imply "Success".
+      for (final unrecognized in <String?>[null, '', 'unknown']) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: OfficialCodexThemeProvider(
+              data: OfficialCodexThemeData.dark,
+              child: Scaffold(
+                body: SizedBox(
+                  width: 600,
+                  child: CodexShellExecutionCard(
+                    rawCommand: 'Command: echo probe',
+                    output: 'probe',
+                    status: unrecognized,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(find.text('Success'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('shell-card-status-footer')),
+          findsNothing,
+        );
+      }
     },
   );
 
@@ -224,6 +293,8 @@ void main() {
       // Collapsed row shows unwrapped command without /bin/bash -lc and without 28px expand icon button.
       expect(find.text('Ran git status --short'), findsOneWidget);
       expect(find.text('Ran false'), findsOneWidget);
+      expect(find.text('Ran exit 2'), findsOneWidget);
+      expect(find.text('Ran echo unknown'), findsOneWidget);
       expect(find.byIcon(Icons.expand_more), findsNothing);
 
       // Clicking full row expands the bash Shell card and switches row header to "Ran command".
@@ -244,10 +315,33 @@ void main() {
       expect(find.text('M lib/main.dart'), findsOneWidget);
       expect(find.text('Success'), findsOneWidget);
 
+      // Collapse first card so subsequent footer checks remain unambiguous.
+      await tester.tap(find.text('Ran command'));
+      await tester.pumpAndSettle();
+
       // Failed command without protocol exitCode truthfully renders "Exit code unknown".
       await tester.tap(find.text('Ran false'));
       await tester.pumpAndSettle();
       expect(find.text('Exit code unknown'), findsOneWidget);
+      await tester.tap(find.text('Ran command'));
+      await tester.pumpAndSettle();
+
+      // Descriptor exitCode projects numeric "Exit code 2" into PuGl.d.Footer.
+      await tester.tap(find.text('Ran exit 2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Exit code 2'), findsOneWidget);
+      expect(find.text('Success'), findsNothing);
+      await tester.tap(find.text('Ran command'));
+      await tester.pumpAndSettle();
+
+      // Unknown status with null exitCode does not imply "Success".
+      await tester.tap(find.text('Ran echo unknown'));
+      await tester.pumpAndSettle();
+      expect(find.text('Success'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('shell-card-status-footer')),
+        findsNothing,
+      );
     },
   );
 }
@@ -275,6 +369,7 @@ class _ShellCardTimelineHarness extends SimulatedRuntimeHarness {
             kind: HistoryItemKind.activity,
             text: "Command: /bin/bash -lc 'git status --short'",
             status: 'completed',
+            exitCode: 0,
             isCommand: true,
             output: OutputDescriptor(
               reference: 'u6-out-ok',
@@ -282,6 +377,7 @@ class _ShellCardTimelineHarness extends SimulatedRuntimeHarness {
               storedBytes: 15,
               truncated: false,
               available: true,
+              exitCode: 0,
             ),
           ),
           HistoryItem(
@@ -293,8 +389,40 @@ class _ShellCardTimelineHarness extends SimulatedRuntimeHarness {
             isCommand: true,
             output: OutputDescriptor(
               reference: 'u6-out-fail',
-              bytes: 12,
-              storedBytes: 12,
+              bytes: 11,
+              storedBytes: 11,
+              truncated: false,
+              available: true,
+            ),
+          ),
+          HistoryItem(
+            id: 'u6-cmd-exit-2',
+            turnId: 'u6-turn-1',
+            kind: HistoryItemKind.activity,
+            text: 'Command: exit 2',
+            status: 'failed',
+            exitCode: 2,
+            isCommand: true,
+            output: OutputDescriptor(
+              reference: 'u6-out-exit-2',
+              bytes: 10,
+              storedBytes: 10,
+              truncated: false,
+              available: true,
+              exitCode: 2,
+            ),
+          ),
+          HistoryItem(
+            id: 'u6-cmd-unknown',
+            turnId: 'u6-turn-1',
+            kind: HistoryItemKind.activity,
+            text: 'Command: echo unknown',
+            status: 'unknown',
+            isCommand: true,
+            output: OutputDescriptor(
+              reference: 'u6-out-unknown',
+              bytes: 7,
+              storedBytes: 7,
               truncated: false,
               available: true,
             ),
@@ -304,6 +432,8 @@ class _ShellCardTimelineHarness extends SimulatedRuntimeHarness {
       ) {
     storeOutput('u6-out-ok', 'M lib/main.dart');
     storeOutput('u6-out-fail', 'error: boom');
+    storeOutput('u6-out-exit-2', 'cache miss');
+    storeOutput('u6-out-unknown', 'unknown');
   }
 
   static const _user = HistoryItem(

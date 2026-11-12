@@ -1022,6 +1022,70 @@ void main() {
     expect(mcpActivity.summary.length, lessThanOrEqualTo(170));
     expect(mcpActivity.summary.endsWith('…'), isTrue);
   });
+
+  test(
+    'projects bounded int32 commandExecution exitCode onto ActivityEvent and OutputDescriptor',
+    () async {
+      final hostAdapter = TurnProtocolAdapter(
+        request: (method, [params = const {}]) async =>
+            responses[method] ?? const {},
+        notifications: notifications.stream,
+        includeHostCommandOutput: true,
+      );
+      final events = <ActivityEvent>[];
+      final sub = hostAdapter.events
+          .where((event) => event is ActivityEvent)
+          .cast<ActivityEvent>()
+          .listen(events.add);
+      addTearDown(sub.cancel);
+
+      const nativeOut = {
+        'available': true,
+        'bytes': 12,
+        'ref': '0123456789abcdef0123456789abcdef',
+        'storedBytes': 12,
+        'truncated': false,
+      };
+      for (final (id, status, rawExit) in <(String, String, Object?)>[
+        ('cmd-ok', 'completed', 0),
+        ('cmd-fail-2', 'failed', 2),
+        ('cmd-declined', 'declined', null),
+        ('cmd-overflow', 'failed', 0x100000000),
+        ('cmd-bad-type', 'failed', '2'),
+      ]) {
+        notifications.add(
+          CodexNotification(
+            method: 'item/completed',
+            params: {
+              'threadId': 'thread-1',
+              'turnId': 'turn-1',
+              'item': {
+                'type': 'commandExecution',
+                'id': id,
+                'command': 'echo $id',
+                'status': status,
+                'exitCode': rawExit,
+                '_codexNativeOutput': nativeOut,
+              },
+            },
+          ),
+        );
+      }
+      await pumpEventQueue();
+
+      expect(events, hasLength(5));
+      expect(events[0].exitCode, 0);
+      expect(events[0].commandOutput?.exitCode, 0);
+      expect(events[1].exitCode, 2);
+      expect(events[1].commandOutput?.exitCode, 2);
+      expect(events[2].exitCode, isNull);
+      expect(events[2].commandOutput?.exitCode, isNull);
+      expect(events[3].exitCode, isNull);
+      expect(events[3].commandOutput?.exitCode, isNull);
+      expect(events[4].exitCode, isNull);
+      expect(events[4].commandOutput?.exitCode, isNull);
+    },
+  );
 }
 
 class _Request {

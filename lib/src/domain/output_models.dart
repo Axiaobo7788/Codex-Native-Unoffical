@@ -7,6 +7,7 @@ class OutputDescriptor {
     required this.storedBytes,
     required this.truncated,
     required this.available,
+    this.exitCode,
   }) : assert(bytes >= 0),
        assert(storedBytes >= 0),
        assert(storedBytes <= bytes);
@@ -16,6 +17,18 @@ class OutputDescriptor {
   final int storedBytes;
   final bool truncated;
   final bool available;
+  final int? exitCode;
+
+  OutputDescriptor withExitCode(int? exitCode) => exitCode == this.exitCode
+      ? this
+      : OutputDescriptor(
+          reference: reference,
+          bytes: bytes,
+          storedBytes: storedBytes,
+          truncated: truncated,
+          available: available,
+          exitCode: exitCode,
+        );
 }
 
 class OutputChunk {

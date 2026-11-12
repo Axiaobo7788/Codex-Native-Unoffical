@@ -596,6 +596,9 @@ final class TurnProtocolAdapter {
       );
     }
 
+    final exitCode = type == 'commandExecution'
+        ? _optionalInt32(item['exitCode'])
+        : null;
     return ActivityEvent(
       threadId: threadId,
       turnId: turnId,
@@ -603,15 +606,22 @@ final class TurnProtocolAdapter {
       summary: _activitySummary(type, item),
       status: _activityStatus(item, completed),
       completed: completed,
+      exitCode: exitCode,
       commandActions: type == 'commandExecution'
           ? _commandActions(item['commandActions'])
           : const {},
       commandOutput:
           includeHostCommandOutput && completed && type == 'commandExecution'
-          ? _commandOutput(item['_codexNativeOutput'])
+          ? _commandOutput(item['_codexNativeOutput'], exitCode: exitCode)
           : null,
     );
   }
+
+  static const _minInt32 = -2147483648;
+  static const _maxInt32 = 2147483647;
+
+  static int? _optionalInt32(Object? value) =>
+      value is int && value >= _minInt32 && value <= _maxInt32 ? value : null;
 
   static Set<CommandActionKind> _commandActions(Object? value) {
     if (value is! List<Object?>) return const {};
@@ -625,13 +635,15 @@ final class TurnProtocolAdapter {
     return Set.unmodifiable(actions);
   }
 
-  static OutputDescriptor? _commandOutput(Object? value) {
+  static OutputDescriptor? _commandOutput(Object? value, {int? exitCode}) {
     if (value == null) {
       return null;
     }
     try {
       final output = OutputProtocolAdapter.descriptorFromItem(value);
-      return (output.reference?.length ?? 0) <= 128 ? output : null;
+      return (output.reference?.length ?? 0) <= 128
+          ? output.withExitCode(exitCode)
+          : null;
     } on ProtocolViolation {
       // The optional Host extension cannot erase a completed command row.
       return null;

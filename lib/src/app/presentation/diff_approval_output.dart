@@ -535,6 +535,7 @@ class _HistoryEntryView extends StatelessWidget {
             : const [],
         completed: true,
         status: item.status,
+        exitCode: item.exitCode,
         attachments: effectiveAttachments,
       ),
       attachments: effectiveAttachments,
@@ -685,7 +686,7 @@ class _InlineCommandOutput extends StatelessWidget {
         errorMessage: viewer.errorMessage,
         isInProgress: !completed || status?.trim() == 'inProgress',
         status: status,
-        exitCode: exitCode,
+        exitCode: exitCode ?? viewer.descriptor.exitCode,
         storedBytesNotice: chunk != null && chunk.offset > 0
             ? 'Last ${chunk.data.length} stored bytes'
             : null,
