@@ -538,6 +538,77 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'U8 A7 CodexInlinePatchPreviewCard awaits Clipboard.setData before showing Copied and suppresses clipboard errors',
+    (tester) async {
+      var completer = Completer<void>();
+      var failClipboard = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              if (failClipboard) {
+                throw PlatformException(code: 'unavailable');
+              }
+              await completer.future;
+            }
+            return null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+
+      const file = DiffFile(
+        path: 'lib/a.dart',
+        additions: 1,
+        deletions: 0,
+        lines: ['+final ok = true;'],
+        truncated: false,
+      );
+      const card = CodexInlinePatchPreviewCard(files: [file]);
+      const copyKey = ValueKey('inline-patch-copy-lib/a.dart');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OfficialCodexThemeProvider(
+            data: OfficialCodexThemeData.light,
+            child: const Scaffold(body: card),
+          ),
+        ),
+      );
+
+      final copyButton = find.byKey(copyKey);
+
+      await tester.tap(copyButton);
+      await tester.pump();
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+
+      completer.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 1450));
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+
+      failClipboard = true;
+      await tester.tap(copyButton);
+      await tester.pump();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+
+      failClipboard = false;
+      completer = Completer<void>();
+      await tester.tap(copyButton);
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      completer.complete();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 class _NonCompletedGroupingHarness extends SimulatedRuntimeHarness {

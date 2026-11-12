@@ -1630,11 +1630,18 @@ class _SingleFilePatchCardState extends State<_SingleFilePatchCard> {
     super.dispose();
   }
 
-  void _copyDiff() {
+  Future<void> _handleCopyDiff() async {
     final payload = widget.file.lines.isEmpty
         ? widget.file.path
         : widget.file.lines.join('\n');
-    unawaited(Clipboard.setData(ClipboardData(text: payload)));
+    try {
+      await Clipboard.setData(ClipboardData(text: payload));
+    } on Object {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     _copiedResetTimer?.cancel();
     setState(() => _copied = true);
     _copiedResetTimer = Timer(const Duration(milliseconds: 1400), () {
@@ -1829,7 +1836,7 @@ class _SingleFilePatchCardState extends State<_SingleFilePatchCard> {
                         setState(() => _copyFocused = focused);
                       }
                     },
-                    onPressed: _copyDiff,
+                    onPressed: () => unawaited(_handleCopyDiff()),
                   ),
                 ],
               ),
