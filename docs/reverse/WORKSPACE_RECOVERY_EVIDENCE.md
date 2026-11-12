@@ -1,7 +1,7 @@
 # Local Desktop workspace recovery evidence
 
-Status: source24201ac shared gates and controlled real-stock core recovery pass.
-Coupled compact failure-feedback and Back-stack follow-ups remain active. Program remains SELF_ITERATION.
+Status: source55dcf16 combined gates and controlled real-stock recovery/failure/navigation pass.
+The scoped functional flow is verified; Program remains SELF_ITERATION.
 This is a local Codex Desktop lifecycle correction, not Remote expansion.
 
 ## Preserved failures and source corrections
@@ -135,11 +135,57 @@ interaction remain unrun.
   The corrected flow reports the bounded current-scope error, removes the
   obsolete notice at the next explicit attempt, retains draft/attachment on
   failure, and allows immediate retry/Send. Updated seven widget cases and
-  strict analysis pass (`green-r3`); combined/source-real evidence is still pending.
-- Gemini owns bounded Back-stack pruning for the evicted session-only placeholder
-  in an independent worktree. Arbitrary saved threads outside the current catalog
-  must stay navigable. Its targeted and combined validation remain pending.
+  strict analysis pass (`green-r3`); the combined real evidence below closes this scoped correction.
+- Gemini4122c37 rewrites only the evicted session-only placeholder in the bounded
+  Back/Forward stack, compacts adjacent duplicates and preserves arbitrary saved
+  or off-catalog threads. The owner recorded a real +1/-3 RED, then39 targeted
+  passes, pure68, zero format changes and strict analysis0; combined validation
+  and packaged Back/Forward below pass.
 - Persisted stock item IDs identify items across process sessions. The peer's
   synthetic reused-ID delta-prefix observation remains research, not a proven
   supported stock failure: dropping retained prefixes blindly could also lose
   a valid same-item continuation. No speculative namespace rewrite is adopted.
+
+## Final combined failure and navigation packet55dcf16
+
+Source55dcf16293bc6f508d25331d22996340361ca8ee normal-merges Codex507cbc7 and
+Gemini4122c37 without rewriting their history. Serial shared gates pass:
+format210/zero, strict analysis0, pure68,689 default Flutter/five opt-in skips,
+five enabled stock cases on each binary, bounded-history/heavy-output benchmark,
+Cargo format, two-job Linux release and83-system-library closure. All248 tracked
+inputs match before/after. Packet `/var/tmp/native-desktop-recovery-nav-55dcf16-r1/`
+freezes AOT `63e9da82019f1d06eed5bb73dcd392bb3ca7acf9f54b43c77820314275d974fc`;
+runner/Host match the earlier24201ac identities. Checksums remain unchanged.
+
+A separate pure-Dart bundled-Host probe actually verifies both public0.167.2 and
+installed alpha re-read a private config for thread/start: invalid TOML produces
+normal `JsonRpcException -32600`; restoring the same task-owned file lets a
+subsequent start succeed. No user configuration, credentials or private service
+is involved. Probe results are private in
+`/var/tmp/native-thread-create-config-failure-r1/{public,installed}/verification.json`.
+
+The new packaged public-stock replay at
+`/var/tmp/native-workspace-recovery-real-r3/verification.json` records16 captures:
+
+- save `BackAnchor55` through explicit Send; create an empty session draft with
+  `Retain55Draft` and preserved-draft.md mention; terminate only owned stock;
+- reconnect in the same App, retire both old child identities, and retain the
+  draft/attachment at700x760 without another model call;
+- invalidating only the disposable profile config makes explicit New conversation
+  fail in real stock. Capture07 shows the bounded RPC error in the compact view;
+  the draft and mention remain. Restore config and explicitly retry;
+- capture09/10 and exact UTF8 clipboard confirm the new conversation retains
+  `Retain55Draft` and mention, with no automatic Send. The obsolete error notice
+  is removed and the following explicit Send succeeds;
+- resize1191x865; actual Back displays saved `BackAnchor55`, actual Forward
+  displays saved `Retain55Draft` and its attachment/assistant, without visiting
+  the retired ID or issuing another turn;
+- exactly two controlled model POSTs result from the two explicit Sends. All
+  five recorded App/Host/stock PIDs and the owned model are absent after awaited
+  cleanup. The two standalone probe Hosts are also absent.
+
+The initial private driver used the pre-attachment text coordinate before the
+field moved, and its first clipboard request while the error notice covered the
+field was unavailable. These artifacts remain preserved; the later exact
+clipboard and actual visible states provide the stated positive evidence.
+Neither this packet nor hosted CI is Human visual/long-session acceptance.

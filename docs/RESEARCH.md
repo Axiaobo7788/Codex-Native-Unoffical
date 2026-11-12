@@ -5088,8 +5088,8 @@ The current Desktop functional audit led to a reproduced local draft-loss
 boundary and three peer-reviewed stale-session risks. The controlled public
 stock0.167.2 packet establishes same-App recovery and no replay for saved/active
 threads, but also reproduces the old session-only-ID failure. The later explicit
-replacement correction remains a separate source/runtime claim until its own
-packet is exercised. See [recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md)
+replacement correction was subsequently exercised in the distinct24201ac
+packet below; source55dcf16 adds failure/retry and navigation verification. See [recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md)
 and ADR-063. Current build25894 static process-manager observations do not prove
 an official automatic crash-recovery or state-database repair workflow; neither
 is inferred or copied into Native.
@@ -5119,3 +5119,17 @@ thread metadata is read; after recovery the stock preview is shown. This is not
 yet classified as a confirmed official-title-generation gap or justification for
 a private title service. Runtime failure feedback and obsolete Back entries are
 concrete coupled follow-ups owned independently by the peers.
+
+
+### Recovery failure feedback and navigation55dcf16
+
+The final combined source passes689 default tests, both five-case real-stock
+sets, strict analysis/pure boundary, memory and Linux83 closure. A fresh isolated
+probe on public0.167.2 and installed alpha confirms normal thread/start config
+errors and a successful restored-config retry. The packaged public-stock replay
+then exercises exactly that failure at700px, retained draft/mention, explicit
+retry and subsequent Send, followed by real wide Back/Forward across the
+replacement. Sixteen captures and exact source/binary/process identities are in
+[the recovery evidence](reverse/WORKSPACE_RECOVERY_EVIDENCE.md). Earlier source
+failures and driver mistakes remain preserved. No official automatic recovery,
+provider-account acceptance or Human visual acceptance is inferred.

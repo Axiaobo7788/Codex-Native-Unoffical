@@ -106,63 +106,59 @@ permission to lower the engineering or visual quality bar.
 
 ## Active peer coordination
 
-- Current shared **validation source** is `24201ac2ee22a5cb2befab8f129f2137f920f623`,
-  a normal merge preserving Codex recovery `5e08cfe` / `3d68ebe`, Gemini U7
-  `44a8809`, and its initial peer audit `3c18450`. It is pushed on the Codex
-  branch. Main is still `2600ec5` (docs over source7d) until the current coupled
-  corrections are integrated; no history rewrite or overwrite is needed.
-- Core local recovery is machine and controlled real-stock verified. It retains
-  one mounted editor/draft/attachment state, retires old operations/requests and
-  Host references, and reconnects without implicit resume or write replay.
-  Unavailable prior-session drafts require an explicit new-conversation action.
-  The old failed real packet remains preserved; the new packet demonstrates
-  the actual correction on both public and installed stock.
-- Codex owns the compact/collapsed replacement-failure feedback follow-up in
-  `conversation.dart` and its existing continuity test. A real widget RED proved
-  the compact error was hidden. The first notice fix covered Send after a
-  successful retry; that negative is preserved. Seven updated widget cases and
-  strict analysis now pass after removing the obsolete notice at a new attempt.
-- Gemini owns the coupled Back-stack placeholder correction in isolated
-  `agent/gemini-runtime-draft-navigation`, based on24201ac. Its writable surfaces
-  are ThreadListController, app shell and a new navigation test; Codex does not
-  edit them concurrently. Gemini has the exclusive heavy lease for targeted
-  validation; Codex is source/docs/CI-only. All Codex real-use workers exited.
-- U7 is source-integrated in the shared validation branch, with later peer
-  review `5746b8e` reporting zero P0/P1 at its explicitly inspected source.
-  Golden A stays PARTIAL. The next UI candidate remains evidenced A7 saved/live
-  activity hierarchy and non-Shell rows, followed by other actionable A rows.
-- Live communication is official agy TUI-only, refreshed after the long session.
-  Peers remain equal; one writer per overlapping surface. Flutter uses one
-  worker, Cargo/CMake two jobs, with no overlapping heavy workloads.
+- Shared validation source is `55dcf16293bc6f508d25331d22996340361ca8ee`,
+  a normal merge preserving Codex recovery5e08cfe/3d68ebe, Gemini U7
+  44a8809, calibrated peer audits3c18450/5746b8e, Codex visible replacement
+  failure/retry507cbc7 and Gemini bounded Back/Forward reconciliation4122c37.
+  All owner branches are pushed. Main integration and exact final-HEAD hosted
+  CI are the current checkpoint steps; Git remains canonical for actual HEAD.
+- The scoped local recovery flow now has combined machine and packaged stock
+  verification. One editor/draft/attachment state stays mounted; stale async
+  operations, requests and Host references retire; reconnect performs reads
+  without automatic resume, writes or replay. An unavailable prior-session
+  draft requires explicit replacement. Its real creation failure is visible
+  at700px, retry retains the draft, and Back/Forward follows the replacement.
+- Codex has read the actual navigation diff and tests with no blocking finding.
+  Gemini's39 targeted cases/pure68/format/strict analysis pass. Both peers have
+  released these write surfaces. No owned real-use/compiler workers remain.
+- Proposed next independent pair: Codex audits advertised session approval
+  choices; Gemini continues evidenced A7 saved/live activity and non-Shell rows.
+  Confirm the exact next writable surfaces through official agy before writing.
+  Golden A remains PARTIAL; U7 does not close attachment/hover or other states.
+- Live communication stays official agy TUI-only. Peers are equal. Flutter uses
+  one worker and Cargo/CMake two jobs; heavy work never overlaps across peers.
 
 ## Current verification checkpoint
 
-- **Source24201ac machine gates:** format209/zero changes, strict analysis0,
-  pure-Dart68, **685 default Flutter cases/five explicit stock skips**. Five
+- **Source55dcf16 machine gates:** format210/zero changes, strict analysis0,
+  pure-Dart68, **689 default Flutter cases/five explicit stock skips**. Five
   enabled direct-stock cases pass separately on public0.167.2 and installed
   0.167.0-alpha.3.2. History retains100/1,000 turns and discards ten3MiB outputs.
   Cargo format and two-job Linux/83-system-library closure pass. Rust source is
   unchanged; no new local Clippy/100-test run is inferred. Hosted verify runs
   its own full Rust gate.
-- Frozen packet: `/var/tmp/native-desktop-recovery-u7-24201ac-r1/bundle/`,
-  AOT `01f4443b863dcf5ce3a6b3187c96236a417df9498e2926c2be79f846b560988b`,
+- Frozen packet: `/var/tmp/native-desktop-recovery-nav-55dcf16-r1/bundle/`,
+  AOT `63e9da82019f1d06eed5bb73dcd392bb3ca7acf9f54b43c77820314275d974fc`,
   Host `73218b9253ec1ff72173c39ce7356d942d732948318843b15c7b236c62598878`.
-  All247 tracked validation/build input hashes match after the shared packet.
+  All248 tracked validation/build input hashes match after the shared packet.
   Frozen binary identities also match after real use.
 - **Agent real-use:** [recovery evidence](docs/reverse/WORKSPACE_RECOVERY_EVIDENCE.md)
-  records23 captures, same-App empty/active crash recovery, retained text and
-  mention attachments at wide/700px, explicit replacement and first Send on
-  public and installed stock, three controlled model POSTs, and no replay.
-  All12 recorded App/Host/stock PIDs are absent; the owned model exits after
-  SIGINT and is awaited. These are not Human or live-account acceptance.
-- **Hosted exact source:** branch [CI43171510846](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43171510846)
-  at24201ac passes verify, macOS and Windows. The newer failure-feedback and
-  navigation follow-ups still need their combined final-source gate/CI.
+  retains the source24201ac23-capture public/installed empty/active crash packet,
+  plus source55dcf16 sixteen captures: actual stock configuration error visible
+  at700px, exact retained draft/mention, explicit retry/Send, and real wide
+  Back/Forward across the replacement. Two model POSTs come only from two
+  explicit Sends. All five new App/Host/stock identities and owned model exit;
+  both standalone real configuration-error probes also close. These are
+  controlled model tests, not Human or live-account acceptance.
+- **Hosted exact source:** prior branch
+  [CI43171510846](https://github.com/Axiaobo7788/Codex-Native-Unoffical/actions/runs/43171510846)
+  at24201ac passes verify/macOS/Windows. The55dcf16 combined source and final
+  main integration need their own exact-HEAD hosted result before that claim.
 - Earlier settings/provider/Shell evidence remains linked from the functional
   audit and [source7d checkpoint](docs/reverse/SETTINGS_SHELL_PROVIDER_CHECKPOINT.md).
-  Old APT timeouts, fixture duplicate IDs, coordinate/clipboard mistakes,
-  Xvfb/ATK/model-metadata warnings and failed REDs remain preserved. ASCII-path
-  success does not establish a fix for the original Unicode-path LSP failure.
+  Earlier product REDs, APT timeout, fixture duplicate IDs, coordinate/clipboard
+  errors and native/model warnings remain preserved. ASCII-path analysis does
+  not establish a fix for the original Unicode-path LSP failure.
 
 ## Current architecture truth
 
@@ -199,7 +195,7 @@ permission to lower the engineering or visual quality bar.
 - Both tracks still have machine-actionable work. The
   [functional audit](docs/reverse/CODEX_DESKTOP_FUNCTIONAL_AUDIT.md) and
   [living matrix](docs/reverse/OFFICIAL_FEATURE_MATRIX.md) remain canonical for
-  supported missing/partial workflows, including the coupled recovery follow-ups, Home settings,
+  supported missing/partial workflows, including advertised approval choices, Home settings,
   account lifecycle, global content search and queue/terminal management.
 - [Golden State A](docs/reverse/OFFICIAL_UI_GOLDEN_STATE_A.md) remains PARTIAL.
   U6 Shell cards, U7 user-bubble clipping and acknowledged controls do not close saved-activity hierarchy,
